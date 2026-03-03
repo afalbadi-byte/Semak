@@ -19,13 +19,13 @@ const ADMIN_CREDS = {
   name: "أحمد البادي (Admin)",
   role: "admin",
   job: "المدير العام",
-  email: "a.f.albadi@gmail.com",
+  email: "ahmed.albadi@semak.sa",
   pass: "Medo@3225"
 };
 
 const TECHNICIANS = {
   تكييف: "محمد (فني تكييف)",
-  سباكة: "خالد (فني سباكة)",
+  سباكة: "خالد (فني بلاااااااااااااااااط)",
   كهرباء: "محمود (فني كهرباء)",
   أخرى: "فريق الدعم العام"
 };
