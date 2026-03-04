@@ -19,7 +19,8 @@ jobs:
           node-version: '18'
 
       - name: Install Dependencies
-        run: npm install
+        # 🔴 التعديل الأول: لحل مشكلة الخطأ الأحمر في تثبيت المكتبات (الصورة الثانية)
+        run: npm install --legacy-peer-deps
 
       - name: Build Project
         run: npm run build
@@ -30,5 +31,8 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./dist/ # مجلد المخرجات بعد عملية البناء
-          server-dir: ./ # المسار على استضافة Hostinger، تأكد منه إذا كان مختلفاً
+          # 🔴 التعديل الثاني: إضافة البورت لتجنب مشكلة الـ Timeout (الصورة الأولى)
+          port: 21 
+          local-dir: ./dist/ 
+          # 🔴 التعديل الثالث: المسار الصحيح لهوستينجر عشان يشتغل الموقع للزوار
+          server-dir: ./public_html/

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css'; // تصميم محرر النصوص
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css'; // تصميم محرر النصوص
 import {
   ArrowLeft, ArrowRight, Award, Bath, Bed, Box, Building, CalendarDays, Car, Calculator,
   ChevronDown, CircleCheckBig, CircleCheck, Clock, Droplets, ExternalLink, Eye,
@@ -962,7 +962,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [otpInputs, setOtpInputs] = useState({}); 
   const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
 
-  // دالة التحقق من الصلاحيات
+  // دالة مساعدة للتحقق من الصلاحيات
   const hasPerm = (perm) => {
     if (user?.role === 'admin') return true;
     if (!user?.permissions) return false;
@@ -1960,7 +1960,7 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* قسم حفظ النموذج كنسخة جديدة */}
+          {/* قسم حفظ النموذج كنسخة جديدة (متاح للجميع) */}
           <div className="bg-slate-800/50 p-4 rounded-xl mt-4 border border-slate-700">
             {!showSaveForm ? (
               <button onClick={() => setShowSaveForm(true)} className="w-full text-sm font-bold text-teal-400 hover:text-teal-300 transition flex items-center justify-center gap-2 py-2">
