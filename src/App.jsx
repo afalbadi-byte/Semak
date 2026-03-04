@@ -1364,15 +1364,16 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   );
 };
 
-const LetterGeneratorView = ({ navigateTo }) => {
+const LetterGeneratorView = ({ user, navigateTo }) => {
+  // 1. تعيين قيم مبدئية تعتمد على حساب الموظف المسجل دخوله
   const [data, setData] = useState({
     date: new Date().toISOString().split("T")[0],
     recipient: "شركاء النجاح المحترمين",
     subject: "",
     body: "",
-    signName: "أحمد البادي",
-    signTitle: "المدير العام",
-    showStamp: true
+    signName: user?.name || "أحمد البادي", // أخذ اسم الموظف
+    signTitle: user?.job || "المدير العام", // أخذ المسمى الوظيفي
+    showStamp: user?.role === "admin" // الختم يظهر تلقائياً للأدمن فقط
   });
 
   const templates = {
@@ -1432,10 +1433,15 @@ const LetterGeneratorView = ({ navigateTo }) => {
             <div><label className="text-xs text-slate-400 block mb-1">اسم الموقع</label><input type="text" value={data.signName} onChange={e => setData({ ...data, signName: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" /></div>
             <div><label className="text-xs text-slate-400 block mb-1">المنصب</label><input type="text" value={data.signTitle} onChange={e => setData({ ...data, signTitle: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" /></div>
           </div>
-          <div className="flex justify-between items-center pt-2">
-            <span className="text-sm">إظهار الختم</span>
-            <input type="checkbox" checked={data.showStamp} onChange={e => setData({ ...data, showStamp: e.target.checked })} className="w-5 h-5 accent-[#c5a059]" />
-          </div>
+          
+          {/* 2. إخفاء زر إظهار الختم لمن ليس لديه صلاحية أدمن */}
+          {user?.role === "admin" && (
+            <div className="flex justify-between items-center pt-2">
+              <span className="text-sm">إظهار الختم</span>
+              <input type="checkbox" checked={data.showStamp} onChange={e => setData({ ...data, showStamp: e.target.checked })} className="w-5 h-5 accent-[#c5a059]" />
+            </div>
+          )}
+
         </div>
         <div className="p-4 bg-slate-950 border-t border-slate-700">
           <button onClick={() => window.print()} className="w-full bg-[#c5a059] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-yellow-600 transition">
@@ -1465,7 +1471,10 @@ const LetterGeneratorView = ({ navigateTo }) => {
             <div className="corner-accent" />
             <div className="mt-12 mb-12 flex justify-between items-start px-12 relative min-h-[150px]">
               <div className="relative w-48 flex justify-center">
-                {data.showStamp && <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-90 mix-blend-multiply" alt="ختم" />}
+                {/* لن يظهر الختم إلا إذا كان المستخدم أدمن واختار إظهاره */}
+                {data.showStamp && user?.role === "admin" && (
+                  <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-90 mix-blend-multiply" alt="ختم" />
+                )}
               </div>
               <div className="text-center pt-10 pl-8 font-cairo">
                 <p className="font-bold text-[#1a365d] mb-2 text-xl">{data.signTitle}</p>
@@ -1657,7 +1666,7 @@ export default function App() {
         {currentPage === "maintenance" && <MaintenanceView customer={customer} setCustomer={setCustomer} navigateTo={navigateTo} showToast={showToast} />}
         {currentPage === "login" && <AdminLoginView setUser={setAdminUser} navigateTo={navigateTo} showToast={showToast} />}
         {currentPage === "dashboard" && <DashboardView user={adminUser} setUser={setAdminUser} navigateTo={navigateTo} showToast={showToast} />}
-        {currentPage === "letter-generator" && <LetterGeneratorView navigateTo={navigateTo} />}
+        {currentPage === "letter-generator" && <LetterGeneratorView user={adminUser} navigateTo={navigateTo} />}
         {currentPage === "privacy" && <LegalPage title="سياسة الخصوصية" navigateTo={navigateTo} />}
         {currentPage === "terms" && <LegalPage title="الشروط والأحكام" navigateTo={navigateTo} />}
       </div>
