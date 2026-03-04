@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 
 // --- Global Constants ---
-// 🔴 ضع رابط موقعك الفعلي هنا 🔴
-const API_URL = "https://semak.sa/api.php";
+// 🔴 رابط ملف API الخاص بك 🔴
+const API_URL = "https://semak.sa/api.php"; 
 
 const ADMIN_CREDS = {
   id: 999,
@@ -1075,17 +1075,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
   };
 
-  const units = ["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"];
-  
-  const groupedTickets = tickets.reduce((acc, ticket) => {
-    const date = ticket.scheduleDate || "غير مجدول";
-    if (!acc[date]) acc[date] = [];
-    acc[date].push(ticket);
-    return acc;
-  }, {});
-  
-  const sortedDates = Object.keys(groupedTickets).sort((a, b) => a === "غير مجدول" ? 1 : b === "غير مجدول" ? -1 : new Date(a) - new Date(b));
-
   const columns = [
     { id: "pending", title: "طلبات جديدة / قيد الانتظار", color: "border-slate-300", bg: "bg-slate-100", text: "text-slate-700", statuses: ["قيد الانتظار", undefined] },
     { id: "active", title: "جاري العمل / معينة", color: "border-blue-300", bg: "bg-blue-50", text: "text-blue-700", statuses: ["تم التعيين", "جاري العمل"] },
@@ -1122,6 +1111,20 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     </div>
   );
 
+  const sortedDates = Object.keys(tickets.reduce((acc, ticket) => {
+    const date = ticket.scheduleDate || "غير مجدول";
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(ticket);
+    return acc;
+  }, {})).sort((a, b) => a === "غير مجدول" ? 1 : b === "غير مجدول" ? -1 : new Date(a) - new Date(b));
+
+  const groupedTickets = tickets.reduce((acc, ticket) => {
+    const date = ticket.scheduleDate || "غير مجدول";
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(ticket);
+    return acc;
+  }, {});
+
   return (
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen">
       <div className="container mx-auto px-6">
@@ -1134,7 +1137,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             <button onClick={() => setActiveTab("settings")} className="bg-white border border-slate-200 text-slate-700 px-5 py-3 rounded-xl font-bold hover:bg-slate-100 transition flex items-center gap-2">
               <Lock size={16} /> إعدادات الحساب
             </button>
-            <button onClick={handleLogout} className="bg-red-50 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2">
+            <button onClick={handleLogout} className="bg-red-50 text-red-600 px-5 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2">
               <LogOut size={16} /> تسجيل خروج
             </button>
           </div>
@@ -1204,18 +1207,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
               </div>
             </div>
           )}
-
-          <a href="https://semak.daftra.com/" target="_blank" rel="noreferrer" className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-green-500" />
-            <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center text-3xl text-green-600 mb-6 group-hover:bg-green-500 group-hover:text-white transition-colors">
-              <Receipt size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">بوابة دفترة</h3>
-            <p className="text-slate-500 mb-6">الدخول لنظام الفواتير والمحاسبة وإدارة العملاء.</p>
-            <div className="flex items-center text-green-600 font-bold group-hover:gap-2 transition-all">
-              دخول النظام <ExternalLink size={16} className="mr-2" />
-            </div>
-          </a>
         </div>
 
         {/* Settings Tab */}
@@ -1376,7 +1367,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             </div>
             <div className="p-8 bg-slate-50/20">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {units.map(unit => {
+                {["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"].map(unit => {
                   const url = `${window.location.origin + window.location.pathname}?unit=${unit}&auth=smak2026`;
                   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}&margin=10`;
                   return (
