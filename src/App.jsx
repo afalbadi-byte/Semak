@@ -957,12 +957,11 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [users, setUsers] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "calendar" | "gantt"
+  const [viewMode, setViewMode] = useState("kanban");
   const [showAddUser, setShowAddUser] = useState(false);
   const [otpInputs, setOtpInputs] = useState({}); 
   const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
 
-  // دالة مساعدة للتحقق من الصلاحيات
   const hasPerm = (perm) => {
     if (user?.role === 'admin') return true;
     if (!user?.permissions) return false;
@@ -1323,7 +1322,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
           
-          {/* كرت الموظفين والصلاحيات */}
           {hasPerm("users_manage") && (
             <div onClick={() => {loadUsers(); setActiveTab("users");}} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-[#1a365d]" />
@@ -1335,7 +1333,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             </div>
           )}
           
-          {/* كرت الخطابات */}
           {hasPerm("letters") && (
             <div onClick={() => navigateTo("letter-generator")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-[#c5a059]" />
@@ -1347,7 +1344,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* كرت الصيانة */}
           {hasPerm("maintenance") && (
             <div onClick={loadMaintenance} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-purple-500" />
@@ -1359,7 +1355,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* كرت النظام المحاسبي */}
           {hasPerm("accounting") && (
             <div onClick={() => window.open("https://semak.daftra.com/", "_blank")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500" />
@@ -1374,7 +1369,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* كرت QR */}
           {hasPerm("qr") && (
             <div onClick={() => setActiveTab("qr")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-slate-800" />
@@ -1386,7 +1380,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* كرت المهتمين */}
           {hasPerm("leads") && (
             <div onClick={loadLeads} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-teal-500" />
@@ -1968,7 +1961,7 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
               </button>
             ) : (
               <div className="space-y-3 animate-fadeIn">
-                <div className="text-xs text-slate-400 mb-2 text-center bg-slate-800 p-2 rounded">سيتم حفظ هذا النص كقالب جديد في قاعدة البيانات ليتم استخدامه لاحقاً.</div>
+                <div className="text-xs text-slate-400 mb-2 text-center bg-slate-800 p-2 rounded">سيتم حفظ هذا النص كقالب جديد في قاعدة البيانات ليتم استخدامه لاحقاً من قبل الجميع.</div>
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">تصنيف النموذج الجديد</label>
                   <select value={newTempMeta.category} onChange={e => setNewTempMeta({...newTempMeta, category: e.target.value})} className="w-full bg-slate-700 rounded p-2 text-sm outline-none border border-slate-600 focus:border-teal-500">
@@ -2241,7 +2234,7 @@ export default function App() {
                 <button onClick={() => navigateTo("privacy")} className="hover:text-white transition">سياسة الخصوصية</button>
                 <button onClick={() => navigateTo("terms")} className="hover:text-white transition">الشروط والأحكام</button>
                 <button onClick={() => navigateTo("login")} className="hover:text-[#c5a059] transition flex items-center gap-2">
-                  <Lock size={14} /> بوابة الموظفيــن
+                  <Lock size={14} /> بوابة الموظفين
                 </button>
               </div>
             </div>
