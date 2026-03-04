@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 // --- Global Constants ---
-// 🔴 ضع رابط موقعك الفعلي هنا بدلاً من yourdomain.com 🔴
+// 🔴 ضع رابط موقعك الفعلي هنا 🔴
 const API_URL = "https://semak.sa/api.php";
 
 const ADMIN_CREDS = {
@@ -596,327 +596,142 @@ const ContactView = ({ showToast }) => {
   );
 };
 
-const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
-  const [activeTab, setActiveTab] = useState("");
-  const [leads, setLeads] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [users, setUsers] = useState([]);
-  const [tickets, setTickets] = useState([]);
+const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState("kanban");
-  const [showAddUser, setShowAddUser] = useState(false);
 
-  const handleLogout = () => {
-    setUser(null);
-    navigateTo("home");
-  };
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("semak_admin_email");
+    const savedPassword = localStorage.getItem("semak_admin_password");
+    if (savedEmail && savedPassword) {
+      setEmail(savedEmail);
+      setPassword(savedPassword);
+      setRememberMe(true);
+    }
+  }, []);
 
-  const loadLeads = async () => {
-    setActiveTab("leads");
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}?action=get_leads`);
-      setLeads(await res.json());
-    } catch { showToast("خطأ", "تعذر جلب سجل المهتمين", "error"); }
-    finally { setLoading(false); }
-  };
-
-  const loadUsers = async () => {
-    setActiveTab("users");
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}?action=get_users`);
-      setUsers(await res.json());
-    } catch { showToast("خطأ", "تعذر جلب الموظفين", "error"); }
-    finally { setLoading(false); }
-  };
-
-  const loadMaintenance = async () => {
-    setActiveTab("maintenance");
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}?action=get_maintenance`);
-      let data = await res.json();
-      const parsed = data.map(row => {
-         let desc = row.descrip || "---";
-         let scheduleDate = row.date ? row.date.split(" ")[0] : "";
-         let scheduleTime = "غير محدد";
-         if (desc.includes("التاريخ المفضل:")) {
-           const dateMatch = desc.match(/التاريخ المفضل: (.*)/);
-           if (dateMatch) scheduleDate = dateMatch[1];
-           const timeMatch = desc.match(/الوقت المفضل: (.*)/);
-           if (timeMatch) scheduleTime = timeMatch[1];
-           desc = desc.split(`\n\nالوصف:\n`)[1] || desc;
-         }
-         return { id: row.id, date: row.date, scheduleDate, scheduleTime, name: row.name, phone: row.phone, unit: row.unit, type: row.type, desc: desc, status: row.status || "قيد الانتظار", technician: row.technician || "لم يتم التعيين" };
-      });
-      setTickets(parsed);
-    } catch { showToast("خطأ", "تعذر جلب تذاكر الصيانة", "error"); }
-    finally { setLoading(false); }
-  };
-
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const payload = {
-      name: e.target.name.value,
-      job: e.target.job.value,
-      email: e.target.email.value,
-      role: e.target.role.value,
-      password: e.target.password.value
-    };
-    try {
-      const res = await fetch(`${API_URL}?action=add_user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.success) {
-        showToast("تم", data.message);
-        e.target.reset();
-        setShowAddUser(false);
-        loadUsers();
-      }
-    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
-    finally { setLoading(false); }
-  };
-
-  const handleChangePassword = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}?action=change_password`, {
+      const res = await fetch(`${API_URL}?action=login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: user.id,
-          old_password: e.target.old_password.value,
-          new_password: e.target.new_password.value
-        })
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
+      
       if (data.success) {
-        showToast("نجاح", data.message);
-        e.target.reset();
+        if (rememberMe) {
+          localStorage.setItem("semak_admin_email", email);
+          localStorage.setItem("semak_admin_password", password);
+        } else {
+          localStorage.removeItem("semak_admin_email");
+          localStorage.removeItem("semak_admin_password");
+        }
+        setUser(data.user);
+        showToast("تم تسجيل الدخول", `مرحباً بك، ${data.user.name}`);
+        navigateTo("dashboard");
       } else {
         showToast("خطأ", data.message, "error");
       }
-    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
-    finally { setLoading(false); }
+    } catch {
+      showToast("خطأ", "فشل الاتصال بالسيرفر", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const updateTicketStatus = (id, field, value) => {
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
-    showToast("تم التحديث", `تم التحديث محلياً للطلب ${id}`);
-  };
-
-  const notifyWhatsApp = (ticket) => {
-    if (!ticket.phone || ticket.phone === "---") return showToast("خطأ", "رقم جوال العميل غير صالح", "error");
-    let phone = ticket.phone.toString().replace(/^0/, "966").replace(/\D/g, "");
-    let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `الفني المختص: *${ticket.technician}*` : "سيتم تعيين الفني قريباً.";
-    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nتفيدك الإدارة بأن حالة الطلب الآن: *${ticket.status}*.\n${techText}\n\nنتمنى لك يوماً سعيداً!`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
-  };
-
-  const columns = [
-    { id: "pending", title: "طلبات جديدة / قيد الانتظار", color: "border-slate-300", bg: "bg-slate-100", text: "text-slate-700", statuses: ["قيد الانتظار", undefined] },
-    { id: "active", title: "جاري العمل / معينة", color: "border-blue-300", bg: "bg-blue-50", text: "text-blue-700", statuses: ["تم التعيين", "جاري العمل"] },
-    { id: "completed", title: "مكتملة", color: "border-green-300", bg: "bg-green-50", text: "text-green-700", statuses: ["مكتمل"] }
-  ];
-
-  const renderTicketCard = (ticket) => (
-    <div key={ticket.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 hover:shadow-md transition group">
-      <div className="flex justify-between items-start mb-3">
-        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
-        <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
-      </div>
-      <p className="text-xs text-slate-500 mb-3 line-clamp-2">{ticket.desc}</p>
-      <div className="space-y-2 border-t border-slate-100 pt-3 mt-2">
-        <select value={ticket.technician || "لم يتم التعيين"} onChange={(e) => updateTicketStatus(ticket.id, "technician", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg bg-slate-50 border-none outline-none focus:ring-1 ring-purple-400">
-          <option value="لم يتم التعيين" disabled>-- إسناد لفني --</option>
-          {TECHNICIANS_LIST.map(tech => <option key={tech} value={tech}>{tech}</option>)}
-        </select>
-        <div className="flex gap-2">
-          <select value={ticket.status} onChange={(e) => updateTicketStatus(ticket.id, "status", e.target.value)} className={`flex-grow text-xs font-bold p-2 rounded-lg border outline-none ${ticket.status === "مكتمل" ? "bg-green-100 text-green-700 border-green-200" : "bg-slate-50 text-slate-700 border-slate-200"}`}>
-            <option value="قيد الانتظار">قيد الانتظار</option>
-            <option value="تم التعيين">تم التعيين</option>
-            <option value="جاري العمل">جاري العمل</option>
-            <option value="مكتمل">مكتمل</option>
-          </select>
-          <button onClick={() => notifyWhatsApp(ticket)} className="w-8 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition" title="إبلاغ العميل بالواتس"><MessageCircle size={14} /></button>
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2069&auto=format&fit=crop')" }}>
+      <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
+      <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10 border border-white/20">
+        <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="سماك العقارية" className="h-16 mx-auto mb-4 object-contain" />
+        <h2 className="text-2xl font-black text-[#1a365d]">بوابة الموظفين</h2>
+        <p className="text-slate-500 text-sm mt-2 mb-8">تسجيل الدخول للوصول للأدوات الإدارية</p>
+        <form onSubmit={handleLogin} className="space-y-6 text-right">
+          <div>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">البريد الإلكتروني</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><User size={16} /></span>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="Email" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Lock size={16} /></span>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="••••••••" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 accent-[#c5a059] cursor-pointer rounded border-slate-300"/>
+            <label htmlFor="rememberMe" className="text-sm text-slate-600 font-bold cursor-pointer select-none">تذكر بيانات الدخول</label>
+          </div>
+          <button type="submit" disabled={loading} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-bold text-lg hover:bg-[#c5a059] transition shadow-lg shadow-[#1a365d]/30 mt-4 flex justify-center items-center gap-2">
+            {loading ? <RefreshCw className="animate-spin" size={20} /> : "دخول"}
+          </button>
+        </form>
+        <div className="mt-8 text-center pt-6 border-t border-slate-100">
+          <button onClick={() => navigateTo("home")} className="text-slate-400 hover:text-[#1a365d] text-sm flex items-center justify-center gap-2 mx-auto transition">
+            <ArrowRight size={14} /> العودة للموقع الرئيسي
+          </button>
         </div>
       </div>
     </div>
   );
+};
+
+const CustomerLoginView = ({ setCustomer, navigateTo, showToast }) => {
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const user = e.target.user.value;
+    const pass = e.target.password.value;
+    if (user === "user" && pass === "user") {
+      setCustomer({ username: "user", name: "عميل تجريبي", unit: "SM-A01" });
+      showToast("تم تسجيل الدخول بنجاح", "مرحباً بك في بوابة العملاء");
+      navigateTo("maintenance");
+    } else {
+      showToast("خطأ", "بيانات الدخول غير صحيحة", "error");
+    }
+  };
 
   return (
-    <div className="pt-32 pb-20 bg-slate-50 min-h-screen">
-      <div className="container mx-auto px-6">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
+    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=2073&auto=format&fit=crop')" }}>
+      <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
+      <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10 border border-white/20">
+        <div className="w-16 h-16 bg-[#c5a059]/10 text-[#c5a059] rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
+          <ShieldCheck size={32} />
+        </div>
+        <h2 className="text-2xl font-black text-[#1a365d]">بوابة العملاء</h2>
+        <p className="text-slate-500 text-sm mt-2 mb-8">تسجيل الدخول لطلب و متابعة خدمات الصيانة</p>
+        <form onSubmit={handleLogin} className="space-y-6 text-right">
           <div>
-            <h1 className="text-3xl md:text-4xl font-black text-[#1a365d]">لوحة الخدمات</h1>
-            <p className="text-slate-500 mt-2">أهلاً بك، <span className="font-bold text-[#c5a059]">{user?.name}</span></p>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">اسم المستخدم</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><User size={16} /></span>
+              <input type="text" name="user" required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="user" />
+            </div>
           </div>
-          <div className="flex gap-3">
-            <button onClick={() => setActiveTab("settings")} className="bg-white border border-slate-200 text-slate-700 px-5 py-3 rounded-xl font-bold hover:bg-slate-100 transition flex items-center gap-2">
-              <Lock size={16} /> تغيير كلمة المرور
-            </button>
-            <button onClick={handleLogout} className="bg-red-50 text-red-600 px-5 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2">
-              <LogOut size={16} /> خروج
-            </button>
+          <div>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Lock size={16} /></span>
+              <input type="password" name="password" required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="user" />
+            </div>
           </div>
+          <button type="submit" className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-bold text-lg hover:bg-yellow-600 transition shadow-lg shadow-[#c5a059]/30 mt-4">دخول</button>
+        </form>
+        <div className="mt-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 text-center">
+          <strong>حساب التجربة:</strong> (user / user)
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-          {user?.role === "admin" && (
-            <div onClick={loadUsers} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
-              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl text-blue-600 mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors"><Users size={32} /></div>
-              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">إدارة الموظفين</h3>
-              <p className="text-slate-500 mb-6">عرض وإضافة الموظفين للنظام.</p>
-              <div className="flex items-center text-blue-600 font-bold group-hover:gap-2 transition-all">فتح القائمة <ArrowLeft size={16} className="mr-2" /></div>
-            </div>
-          )}
-          
-          <div onClick={() => navigateTo("letter-generator")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
-            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl text-[#c5a059] mb-6 group-hover:bg-[#c5a059] group-hover:text-white transition-colors"><FilePenLine size={32} /></div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">منشئ الخطابات</h3>
-            <p className="text-slate-500 mb-6">إنشاء وطباعة خطابات رسمية.</p>
-            <div className="flex items-center text-[#c5a059] font-bold group-hover:gap-2 transition-all">فتح الأداة <ArrowLeft size={16} className="mr-2" /></div>
-          </div>
-
-          <div onClick={loadMaintenance} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
-            <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center text-3xl text-purple-600 mb-6 group-hover:bg-purple-500 group-hover:text-white transition-colors"><Wrench size={32} /></div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة</h3>
-            <p className="text-slate-500 mb-6">توزيع آلي ومتابعة تذاكر الصيانة.</p>
-            <div className="flex items-center text-purple-600 font-bold group-hover:gap-2 transition-all">إدارة الطلبات <ArrowLeft size={16} className="mr-2" /></div>
-          </div>
-
-          <div onClick={() => setActiveTab("qr")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
-            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl text-slate-800 mb-6 group-hover:bg-slate-800 group-hover:text-white transition-colors"><QrCode size={32} /></div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">رموز الوحدات (QR)</h3>
-            <p className="text-slate-500 mb-6">توليد وطباعة رموز QR للعملاء.</p>
-            <div className="flex items-center text-slate-800 font-bold group-hover:gap-2 transition-all">فتح الأداة <ArrowLeft size={16} className="mr-2" /></div>
-          </div>
-
-          {user?.role === "admin" && (
-            <div onClick={loadLeads} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
-              <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center text-3xl text-teal-600 mb-6 group-hover:bg-teal-500 group-hover:text-white transition-colors"><Users size={32} /></div>
-              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">سجل المهتمين</h3>
-              <p className="text-slate-500 mb-6">متابعة طلبات المهتمين بالشراء.</p>
-              <div className="flex items-center text-teal-600 font-bold group-hover:gap-2 transition-all">عرض السجل <ArrowLeft size={16} className="mr-2" /></div>
-            </div>
-          )}
+        <div className="mt-8 text-center pt-6 border-t border-slate-100">
+          <button onClick={() => navigateTo("home")} className="text-slate-400 hover:text-[#1a365d] text-sm flex items-center justify-center gap-2 mx-auto transition">
+            <ArrowRight size={14} /> العودة للموقع الرئيسي
+          </button>
         </div>
-
-        {/* Tab: Change Password */}
-        {activeTab === "settings" && (
-          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 p-8 max-w-xl mx-auto animate-fade-in-up">
-            <h3 className="text-2xl font-black text-[#1a365d] mb-2 flex items-center gap-2"><Lock className="text-[#c5a059]" /> إعدادات الأمان</h3>
-            <p className="text-slate-500 mb-6">تغيير كلمة المرور الخاصة بحسابك.</p>
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور الحالية</label>
-                <input type="password" name="old_password" required className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl outline-none focus:border-[#c5a059]" />
-              </div>
-              <div>
-                <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور الجديدة</label>
-                <input type="password" name="new_password" required minLength={6} className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl outline-none focus:border-[#c5a059]" />
-              </div>
-              <button type="submit" disabled={loading} className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-bold hover:bg-[#c5a059] transition mt-4">
-                {loading ? <RefreshCw className="animate-spin mx-auto" /> : "حفظ كلمة المرور"}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Tab: Users Management */}
-        {activeTab === "users" && (
-          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
-            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <div>
-                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-blue-600" /> قائمة الموظفين</h3>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowAddUser(!showAddUser)} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition">
-                  {showAddUser ? "إغلاق النموذج" : "إضافة موظف جديد +"}
-                </button>
-                <button onClick={loadUsers} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-300 transition">
-                  <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-                </button>
-              </div>
-            </div>
-
-            {/* Add User Form */}
-            {showAddUser && (
-              <div className="p-8 bg-blue-50/50 border-b border-slate-100 animate-fadeIn">
-                <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">الاسم</label><input required name="name" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">المسمى الوظيفي</label><input required name="job" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">البريد الإلكتروني</label><input required name="email" type="email" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">الصلاحية</label>
-                    <select name="role" className="w-full p-3 rounded-xl border border-slate-200 outline-none">
-                      <option value="employee">موظف (صيانة فقط)</option>
-                      <option value="admin">مدير (صلاحيات كاملة)</option>
-                    </select>
-                  </div>
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">كلمة المرور الافتراضية</label><input required name="password" type="text" defaultValue="123456" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
-                  <div className="flex items-end"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">حفظ الموظف</button></div>
-                </form>
-              </div>
-            )}
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-right">
-                <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
-                  <tr><th className="px-6 py-4">الاسم</th><th className="px-6 py-4">المنصب</th><th className="px-6 py-4">البريد الإلكتروني</th><th className="px-6 py-4">الصلاحية</th></tr>
-                </thead>
-                <tbody className="text-slate-700 divide-y divide-slate-50">
-                  {users.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50 transition">
-                      <td className="px-6 py-4 font-bold">{u.name}</td>
-                      <td className="px-6 py-4 text-slate-500">{u.job}</td>
-                      <td className="px-6 py-4 font-mono text-xs">{u.email}</td>
-                      <td className="px-6 py-4">
-                        {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">مدير</span> : <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Tab: Maintenance */}
-        {activeTab === "maintenance" && (
-          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden mb-12 animate-fade-in-up">
-            <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-              <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Wrench className="text-purple-600" /> إدارة مهام الصيانة</h3>
-              <div className="flex gap-2">
-                 <button onClick={() => setViewMode("kanban")} className={`p-2 rounded-lg ${viewMode === "kanban" ? "bg-purple-100 text-purple-700" : "bg-white"}`}><LayoutGrid size={20} /></button>
-                 <button onClick={loadMaintenance} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"><RefreshCw size={16} className={loading ? "animate-spin":""}/> تحديث</button>
-              </div>
-            </div>
-            <div className="p-4 md:p-8 bg-slate-50/50">
-               <div className="flex overflow-x-auto pb-4 gap-6 kanban-scroll items-start">
-                  {columns.map(col => {
-                    const colTickets = tickets.filter(t => col.statuses.includes(t.status));
-                    return (
-                      <div key={col.id} className={`w-80 flex-shrink-0 rounded-2xl border-t-4 ${col.color} ${col.bg} p-4 max-h-[800px] overflow-y-auto kanban-scroll flex flex-col`}>
-                        <div className="flex justify-between mb-4"><h4 className={`font-black ${col.text} text-lg`}>{col.title}</h4> <span className="bg-white px-2 py-0.5 rounded-full text-xs font-bold shadow-sm">{colTickets.length}</span></div>
-                        {colTickets.length === 0 ? <p className="text-xs text-center text-slate-400 py-4">لا توجد مهام</p> : colTickets.map(renderTicketCard)}
-                      </div>
-                    );
-                  })}
-               </div>
-            </div>
-          </div>
-        )}
-        
-        {/* QR, Leads components stay similar, just conditionally rendered if activeTab === 'qr' or 'leads' */}
-        {/* لقد تركت هذه المكونات مختصرة هنا لتقليل طول الرسالة، جميعها تعمل بشكل طبيعي في كودك المحدث */}
       </div>
     </div>
   );
@@ -1115,6 +930,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState("kanban");
+  const [showAddUser, setShowAddUser] = useState(false);
 
   const handleLogout = () => {
     setUser(null);
@@ -1126,13 +942,9 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}?action=get_leads`);
-      const data = await res.json();
-      setLeads(data);
-    } catch (err) {
-      showToast("خطأ", "تعذر جلب سجل المهتمين", "error");
-    } finally {
-      setLoading(false);
-    }
+      setLeads(await res.json());
+    } catch { showToast("خطأ", "تعذر جلب سجل المهتمين", "error"); }
+    finally { setLoading(false); }
   };
 
   const loadUsers = async () => {
@@ -1140,13 +952,9 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}?action=get_users`);
-      const data = await res.json();
-      setUsers([ADMIN_CREDS, ...data]);
-    } catch (err) {
-      showToast("خطأ", "تعذر جلب الموظفين", "error");
-    } finally {
-      setLoading(false);
-    }
+      setUsers(await res.json());
+    } catch { showToast("خطأ", "تعذر جلب الموظفين", "error"); }
+    finally { setLoading(false); }
   };
 
   const loadMaintenance = async () => {
@@ -1155,12 +963,10 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     try {
       const res = await fetch(`${API_URL}?action=get_maintenance`);
       let data = await res.json();
-      
       const parsed = data.map(row => {
          let desc = row.descrip || "---";
          let scheduleDate = row.date ? row.date.split(" ")[0] : "";
          let scheduleTime = "غير محدد";
-         
          if (desc.includes("التاريخ المفضل:")) {
            const dateMatch = desc.match(/التاريخ المفضل: (.*)/);
            if (dateMatch) scheduleDate = dateMatch[1];
@@ -1168,56 +974,76 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
            if (timeMatch) scheduleTime = timeMatch[1];
            desc = desc.split(`\n\nالوصف:\n`)[1] || desc;
          }
-
-         return {
-            id: row.id,
-            date: row.date,
-            scheduleDate,
-            scheduleTime,
-            name: row.name,
-            phone: row.phone,
-            unit: row.unit,
-            type: row.type,
-            desc: desc,
-            status: row.status || "قيد الانتظار",
-            technician: row.technician || "لم يتم التعيين"
-         };
+         return { id: row.id, date: row.date, scheduleDate, scheduleTime, name: row.name, phone: row.phone, unit: row.unit, type: row.type, desc: desc, status: row.status || "قيد الانتظار", technician: row.technician || "لم يتم التعيين" };
       });
       setTickets(parsed);
-    } catch (err) {
-      showToast("خطأ", "تعذر جلب تذاكر الصيانة", "error");
-    } finally {
-      setLoading(false);
-    }
+    } catch { showToast("خطأ", "تعذر جلب تذاكر الصيانة", "error"); }
+    finally { setLoading(false); }
+  };
+
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const payload = {
+      name: e.target.name.value,
+      job: e.target.job.value,
+      email: e.target.email.value,
+      role: e.target.role.value,
+      password: e.target.password.value
+    };
+    try {
+      const res = await fetch(`${API_URL}?action=add_user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("تم", data.message);
+        e.target.reset();
+        setShowAddUser(false);
+        loadUsers();
+      }
+    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
+    finally { setLoading(false); }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=change_password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          old_password: e.target.old_password.value,
+          new_password: e.target.new_password.value
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("نجاح", data.message);
+        e.target.reset();
+      } else {
+        showToast("خطأ", data.message, "error");
+      }
+    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
+    finally { setLoading(false); }
   };
 
   const updateTicketStatus = (id, field, value) => {
     setTickets(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
-    showToast("تم التحديث", `تم التحديث بنجاح للطلب ${id}`);
+    showToast("تم التحديث", `تم التحديث محلياً للطلب ${id}`);
   };
 
   const notifyWhatsApp = (ticket) => {
-    if (!ticket.phone || ticket.phone === "---") {
-      showToast("خطأ", "رقم جوال العميل غير صالح", "error");
-      return;
-    }
+    if (!ticket.phone || ticket.phone === "---") return showToast("خطأ", "رقم جوال العميل غير صالح", "error");
     let phone = ticket.phone.toString().replace(/^0/, "966").replace(/\D/g, "");
     let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `الفني المختص: *${ticket.technician}*` : "سيتم تعيين الفني قريباً.";
-    let dateText = ticket.scheduleDate ? `الموعد: *${ticket.scheduleDate}* | *${ticket.scheduleTime}*` : "";
-    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nتفيدك الإدارة بأن حالة الطلب الآن: *${ticket.status}*.\n${techText}\n${dateText}\n\nنتمنى لك يوماً سعيداً!`;
+    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nتفيدك الإدارة بأن حالة الطلب الآن: *${ticket.status}*.\n${techText}\n\nنتمنى لك يوماً سعيداً!`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
   };
-
-  const units = ["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"];
-  
-  const groupedTickets = tickets.reduce((acc, ticket) => {
-    const date = ticket.scheduleDate || "غير مجدول";
-    if (!acc[date]) acc[date] = [];
-    acc[date].push(ticket);
-    return acc;
-  }, {});
-  
-  const sortedDates = Object.keys(groupedTickets).sort((a, b) => a === "غير مجدول" ? 1 : b === "غير مجدول" ? -1 : new Date(a) - new Date(b));
 
   const columns = [
     { id: "pending", title: "طلبات جديدة / قيد الانتظار", color: "border-slate-300", bg: "bg-slate-100", text: "text-slate-700", statuses: ["قيد الانتظار", undefined] },
@@ -1232,9 +1058,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
       </div>
       <p className="text-xs text-slate-500 mb-3 line-clamp-2">{ticket.desc}</p>
-      <div className="flex items-center gap-2 mb-3 text-[10px] font-bold text-slate-400">
-        <Clock size={12} /> {ticket.scheduleDate} {ticket.scheduleTime !== "غير محدد" && `| ${ticket.scheduleTime}`}
-      </div>
       <div className="space-y-2 border-t border-slate-100 pt-3 mt-2">
         <select value={ticket.technician || "لم يتم التعيين"} onChange={(e) => updateTicketStatus(ticket.id, "technician", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg bg-slate-50 border-none outline-none focus:ring-1 ring-purple-400">
           <option value="لم يتم التعيين" disabled>-- إسناد لفني --</option>
@@ -1247,13 +1070,22 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             <option value="جاري العمل">جاري العمل</option>
             <option value="مكتمل">مكتمل</option>
           </select>
-          <button onClick={() => notifyWhatsApp(ticket)} className="w-8 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition" title="إبلاغ العميل بالواتس">
-            <MessageCircle size={14} />
-          </button>
+          <button onClick={() => notifyWhatsApp(ticket)} className="w-8 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition" title="إبلاغ العميل بالواتس"><MessageCircle size={14} /></button>
         </div>
       </div>
     </div>
   );
+
+  const units = ["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"];
+  
+  const groupedTickets = tickets.reduce((acc, ticket) => {
+    const date = ticket.scheduleDate || "غير مجدول";
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(ticket);
+    return acc;
+  }, {});
+  
+  const sortedDates = Object.keys(groupedTickets).sort((a, b) => a === "غير مجدول" ? 1 : b === "غير مجدول" ? -1 : new Date(a) - new Date(b));
 
   return (
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen">
@@ -1263,120 +1095,128 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             <h1 className="text-3xl md:text-4xl font-black text-[#1a365d]">لوحة الخدمات</h1>
             <p className="text-slate-500 mt-2">أهلاً بك، <span className="font-bold text-[#c5a059]">{user?.name}</span></p>
           </div>
-          <button onClick={handleLogout} className="bg-red-50 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2">
-            <LogOut size={16} /> تسجيل خروج
-          </button>
+          <div className="flex gap-3">
+            <button onClick={() => setActiveTab("settings")} className="bg-white border border-slate-200 text-slate-700 px-5 py-3 rounded-xl font-bold hover:bg-slate-100 transition flex items-center gap-2">
+              <Lock size={16} /> تغيير كلمة المرور
+            </button>
+            <button onClick={handleLogout} className="bg-red-50 text-red-600 px-5 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2">
+              <LogOut size={16} /> خروج
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
           {user?.role === "admin" && (
-            <div onClick={loadUsers} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-              <div className="absolute top-0 left-0 w-full h-2 bg-[#1a365d]" />
-              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl text-[#1a365d] mb-6 group-hover:bg-[#1a365d] group-hover:text-white transition-colors">
-                <Users size={32} />
-              </div>
+            <div onClick={loadUsers} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl text-blue-600 mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors"><Users size={32} /></div>
               <h3 className="text-2xl font-bold text-[#1a365d] mb-2">إدارة الموظفين</h3>
-              <p className="text-slate-500 mb-6">عرض الموظفين المسجلين في النظام.</p>
-              <div className="flex items-center text-[#1a365d] font-bold group-hover:gap-2 transition-all">
-                فتح القائمة <ArrowLeft size={16} className="mr-2" />
-              </div>
+              <p className="text-slate-500 mb-6">عرض وإضافة الموظفين للنظام.</p>
+              <div className="flex items-center text-blue-600 font-bold group-hover:gap-2 transition-all">فتح القائمة <ArrowLeft size={16} className="mr-2" /></div>
             </div>
           )}
           
-          <div onClick={() => navigateTo("letter-generator")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-            <div className="absolute top-0 left-0 w-full h-2 bg-[#c5a059]" />
-            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl text-[#c5a059] mb-6 group-hover:bg-[#c5a059] group-hover:text-white transition-colors">
-              <FilePenLine size={32} />
-            </div>
+          <div onClick={() => navigateTo("letter-generator")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
+            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl text-[#c5a059] mb-6 group-hover:bg-[#c5a059] group-hover:text-white transition-colors"><FilePenLine size={32} /></div>
             <h3 className="text-2xl font-bold text-[#1a365d] mb-2">منشئ الخطابات</h3>
             <p className="text-slate-500 mb-6">إنشاء وطباعة خطابات رسمية.</p>
-            <div className="flex items-center text-[#c5a059] font-bold group-hover:gap-2 transition-all">
-              فتح الأداة <ArrowLeft size={16} className="mr-2" />
-            </div>
+            <div className="flex items-center text-[#c5a059] font-bold group-hover:gap-2 transition-all">فتح الأداة <ArrowLeft size={16} className="mr-2" /></div>
           </div>
 
-          <div onClick={loadMaintenance} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-            <div className="absolute top-0 left-0 w-full h-2 bg-purple-500" />
-            <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center text-3xl text-purple-600 mb-6 group-hover:bg-purple-500 group-hover:text-white transition-colors">
-              <Wrench size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة (متطور)</h3>
-            <p className="text-slate-500 mb-6">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
-            <div className="flex items-center text-purple-600 font-bold group-hover:gap-2 transition-all">
-              إدارة الطلبات <ChevronDown size={16} className="mr-2" />
-            </div>
+          <div onClick={loadMaintenance} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
+            <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center text-3xl text-purple-600 mb-6 group-hover:bg-purple-500 group-hover:text-white transition-colors"><Wrench size={32} /></div>
+            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة</h3>
+            <p className="text-slate-500 mb-6">توزيع آلي ومتابعة تذاكر الصيانة.</p>
+            <div className="flex items-center text-purple-600 font-bold group-hover:gap-2 transition-all">إدارة الطلبات <ArrowLeft size={16} className="mr-2" /></div>
           </div>
 
-          <div onClick={() => setActiveTab("qr")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-            <div className="absolute top-0 left-0 w-full h-2 bg-slate-800" />
-            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl text-slate-800 mb-6 group-hover:bg-slate-800 group-hover:text-white transition-colors">
-              <QrCode size={32} />
-            </div>
+          <div onClick={() => setActiveTab("qr")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
+            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl text-slate-800 mb-6 group-hover:bg-slate-800 group-hover:text-white transition-colors"><QrCode size={32} /></div>
             <h3 className="text-2xl font-bold text-[#1a365d] mb-2">رموز الوحدات (QR)</h3>
-            <p className="text-slate-500 mb-6">توليد وطباعة رموز QR الخاصة بدخول العملاء.</p>
-            <div className="flex items-center text-slate-800 font-bold group-hover:gap-2 transition-all">
-              فتح الأداة <ChevronDown size={16} className="mr-2" />
-            </div>
+            <p className="text-slate-500 mb-6">توليد وطباعة رموز QR للعملاء.</p>
+            <div className="flex items-center text-slate-800 font-bold group-hover:gap-2 transition-all">فتح الأداة <ArrowLeft size={16} className="mr-2" /></div>
           </div>
 
           {user?.role === "admin" && (
-            <div onClick={loadLeads} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-              <div className="absolute top-0 left-0 w-full h-2 bg-teal-500" />
-              <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center text-3xl text-teal-600 mb-6 group-hover:bg-teal-500 group-hover:text-white transition-colors">
-                <Users size={32} />
-              </div>
-              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">سجل المهتمين (Leads)</h3>
-              <p className="text-slate-500 mb-6">متابعة الطلبات الواردة من الموقع الإلكتروني.</p>
-              <div className="flex items-center text-teal-600 font-bold group-hover:gap-2 transition-all">
-                عرض السجل <ChevronDown size={16} className="mr-2" />
-              </div>
+            <div onClick={loadLeads} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group">
+              <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center text-3xl text-teal-600 mb-6 group-hover:bg-teal-500 group-hover:text-white transition-colors"><Users size={32} /></div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">سجل المهتمين</h3>
+              <p className="text-slate-500 mb-6">متابعة طلبات المهتمين بالشراء.</p>
+              <div className="flex items-center text-teal-600 font-bold group-hover:gap-2 transition-all">عرض السجل <ArrowLeft size={16} className="mr-2" /></div>
             </div>
           )}
-
-          <a href="https://semak.daftra.com/" target="_blank" rel="noreferrer" className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-green-500" />
-            <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center text-3xl text-green-600 mb-6 group-hover:bg-green-500 group-hover:text-white transition-colors">
-              <Receipt size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">بوابة دفترة</h3>
-            <p className="text-slate-500 mb-6">الدخول لنظام الفواتير والمحاسبة وإدارة العملاء.</p>
-            <div className="flex items-center text-green-600 font-bold group-hover:gap-2 transition-all">
-              دخول النظام <ExternalLink size={16} className="mr-2" />
-            </div>
-          </a>
         </div>
 
+        {/* Tab: Change Password */}
+        {activeTab === "settings" && (
+          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 p-8 max-w-xl mx-auto animate-fade-in-up">
+            <h3 className="text-2xl font-black text-[#1a365d] mb-2 flex items-center gap-2"><Lock className="text-[#c5a059]" /> إعدادات الأمان</h3>
+            <p className="text-slate-500 mb-6">تغيير كلمة المرور الخاصة بحسابك.</p>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور الحالية</label>
+                <input type="password" name="old_password" required className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl outline-none focus:border-[#c5a059]" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور الجديدة</label>
+                <input type="password" name="new_password" required minLength={6} className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl outline-none focus:border-[#c5a059]" />
+              </div>
+              <button type="submit" disabled={loading} className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-bold hover:bg-[#c5a059] transition mt-4">
+                {loading ? <RefreshCw className="animate-spin mx-auto" /> : "حفظ كلمة المرور"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Tab: Users Management */}
         {activeTab === "users" && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
-            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-[#c5a059]" /> قائمة الموظفين</h3>
-                <p className="text-slate-500 text-sm mt-1">يتم جلب القائمة من قاعدة البيانات.</p>
+                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-blue-600" /> قائمة الموظفين</h3>
               </div>
-              <div className="flex items-center gap-3">
-                <button onClick={loadUsers} className="bg-[#c5a059] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-600 transition flex items-center gap-2">
-                  {loading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />} تحديث
+              <div className="flex gap-3">
+                <button onClick={() => setShowAddUser(!showAddUser)} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition">
+                  {showAddUser ? "إغلاق النموذج" : "إضافة موظف جديد +"}
+                </button>
+                <button onClick={loadUsers} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-300 transition">
+                  <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
                 </button>
               </div>
             </div>
+
+            {/* Add User Form */}
+            {showAddUser && (
+              <div className="p-8 bg-blue-50/50 border-b border-slate-100 animate-fadeIn">
+                <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">الاسم</label><input required name="name" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">المسمى الوظيفي</label><input required name="job" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">البريد الإلكتروني</label><input required name="email" type="email" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">الصلاحية</label>
+                    <select name="role" className="w-full p-3 rounded-xl border border-slate-200 outline-none">
+                      <option value="employee">موظف (صيانة فقط)</option>
+                      <option value="admin">مدير (صلاحيات كاملة)</option>
+                    </select>
+                  </div>
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">كلمة المرور الافتراضية</label><input required name="password" type="text" defaultValue="123456" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div className="flex items-end"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">حفظ الموظف</button></div>
+                </form>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-right">
                 <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
-                  <tr>
-                    <th className="px-6 py-4 border-b">الاسم</th>
-                    <th className="px-6 py-4 border-b">المسمى الوظيفي</th>
-                    <th className="px-6 py-4 border-b">البريد الإلكتروني</th>
-                    <th className="px-6 py-4 border-b">الصلاحية</th>
-                  </tr>
+                  <tr><th className="px-6 py-4">الاسم</th><th className="px-6 py-4">المنصب</th><th className="px-6 py-4">البريد الإلكتروني</th><th className="px-6 py-4">الصلاحية</th></tr>
                 </thead>
                 <tbody className="text-slate-700 divide-y divide-slate-50">
-                  {users.map((u, i) => (
-                    <tr key={i} className="hover:bg-slate-50 transition border-b border-slate-50">
-                      <td className="px-6 py-4 font-bold text-slate-700">{u.name}</td>
+                  {users.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-bold">{u.name}</td>
                       <td className="px-6 py-4 text-slate-500">{u.job}</td>
-                      <td className="px-6 py-4 font-mono text-xs text-slate-400" dir="ltr">{u.email}</td>
+                      <td className="px-6 py-4 font-mono text-xs">{u.email}</td>
                       <td className="px-6 py-4">
-                        {u.role === "admin" ? <span className="bg-[#1a365d]/10 text-[#1a365d] px-2 py-1 rounded text-xs font-bold">مدير</span> : <span className="bg-gray-100 text-gray-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
+                        {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">مدير</span> : <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
                       </td>
                     </tr>
                   ))}
@@ -1386,25 +1226,15 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
           </div>
         )}
 
+        {/* Tab: Maintenance */}
         {activeTab === "maintenance" && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden mb-12 animate-fade-in-up">
-            <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
-              <div>
-                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Wrench className="text-purple-600" /> إدارة مهام الصيانة</h3>
-                <p className="text-slate-500 text-sm mt-1">توزيع المهام، تحديث الحالة، ومراسلة العميل بسهولة.</p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 flex">
-                  <button onClick={() => setViewMode("kanban")} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${viewMode === "kanban" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
-                    <LayoutGrid size={16} /> اللوحة
-                  </button>
-                  <button onClick={() => setViewMode("calendar")} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${viewMode === "calendar" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
-                    <CalendarDays size={16} /> التقويم
-                  </button>
-                </div>
-                <button onClick={loadMaintenance} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition flex items-center gap-2 shadow-sm w-full sm:w-auto justify-center">
-                  {loading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />} تحديث
-                </button>
+            <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+              <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Wrench className="text-purple-600" /> إدارة مهام الصيانة</h3>
+              <div className="flex gap-2">
+                 <button onClick={() => setViewMode("kanban")} className={`p-2 rounded-lg ${viewMode === "kanban" ? "bg-purple-100 text-purple-700" : "bg-white"}`}><LayoutGrid size={20} /></button>
+                 <button onClick={() => setViewMode("calendar")} className={`p-2 rounded-lg ${viewMode === "calendar" ? "bg-purple-100 text-purple-700" : "bg-white"}`}><CalendarDays size={20} /></button>
+                 <button onClick={loadMaintenance} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"><RefreshCw size={16} className={loading ? "animate-spin":""}/> تحديث</button>
               </div>
             </div>
             <div className="p-4 md:p-8 bg-slate-50/50">
@@ -1413,22 +1243,17 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                   <p className="text-lg">لا توجد تذاكر صيانة حالياً...</p>
                 </div>
               ) : viewMode === "kanban" ? (
-                <div className="flex overflow-x-auto pb-4 gap-6 kanban-scroll items-start">
+               <div className="flex overflow-x-auto pb-4 gap-6 kanban-scroll items-start">
                   {columns.map(col => {
                     const colTickets = tickets.filter(t => col.statuses.includes(t.status));
                     return (
                       <div key={col.id} className={`w-80 flex-shrink-0 rounded-2xl border-t-4 ${col.color} ${col.bg} p-4 max-h-[800px] overflow-y-auto kanban-scroll flex flex-col`}>
-                        <div className="flex justify-between items-center mb-4">
-                          <h4 className={`font-black ${col.text} text-lg`}>{col.title}</h4>
-                          <span className="bg-white text-slate-500 px-2 py-0.5 rounded-full text-xs font-bold shadow-sm">{colTickets.length}</span>
-                        </div>
-                        <div className="flex-grow">
-                          {colTickets.length === 0 ? <p className="text-xs text-center text-slate-400 py-4">لا توجد مهام</p> : colTickets.map(renderTicketCard)}
-                        </div>
+                        <div className="flex justify-between mb-4"><h4 className={`font-black ${col.text} text-lg`}>{col.title}</h4> <span className="bg-white px-2 py-0.5 rounded-full text-xs font-bold shadow-sm">{colTickets.length}</span></div>
+                        {colTickets.length === 0 ? <p className="text-xs text-center text-slate-400 py-4">لا توجد مهام</p> : colTickets.map(renderTicketCard)}
                       </div>
                     );
                   })}
-                </div>
+               </div>
               ) : (
                 <div className="space-y-8 max-w-5xl mx-auto">
                   {sortedDates.map(dateKey => (
@@ -1450,6 +1275,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
           </div>
         )}
 
+        {/* Tab: QR */}
         {activeTab === "qr" && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
@@ -1484,6 +1310,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
           </div>
         )}
 
+        {/* Tab: Leads */}
         {activeTab === "leads" && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
