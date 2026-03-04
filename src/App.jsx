@@ -1365,33 +1365,54 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
 };
 
 const LetterGeneratorView = ({ user, navigateTo }) => {
-  // 1. تعيين قيم مبدئية تعتمد على حساب الموظف المسجل دخوله
   const [data, setData] = useState({
     date: new Date().toISOString().split("T")[0],
     recipient: "شركاء النجاح المحترمين",
     subject: "",
     body: "",
-    signName: user?.name || "أحمد البادي", // أخذ اسم الموظف
-    signTitle: user?.job || "المدير العام", // أخذ المسمى الوظيفي
-    showStamp: user?.role === "admin" // الختم يظهر تلقائياً للأدمن فقط
+    signName: user?.name || "أحمد البادي",
+    signTitle: user?.job || "المدير العام",
+    showStamp: user?.role === "admin"
   });
 
-  const templates = {
-    custom: { subj: "", body: "" },
-    fin_receipt: { subj: "سند قبض مبلغ", body: `نفيدكم علماً بأنه تم استلام مبلغ وقدره (....) ريال سعودي،\nوذلك نقداً / شيك رقم (....) بتاريخ ..../..../....،\nوذلك عن (دفعة مقدمة / قسط / سداد نهائي) للوحدة العقارية رقم (....) في مشروع (....).\n\nوهذا إقرار منا بالاستلام.` },
-    fin_payment: { subj: "سند صرف مبلغ", body: `تم صرف مبلغ وقدره (....) ريال سعودي،\nلصالح السيد/السادة: (....)\nوذلك مقابل: (ذكر سبب الصرف، مثلاً: توريد مواد / أتعاب / استرجاع مبلغ).\n\nوقد تم التسليم بموجب (شيك رقم .... / حوالة بنكية / نقداً).` },
-    fin_petty_cash: { subj: "طلب صرف عهدة نقدية", body: `أرجو التكرم بالموافقة على صرف عهدة نقدية مؤقتة بمبلغ وقدره (....) ريال،\nوذلك لتغطية المصاريف التشغيلية العاجلة الخاصة بـ (ذكر الغرض).\n\nعلى أن يتم تسوية العهدة وتقديم الفواتير المؤيدة خلال (....) يوم من تاريخ الاستلام.` },
-    hr_salary_cert: { subj: "شهادة تعريف بالراتب", body: `تشهد شركة سماك العقارية بأن الموظف/ (....)، هوية رقم (....)، يعمل لدينا بمسمى وظيفي (....) اعتباراً من تاريخ ..../..../....، ولا يزال على رأس العمل حتى تاريخه.\n\nويتقاضى راتباً شهرياً إجمالياً قدره (....) ريال.\n\nأعطيت له هذه الشهادة بناءً على طلبه لتقديمها إلى (....) دون أدنى مسؤولية على الشركة.` },
-    hr_job_offer: { subj: "عرض وظيفي", body: `يسرنا أن نعرض عليكم الانضمام لفريق عمل سماك العقارية في وظيفة (....).\n\nالمميزات:\n- الراتب الأساسي: (....) ريال.\n- بدل السكن: (....) ريال.\n- بدل النقل: (....) ريال.\n- تأمين طبي للموظف وعائلته.\n\nنأمل في حال القبول توقيع نسخة من هذا العرض وإعادتها إلينا.` },
-    sales_quotation: { subj: "عرض سعر وحدة سكنية", body: `نشكر لكم اهتمامكم بمشاريع سماك العقارية. بناءً على طلبكم، يسرنا تقديم عرض السعر التالي:\n\nالمشروع: (....)\nرقم الوحدة: (....)\nالمساحة: (....) م2\nالسعر الإجمالي: (....) ريال.\n\nصلاحية العرض: (....) أيام من تاريخه.` },
-    sales_reservation: { subj: "نموذج حجز وحدة عقارية", body: `تم بحمد الله حجز الوحدة رقم (....) في مشروع (....) لصالح العميل/ (....).\nرقم الهوية: (....)\nقيمة العربون المدفوع: (....) ريال.\n\nيجب استكمال باقي الدفعة المقدمة وتوقيع العقود خلال (....) يوم وإلا يعتبر الحجز لاغياً.` },
-    admin_circular: { subj: "تعميم إداري", body: `إلى كافة منسوبي الشركة،\nالسلام عليكم ورحمة الله وبركاته،\n\nنود إفادتكم بأنه تقرر (....) اعتباراً من تاريخ ..../..../....\n\nنأمل من الجميع الالتزام والتقيد بما ورد.` }
-  };
+  // 1. حالة جديدة لحفظ النماذج القادمة من قاعدة البيانات
+  const [dbTemplates, setDbTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
 
+  // 2. جلب النماذج عند فتح الصفحة
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const res = await fetch(`${API_URL}?action=get_templates`);
+        const result = await res.json();
+        setDbTemplates(result);
+      } catch (error) {
+        console.error("تعذر جلب النماذج", error);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  // 3. تجميع النماذج حسب التصنيف (Category) لعرضها في القائمة المنسدلة
+  const groupedTemplates = dbTemplates.reduce((acc, curr) => {
+    if (!acc[curr.category]) acc[curr.category] = [];
+    acc[curr.category].push(curr);
+    return acc;
+  }, {});
+
+  // 4. دالة تغيير النموذج
   const handleTemplateChange = (e) => {
     const val = e.target.value;
-    if (templates[val]) {
-      setData({ ...data, subject: templates[val].subj, body: templates[val].body });
+    if (val === "custom") {
+      setData({ ...data, subject: "", body: "" });
+      return;
+    }
+    // البحث عن النموذج المختار بواسطة الـ ID الخاص به
+    const selected = dbTemplates.find(t => t.id.toString() === val);
+    if (selected) {
+      setData({ ...data, subject: selected.subject, body: selected.body });
     }
   };
 
@@ -1407,22 +1428,18 @@ const LetterGeneratorView = ({ user, navigateTo }) => {
             <label className="text-xs text-[#c5a059] block mb-1">اختر نموذجاً</label>
             <select onChange={handleTemplateChange} className="w-full bg-slate-800 border-none rounded p-2 text-sm outline-none text-white">
               <option value="custom">-- نموذج مخصص (فارغ) --</option>
-              <optgroup label="النماذج المالية">
-                <option value="fin_receipt">سند قبض مبلغ</option>
-                <option value="fin_payment">سند صرف مبلغ</option>
-                <option value="fin_petty_cash">طلب صرف عهدة نقدية</option>
-              </optgroup>
-              <optgroup label="الموارد البشرية والموظفين">
-                <option value="hr_salary_cert">تعريف بالراتب</option>
-                <option value="hr_job_offer">عرض وظيفي</option>
-              </optgroup>
-              <optgroup label="نماذج العملاء والمبيعات">
-                <option value="sales_quotation">عرض مالي لوحدة سكنية</option>
-                <option value="sales_reservation">تأكيد حجز وحدة</option>
-              </optgroup>
-              <optgroup label="إدارية عامة">
-                <option value="admin_circular">تعميم إداري</option>
-              </optgroup>
+              
+              {loadingTemplates ? (
+                <option disabled>جاري تحميل النماذج...</option>
+              ) : (
+                Object.keys(groupedTemplates).map(category => (
+                  <optgroup key={category} label={category}>
+                    {groupedTemplates[category].map(temp => (
+                      <option key={temp.id} value={temp.id}>{temp.title}</option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
             </select>
           </div>
           <div><label className="text-xs text-slate-400 block mb-1">التاريخ</label><input type="date" value={data.date} onChange={e => setData({ ...data, date: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" style={{ colorScheme: "dark" }} /></div>
@@ -1433,15 +1450,12 @@ const LetterGeneratorView = ({ user, navigateTo }) => {
             <div><label className="text-xs text-slate-400 block mb-1">اسم الموقع</label><input type="text" value={data.signName} onChange={e => setData({ ...data, signName: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" /></div>
             <div><label className="text-xs text-slate-400 block mb-1">المنصب</label><input type="text" value={data.signTitle} onChange={e => setData({ ...data, signTitle: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" /></div>
           </div>
-          
-          {/* 2. إخفاء زر إظهار الختم لمن ليس لديه صلاحية أدمن */}
           {user?.role === "admin" && (
             <div className="flex justify-between items-center pt-2">
               <span className="text-sm">إظهار الختم</span>
               <input type="checkbox" checked={data.showStamp} onChange={e => setData({ ...data, showStamp: e.target.checked })} className="w-5 h-5 accent-[#c5a059]" />
             </div>
           )}
-
         </div>
         <div className="p-4 bg-slate-950 border-t border-slate-700">
           <button onClick={() => window.print()} className="w-full bg-[#c5a059] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-yellow-600 transition">
@@ -1471,7 +1485,6 @@ const LetterGeneratorView = ({ user, navigateTo }) => {
             <div className="corner-accent" />
             <div className="mt-12 mb-12 flex justify-between items-start px-12 relative min-h-[150px]">
               <div className="relative w-48 flex justify-center">
-                {/* لن يظهر الختم إلا إذا كان المستخدم أدمن واختار إظهاره */}
                 {data.showStamp && user?.role === "admin" && (
                   <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-90 mix-blend-multiply" alt="ختم" />
                 )}
