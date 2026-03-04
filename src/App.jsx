@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ArrowLeft, ArrowRight, Award, Bath, Bed, Box, Building, CalendarDays, Car,
+  ArrowLeft, ArrowRight, Award, Bath, Bed, Box, Building, CalendarDays, Car, Calculator,
   ChevronDown, CircleCheckBig, CircleCheck, Clock, Droplets, ExternalLink, Eye,
   FilePenLine, Fingerprint, GanttChartSquare, HardHat, HousePlus, House, Layers, LayoutGrid, Leaf,
   ListChecks, Lock, LogOut, MapPin, Menu, MessageCircle, Moon, Phone, Plane,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 // --- Global Constants ---
+// 🔴 رابط ملف API الخاص بك 🔴
 const API_URL = "https://semak.sa/api.php"; 
 
 const ADMIN_CREDS = {
@@ -41,6 +42,7 @@ const APP_MODULES = [
   { id: "letters", label: "منشئ الخطابات", icon: FilePenLine, color: "text-orange-500", bg: "bg-orange-50" },
   { id: "qr", label: "رموز الوحدات (QR)", icon: QrCode, color: "text-slate-800", bg: "bg-slate-100" },
   { id: "leads", label: "سجل المهتمين (Leads)", icon: Users, color: "text-teal-600", bg: "bg-teal-50" },
+  { id: "accounting", label: "النظام المحاسبي (دفترة)", icon: Calculator, color: "text-emerald-600", bg: "bg-emerald-50" },
   { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
 ];
 
@@ -1304,6 +1306,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+          
           {/* كرت الموظفين والصلاحيات */}
           {hasPerm("users_manage") && (
             <div onClick={() => {loadUsers(); setActiveTab("users");}} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
@@ -1337,6 +1340,21 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
               </div>
               <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة</h3>
               <p className="text-slate-500 mb-6">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
+            </div>
+          )}
+
+          {/* كرت النظام المحاسبي (جديد) */}
+          {hasPerm("accounting") && (
+            <div onClick={() => window.open("https://semak.daftra.com/", "_blank")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500" />
+              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-3xl text-emerald-600 mb-6 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                <Calculator size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">النظام المحاسبي</h3>
+              <p className="text-slate-500 mb-6">الدخول إلى منصة دفترة لإدارة الحسابات والفواتير.</p>
+              <div className="flex items-center text-emerald-600 font-bold group-hover:gap-2 transition-all">
+                فتح دفترة <ExternalLink size={16} className="mr-2" />
+              </div>
             </div>
           )}
 
