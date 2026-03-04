@@ -793,16 +793,16 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
   const renderTracker = () => {
     if (!ticket) return <div className="text-center py-10 text-slate-500">لا يوجد طلبات سابقة.</div>;
     const steps = [
-      { id: 1, label: "تم استلام الطلب", status: "قيد الانتظار", icon: ListChecks, desc: "تم استلام طلبك بنجاح." },
-      { id: 2, label: "تعيين الفني", status: "تم التعيين", icon: UserCog, desc: `تم إسناد المهمة لـ: ${ticket.technician}` },
-      { id: 3, label: "جاري العمل", status: "جاري العمل", icon: HardHat, desc: `الزيارة المجدولة: ${ticket.desc.split('\n')[1]?.replace("التاريخ المفضل: ", "")} | ${ticket.desc.split('\n')[0]?.replace("الوقت المفضل: ", "")}` },
+      { id: 1, label: "تم استلام الطلب", status: "قيد الانتظار", icon: ListChecks, desc: "تم استلام طلبك وبانتظار مراجعة الجدول." },
+      { id: 2, label: "تأكيد الموعد والفني", status: "تم اعتماد الموعد", icon: CalendarDays, desc: `تم الاعتماد. الفني: ${ticket.technician !== "لم يتم التعيين" ? ticket.technician : "سيتم التحديد"} | الموعد: ${ticket.scheduleDate || "سيتم التأكيد"} (${ticket.scheduleTime || ""})` },
+      { id: 3, label: "جاري العمل", status: "جاري العمل", icon: HardHat, desc: "الفني في طريقه إليك أو يباشر العمل حالياً." },
       { id: 4, label: "مكتمل", status: "مكتمل", icon: CircleCheck, desc: "تم إغلاق الطلب، شكراً لتعاونكم." }
     ];
+    
     let currentStep = 0;
-    if (ticket.status === "تم التعيين") currentStep = 1;
+    if (["تم التعيين", "تم اعتماد الموعد", "تم اقتراح موعد بديل"].includes(ticket.status)) currentStep = 1;
     if (ticket.status === "جاري العمل") currentStep = 2;
     if (ticket.status === "مكتمل") currentStep = 3;
-
     return (
       <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
         <div className="absolute top-0 right-0 w-full h-2 bg-[#1a365d]" />
@@ -1069,15 +1069,18 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       return;
     }
     let phone = ticket.phone.toString().replace(/^0/, "966").replace(/\D/g, "");
-    let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `الفني المختص: *${ticket.technician}*` : "سيتم تعيين الفني قريباً.";
-    let dateText = ticket.scheduleDate ? `الموعد: *${ticket.scheduleDate}* | *${ticket.scheduleTime}*` : "";
-    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nتفيدك الإدارة بأن حالة الطلب الآن: *${ticket.status}*.\n${techText}\n${dateText}\n\nنتمنى لك يوماً سعيداً!`;
+    
+    let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `👨‍🔧 الفني المختص: *${ticket.technician}*` : "سيتم إعلامكم باسم الفني لاحقاً.";
+    let dateText = ticket.scheduleDate ? `📅 التاريخ: *${ticket.scheduleDate}*\n⏰ الوقت: *${ticket.scheduleTime}*` : "لم يتم تحديد موعد الزيارة بعد.";
+    
+    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nنفيدكم بأنه تمت مراجعة طلبكم، وحالة الطلب الآن: *${ticket.status}*.\n\n${techText}\n\n*موعد الزيارة (المعتمد / المقترح):*\n${dateText}\n\n💡 *(في حال عدم مناسبة الموعد أعلاه، يرجى الرد على هذه الرسالة وسنقوم بتنسيق موعد بديل يناسبكم)*\n\nنسعد بخدمتكم، ونتمنى لكم يوماً سعيداً!`;
+    
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
   };
 
   const columns = [
-    { id: "pending", title: "طلبات جديدة / قيد الانتظار", color: "border-slate-300", bg: "bg-slate-100", text: "text-slate-700", statuses: ["قيد الانتظار", undefined] },
-    { id: "active", title: "جاري العمل / معينة", color: "border-blue-300", bg: "bg-blue-50", text: "text-blue-700", statuses: ["تم التعيين", "جاري العمل"] },
+    { id: "pending", title: "طلبات ومواعيد جديدة", color: "border-slate-300", bg: "bg-slate-100", text: "text-slate-700", statuses: ["قيد الانتظار", undefined] },
+    { id: "active", title: "معتمدة / جاري العمل", color: "border-blue-300", bg: "bg-blue-50", text: "text-blue-700", statuses: ["تم التعيين", "تم اعتماد الموعد", "تم اقتراح موعد بديل", "جاري العمل"] },
     { id: "completed", title: "مكتملة", color: "border-green-300", bg: "bg-green-50", text: "text-green-700", statuses: ["مكتمل"] }
   ];
 
@@ -1087,30 +1090,80 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
         <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
       </div>
-      <p className="text-xs text-slate-500 mb-3 line-clamp-2">{ticket.desc}</p>
-      <div className="flex items-center gap-2 mb-3 text-[10px] font-bold text-slate-400">
-        <Clock size={12} /> {ticket.scheduleDate} {ticket.scheduleTime !== "غير محدد" && `| ${ticket.scheduleTime}`}
-      </div>
-      <div className="space-y-2 border-t border-slate-100 pt-3 mt-2">
-        <select value={ticket.technician || "لم يتم التعيين"} onChange={(e) => updateTicketStatus(ticket.id, "technician", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg bg-slate-50 border-none outline-none focus:ring-1 ring-purple-400">
-          <option value="لم يتم التعيين" disabled>-- إسناد لفني --</option>
-          {TECHNICIANS_LIST.map(tech => <option key={tech} value={tech}>{tech}</option>)}
-        </select>
-        <div className="flex gap-2">
-          <select value={ticket.status} onChange={(e) => updateTicketStatus(ticket.id, "status", e.target.value)} className={`flex-grow text-xs font-bold p-2 rounded-lg border outline-none ${ticket.status === "مكتمل" ? "bg-green-100 text-green-700 border-green-200" : "bg-slate-50 text-slate-700 border-slate-200"}`}>
-            <option value="قيد الانتظار">قيد الانتظار</option>
-            <option value="تم التعيين">تم التعيين</option>
-            <option value="جاري العمل">جاري العمل</option>
-            <option value="مكتمل">مكتمل</option>
+      
+      {/* عرض وصف المشكلة */}
+      <p className="text-xs text-slate-500 mb-3 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100">{ticket.desc}</p>
+      
+      {/* قسم إدارة الموعد والتكليف (جديد) */}
+      <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-3 mt-4">
+        <div className="flex items-center gap-2 mb-1">
+          <CalendarDays size={14} className="text-blue-600" />
+          <span className="text-xs font-bold text-blue-800">إدارة الموعد والتكليف</span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-slate-500 font-bold block mb-1">تاريخ الزيارة</label>
+            <input 
+              type="date" 
+              value={ticket.scheduleDate || ""} 
+              onChange={(e) => updateTicketStatus(ticket.id, "scheduleDate", e.target.value)} 
+              className="w-full text-xs font-bold p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-400 bg-white" 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-500 font-bold block mb-1">وقت الزيارة</label>
+            <select 
+              value={ticket.scheduleTime || "غير محدد"} 
+              onChange={(e) => updateTicketStatus(ticket.id, "scheduleTime", e.target.value)} 
+              className="w-full text-xs font-bold p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-400 bg-white"
+            >
+              <option value="غير محدد" disabled>اختر الوقت</option>
+              {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-2 border-t border-blue-100">
+          <select 
+            value={ticket.technician || "لم يتم التعيين"} 
+            onChange={(e) => updateTicketStatus(ticket.id, "technician", e.target.value)} 
+            className="w-full text-xs font-bold p-2 rounded-lg bg-white border border-slate-200 outline-none focus:border-blue-400 text-slate-700"
+          >
+            <option value="لم يتم التعيين" disabled>-- إسناد لفني --</option>
+            {TECHNICIANS_LIST.map(tech => <option key={tech} value={tech}>{tech}</option>)}
           </select>
-          <button onClick={() => notifyWhatsApp(ticket)} className="w-8 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition" title="إبلاغ العميل بالواتس">
-            <MessageCircle size={14} />
-          </button>
+
+          <div className="flex gap-2">
+            <select 
+              value={ticket.status} 
+              onChange={(e) => updateTicketStatus(ticket.id, "status", e.target.value)} 
+              className={`flex-grow text-xs font-bold p-2 rounded-lg border outline-none ${
+                ticket.status === "مكتمل" ? "bg-green-100 text-green-700 border-green-200" : 
+                ticket.status === "تم اعتماد الموعد" ? "bg-blue-100 text-blue-700 border-blue-200" :
+                "bg-white text-slate-700 border-slate-200"
+              }`}
+            >
+              <option value="قيد الانتظار">قيد الانتظار (طلب جديد)</option>
+              <option value="تم التعيين">تم تعيين الفني (بلا موعد مؤكد)</option>
+              <option value="تم اعتماد الموعد">تم اعتماد الموعد</option>
+              <option value="تم اقتراح موعد بديل">تم اقتراح موعد بديل</option>
+              <option value="جاري العمل">جاري العمل</option>
+              <option value="مكتمل">مكتمل</option>
+            </select>
+            
+            <button 
+              onClick={() => notifyWhatsApp(ticket)} 
+              className="w-10 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition shadow-md shadow-green-200" 
+              title="إرسال الموعد للعميل بالواتساب"
+            >
+              <MessageCircle size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
-
   const sortedDates = Object.keys(tickets.reduce((acc, ticket) => {
     const date = ticket.scheduleDate || "غير مجدول";
     if (!acc[date]) acc[date] = [];
