@@ -16,7 +16,7 @@ const USERS_SHEET = "Users";
 
 const ADMIN_CREDS = {
   id: 999,
-  name: "أحمد البادي (Admin)",
+  name: "Ahmed Al-Badi (Admin)",
   role: "admin",
   job: "المدير العام",
   email: "ahmed.albadi@semak.sa",
