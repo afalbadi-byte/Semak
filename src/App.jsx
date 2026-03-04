@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css'; // تصميم محرر النصوص
+import React, { useState, useEffect, useRef } from 'react';
+import JoditEditor from 'jodit-react'; // المحرر الاحترافي الجديد
 import {
   ArrowLeft, ArrowRight, Award, Bath, Bed, Box, Building, CalendarDays, Car, Calculator,
   ChevronDown, CircleCheckBig, CircleCheck, Clock, Droplets, ExternalLink, Eye,
@@ -71,18 +70,6 @@ const GlobalStyles = () => (
     .map-container iframe { filter: grayscale(20%) contrast(1.2) opacity(0.9); transition: all 0.3s ease; }
     .map-container:hover iframe { filter: grayscale(0%) opacity(1); }
     
-    @keyframes marquee { 
-        0% { transform: translateX(0%); } 
-        100% { transform: translateX(-100%); } 
-    }
-    .marquee-container { 
-        display: flex; overflow: hidden; width: 100%; direction: ltr; 
-    }
-    .marquee-content { 
-        display: flex; min-width: 100%; flex-shrink: 0; align-items: center; justify-content: space-around; animation: marquee 25s linear infinite; 
-    }
-    .marquee-container:hover .marquee-content { animation-play-state: paused; }
-    
     /* Print Styles */
     .a4-page {
         width: 210mm; min-height: 297mm; height: auto; background: white; margin: 0 auto;
@@ -94,21 +81,19 @@ const GlobalStyles = () => (
     .watermark { position: absolute; top: 55%; left: 45%; transform: translate(-50%, -50%); opacity: 0.04; width: 80%; pointer-events: none; filter: grayscale(100%); z-index: 0; }
     .letter-header { padding: 15mm 20mm 5mm 30mm; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; }
     .letter-footer { margin-top: auto; background-color: #1a365d; color: white; padding: 12px 0; border-top: 4px solid #c5a059; z-index: 20; -webkit-print-color-adjust: exact !important; }
-    .letter-body { padding: 10mm 20mm 10mm 30mm; flex-grow: 1; font-family: 'Amiri', serif; font-size: 18px; line-height: 2.2; position: relative; z-index: 5; display: flex; flex-direction: column; font-variant-ligatures: no-common-ligatures; letter-spacing: 0px; }
+    .letter-body { padding: 10mm 20mm 10mm 30mm; flex-grow: 1; font-family: 'Amiri', serif; font-size: 18px; position: relative; z-index: 5; display: flex; flex-direction: column; }
 
-    /* تنسيقات محرر النصوص للطباعة (React-Quill) */
-    .quill-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 10px auto; display: block; }
-    .quill-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-    .quill-content th, .quill-content td { border: 1px solid #cbd5e1; padding: 8px; text-align: right; }
-    .quill-content th { background-color: #f1f5f9; font-weight: bold; }
-    .quill-content ul { list-style-type: disc; margin-right: 20px; }
-    .quill-content ol { list-style-type: decimal; margin-right: 20px; }
-    .quill-content strong { font-weight: 900; color: #1a365d; }
-    
-    /* تعديل شكل المحرر في الوضع الليلي للشريط الجانبي */
-    .ql-toolbar.ql-snow { background-color: #f8fafc; border-radius: 8px 8px 0 0; font-family: 'Cairo', sans-serif; direction: ltr;}
-    .ql-container.ql-snow { background-color: white; border-radius: 0 0 8px 8px; color: black; font-family: 'Cairo', sans-serif; font-size: 16px; min-height: 200px;}
-    .ql-editor { direction: rtl; text-align: right; }
+    /* تنسيقات محرر النصوص داخل الـ A4 لضمان الطباعة المثالية */
+    .letter-content-html { width: 100%; color: #333; line-height: 1.8; text-align: justify; }
+    .letter-content-html p { margin-bottom: 15px; }
+    .letter-content-html img { max-width: 100%; height: auto; display: block; margin: 15px auto; border-radius: 8px; }
+    .letter-content-html table { width: 100%; border-collapse: collapse; margin: 20px 0; font-family: 'Cairo', sans-serif; font-size: 14px; }
+    .letter-content-html th, .letter-content-html td { border: 1px solid #94a3b8; padding: 10px; text-align: center; }
+    .letter-content-html th { background-color: #f1f5f9; font-weight: bold; color: #1a365d; }
+    .letter-content-html ul { list-style-type: disc; margin-right: 25px; margin-bottom: 15px; }
+    .letter-content-html ol { list-style-type: decimal; margin-right: 25px; margin-bottom: 15px; }
+    .letter-content-html strong, .letter-content-html b { font-weight: 900; color: #1a365d; }
+    .letter-content-html h1, .letter-content-html h2, .letter-content-html h3 { color: #1a365d; font-family: 'Cairo', sans-serif; font-weight: bold; margin-bottom: 15px; margin-top: 25px; }
 
     @media print {
         @page { size: A4; margin: 0; }
@@ -957,7 +942,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [users, setUsers] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState("kanban");
+  const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "calendar" | "gantt"
   const [showAddUser, setShowAddUser] = useState(false);
   const [otpInputs, setOtpInputs] = useState({}); 
   const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
@@ -1794,12 +1779,13 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
     date: new Date().toISOString().split("T")[0],
     recipient: "شركاء النجاح المحترمين",
     subject: "",
-    body: "", // سيحتوي على HTML من محرر ReactQuill
+    body: "", 
     signName: user?.name || "أحمد البادي",
     signTitle: user?.job || "المدير العام",
     showStamp: user?.role === "admin"
   });
 
+  const editor = useRef(null);
   const [dbTemplates, setDbTemplates] = useState([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   
@@ -1807,17 +1793,21 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
 
-  // إعدادات الأدوات المتاحة في المحرر (صور، خط عريض، ألوان، قوائم)
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'color': [] }, { 'background': [] }],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      [{ 'align': [] }],
-      ['link', 'image'],
-      ['clean']
-    ],
+  // إعدادات محرر Jodit الممتاز لدعم العربي والجداول بالكامل
+  const editorConfig = {
+    readonly: false,
+    language: 'ar',
+    direction: 'rtl',
+    height: 400,
+    enableDragAndDropFileToEditor: true,
+    toolbarAdaptive: false,
+    buttons: [
+      'source', '|',
+      'bold', 'italic', 'underline', 'strikethrough', '|',
+      'font', 'fontsize', 'brush', 'paragraph', '|',
+      'image', 'table', 'link', '|',
+      'align', 'ul', 'ol', 'undo', 'redo', 'hr', 'fullsize'
+    ]
   };
 
   const fetchTemplates = async () => {
@@ -1927,16 +1917,15 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
           <div><label className="text-xs text-slate-400 block mb-1">المستلم</label><input type="text" value={data.recipient} onChange={e => setData({ ...data, recipient: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none border border-slate-700 focus:border-[#c5a059] transition" /></div>
           <div><label className="text-xs text-slate-400 block mb-1">الموضوع</label><input type="text" value={data.subject} onChange={e => setData({ ...data, subject: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none font-bold border border-slate-700 focus:border-[#c5a059] transition" /></div>
           
-          {/* المحرر الاحترافي الجديد */}
+          {/* المحرر الاحترافي الجديد Jodit */}
           <div className="mb-4">
             <label className="text-xs text-slate-400 block mb-1">نص الخطاب (المحرر الذكي)</label>
-            <div className="bg-white rounded-lg text-black">
-              <ReactQuill 
-                theme="snow" 
-                value={data.body} 
-                onChange={(content) => setData({ ...data, body: content })} 
-                modules={quillModules}
-                placeholder="اكتب تفاصيل الخطاب هنا... يمكنك إضافة صور ولصق جداول."
+            <div className="rounded-lg text-black overflow-hidden">
+              <JoditEditor
+                ref={editor}
+                value={data.body}
+                config={editorConfig}
+                onBlur={newContent => setData({ ...data, body: newContent })} // الأداء أفضل عند استخدام onBlur
               />
             </div>
           </div>
@@ -1953,7 +1942,7 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* قسم حفظ النموذج كنسخة جديدة (متاح للجميع) */}
+          {/* قسم حفظ النموذج كنسخة جديدة */}
           <div className="bg-slate-800/50 p-4 rounded-xl mt-4 border border-slate-700">
             {!showSaveForm ? (
               <button onClick={() => setShowSaveForm(true)} className="w-full text-sm font-bold text-teal-400 hover:text-teal-300 transition flex items-center justify-center gap-2 py-2">
@@ -2016,7 +2005,7 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
             <div className="text-center mb-8 md:mb-10"><span className="border-b-2 border-[#c5a059] pb-2 px-8 font-bold text-lg md:text-xl text-[#1a365d] font-cairo">{data.subject}</span></div>
             
             {/* قراءة وعرض الـ HTML الذي تم إنتاجه من المحرر هنا */}
-            <div className="text-justify leading-[2.2] flex-grow quill-content" dangerouslySetInnerHTML={{ __html: data.body }}></div>
+            <div className="text-justify leading-relaxed flex-grow letter-content-html" dangerouslySetInnerHTML={{ __html: data.body }}></div>
             
             <div className="corner-accent" />
             <div className="mt-12 mb-12 flex justify-between items-start px-4 md:px-12 relative min-h-[150px]">
