@@ -10,9 +10,8 @@ import {
 } from 'lucide-react';
 
 // --- Global Constants ---
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyK4aqciGQm0UKZpH3OC3j5pEie2sw-rQjmk-QUzuteW6Gm0NR7kygjYZnKF-crb0U/exec";
-const SHEET_ID = "1TlftMYy6NZdy1su7F9hw7-0h_GDTMErhetTDTavdhv0";
-const USERS_SHEET = "Users";
+// 🔴 ضع رابط موقعك الفعلي هنا بدلاً من yourdomain.com 🔴
+const API_URL = "https://semak.sa/api.php";
 
 const ADMIN_CREDS = {
   id: 999,
@@ -520,21 +519,25 @@ const ContactView = ({ showToast }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const form = e.target;
-    const data = new FormData(form);
-    const params = new URLSearchParams();
-    for (const pair of data) { params.append(pair[0], pair[1]); }
-    params.append("timestamp", new Date().toLocaleString("en-GB"));
+    
+    const payload = {
+      name: e.target.name.value,
+      phone: e.target.phone.value,
+      unit: e.target.unit.value,
+    };
 
     try {
-      await fetch(SCRIPT_URL, {
+      const response = await fetch(`${API_URL}?action=add_lead`, {
         method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
       });
-      showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.");
-      form.reset();
+      if (response.ok) {
+        showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.");
+        e.target.reset();
+      } else {
+        throw new Error("فشل");
+      }
     } catch {
       showToast("تنبيه", "حدث خطأ في الاتصال، يرجى المحاولة لاحقاً.", "error");
     } finally {
@@ -594,12 +597,10 @@ const ContactView = ({ showToast }) => {
 };
 
 const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
-  // إضافة حالات (States) لحفظ البيانات وقيمة مربع الاختيار
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
 
-  // استرجاع البيانات المحفوظة عند تحميل الصفحة
   useEffect(() => {
     const savedEmail = localStorage.getItem("semak_admin_email");
     const savedPassword = localStorage.getItem("semak_admin_password");
@@ -613,7 +614,6 @@ const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
   const handleLogin = (e) => {
     e.preventDefault();
     if (email === ADMIN_CREDS.email && password === ADMIN_CREDS.pass) {
-      // حفظ أو مسح البيانات بناءً على اختيار المستخدم
       if (rememberMe) {
         localStorage.setItem("semak_admin_email", email);
         localStorage.setItem("semak_admin_password", password);
@@ -669,7 +669,6 @@ const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
             </div>
           </div>
           
-          {/* خيار تذكرني المضاف */}
           <div className="flex items-center gap-2 mt-2">
             <input 
               type="checkbox" 
@@ -769,33 +768,30 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
       return;
     }
     setLoading(true);
-    const id = "SMK-" + Math.floor(Math.random() * 10000);
     const tech = TECHNICIANS[e.target.type.value] || "غير محدد";
     const desc = `الوقت المفضل: ${time}\nالتاريخ المفضل: ${date}\n\nالوصف:\n${e.target.desc.value}`;
+    
     const payload = {
-      id,
-      date: new Date().toLocaleDateString("ar-EG"),
       name: e.target.name.value,
       phone: e.target.phone.value,
       unit: e.target.unit.value,
       type: e.target.type.value,
-      desc,
-      status: "تم التعيين",
-      technician: tech
+      desc: desc
     };
 
     try {
-      await fetch(SCRIPT_URL, {
+      const res = await fetch(`${API_URL}?action=add_maintenance`, {
         method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
+      const result = await res.json();
+      
       showToast("نجاح", "تم استلام طلبك وتعيين الفني المختص بنجاح.");
       e.target.reset();
       setDate("");
       setTime("");
-      setTicket(payload);
+      setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: tech});
       setTab("track");
     } catch {
       showToast("تنبيه", "حدث خطأ. حاول لاحقاً.", "error");
@@ -823,7 +819,7 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
         <div className="flex justify-between items-start mb-10 border-b border-slate-100 pb-6">
           <div>
             <h4 className="text-2xl font-black text-[#1a365d] mb-2">طلب رقم {ticket.id}</h4>
-            <p className="text-slate-500 flex items-center gap-2"><Clock size={16} /> تاريخ الطلب: {ticket.date}</p>
+            <p className="text-slate-500 flex items-center gap-2"><Clock size={16} /> تاريخ الطلب: {ticket.date || new Date().toLocaleDateString("ar-EG")}</p>
           </div>
           <span className="bg-[#c5a059]/10 text-[#c5a059] px-4 py-2 rounded-xl font-bold text-sm border border-[#c5a059]/20">{ticket.type}</span>
         </div>
@@ -950,97 +946,74 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     navigateTo("home");
   };
 
-  const fetchGoogleSheetData = (query, sheetName, callback) => {
-    setLoading(true);
-    const callbackName = "handleData" + Math.floor(Math.random() * 100000);
-    window[callbackName] = (data) => {
-      callback(data);
-      delete window[callbackName];
-      document.getElementById(callbackName + "-script")?.remove();
-      setLoading(false);
-    };
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:${callbackName}&sheet=${sheetName}&tq=${encodeURIComponent(query)}`;
-    const script = document.createElement("script");
-    script.src = url;
-    script.id = callbackName + "-script";
-    script.onerror = () => {
-      showToast("خطأ", "تعذر جلب البيانات من Google Sheets", "error");
-      setLoading(false);
-    };
-    document.body.appendChild(script);
-  };
-
-  const loadLeads = () => {
+  const loadLeads = async () => {
     setActiveTab("leads");
-    fetchGoogleSheetData("SELECT *", "Sheet1", (data) => {
-      if (data && data.table && data.table.rows) {
-        const parsed = data.table.rows.map((row, i) => ({
-          id: i,
-          date: row.c[0]?.v ? String(row.c[0].v) : "",
-          name: row.c[1]?.v ? String(row.c[1].v) : "---",
-          phone: row.c[2]?.v ? String(row.c[2].v) : "---",
-          unit: row.c[3]?.v ? String(row.c[3].v) : "غير محدد"
-        })).reverse().filter(r => r.name !== "الاسم" && r.name !== "Name" && r.name !== "---");
-        setLeads(parsed);
-      } else {
-        setLeads([]);
-      }
-    });
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_leads`);
+      const data = await res.json();
+      setLeads(data);
+    } catch (err) {
+      showToast("خطأ", "تعذر جلب سجل المهتمين", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const loadUsers = () => {
+  const loadUsers = async () => {
     setActiveTab("users");
-    fetchGoogleSheetData("SELECT A,B,C,D,E", USERS_SHEET, (data) => {
-      if (data && data.table && data.table.rows) {
-        const parsed = data.table.rows.map((row, i) => ({
-          id: i,
-          name: row.c[0]?.v || "بدون اسم",
-          job: row.c[1]?.v || "",
-          email: row.c[2]?.v || "",
-          role: row.c[4]?.v || "employee"
-        })).filter(r => r.email);
-        setUsers([ADMIN_CREDS, ...parsed].filter((v, i, a) => a.findIndex(t => t.email === v.email) === i));
-      } else {
-        setUsers([ADMIN_CREDS]);
-      }
-    });
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_users`);
+      const data = await res.json();
+      setUsers([ADMIN_CREDS, ...data]);
+    } catch (err) {
+      showToast("خطأ", "تعذر جلب الموظفين", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const loadMaintenance = () => {
+  const loadMaintenance = async () => {
     setActiveTab("maintenance");
-    fetchGoogleSheetData("SELECT *", "Maintenance", (data) => {
-      if (data && data.table && data.table.rows) {
-        const parsed = data.table.rows.map(row => {
-          const type = row.c[5]?.v || "أخرى";
-          let desc = row.c[6]?.v || "---";
-          let scheduleDate = row.c[1]?.v || "";
-          let scheduleTime = "غير محدد";
-          if (desc.includes("التاريخ المفضل:")) {
-            const dateMatch = desc.match(/التاريخ المفضل: (.*)/);
-            if (dateMatch) scheduleDate = dateMatch[1];
-            const timeMatch = desc.match(/الوقت المفضل: (.*)/);
-            if (timeMatch) scheduleTime = timeMatch[1];
-            desc = desc.split(`\n\nالوصف:\n`)[1] || desc;
-          }
-          return {
-            id: row.c[0]?.v || "---",
-            date: row.c[1]?.v || "",
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_maintenance`);
+      let data = await res.json();
+      
+      const parsed = data.map(row => {
+         let desc = row.descrip || "---";
+         let scheduleDate = row.date ? row.date.split(" ")[0] : "";
+         let scheduleTime = "غير محدد";
+         
+         if (desc.includes("التاريخ المفضل:")) {
+           const dateMatch = desc.match(/التاريخ المفضل: (.*)/);
+           if (dateMatch) scheduleDate = dateMatch[1];
+           const timeMatch = desc.match(/الوقت المفضل: (.*)/);
+           if (timeMatch) scheduleTime = timeMatch[1];
+           desc = desc.split(`\n\nالوصف:\n`)[1] || desc;
+         }
+
+         return {
+            id: row.id,
+            date: row.date,
             scheduleDate,
             scheduleTime,
-            name: row.c[2]?.v || "---",
-            phone: row.c[3]?.v ? String(row.c[3].v) : "---",
-            unit: row.c[4]?.v || "---",
-            type,
-            desc,
-            status: row.c[7]?.v || "قيد الانتظار",
-            technician: row.c[7]?.v === "قيد الانتظار" || row.c[7]?.v === undefined ? "لم يتم التعيين" : (TECHNICIANS[type] || "فريق الدعم العام")
-          };
-        }).reverse().filter(r => r.id !== "ID" && r.id !== "رقم الطلب" && r.name !== "الاسم" && r.id !== "---");
-        setTickets(parsed);
-      } else {
-        setTickets([]);
-      }
-    });
+            name: row.name,
+            phone: row.phone,
+            unit: row.unit,
+            type: row.type,
+            desc: desc,
+            status: row.status || "قيد الانتظار",
+            technician: row.technician || "لم يتم التعيين"
+         };
+      });
+      setTickets(parsed);
+    } catch (err) {
+      showToast("خطأ", "تعذر جلب تذاكر الصيانة", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updateTicketStatus = (id, field, value) => {
@@ -1203,12 +1176,9 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
               <div>
                 <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-[#c5a059]" /> قائمة الموظفين</h3>
-                <p className="text-slate-500 text-sm mt-1">يتم جلب القائمة من تبويب (Users) في ملف الإكسل.</p>
+                <p className="text-slate-500 text-sm mt-1">يتم جلب القائمة من قاعدة البيانات.</p>
               </div>
               <div className="flex items-center gap-3">
-                <a href={`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`} target="_blank" rel="noreferrer" className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-50 transition flex items-center gap-2">
-                  <ExternalLink size={16} /> فتح الشيت
-                </a>
                 <button onClick={loadUsers} className="bg-[#c5a059] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-600 transition flex items-center gap-2">
                   {loading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />} تحديث
                 </button>
@@ -1344,12 +1314,9 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
               <div>
                 <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-[#c5a059]" /> سجل المهتمين</h3>
-                <p className="text-slate-500 text-sm mt-1">يتم جلب البيانات مباشرة من ملف Google Sheet المعتمد</p>
+                <p className="text-slate-500 text-sm mt-1">يتم جلب البيانات مباشرة من قاعدة البيانات</p>
               </div>
               <div className="flex items-center gap-3">
-                <a href={`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`} target="_blank" rel="noreferrer" className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-50 transition flex items-center gap-2">
-                  <ExternalLink size={16} /> فتح الشيت
-                </a>
                 <button onClick={loadLeads} className="bg-[#c5a059] text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-yellow-600 transition flex items-center gap-2 shadow-lg shadow-orange-100">
                   {loading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />} تحديث البيانات
                 </button>
