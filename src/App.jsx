@@ -933,6 +933,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "calendar" | "gantt"
   const [showAddUser, setShowAddUser] = useState(false);
+  const [otpInputs, setOtpInputs] = useState({}); // لتخزين ما يكتبه الفني في خانة الـ OTP
 
   const handleLogout = () => {
     setUser(null);
@@ -998,7 +999,8 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             type: row.type,
             desc: desc,
             status: row.status || "قيد الانتظار",
-            technician: row.technician || "لم يتم التعيين"
+            technician: row.technician || "لم يتم التعيين",
+            otp: row.otp // إذا كان هناك OTP محفوظ مسبقاً
          };
       });
       setTickets(parsed);
@@ -1061,7 +1063,19 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   };
 
   const updateTicketStatus = (id, field, value) => {
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
+    setTickets(prev => prev.map(t => {
+      if (t.id === id) {
+        let updatedTicket = { ...t, [field]: value };
+        
+        // إنشاء رمز OTP تلقائياً عند اعتماد الموعد (إذا لم يكن موجوداً مسبقاً)
+        if (field === "status" && value === "تم اعتماد الموعد" && !t.otp) {
+          updatedTicket.otp = Math.floor(1000 + Math.random() * 9000).toString();
+        }
+        
+        return updatedTicket;
+      }
+      return t;
+    }));
     // ملاحظة: هذا التحديث محلي (في الواجهة فقط) حالياً، للإنتاج الفعلي اربطه بـ API.php
     showToast("تم التحديث", `تم التحديث محلياً للطلب ${id}`);
   };
@@ -1076,7 +1090,10 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `👨‍🔧 الفني المختص: *${ticket.technician}*` : "سيتم إعلامكم باسم الفني لاحقاً.";
     let dateText = ticket.scheduleDate ? `📅 التاريخ: *${ticket.scheduleDate}*\n⏰ الوقت: *${ticket.scheduleTime}*` : "لم يتم تحديد موعد الزيارة بعد.";
     
-    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nنفيدكم بأنه تمت مراجعة طلبكم، وحالة الطلب الآن: *${ticket.status}*.\n\n${techText}\n\n*موعد الزيارة (المعتمد / المقترح):*\n${dateText}\n\n💡 *(في حال عدم مناسبة الموعد أعلاه، يرجى الرد على هذه الرسالة وسنقوم بتنسيق موعد بديل يناسبكم)*\n\nنسعد بخدمتكم، ونتمنى لكم يوماً سعيداً!`;
+    // إضافة فقرة الـ OTP للرسالة (ليتم إعطاؤه للفني بعد الانتهاء)
+    let otpText = ticket.otp ? `\n\n🔑 *رمز إغلاق الطلب (OTP):* ${ticket.otp}\n_(يرجى تزويد الفني بهذا الرمز عند **الانتهاء من العمل** لتأكيد إغلاق الطلب بنجاح)_` : "";
+    
+    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nنفيدكم بأنه تمت مراجعة طلبكم، وحالة الطلب الآن: *${ticket.status}*.\n\n${techText}\n\n*موعد الزيارة (المعتمد / المقترح):*\n${dateText}${otpText}\n\n💡 *(في حال عدم مناسبة الموعد أعلاه، يرجى الرد على هذه الرسالة وسنقوم بتنسيق موعد بديل يناسبكم)*\n\nنسعد بخدمتكم، ونتمنى لكم يوماً سعيداً!`;
     
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
   };
@@ -1097,7 +1114,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       {/* عرض وصف المشكلة */}
       <p className="text-xs text-slate-500 mb-3 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100">{ticket.desc}</p>
       
-      {/* قسم إدارة الموعد والتكليف (جديد) */}
+      {/* قسم إدارة الموعد والتكليف */}
       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-3 mt-4">
         <div className="flex items-center gap-2 mb-1">
           <CalendarDays size={14} className="text-blue-600" />
@@ -1137,31 +1154,68 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             {TECHNICIANS_LIST.map(tech => <option key={tech} value={tech}>{tech}</option>)}
           </select>
 
-          <div className="flex gap-2">
-            <select 
-              value={ticket.status} 
-              onChange={(e) => updateTicketStatus(ticket.id, "status", e.target.value)} 
-              className={`flex-grow text-xs font-bold p-2 rounded-lg border outline-none ${
-                ticket.status === "مكتمل" ? "bg-green-100 text-green-700 border-green-200" : 
-                ticket.status === "تم اعتماد الموعد" ? "bg-blue-100 text-blue-700 border-blue-200" :
-                "bg-white text-slate-700 border-slate-200"
-              }`}
-            >
-              <option value="قيد الانتظار">قيد الانتظار (طلب جديد)</option>
-              <option value="تم التعيين">تم تعيين الفني (بلا موعد مؤكد)</option>
-              <option value="تم اعتماد الموعد">تم اعتماد الموعد</option>
-              <option value="تم اقتراح موعد بديل">تم اقتراح موعد بديل</option>
-              <option value="جاري العمل">جاري العمل</option>
-              <option value="مكتمل">مكتمل</option>
-            </select>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <select 
+                value={ticket.status} 
+                onChange={(e) => updateTicketStatus(ticket.id, "status", e.target.value)} 
+                className={`flex-grow text-xs font-bold p-2 rounded-lg border outline-none ${
+                  ticket.status === "مكتمل" ? "bg-green-100 text-green-700 border-green-200" : 
+                  ticket.status === "تم اعتماد الموعد" ? "bg-blue-100 text-blue-700 border-blue-200" :
+                  "bg-white text-slate-700 border-slate-200"
+                }`}
+              >
+                <option value="قيد الانتظار">قيد الانتظار (طلب جديد)</option>
+                <option value="تم التعيين">تم تعيين الفني (بلا موعد مؤكد)</option>
+                <option value="تم اعتماد الموعد">تم اعتماد الموعد</option>
+                <option value="تم اقتراح موعد بديل">تم اقتراح موعد بديل</option>
+                <option value="جاري العمل">جاري العمل</option>
+                <option value="مكتمل" disabled={ticket.status === "جاري العمل" && ticket.otp}>مكتمل (يتطلب رمز العميل)</option>
+              </select>
+              
+              <button 
+                onClick={() => notifyWhatsApp(ticket)} 
+                className="w-10 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition shadow-md shadow-green-200" 
+                title="إرسال الموعد للعميل بالواتساب"
+              >
+                <MessageCircle size={16} />
+              </button>
+            </div>
+
+            {/* واجهة إدخال رمز التحقق OTP للفني (لإغلاق الطلب) */}
+            {ticket.status === "جاري العمل" && ticket.otp && (
+              <div className="flex items-center gap-2 mt-1 p-2 bg-green-50 border border-green-200 rounded-lg animate-fadeIn shadow-inner">
+                <Lock size={14} className="text-green-600 flex-shrink-0" />
+                <input 
+                  type="text" 
+                  placeholder="رمز إغلاق الطلب" 
+                  maxLength={4}
+                  value={otpInputs[ticket.id] || ""}
+                  onChange={(e) => setOtpInputs({...otpInputs, [ticket.id]: e.target.value})}
+                  className="w-full text-center text-xs font-bold p-1.5 rounded border border-green-300 outline-none focus:border-green-500"
+                />
+                <button 
+                  onClick={() => {
+                    if(otpInputs[ticket.id] === ticket.otp) {
+                      updateTicketStatus(ticket.id, "status", "مكتمل");
+                      showToast("عمل ممتاز!", "تم إغلاق الطلب بناءً على تأكيد العميل.");
+                    } else {
+                      showToast("رمز خاطئ", "الرمز غير صحيح، يرجى طلبه من العميل.", "error");
+                    }
+                  }}
+                  className="bg-green-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-600 transition flex-shrink-0 whitespace-nowrap shadow-sm"
+                >
+                  إغلاق الطلب
+                </button>
+              </div>
+            )}
             
-            <button 
-              onClick={() => notifyWhatsApp(ticket)} 
-              className="w-10 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition shadow-md shadow-green-200" 
-              title="إرسال الموعد للعميل بالواتساب"
-            >
-              <MessageCircle size={16} />
-            </button>
+            {/* عرض الرمز للمدير في حال نسيانه العميل (يظهر في حالتي الاعتماد أو جاري العمل) */}
+            {user?.role === "admin" && ticket.otp && (ticket.status === "تم اعتماد الموعد" || ticket.status === "جاري العمل") && (
+               <div className="text-[9px] text-slate-400 text-center mt-1">
+                 (للمدير فقط: رمز الإغلاق هو {ticket.otp})
+               </div>
+            )}
           </div>
         </div>
       </div>
@@ -1389,9 +1443,8 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                         {[...Array(7)].map((_, index) => {
                           const date = new Date();
                           date.setDate(date.getDate() + index);
-                          // تنسيق التاريخ ليتطابق مع (YYYY-MM-DD)
-                          const offset = date.getTimezoneOffset()
-                          const localDate = new Date(date.getTime() - (offset*60*1000))
+                          const offset = date.getTimezoneOffset();
+                          const localDate = new Date(date.getTime() - (offset*60*1000));
                           const dateString = localDate.toISOString().split("T")[0];
                           const dayName = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' }).format(date);
                           const isToday = index === 0;
@@ -1420,18 +1473,16 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                           {[...Array(7)].map((_, dayIndex) => {
                             const date = new Date();
                             date.setDate(date.getDate() + dayIndex);
-                            const offset = date.getTimezoneOffset()
-                            const localDate = new Date(date.getTime() - (offset*60*1000))
+                            const offset = date.getTimezoneOffset();
+                            const localDate = new Date(date.getTime() - (offset*60*1000));
                             const dateString = localDate.toISOString().split("T")[0];
                             const isToday = dayIndex === 0;
                             
-                            // جلب التذاكر الخاصة بهذا الفني في هذا اليوم
                             const dayTickets = tickets.filter(t => t.technician === tech && t.scheduleDate === dateString);
 
                             return (
                               <div key={dayIndex} className={`p-2 border-l border-slate-200 min-h-[100px] relative ${isToday ? 'bg-purple-50/30' : ''}`}>
                                 {dayTickets.map(t => {
-                                  // تحديد لون الكرت بناءً على الحالة
                                   let bgClass = "bg-slate-100 border-slate-300 text-slate-700";
                                   if(t.status === "تم اعتماد الموعد") bgClass = "bg-blue-100 border-blue-300 text-blue-800 shadow-sm";
                                   if(t.status === "جاري العمل") bgClass = "bg-purple-100 border-purple-300 text-purple-800 shadow-sm";
@@ -1465,8 +1516,8 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                         {[...Array(7)].map((_, dayIndex) => {
                             const date = new Date();
                             date.setDate(date.getDate() + dayIndex);
-                            const offset = date.getTimezoneOffset()
-                            const localDate = new Date(date.getTime() - (offset*60*1000))
+                            const offset = date.getTimezoneOffset();
+                            const localDate = new Date(date.getTime() - (offset*60*1000));
                             const dateString = localDate.toISOString().split("T")[0];
                             const unassignedTickets = tickets.filter(t => (t.technician === "لم يتم التعيين" || !t.technician) && t.scheduleDate === dateString);
 
