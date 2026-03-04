@@ -42,30 +42,48 @@ const getImg = (id, sz = "w1500") => `https://drive.google.com/thumbnail?id=${id
 const GlobalStyles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Amiri:wght@400;700&display=swap');
+    
     .font-cairo { font-family: 'Cairo', sans-serif; }
     .font-amiri { font-family: 'Amiri', serif; }
+    
     body { font-family: 'Cairo', sans-serif; overflow-x: hidden; background-color: #f8fafc; }
     .hero-gradient { background: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.6)); }
     .text-glow { text-shadow: 0 0 15px rgba(197, 160, 89, 0.4); }
     .card-hover { transition: all 0.3s ease; }
     .card-hover:hover { transform: translateY(-10px); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); }
+    
     .logo-blend-light { mix-blend-mode: multiply; }
     .logo-footer-gold { transition: transform 0.3s ease; }
     .logo-footer-gold:hover { transform: scale(1.05); filter: drop-shadow(0 0 10px rgba(197, 160, 89, 0.3)); }
+
     .map-container iframe { filter: grayscale(20%) contrast(1.2) opacity(0.9); transition: all 0.3s ease; }
     .map-container:hover iframe { filter: grayscale(0%) opacity(1); }
-    @keyframes marquee { 0% { transform: translateX(0%); } 100% { transform: translateX(-100%); } }
-    .marquee-container { display: flex; overflow: hidden; width: 100%; direction: ltr; }
-    .marquee-content { display: flex; min-width: 100%; flex-shrink: 0; align-items: center; justify-content: space-around; animation: marquee 25s linear infinite; }
+    
+    @keyframes marquee { 
+        0% { transform: translateX(0%); } 
+        100% { transform: translateX(-100%); } 
+    }
+    .marquee-container { 
+        display: flex; overflow: hidden; width: 100%; direction: ltr; 
+    }
+    .marquee-content { 
+        display: flex; min-width: 100%; flex-shrink: 0; align-items: center; justify-content: space-around; animation: marquee 25s linear infinite; 
+    }
     .marquee-container:hover .marquee-content { animation-play-state: paused; }
+    
     /* Print Styles */
-    .a4-page { width: 210mm; min-height: 297mm; height: auto; background: white; margin: 0 auto; position: relative; padding: 0; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.15); color: #333; transform-origin: top center; }
+    .a4-page {
+        width: 210mm; min-height: 297mm; height: auto; background: white; margin: 0 auto;
+        position: relative; padding: 0; display: flex; flex-direction: column; overflow: hidden;
+        box-shadow: 0 0 20px rgba(0,0,0,0.15); color: #333; transform-origin: top center;
+    }
     .decorative-strip { position: absolute; right: 0; top: 0; bottom: 0; width: 8mm; background: linear-gradient(180deg, #1a365d 0%, #1a365d 85%, #c5a059 85%, #c5a059 100%); z-index: 10; -webkit-print-color-adjust: exact; }
     .corner-accent { position: absolute; bottom: 20mm; left: 20mm; width: 30mm; height: 30mm; border-bottom: 2px solid #c5a059; border-left: 2px solid #c5a059; opacity: 0.3; pointer-events: none; z-index: 5; }
     .watermark { position: absolute; top: 55%; left: 45%; transform: translate(-50%, -50%); opacity: 0.04; width: 80%; pointer-events: none; filter: grayscale(100%); z-index: 0; }
     .letter-header { padding: 15mm 20mm 5mm 30mm; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; }
     .letter-footer { margin-top: auto; background-color: #1a365d; color: white; padding: 12px 0; border-top: 4px solid #c5a059; z-index: 20; -webkit-print-color-adjust: exact !important; }
     .letter-body { padding: 10mm 20mm 10mm 30mm; flex-grow: 1; font-family: 'Amiri', serif; font-size: 18px; line-height: 2.2; position: relative; z-index: 5; display: flex; flex-direction: column; font-variant-ligatures: no-common-ligatures; letter-spacing: 0px; }
+
     @media print {
         @page { size: A4; margin: 0; }
         body * { visibility: hidden; }
@@ -76,11 +94,13 @@ const GlobalStyles = () => (
         .decorative-strip { background: linear-gradient(180deg, #1a365d 0%, #1a365d 85%, #c5a059 85%, #c5a059 100%) !important; -webkit-print-color-adjust: exact !important; }
         .letter-footer { background-color: #1a365d !important; color: white !important; -webkit-print-color-adjust: exact !important; position: absolute !important; bottom: 0 !important; left: 0 !important; width: 100% !important;}
     }
+
     .timeline-container { position: relative; }
     .timeline-container::before { content: ''; position: absolute; top: 0; bottom: 0; right: 24px; width: 2px; background: #e2e8f0; }
     .timeline-item { position: relative; padding-right: 60px; margin-bottom: 30px; }
     .timeline-item:last-child { margin-bottom: 0; }
     .timeline-icon { position: absolute; right: 8px; top: 0; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; border: 4px solid white; }
+    
     .kanban-scroll::-webkit-scrollbar { height: 6px; }
     .kanban-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
     .kanban-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
@@ -106,10 +126,22 @@ const HomeView = ({ navigateTo }) => (
         </p>
         <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-8" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 divide-white/5 mb-10 md:divide-x md:divide-x-reverse">
-          <div className="px-2"><span className="block text-3xl md:text-4xl font-black text-white mb-1">07</span><p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">وحدات سكنية</p></div>
-          <div className="px-2"><span className="block text-3xl md:text-4xl font-black text-white mb-1">+200</span><p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">متر مربع مساحة</p></div>
-          <div className="px-2"><span className="block text-3xl md:text-4xl font-black text-white mb-1">10</span><p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">سنوات ضمان</p></div>
-          <div className="px-2 border-none"><span className="block text-3xl md:text-4xl font-black text-white mb-1">100%</span><p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">تملك حر</p></div>
+          <div className="px-2">
+            <span className="block text-3xl md:text-4xl font-black text-white mb-1">07</span>
+            <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">وحدات سكنية</p>
+          </div>
+          <div className="px-2">
+            <span className="block text-3xl md:text-4xl font-black text-white mb-1">+200</span>
+            <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">متر مربع مساحة</p>
+          </div>
+          <div className="px-2">
+            <span className="block text-3xl md:text-4xl font-black text-white mb-1">10</span>
+            <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">سنوات ضمان</p>
+          </div>
+          <div className="px-2 border-none">
+            <span className="block text-3xl md:text-4xl font-black text-white mb-1">100%</span>
+            <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">تملك حر</p>
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
           <button onClick={() => navigateTo("contact")} className="bg-[#c5a059] text-white px-8 py-3 rounded-2xl font-bold text-lg hover:bg-yellow-600 transition shadow-lg shadow-[#c5a059]/20 transform hover:-translate-y-1">احجز معاينتك اليوم</button>
@@ -126,12 +158,14 @@ const AboutView = () => {
     { icon: ShieldCheck, color: "red", title: "أمان العائلة أولاً", desc: "أنظمة مراقبة CCTV متطورة، وأقفال إلكترونية ذكية تضمن أقصى درجات الحماية." },
     { icon: Award, color: "amber", title: "جودة بلا تنازلات", desc: "استخدام أرقى خامات البورسلان، الرخام، والأدوات الصحية من ماركات عالمية." }
   ];
+
   const pillars = [
     { icon: Leaf, title: "تعزيز جودة الحياة", desc: "من خلال توفير بيئة سكنية متكاملة الخدمات تعزز رفاهية وراحة الساكنين." },
     { icon: Wifi, title: "المسكن الذكي", desc: "تبني تقنيات البناء الحديثة والأنظمة الذكية لضمان كفاءة الطاقة وسهولة التحكم." },
     { icon: Users, title: "المساهمة في التملك", desc: "تقديم خيارات سكنية متنوعة بأسعار تنافسية تدعم تطلعات الأسر السعودية في التملك." },
     { icon: Building, title: "أنسنة مكة", desc: "مراعاة الهوية العمرانية والإنسانية مكة المكرمة في تصاميمنا لخلق مجتمعات حيوية." }
   ];
+
   return (
     <div className="bg-white min-h-screen">
       <div className="relative h-[60vh] flex items-center justify-center bg-fixed bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')" }}>
@@ -143,15 +177,99 @@ const AboutView = () => {
           <p className="text-xl md:text-3xl font-light leading-relaxed opacity-90">سقف يعلو برؤيتك، ومسكن يحكي قصتك</p>
         </div>
       </div>
+
       <div className="py-24 bg-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#c5a059]/5 rounded-bl-[100%] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#1a365d]/5 rounded-tr-[100%] pointer-events-none" />
+        <div className="absolute top-10 left-10 text-[200px] text-slate-50 font-black leading-none -z-10 select-none hidden md:block">01</div>
         <div className="container mx-auto px-6 relative z-10 max-w-5xl text-center">
           <div className="inline-block px-6 py-2 rounded-full bg-slate-100 text-[#1a365d] font-bold mb-8 shadow-sm">قصتنا</div>
           <h2 className="text-4xl md:text-6xl font-black text-[#1a365d] mb-10 leading-tight">سماك العقارية</h2>
           <p className="text-xl md:text-2xl text-slate-600 leading-loose font-light relative">
-            في قلب مكة المكرمة، حيث تلتقي الروحانية بطموح المستقبل، ولدت <strong>سماك</strong>. لم نأتِ لنبني مجرد جدران وأسقف، بل لنرسم أسلوب حياة يتناغم مع قدسية المكان.
+            <span className="text-6xl text-[#c5a059]/20 absolute -top-8 -right-8 font-serif">"</span>
+            في قلب مكة المكرمة، حيث تلتقي الروحانية بطموح المستقبل، ولدت <strong>سماك</strong>. لم نأتِ لنبني مجرد جدران وأسقف، بل لنرسم أسلوب حياة يتناغم مع قدسية المكان. نؤمن بأن السكن هو امتداد للإنسان، لذا نصيغ مجتمعاتنا بعناية لتكون ملاذاً ذكياً ومستداماً، يمنحك شعوراً عميقاً بالانتماء والرفاهية، مساهمين بذلك في كتابة فصل جديد من قصة التطور العمراني في أطهر البقاع.
+            <span className="text-6xl text-[#c5a059]/20 absolute -bottom-12 -left-8 font-serif">"</span>
           </p>
+        </div>
+      </div>
+
+      <div className="py-24 bg-slate-50 relative">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-40" />
+        <div className="container mx-auto px-6 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
+          <div className="bg-white p-10 rounded-[3rem] shadow-xl border-t-8 border-[#1a365d] hover:-translate-y-2 transition-transform duration-500 group">
+            <div className="flex items-center gap-6 mb-6">
+              <div className="w-20 h-20 bg-[#1a365d]/5 rounded-2xl flex items-center justify-center text-[#1a365d] text-4xl group-hover:bg-[#1a365d] group-hover:text-white transition-colors duration-300">
+                <Eye size={40} />
+              </div>
+              <h3 className="text-4xl font-black text-[#1a365d]">الرؤية</h3>
+            </div>
+            <p className="text-slate-600 text-lg leading-loose text-justify border-r-4 border-slate-100 pr-6">
+              الريادة في صياغة مفهوم السكن العصري في مكة المكرمة، عبر تطوير مجتمعات عمرانية ذكية ومستدامة ترفع جودة الحياة وتواكب طموحات رؤية المملكة 2030 في إثراء المشهد الحضري.
+            </p>
+          </div>
+          <div className="bg-white p-10 rounded-[3rem] shadow-xl border-t-8 border-[#c5a059] hover:-translate-y-2 transition-transform duration-500 group">
+            <div className="flex items-center gap-6 mb-6">
+              <div className="w-20 h-20 bg-[#c5a059]/5 rounded-2xl flex items-center justify-center text-[#c5a059] text-4xl group-hover:bg-[#c5a059] group-hover:text-white transition-colors duration-300">
+                <Target size={40} />
+              </div>
+              <h3 className="text-4xl font-black text-[#1a365d]">الرسالة</h3>
+            </div>
+            <p className="text-slate-600 text-lg leading-loose text-justify border-r-4 border-slate-100 pr-6">
+              تقديم منتجات عقارية نوعية تجمع بين روحانية الجوار وأحدث تقنيات البناء الذكي، ملتزمين بأعلى معايير الجودة والخصوصية، لنخلق فرصاً استثمارية وسكنية آمنة تحقق الرفاهية.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="py-24 bg-[#1a365d] relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(#c5a059 1px, transparent 1px)", backgroundSize: "30px 30px" }} />
+        <div className="container mx-auto px-6 relative z-10">
+          <div className="text-center mb-16">
+            <span className="text-[#c5a059] font-bold tracking-[0.3em] uppercase text-sm">التزامنا</span>
+            <h3 className="text-4xl md:text-5xl font-black text-white mt-2">قيمنا الراسخة</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {values.map((val, idx) => {
+              const Icon = val.icon;
+              let bg = "from-blue-400 to-blue-600 shadow-blue-500/30";
+              if (val.color === "red") bg = "from-red-400 to-red-600 shadow-red-500/30";
+              if (val.color === "amber") bg = "from-amber-400 to-amber-600 shadow-amber-500/30";
+              
+              return (
+                <div key={idx} className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2.5rem] hover:bg-white/10 transition-colors duration-300 group">
+                  <div className={`w-16 h-16 bg-gradient-to-br ${bg} rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg group-hover:scale-110 transition-transform`}>
+                    <Icon size={32} />
+                  </div>
+                  <h4 className="text-2xl font-bold text-white mb-4">{val.title}</h4>
+                  <p className="text-slate-300 leading-relaxed">{val.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="py-24 bg-slate-900 text-white relative overflow-hidden" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1565552629477-ff14d7acd490?q=80&w=2070&auto=format&fit=crop')", backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed" }}>
+        <div className="absolute inset-0 bg-[#1a365d]/80" />
+        <div className="container mx-auto px-6 relative z-10">
+          <div className="text-center mb-16 flex flex-col md:flex-row items-center justify-center gap-6">
+            <h3 className="text-3xl md:text-4xl font-bold">ركائزنا المتوافقة مع</h3>
+            <img src={getImg("1ZyQiajC0S8NhwqOczZ8jtpaKLMUz2weR")} alt="رؤية 2030" className="h-16 md:h-20 w-auto opacity-90 hover:opacity-100 transition-opacity duration-300 mix-blend-screen" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {pillars.map((pillar, idx) => {
+              const Icon = pillar.icon;
+              return (
+                <div key={idx} className="text-center p-6 bg-white/5 rounded-3xl border border-white/5 backdrop-blur-sm hover:bg-white/10 transition duration-300">
+                  <div className="w-16 h-16 mx-auto bg-white/10 rounded-full flex items-center justify-center mb-4 text-[#c5a059]">
+                    <Icon size={28} />
+                  </div>
+                  <h4 className="text-xl font-bold mb-2">{pillar.title}</h4>
+                  <p className="text-slate-300 text-sm">{pillar.desc}</p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -162,28 +280,159 @@ const ProjectsView = () => {
   const [selectedFloor, setSelectedFloor] = useState("first");
   const [expandedUnit, setExpandedUnit] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
+
   const toggleUnit = (id) => setExpandedUnit(expandedUnit === id ? null : id);
-  const floors = [{ id: "ground", label: "الدور الأرضي" }, { id: "first", label: "الدور الأول" }, { id: "second", label: "الدور الثاني" }, { id: "third", label: "الدور الثالث" }, { id: "fourth", label: "الدور الرابع" }];
+
+  const floors = [
+    { id: "ground", label: "الدور الأرضي" },
+    { id: "first", label: "الدور الأول" },
+    { id: "second", label: "الدور الثاني" },
+    { id: "third", label: "الدور الثالث" },
+    { id: "fourth", label: "الدور الرابع" }
+  ];
+
   const unitsData = {
-    first: [{ id: "sm-a01", title: "وحدة SM-A01", price: "720,000 ريال", badge: "واجهتين", isSpecial: true }, { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }],
-    second: [{ id: "sm-a03", title: "وحدة SM-A03", price: "720,000 ريال", badge: "واجهتين", isSpecial: true }, { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }],
-    third: [{ id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين", isSpecial: true, isSold: true }, { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }],
-    fourth: [{ id: "sm-a07", title: "وحدة SM-A07", price: "1,100,000 ريال", badge: "فيلا روف فاخرة", isSpecial: true, isSold: true, roof: true }]
+    first: [
+      { id: "sm-a01", title: "وحدة SM-A01", price: "720,000 ريال", badge: "واجهتين", isSpecial: true },
+      { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
+    ],
+    second: [
+      { id: "sm-a03", title: "وحدة SM-A03", price: "720,000 ريال", badge: "واجهتين", isSpecial: true },
+      { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
+    ],
+    third: [
+      { id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين", isSpecial: true, isSold: true },
+      { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
+    ],
+    fourth: [
+      { id: "sm-a07", title: "وحدة SM-A07", price: "1,100,000 ريال", badge: "فيلا روف فاخرة", isSpecial: true, isSold: true, roof: true }
+    ]
   };
-  const images = { ground: getImg("1WCjS9UTiXUV8oSWjbsZgbHQuWFhU-F31"), first: getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"), second: getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"), third: getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"), fourth: getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1") };
+
+  const images = {
+    ground: getImg("1WCjS9UTiXUV8oSWjbsZgbHQuWFhU-F31"),
+    first: getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"),
+    second: getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"),
+    third: getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"),
+    fourth: getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1")
+  };
 
   return (
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen">
       {previewImg && (
         <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4 cursor-pointer" onClick={() => setPreviewImg(null)}>
           <img src={previewImg} className="max-w-full max-h-screen rounded-lg shadow-2xl" alt="مخطط مكبر" />
-          <button className="absolute top-4 right-4 text-white p-2"><X size={40} /></button>
+          <button className="absolute top-4 right-4 text-white p-2">
+            <X size={40} />
+          </button>
         </div>
       )}
       <div className="container mx-auto px-6 mb-24">
         <div className="max-w-3xl mx-auto text-center mb-16">
           <h2 className="text-[#c5a059] font-black tracking-[0.3em] uppercase text-sm mb-4 leading-tight">مشاريعنا</h2>
           <h3 className="text-4xl md:text-5xl font-black text-[#1a365d] mb-8">سماك - البوابة 1</h3>
+          <p className="text-slate-500 text-lg">لم نهتم فقط بالبناء، بل صممنا نمط حياة يجمع بين الأصالة والحداثة ليكون منزلك هو واحتك الخاصة.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-[2rem] card-hover border border-slate-100 group">
+            <div className="w-12 h-12 bg-blue-50 text-[#1a365d] rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#1a365d] group-hover:text-white transition-colors duration-500">
+              <HousePlus size={24} />
+            </div>
+            <h4 className="text-xl font-black text-[#1a365d] mb-3">بيئة ذكية متكاملة</h4>
+            <p className="text-slate-500 text-sm leading-relaxed">وحدات مجهزة بالكامل بأنظمة الإنارة والدخول الذكي، مع بنية تحتية مرنة تتيح لك التوسع وإضافة المزيد.</p>
+          </div>
+          <div className="bg-white p-6 rounded-[2rem] card-hover border border-slate-100 group">
+            <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-red-600 group-hover:text-white transition-colors duration-500">
+              <ShieldCheck size={24} />
+            </div>
+            <h4 className="text-xl font-black text-[#1a365d] mb-3">أمان العائلة أولاً</h4>
+            <p className="text-slate-500 text-sm leading-relaxed">أنظمة مراقبة CCTV متطورة، وأقفال إلكترونية ذكية تضمن لك ولعائلتك أقصى درجات الحماية.</p>
+          </div>
+          <div className="bg-white p-6 rounded-[2rem] card-hover border border-slate-100 group">
+            <div className="w-12 h-12 bg-amber-50 text-[#c5a059] rounded-xl flex items-center justify-center mb-4 group-hover:bg-[#c5a059] group-hover:text-white transition-colors duration-500">
+              <Award size={24} />
+            </div>
+            <h4 className="text-xl font-black text-[#1a365d] mb-3">جودة بلا تنازلات</h4>
+            <p className="text-slate-500 text-sm leading-relaxed">استخدام أرقى خامات البورسلان، الرخام، والأدوات الصحية من ماركات عالمية موثوقة.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative overflow-hidden bg-cover bg-center py-20 mb-24" style={{ backgroundImage: `url('${getImg("1ahnVUVfBEL8KIY2y1YYJAoupt2WvHRV6")}')` }}>
+        <div className="absolute inset-0 bg-[#1a365d]/90" />
+        <div className="container mx-auto px-6 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 items-center gap-16">
+            <div>
+              <h2 className="text-[#c5a059] font-bold mb-4">الموقع الاستراتيجي</h2>
+              <h3 className="text-4xl font-black text-white mb-8">في قلب الحدث، وقريب من خدماتك</h3>
+              <div className="grid grid-cols-2 gap-4 text-white">
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Building className="text-[#c5a059]" size={20} />
+                    <span className="font-bold text-lg">15 دقيقة</span>
+                  </div>
+                  <p className="text-slate-400 text-sm">عن المسجد الحرام</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
+                  <div className="flex items-center gap-3 mb-2">
+                    <TramFront className="text-[#c5a059]" size={20} />
+                    <span className="font-bold text-lg">9 دقائق</span>
+                  </div>
+                  <p className="text-slate-400 text-sm">عن محطة قطار الحرمين</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Plane className="text-[#c5a059]" size={20} />
+                    <span className="font-bold text-lg">50 دقيقة</span>
+                  </div>
+                  <p className="text-slate-400 text-sm">عن مطار الملك عبدالعزيز</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Moon className="text-[#c5a059]" size={20} />
+                    <span className="font-bold text-lg">مقابل</span>
+                  </div>
+                  <p className="text-slate-400 text-sm">مسجد جامع</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
+                  <div className="flex items-center gap-3 mb-2">
+                    <TreePine className="text-[#c5a059]" size={20} />
+                    <span className="font-bold text-lg">مقابل</span>
+                  </div>
+                  <p className="text-slate-400 text-sm">حديقة عامة</p>
+                </div>
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
+                  <div className="flex items-center gap-3 mb-2">
+                    <ShoppingCart className="text-[#c5a059]" size={20} />
+                    <span className="font-bold text-lg">5 دقائق</span>
+                  </div>
+                  <p className="text-slate-400 text-sm">خمسة من المتاجر الكبرى</p>
+                </div>
+              </div>
+            </div>
+            <div className="relative h-[500px] map-container">
+              <div className="absolute inset-0 bg-slate-800 rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white/5">
+                <iframe title="موقع المشروع" width="100%" height="100%" frameBorder="0" style={{ border: 0 }} src="https://maps.google.com/maps?q=حي+البوابة+مكة+المكرمة&hl=ar&z=14&output=embed" allowFullScreen={true} />
+              </div>
+              <div className="absolute top-10 -right-4 bg-[#c5a059] p-6 rounded-l-[2rem] shadow-2xl z-20">
+                <p className="text-white font-black text-2xl">7</p>
+                <p className="text-white/80 font-bold text-sm">وحدات<br />فقط</p>
+              </div>
+              <a href="https://maps.app.goo.gl/nfJhZ8oGvE6ZrbR49" target="_blank" rel="noreferrer" className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white text-[#1a365d] px-8 py-4 rounded-2xl font-bold shadow-2xl hover:bg-[#c5a059] hover:text-white transition flex items-center gap-3 group z-20 whitespace-nowrap">
+                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-white/20 transition">
+                  <MapPin size={20} />
+                </div>
+                <span>افتح الموقع في خرائط جوجل</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-6">
+        <div className="text-center mb-12">
+          <h2 className="text-[#c5a059] font-black tracking-[0.3em] uppercase text-sm mb-4">مخططات المشروع</h2>
+          <h3 className="text-3xl md:text-4xl font-black text-[#1a365d]">اختر الطابق لاستعراض الوحدات</h3>
         </div>
         <div className="flex flex-wrap justify-center gap-4 mb-12">
           {floors.map(f => (
@@ -194,16 +443,68 @@ const ProjectsView = () => {
         </div>
         <div className="bg-white rounded-[3rem] p-8 md:p-12 shadow-xl border border-slate-100 min-h-[500px] grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div className="order-2 lg:order-1">
-            {selectedFloor !== "ground" && unitsData[selectedFloor].map(unit => (
-              <div key={unit.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-4 cursor-pointer" onClick={() => toggleUnit(unit.id)}>
-                <span className="block font-bold text-xl text-[#1a365d]">{unit.title}</span>
-                <span className="text-[#c5a059] font-black text-lg">{unit.price}</span>
+            <h4 className="text-3xl font-black text-[#1a365d] mb-6">مواصفات {floors.find(f => f.id === selectedFloor).label}</h4>
+            {selectedFloor === "ground" ? (
+              <div className="space-y-4">
+                <p className="text-slate-500 mb-8 leading-relaxed">تم تخصيص الدور الأرضي بالكامل لمواقف السيارات والخدمات العامة للمبنى.</p>
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 text-[#1a365d] font-bold">
+                  <Car className="text-[#c5a059]" /> مواقف خاصة
+                </div>
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 text-[#1a365d] font-bold">
+                  <House className="text-[#c5a059]" /> مدخل ومصعد
+                </div>
               </div>
-            ))}
+            ) : (
+              <div className="space-y-4">
+                {unitsData[selectedFloor].map(unit => (
+                  <div key={unit.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-md">
+                    {unit.isSpecial && <div className="absolute top-0 left-0 bg-[#c5a059] text-white text-xs px-3 py-1 rounded-br-lg z-10">مميزة</div>}
+                    {unit.isSold && (
+                      <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
+                        <div className="border-[5px] border-red-600 text-red-600 text-3xl font-black px-6 py-2 rounded-xl transform -rotate-12 opacity-80 shadow-lg tracking-wider">تم البيع / محجوز</div>
+                      </div>
+                    )}
+                    <div className="p-5 cursor-pointer" onClick={() => toggleUnit(unit.id)}>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="block font-bold text-xl text-[#1a365d]">{unit.title}</span>
+                          <span className="text-[#c5a059] font-black text-lg">{unit.price}</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 mt-2">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${unit.isSpecial ? "bg-[#c5a059]/10 text-[#c5a059]" : "bg-slate-100 text-slate-600"}`}>{unit.badge}</span>
+                          <ChevronDown className={`text-slate-400 transition-transform duration-300 mt-1 ${expandedUnit === unit.id ? "rotate-180" : ""}`} />
+                        </div>
+                      </div>
+                    </div>
+                    {expandedUnit === unit.id && (
+                      <div className="px-5 pb-5 bg-slate-50/50 border-t border-slate-100 pt-4 grid grid-cols-2 gap-3 text-sm text-slate-600 animate-fadeIn">
+                        <span className="flex items-center gap-2"><Ruler size={16} className="text-[#c5a059]" /> {unit.roof ? "422 م²" : "204 م²"}</span>
+                        <span className="flex items-center gap-2"><Bed size={16} className="text-[#c5a059]" /> {unit.roof ? "4 غرف" : "5 غرف"}</span>
+                        <span className="flex items-center gap-2"><UserCheck size={16} className="text-[#c5a059]" /> غرفة خادمة</span>
+                        <span className="flex items-center gap-2"><Droplets size={16} className="text-[#c5a059]" /> غرفة غسيل</span>
+                        {!unit.roof && <span className="flex items-center gap-2"><Fingerprint size={16} className="text-[#c5a059]" /> دخول ذكي</span>}
+                        {!unit.roof && <span className="flex items-center gap-2"><Wifi size={16} className="text-[#c5a059]" /> منزل ذكي</span>}
+                        {unit.roof && <span className="flex items-center gap-2"><Umbrella size={16} className="text-[#c5a059]" /> سطح خاص كبير</span>}
+                        {!unit.roof && <span className="flex items-center gap-2"><Box size={16} className="text-[#c5a059]" /> مستودع</span>}
+                        {!unit.roof && <span className="flex items-center gap-2"><Car size={16} className="text-[#c5a059]" /> موقف خاص</span>}
+                        <span className="col-span-2 flex items-center gap-2"><Layers size={16} className="text-[#c5a059]" /> خزان أرضي وعلوي مستقل</span>
+                        <span className="flex items-center gap-2"><Bath size={16} className="text-[#c5a059]" /> 4 دورات مياه</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="order-1 lg:order-2 h-full min-h-[400px]">
-            <div className="relative cursor-pointer overflow-hidden rounded-3xl h-full bg-slate-200 flex items-center justify-center" onClick={() => setPreviewImg(images[selectedFloor])}>
-              <img src={images[selectedFloor]} className="w-full h-full object-cover" alt="مخطط" />
+            <div className="relative group cursor-pointer overflow-hidden rounded-3xl shadow-lg border-4 border-white h-full bg-slate-200 flex items-center justify-center" onClick={() => setPreviewImg(images[selectedFloor])}>
+              <div className="absolute top-4 left-4 z-20 w-16 h-16 md:w-24 md:h-24 opacity-50 pointer-events-none mix-blend-multiply">
+                <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="w-full h-full object-contain" alt="Logo" />
+              </div>
+              <img src={images[selectedFloor]} className="w-full h-full object-cover transform group-hover:scale-105 transition duration-700" alt="مخطط" />
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-3 rounded-full text-sm font-bold text-[#1a365d] shadow-lg flex items-center gap-2 transition-transform hover:scale-105">
+                <ZoomIn size={16} /> اضغط للتكبير
+              </div>
             </div>
           </div>
         </div>
@@ -214,41 +515,102 @@ const ProjectsView = () => {
 
 const ContactView = ({ showToast }) => {
   const [loading, setLoading] = useState(false);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    
+    const payload = {
+      name: e.target.name.value,
+      phone: e.target.phone.value,
+      unit: e.target.unit.value,
+    };
+
     try {
-      const res = await fetch(`${API_URL}?action=add_lead`, {
+      const response = await fetch(`${API_URL}?action=add_lead`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: e.target.name.value, phone: e.target.phone.value, unit: e.target.unit.value })
+        body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        showToast("تم الإرسال", "سنتواصل معك قريباً");
+      if (response.ok) {
+        showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.");
         e.target.reset();
+      } else {
+        throw new Error("فشل");
       }
-    } catch { showToast("خطأ", "حدث خطأ في الاتصال", "error"); } 
-    finally { setLoading(false); }
+    } catch {
+      showToast("تنبيه", "حدث خطأ في الاتصال، يرجى المحاولة لاحقاً.", "error");
+    } finally {
+      setLoading(false);
+    }
   };
+
   return (
-    <div className="pt-32 pb-20 min-h-screen relative flex items-center justify-center"><div className="w-full max-w-xl bg-white p-8 rounded-3xl shadow-xl">
-      <h2 className="text-2xl font-black mb-6 text-center">احجز وحدتك الآن</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input type="text" name="name" required className="w-full border p-4 rounded-xl" placeholder="الاسم" />
-        <input type="tel" name="phone" required className="w-full border p-4 rounded-xl" placeholder="الجوال" />
-        <select name="unit" className="w-full border p-4 rounded-xl">
-          <option value="SM-A01">SM-A01</option><option value="SM-A02">SM-A02</option>
-        </select>
-        <button type="submit" disabled={loading} className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-bold">إرسال</button>
-      </form>
-    </div></div>
+    <div className="pt-32 pb-20 min-h-screen relative flex items-center bg-cover bg-center" style={{ backgroundImage: `url('${getImg("18fCsrolSEvo8q9wt2_z4BXlB88BZ-62-")}')` }}>
+      <div className="absolute inset-0 hero-gradient" />
+      <div className="container mx-auto px-6 relative z-10 max-w-5xl">
+        <div className="bg-slate-900/60 backdrop-blur-lg rounded-[3rem] shadow-2xl overflow-hidden flex flex-col lg:flex-row border border-white/10">
+          <div className="lg:w-1/2 p-12 md:p-20 flex flex-col justify-center text-white">
+            <h2 className="text-4xl font-black mb-6">احجز وحدتك السكنية الآن</h2>
+            <p className="text-slate-200 text-lg mb-10 leading-relaxed">بادر بالتسجيل لتملك وحدتك في هذا المشروع.</p>
+            <div className="space-y-4 mb-10">
+              <div className="flex items-center gap-4 text-xl font-bold">
+                <Phone className="text-[#c5a059]" /> 920032842
+              </div>
+              <div className="flex items-center gap-4 text-xl font-bold">
+                <MapPin className="text-[#c5a059]" /> حي البوابة، مكة المكرمة
+              </div>
+            </div>
+          </div>
+          <div className="lg:w-1/2 bg-slate-900/30 p-12 md:p-20 border-r border-white/10">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold mb-2 text-slate-200">الاسم الكامل</label>
+                <input type="text" name="name" required className="w-full bg-white/10 border border-white/20 px-6 py-4 rounded-2xl outline-none focus:border-[#c5a059] text-white placeholder-gray-400 transition" placeholder="الاسم الثلاثي" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 text-slate-200">رقم الجوال</label>
+                <input type="tel" name="phone" required className="w-full bg-white/10 border border-white/20 px-6 py-4 rounded-2xl outline-none focus:border-[#c5a059] text-white placeholder-gray-400 transition" placeholder="05xxxxxxxx" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 text-slate-200">الوحدة المهتم بها</label>
+                <select name="unit" className="w-full bg-white/10 border border-white/20 px-6 py-4 rounded-2xl outline-none focus:border-[#c5a059] text-white transition [&>option]:text-slate-900" defaultValue="">
+                  <option value="" disabled>اختر الوحدة</option>
+                  <option value="SM-A01">SM-A01</option>
+                  <option value="SM-A02">SM-A02</option>
+                  <option value="SM-A03">SM-A03</option>
+                  <option value="SM-A04">SM-A04</option>
+                  <option value="SM-A05" disabled className="text-red-500 bg-red-100">SM-A05 (محجوزة)</option>
+                  <option value="SM-A06">SM-A06</option>
+                  <option value="SM-A07" disabled className="text-red-500 bg-red-100">SM-A07 (تم البيع)</option>
+                </select>
+              </div>
+              <button type="submit" disabled={loading} className="w-full bg-[#c5a059] text-white py-5 rounded-2xl font-black text-xl hover:bg-yellow-600 transition flex justify-center items-center gap-2 shadow-xl">
+                {loading ? <RefreshCw className="animate-spin" /> : <Send />} إرسال طلب الاهتمام
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
 const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("semak_admin_email");
+    const savedPassword = localStorage.getItem("semak_admin_password");
+    if (savedEmail && savedPassword) {
+      setEmail(savedEmail);
+      setPassword(savedPassword);
+      setRememberMe(true);
+    }
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -260,207 +622,1105 @@ const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
+      
       if (data.success) {
+        if (rememberMe) {
+          localStorage.setItem("semak_admin_email", email);
+          localStorage.setItem("semak_admin_password", password);
+        } else {
+          localStorage.removeItem("semak_admin_email");
+          localStorage.removeItem("semak_admin_password");
+        }
         setUser(data.user);
-        showToast("تم", `مرحباً بك، ${data.user.name}`);
+        showToast("تم تسجيل الدخول", `مرحباً بك، ${data.user.name}`);
         navigateTo("dashboard");
-      } else { showToast("خطأ", data.message, "error"); }
-    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
-    finally { setLoading(false); }
-  };
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="bg-white p-10 rounded-[2.5rem] w-full max-w-md">
-      <h2 className="text-2xl font-black text-center mb-6">بوابة الموظفين</h2>
-      <form onSubmit={handleLogin} className="space-y-4">
-        <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required className="w-full border p-4 rounded-xl" placeholder="Email" />
-        <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required className="w-full border p-4 rounded-xl" placeholder="Password" />
-        <button type="submit" disabled={loading} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-bold">دخول</button>
-      </form>
-    </div></div>
-  );
-};
-
-const CustomerLoginView = ({ setCustomer, navigateTo, showToast }) => {
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (e.target.user.value === "user" && e.target.password.value === "user") {
-      setCustomer({ username: "user", name: "عميل تجريبي", unit: "SM-A01" });
-      navigateTo("maintenance");
-    } else { showToast("خطأ", "بيانات خاطئة", "error"); }
-  };
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="bg-white p-10 rounded-[2.5rem] w-full max-w-md">
-      <h2 className="text-2xl font-black text-center mb-6">بوابة العملاء</h2>
-      <form onSubmit={handleLogin} className="space-y-4">
-        <input type="text" name="user" required className="w-full border p-4 rounded-xl" placeholder="User" />
-        <input type="password" name="password" required className="w-full border p-4 rounded-xl" placeholder="Password" />
-        <button type="submit" className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-bold">دخول</button>
-      </form>
-    </div></div>
-  );
-};
-
-const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
-  const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState("new");
-  
-  const submitTicket = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}?action=add_maintenance`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: e.target.name.value, phone: e.target.phone.value, unit: e.target.unit.value, type: e.target.type.value, desc: e.target.desc.value })
-      });
-      if (res.ok) {
-        showToast("نجاح", "تم استلام الطلب");
-        e.target.reset();
-        setTab("track");
+      } else {
+        showToast("خطأ", data.message, "error");
       }
-    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
-    finally { setLoading(false); }
-  };
-  return (
-    <div className="pt-32 pb-20 min-h-screen flex justify-center"><div className="w-full max-w-3xl px-6">
-      <div className="flex justify-center gap-4 mb-6">
-        <button onClick={()=>setTab("new")} className={`px-6 py-2 rounded-full font-bold ${tab==="new"?"bg-[#c5a059] text-white":"bg-white"}`}>طلب جديد</button>
-        <button onClick={()=>setTab("track")} className={`px-6 py-2 rounded-full font-bold ${tab==="track"?"bg-[#c5a059] text-white":"bg-white"}`}>طلباتي</button>
-      </div>
-      {tab === "new" ? (
-        <form onSubmit={submitTicket} className="bg-white p-8 rounded-[2rem] space-y-4 shadow-xl">
-          <input type="text" name="name" defaultValue={customer?.name} required className="w-full border p-3 rounded-xl" placeholder="الاسم" />
-          <input type="tel" name="phone" required className="w-full border p-3 rounded-xl" placeholder="الجوال" />
-          <input type="text" name="unit" defaultValue={customer?.unit} required className="w-full border p-3 rounded-xl" placeholder="الوحدة" />
-          <select name="type" required className="w-full border p-3 rounded-xl"><option value="سباكة">سباكة</option><option value="كهرباء">كهرباء</option></select>
-          <textarea name="desc" required className="w-full border p-3 rounded-xl" placeholder="الوصف"></textarea>
-          <button type="submit" disabled={loading} className="w-full bg-[#c5a059] text-white py-3 rounded-xl font-bold">إرسال</button>
-        </form>
-      ) : (<div className="bg-white p-8 rounded-[2rem] text-center text-slate-500 shadow-xl">تم استلام طلبك وبانتظار تعيين الفني.</div>)}
-    </div></div>
-  );
-};
-
-const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
-  const [activeTab, setActiveTab] = useState("");
-  const [leads, setLeads] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const loadData = async (action, setter) => {
-    setActiveTab(action.replace("get_", ""));
-    setLoading(true);
-    try { const res = await fetch(`${API_URL}?action=${action}`); setter(await res.json()); } 
-    catch { showToast("خطأ", "فشل الاتصال", "error"); } 
-    finally { setLoading(false); }
-  };
-
-  const updateTicketStatus = (id, field, value) => {
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
-    showToast("تحديث", "تم تحديث الحالة");
+    } catch {
+      showToast("خطأ", "فشل الاتصال بالسيرفر", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="pt-32 pb-20 bg-slate-50 min-h-screen"><div className="container mx-auto px-6">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-black">لوحة التحكم - {user?.name}</h1>
-        <button onClick={() => {setUser(null); navigateTo("home");}} className="text-red-500 font-bold">خروج</button>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {user?.role === "admin" && <button onClick={() => loadData("get_users", setUsers)} className="bg-white p-6 rounded-2xl shadow-md font-bold">الموظفين</button>}
-        <button onClick={() => navigateTo("letter-generator")} className="bg-white p-6 rounded-2xl shadow-md font-bold">صانع الخطابات</button>
-        <button onClick={() => loadData("get_maintenance", setTickets)} className="bg-white p-6 rounded-2xl shadow-md font-bold">الصيانة</button>
-        {user?.role === "admin" && <button onClick={() => loadData("get_leads", setLeads)} className="bg-white p-6 rounded-2xl shadow-md font-bold">المهتمين</button>}
-      </div>
-      {/* Content area based on activeTab */}
-      {activeTab === "users" && <div className="bg-white p-6 rounded-2xl shadow-md">عرض الموظفين... (تم جلب {users.length} موظف)</div>}
-      {activeTab === "leads" && <div className="bg-white p-6 rounded-2xl shadow-md">عرض المهتمين... (تم جلب {leads.length} مهتم)</div>}
-      {activeTab === "maintenance" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {tickets.map(t => (
-            <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border">
-              <p className="font-bold">{t.type} | {t.unit}</p>
-              <p className="text-sm text-slate-500 mb-2">{t.descrip || t.desc}</p>
-              <select value={t.status} onChange={e=>updateTicketStatus(t.id, "status", e.target.value)} className="w-full text-xs p-2 border rounded">
-                <option value="قيد الانتظار">قيد الانتظار</option><option value="جاري العمل">جاري العمل</option><option value="مكتمل">مكتمل</option>
-              </select>
+    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2069&auto=format&fit=crop')" }}>
+      <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
+      <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10 border border-white/20">
+        <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="سماك العقارية" className="h-16 mx-auto mb-4 object-contain" />
+        <h2 className="text-2xl font-black text-[#1a365d]">بوابة الموظفين</h2>
+        <p className="text-slate-500 text-sm mt-2 mb-8">تسجيل الدخول للوصول للأدوات الإدارية</p>
+        <form onSubmit={handleLogin} className="space-y-6 text-right">
+          <div>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">البريد الإلكتروني</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><User size={16} /></span>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="Email" />
             </div>
-          ))}
-        </div>
-      )}
-    </div></div>
-  );
-};
-
-const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
-  const [data, setData] = useState({ date: new Date().toISOString().split("T")[0], recipient: "السادة المحترمين", subject: "", body: "", signName: user?.name || "", signTitle: user?.job || "", showStamp: user?.role === "admin" });
-  const [dbTemplates, setDbTemplates] = useState([]);
-  const [showSaveForm, setShowSaveForm] = useState(false);
-  const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
-
-  const fetchTemplates = async () => {
-    try { const res = await fetch(`${API_URL}?action=get_templates`); setDbTemplates(await res.json()); } catch {}
-  };
-  useEffect(() => { fetchTemplates(); }, []);
-
-  const saveTemplateToDB = async () => {
-    try {
-      const res = await fetch(`${API_URL}?action=add_template`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: newTempMeta.category, title: newTempMeta.title, subject: data.subject, body: data.body })
-      });
-      if (res.ok) { showToast("تم", "حفظ النموذج"); setShowSaveForm(false); fetchTemplates(); }
-    } catch { showToast("خطأ", "فشل الحفظ", "error"); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col md:flex-row font-cairo">
-      <div className="w-full md:w-1/3 bg-slate-900 text-white p-6 flex flex-col overflow-y-auto no-print">
-        <div className="flex justify-between mb-4"><h2 className="font-bold text-[#c5a059]">صانع الخطابات</h2><button onClick={() => navigateTo("dashboard")}>عودة</button></div>
-        <select onChange={e => {
-            const sel = dbTemplates.find(t => t.id.toString() === e.target.value);
-            if (sel) setData({...data, subject: sel.subject, body: sel.body});
-          }} className="mb-4 bg-slate-800 p-2 rounded text-white">
-          <option value="custom">-- نموذج جديد --</option>
-          {dbTemplates.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-        </select>
-        <input type="text" value={data.recipient} onChange={e=>setData({...data, recipient: e.target.value})} className="mb-2 p-2 bg-slate-800 rounded" placeholder="المستلم" />
-        <input type="text" value={data.subject} onChange={e=>setData({...data, subject: e.target.value})} className="mb-2 p-2 bg-slate-800 rounded font-bold" placeholder="الموضوع" />
-        <textarea rows="8" value={data.body} onChange={e=>setData({...data, body: e.target.value})} className="mb-4 p-2 bg-slate-800 rounded" placeholder="النص..."></textarea>
-        {user?.role === "admin" && (
-          <div className="bg-slate-800 p-4 rounded mb-4">
-            {!showSaveForm ? <button onClick={()=>setShowSaveForm(true)} className="text-teal-400 text-sm font-bold w-full">+ حفظ كنموذج دائم</button> : (
-              <div className="space-y-2">
-                <input type="text" value={newTempMeta.title} onChange={e=>setNewTempMeta({...newTempMeta, title:e.target.value})} placeholder="اسم النموذج السري" className="w-full p-2 text-black text-sm rounded"/>
-                <button onClick={saveTemplateToDB} className="bg-teal-500 w-full py-1 rounded text-sm font-bold">تأكيد الحفظ</button>
-              </div>
-            )}
           </div>
-        )}
-        <button onClick={() => window.print()} className="bg-[#c5a059] py-3 rounded font-bold mt-auto">طباعة (PDF)</button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-10 flex justify-center bg-gray-200">
-        <div className="a4-page bg-white p-12 relative" id="printArea">
-           <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-20 mb-8 object-contain" alt="logo" />
-           <p className="text-sm font-bold mb-4">{data.date}</p>
-           <h3 className="text-xl font-bold mb-4">{data.recipient}</h3>
-           <h2 className="text-center font-bold text-xl underline mb-8">{data.subject}</h2>
-           <div className="whitespace-pre-line leading-loose text-lg">{data.body}</div>
-           <div className="mt-20 flex justify-between">
-              <div className="w-48">{data.showStamp && <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} alt="stamp"/>}</div>
-              <div className="text-center"><p className="font-bold text-xl">{data.signTitle}</p><p className="text-lg">{data.signName}</p></div>
-           </div>
+          <div>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Lock size={16} /></span>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="••••••••" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 accent-[#c5a059] cursor-pointer rounded border-slate-300"/>
+            <label htmlFor="rememberMe" className="text-sm text-slate-600 font-bold cursor-pointer select-none">تذكر بيانات الدخول</label>
+          </div>
+          <button type="submit" disabled={loading} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-bold text-lg hover:bg-[#c5a059] transition shadow-lg shadow-[#1a365d]/30 mt-4 flex justify-center items-center gap-2">
+            {loading ? <RefreshCw className="animate-spin" size={20} /> : "دخول"}
+          </button>
+        </form>
+        <div className="mt-8 text-center pt-6 border-t border-slate-100">
+          <button onClick={() => navigateTo("home")} className="text-slate-400 hover:text-[#1a365d] text-sm flex items-center justify-center gap-2 mx-auto transition">
+            <ArrowRight size={14} /> العودة للموقع الرئيسي
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-const PartnersView = () => <div id="partners-section"></div>;
-const LegalPage = ({ title, navigateTo }) => <div>{title} <button onClick={()=>navigateTo("home")}>عودة</button></div>;
+const CustomerLoginView = ({ setCustomer, navigateTo, showToast }) => {
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const user = e.target.user.value;
+    const pass = e.target.password.value;
+    if (user === "user" && pass === "user") {
+      setCustomer({ username: "user", name: "عميل تجريبي", unit: "SM-A01" });
+      showToast("تم تسجيل الدخول بنجاح", "مرحباً بك في بوابة العملاء");
+      navigateTo("maintenance");
+    } else {
+      showToast("خطأ", "بيانات الدخول غير صحيحة", "error");
+    }
+  };
 
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=2073&auto=format&fit=crop')" }}>
+      <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
+      <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10 border border-white/20">
+        <div className="w-16 h-16 bg-[#c5a059]/10 text-[#c5a059] rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
+          <ShieldCheck size={32} />
+        </div>
+        <h2 className="text-2xl font-black text-[#1a365d]">بوابة العملاء</h2>
+        <p className="text-slate-500 text-sm mt-2 mb-8">تسجيل الدخول لطلب و متابعة خدمات الصيانة</p>
+        <form onSubmit={handleLogin} className="space-y-6 text-right">
+          <div>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">اسم المستخدم</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><User size={16} /></span>
+              <input type="text" name="user" required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="user" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور</label>
+            <div className="relative">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Lock size={16} /></span>
+              <input type="password" name="password" required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="user" />
+            </div>
+          </div>
+          <button type="submit" className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-bold text-lg hover:bg-yellow-600 transition shadow-lg shadow-[#c5a059]/30 mt-4">دخول</button>
+        </form>
+        <div className="mt-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 text-center">
+          <strong>حساب التجربة:</strong> (user / user)
+        </div>
+        <div className="mt-8 text-center pt-6 border-t border-slate-100">
+          <button onClick={() => navigateTo("home")} className="text-slate-400 hover:text-[#1a365d] text-sm flex items-center justify-center gap-2 mx-auto transition">
+            <ArrowRight size={14} /> العودة للموقع الرئيسي
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
+  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState("new");
+  const [type, setType] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [ticket, setTicket] = useState(null);
+
+  const handleLogout = () => {
+    setCustomer(null);
+    showToast("تم تسجيل الخروج", "نتمنى لك يوماً سعيداً");
+    navigateTo("home");
+  };
+
+  const submitTicket = async (e) => {
+    e.preventDefault();
+    if (!date || !time) {
+      showToast("تنبيه", "يرجى اختيار التاريخ والوقت المناسب لزيارة الفني", "error");
+      return;
+    }
+    setLoading(true);
+    const tech = TECHNICIANS[e.target.type.value] || "غير محدد";
+    const desc = `الوقت المفضل: ${time}\nالتاريخ المفضل: ${date}\n\nالوصف:\n${e.target.desc.value}`;
+    
+    const payload = {
+      name: e.target.name.value,
+      phone: e.target.phone.value,
+      unit: e.target.unit.value,
+      type: e.target.type.value,
+      desc: desc
+    };
+
+    try {
+      const res = await fetch(`${API_URL}?action=add_maintenance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      
+      showToast("نجاح", "تم استلام طلبك وتعيين الفني المختص بنجاح.");
+      e.target.reset();
+      setDate("");
+      setTime("");
+      setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: tech});
+      setTab("track");
+    } catch {
+      showToast("تنبيه", "حدث خطأ. حاول لاحقاً.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderTracker = () => {
+    if (!ticket) return <div className="text-center py-10 text-slate-500">لا يوجد طلبات سابقة.</div>;
+    const steps = [
+      { id: 1, label: "تم استلام الطلب", status: "قيد الانتظار", icon: ListChecks, desc: "تم استلام طلبك بنجاح." },
+      { id: 2, label: "تعيين الفني", status: "تم التعيين", icon: UserCog, desc: `تم إسناد المهمة لـ: ${ticket.technician}` },
+      { id: 3, label: "جاري العمل", status: "جاري العمل", icon: HardHat, desc: `الزيارة المجدولة: ${ticket.desc.split('\n')[1]?.replace("التاريخ المفضل: ", "")} | ${ticket.desc.split('\n')[0]?.replace("الوقت المفضل: ", "")}` },
+      { id: 4, label: "مكتمل", status: "مكتمل", icon: CircleCheck, desc: "تم إغلاق الطلب، شكراً لتعاونكم." }
+    ];
+    let currentStep = 0;
+    if (ticket.status === "تم التعيين") currentStep = 1;
+    if (ticket.status === "جاري العمل") currentStep = 2;
+    if (ticket.status === "مكتمل") currentStep = 3;
+
+    return (
+      <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
+        <div className="absolute top-0 right-0 w-full h-2 bg-[#1a365d]" />
+        <div className="flex justify-between items-start mb-10 border-b border-slate-100 pb-6">
+          <div>
+            <h4 className="text-2xl font-black text-[#1a365d] mb-2">طلب رقم {ticket.id}</h4>
+            <p className="text-slate-500 flex items-center gap-2"><Clock size={16} /> تاريخ الطلب: {ticket.date || new Date().toLocaleDateString("ar-EG")}</p>
+          </div>
+          <span className="bg-[#c5a059]/10 text-[#c5a059] px-4 py-2 rounded-xl font-bold text-sm border border-[#c5a059]/20">{ticket.type}</span>
+        </div>
+        <div className="timeline-container pr-4">
+          {steps.map((step, i) => {
+            const Icon = step.icon;
+            const isPast = i <= currentStep;
+            const isCurrent = i === currentStep;
+            return (
+              <div key={step.id} className="timeline-item">
+                <div className={`timeline-icon ${isPast ? "bg-[#c5a059] text-white shadow-lg shadow-orange-200" : "bg-slate-200 text-slate-400"}`}>
+                  <Icon size={16} />
+                </div>
+                <div className={`bg-slate-50 rounded-2xl p-5 border ${isCurrent ? "border-[#c5a059] shadow-md" : "border-slate-100"} transition-all`}>
+                  <h5 className={`font-bold text-lg mb-1 ${isCurrent ? "text-[#c5a059]" : "text-[#1a365d]"}`}>{step.label}</h5>
+                  <p className="text-slate-500 text-sm">{step.desc}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="pt-32 pb-20 bg-slate-50 min-h-screen relative flex items-center justify-center bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=2070&auto=format&fit=crop')" }}>
+      <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
+      <div className="w-full max-w-3xl px-6 relative z-10">
+        <div className="text-center mb-10 text-white relative">
+          <button onClick={handleLogout} className="absolute left-0 top-0 bg-red-500/20 text-red-100 hover:bg-red-500 hover:text-white px-4 py-2 rounded-xl transition text-sm font-bold flex items-center gap-2 backdrop-blur-md border border-red-500/30">
+            <LogOut size={16} /> خروج
+          </button>
+          <h2 className="text-[#c5a059] font-black tracking-[0.1em] uppercase text-sm mb-2">بوابة العملاء</h2>
+          <h3 className="text-3xl md:text-4xl font-black mb-6">إدارة طلبات الصيانة</h3>
+          <div className="flex justify-center gap-4 bg-white/10 p-2 rounded-full backdrop-blur-md w-fit mx-auto border border-white/10">
+            <button onClick={() => setTab("new")} className={`px-6 py-2 rounded-full font-bold text-sm transition ${tab === "new" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>طلب جديد</button>
+            <button onClick={() => setTab("track")} className={`px-6 py-2 rounded-full font-bold text-sm transition ${tab === "track" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>متابعة طلباتي</button>
+          </div>
+        </div>
+        {tab === "new" ? (
+          <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
+            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-[#c5a059] to-yellow-600" />
+            <form onSubmit={submitTicket} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-[#1a365d]">الاسم الكامل</label>
+                  <input type="text" name="name" defaultValue={customer?.name} required className="w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm" placeholder="اسمك الكريم" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-[#1a365d]">رقم الجوال</label>
+                  <input type="tel" name="phone" required className="w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm" placeholder="05xxxxxxxx" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-[#1a365d]">رقم الوحدة العقارية</label>
+                  <input type="text" name="unit" defaultValue={customer?.unit} readOnly={!!customer?.unit} required className={`w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none transition shadow-sm ${customer?.unit ? "bg-slate-100 cursor-not-allowed text-slate-500" : "focus:border-[#c5a059]"}`} placeholder="مثال: SM-A01" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-[#1a365d]">نوع العطل</label>
+                  <select name="type" required value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm">
+                    <option value="" disabled>اختر نوع العطل...</option>
+                    <option value="تكييف">تكييف</option>
+                    <option value="سباكة">سباكة</option>
+                    <option value="كهرباء">كهرباء</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
+                </div>
+              </div>
+              {type && (
+                <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 animate-fadeIn">
+                  <h4 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2"><CalendarDays size={16} /> تحديد موعد الزيارة (فني {type})</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-bold mb-2 text-slate-500">التاريخ المناسب</label>
+                      <input type="date" min={new Date().toISOString().split("T")[0]} required value={date} onChange={e => setDate(e.target.value)} className="w-full bg-white border border-blue-200 px-4 py-3 rounded-xl outline-none focus:border-blue-500 transition shadow-sm text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold mb-2 text-slate-500">الوقت المتاح المفضل</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {TIME_SLOTS.map(t => (
+                          <div key={t} onClick={() => setTime(t)} className={`text-xs font-bold text-center py-3 rounded-xl cursor-pointer transition-all border ${time === t ? "bg-blue-600 text-white border-blue-600 shadow-md transform scale-105" : "bg-white text-slate-600 border-blue-100 hover:border-blue-300"}`}>
+                            {t}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  {date && time && (
+                    <div className="mt-4 text-xs text-blue-600 font-bold bg-blue-100 p-3 rounded-lg flex justify-between items-center">
+                      <span>سيتم التعيين التلقائي لـ: {TECHNICIANS[type]}</span>
+                      <span>في موعد: {date} | {time}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-bold mb-2 text-[#1a365d]">وصف المشكلة بالتفصيل</label>
+                <textarea name="desc" rows="3" required className="w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm" placeholder="يرجى وصف العطل هنا..." />
+              </div>
+              <button type="submit" disabled={loading} className="w-full bg-[#c5a059] text-white px-8 py-4 rounded-full font-bold hover:bg-yellow-600 transition shadow-lg shadow-[#c5a059]/20 transform hover:-translate-y-1 text-lg flex justify-center items-center gap-2">
+                {loading ? <RefreshCw className="animate-spin" /> : <Send />} إرسال الطلب
+              </button>
+            </form>
+          </div>
+        ) : renderTracker()}
+      </div>
+    </div>
+  );
+};
+
+const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
+  const [activeTab, setActiveTab] = useState("");
+  const [leads, setLeads] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [users, setUsers] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState("kanban");
+  const [showAddUser, setShowAddUser] = useState(false);
+
+  const handleLogout = () => {
+    setUser(null);
+    navigateTo("home");
+  };
+
+  const loadLeads = async () => {
+    setActiveTab("leads");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_leads`);
+      const data = await res.json();
+      setLeads(data);
+    } catch (err) {
+      showToast("خطأ", "تعذر جلب سجل المهتمين", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    setActiveTab("users");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_users`);
+      const data = await res.json();
+      setUsers(data);
+    } catch (err) {
+      showToast("خطأ", "تعذر جلب الموظفين", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMaintenance = async () => {
+    setActiveTab("maintenance");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_maintenance`);
+      let data = await res.json();
+      
+      const parsed = data.map(row => {
+         let desc = row.descrip || "---";
+         let scheduleDate = row.date ? row.date.split(" ")[0] : "";
+         let scheduleTime = "غير محدد";
+         
+         if (desc.includes("التاريخ المفضل:")) {
+           const dateMatch = desc.match(/التاريخ المفضل: (.*)/);
+           if (dateMatch) scheduleDate = dateMatch[1];
+           const timeMatch = desc.match(/الوقت المفضل: (.*)/);
+           if (timeMatch) scheduleTime = timeMatch[1];
+           desc = desc.split(`\n\nالوصف:\n`)[1] || desc;
+         }
+
+         return {
+            id: row.id,
+            date: row.date,
+            scheduleDate,
+            scheduleTime,
+            name: row.name,
+            phone: row.phone,
+            unit: row.unit,
+            type: row.type,
+            desc: desc,
+            status: row.status || "قيد الانتظار",
+            technician: row.technician || "لم يتم التعيين"
+         };
+      });
+      setTickets(parsed);
+    } catch (err) {
+      showToast("خطأ", "تعذر جلب تذاكر الصيانة", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const payload = {
+      name: e.target.name.value,
+      job: e.target.job.value,
+      email: e.target.email.value,
+      role: e.target.role.value,
+      password: e.target.password.value
+    };
+    try {
+      const res = await fetch(`${API_URL}?action=add_user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("تم", data.message);
+        e.target.reset();
+        setShowAddUser(false);
+        loadUsers();
+      }
+    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
+    finally { setLoading(false); }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=change_password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          old_password: e.target.old_password.value,
+          new_password: e.target.new_password.value
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("نجاح", data.message);
+        e.target.reset();
+      } else {
+        showToast("خطأ", data.message, "error");
+      }
+    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
+    finally { setLoading(false); }
+  };
+
+  const updateTicketStatus = (id, field, value) => {
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
+    showToast("تم التحديث", `تم التحديث محلياً للطلب ${id}`);
+  };
+
+  const notifyWhatsApp = (ticket) => {
+    if (!ticket.phone || ticket.phone === "---") {
+      showToast("خطأ", "رقم جوال العميل غير صالح", "error");
+      return;
+    }
+    let phone = ticket.phone.toString().replace(/^0/, "966").replace(/\D/g, "");
+    let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `الفني المختص: *${ticket.technician}*` : "سيتم تعيين الفني قريباً.";
+    let dateText = ticket.scheduleDate ? `الموعد: *${ticket.scheduleDate}* | *${ticket.scheduleTime}*` : "";
+    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nتفيدك الإدارة بأن حالة الطلب الآن: *${ticket.status}*.\n${techText}\n${dateText}\n\nنتمنى لك يوماً سعيداً!`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  const units = ["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"];
+  
+  const groupedTickets = tickets.reduce((acc, ticket) => {
+    const date = ticket.scheduleDate || "غير مجدول";
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(ticket);
+    return acc;
+  }, {});
+  
+  const sortedDates = Object.keys(groupedTickets).sort((a, b) => a === "غير مجدول" ? 1 : b === "غير مجدول" ? -1 : new Date(a) - new Date(b));
+
+  const columns = [
+    { id: "pending", title: "طلبات جديدة / قيد الانتظار", color: "border-slate-300", bg: "bg-slate-100", text: "text-slate-700", statuses: ["قيد الانتظار", undefined] },
+    { id: "active", title: "جاري العمل / معينة", color: "border-blue-300", bg: "bg-blue-50", text: "text-blue-700", statuses: ["تم التعيين", "جاري العمل"] },
+    { id: "completed", title: "مكتملة", color: "border-green-300", bg: "bg-green-50", text: "text-green-700", statuses: ["مكتمل"] }
+  ];
+
+  const renderTicketCard = (ticket) => (
+    <div key={ticket.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 hover:shadow-md transition group">
+      <div className="flex justify-between items-start mb-3">
+        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
+        <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
+      </div>
+      <p className="text-xs text-slate-500 mb-3 line-clamp-2">{ticket.desc}</p>
+      <div className="flex items-center gap-2 mb-3 text-[10px] font-bold text-slate-400">
+        <Clock size={12} /> {ticket.scheduleDate} {ticket.scheduleTime !== "غير محدد" && `| ${ticket.scheduleTime}`}
+      </div>
+      <div className="space-y-2 border-t border-slate-100 pt-3 mt-2">
+        <select value={ticket.technician || "لم يتم التعيين"} onChange={(e) => updateTicketStatus(ticket.id, "technician", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg bg-slate-50 border-none outline-none focus:ring-1 ring-purple-400">
+          <option value="لم يتم التعيين" disabled>-- إسناد لفني --</option>
+          {TECHNICIANS_LIST.map(tech => <option key={tech} value={tech}>{tech}</option>)}
+        </select>
+        <div className="flex gap-2">
+          <select value={ticket.status} onChange={(e) => updateTicketStatus(ticket.id, "status", e.target.value)} className={`flex-grow text-xs font-bold p-2 rounded-lg border outline-none ${ticket.status === "مكتمل" ? "bg-green-100 text-green-700 border-green-200" : "bg-slate-50 text-slate-700 border-slate-200"}`}>
+            <option value="قيد الانتظار">قيد الانتظار</option>
+            <option value="تم التعيين">تم التعيين</option>
+            <option value="جاري العمل">جاري العمل</option>
+            <option value="مكتمل">مكتمل</option>
+          </select>
+          <button onClick={() => notifyWhatsApp(ticket)} className="w-8 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition" title="إبلاغ العميل بالواتس">
+            <MessageCircle size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="pt-32 pb-20 bg-slate-50 min-h-screen">
+      <div className="container mx-auto px-6">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-black text-[#1a365d]">لوحة الخدمات</h1>
+            <p className="text-slate-500 mt-2">أهلاً بك، <span className="font-bold text-[#c5a059]">{user?.name}</span></p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setActiveTab("settings")} className="bg-white border border-slate-200 text-slate-700 px-5 py-3 rounded-xl font-bold hover:bg-slate-100 transition flex items-center gap-2">
+              <Lock size={16} /> إعدادات الحساب
+            </button>
+            <button onClick={handleLogout} className="bg-red-50 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2">
+              <LogOut size={16} /> تسجيل خروج
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+          {user?.role === "admin" && (
+            <div onClick={loadUsers} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
+              <div className="absolute top-0 left-0 w-full h-2 bg-[#1a365d]" />
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl text-[#1a365d] mb-6 group-hover:bg-[#1a365d] group-hover:text-white transition-colors">
+                <Users size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">إدارة الموظفين</h3>
+              <p className="text-slate-500 mb-6">عرض وإضافة الموظفين في النظام.</p>
+              <div className="flex items-center text-[#1a365d] font-bold group-hover:gap-2 transition-all">
+                فتح القائمة <ArrowLeft size={16} className="mr-2" />
+              </div>
+            </div>
+          )}
+          
+          <div onClick={() => navigateTo("letter-generator")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
+            <div className="absolute top-0 left-0 w-full h-2 bg-[#c5a059]" />
+            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl text-[#c5a059] mb-6 group-hover:bg-[#c5a059] group-hover:text-white transition-colors">
+              <FilePenLine size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">منشئ الخطابات</h3>
+            <p className="text-slate-500 mb-6">إنشاء وطباعة خطابات رسمية.</p>
+            <div className="flex items-center text-[#c5a059] font-bold group-hover:gap-2 transition-all">
+              فتح الأداة <ArrowLeft size={16} className="mr-2" />
+            </div>
+          </div>
+
+          <div onClick={loadMaintenance} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
+            <div className="absolute top-0 left-0 w-full h-2 bg-purple-500" />
+            <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center text-3xl text-purple-600 mb-6 group-hover:bg-purple-500 group-hover:text-white transition-colors">
+              <Wrench size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة</h3>
+            <p className="text-slate-500 mb-6">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
+            <div className="flex items-center text-purple-600 font-bold group-hover:gap-2 transition-all">
+              إدارة الطلبات <ChevronDown size={16} className="mr-2" />
+            </div>
+          </div>
+
+          <div onClick={() => setActiveTab("qr")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
+            <div className="absolute top-0 left-0 w-full h-2 bg-slate-800" />
+            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl text-slate-800 mb-6 group-hover:bg-slate-800 group-hover:text-white transition-colors">
+              <QrCode size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">رموز الوحدات (QR)</h3>
+            <p className="text-slate-500 mb-6">توليد وطباعة رموز QR للعملاء.</p>
+            <div className="flex items-center text-slate-800 font-bold group-hover:gap-2 transition-all">
+              فتح الأداة <ChevronDown size={16} className="mr-2" />
+            </div>
+          </div>
+
+          {user?.role === "admin" && (
+            <div onClick={loadLeads} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
+              <div className="absolute top-0 left-0 w-full h-2 bg-teal-500" />
+              <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center text-3xl text-teal-600 mb-6 group-hover:bg-teal-500 group-hover:text-white transition-colors">
+                <Users size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">سجل المهتمين (Leads)</h3>
+              <p className="text-slate-500 mb-6">متابعة الطلبات الواردة من الموقع الإلكتروني.</p>
+              <div className="flex items-center text-teal-600 font-bold group-hover:gap-2 transition-all">
+                عرض السجل <ChevronDown size={16} className="mr-2" />
+              </div>
+            </div>
+          )}
+
+          <a href="https://semak.daftra.com/" target="_blank" rel="noreferrer" className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-green-500" />
+            <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center text-3xl text-green-600 mb-6 group-hover:bg-green-500 group-hover:text-white transition-colors">
+              <Receipt size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">بوابة دفترة</h3>
+            <p className="text-slate-500 mb-6">الدخول لنظام الفواتير والمحاسبة وإدارة العملاء.</p>
+            <div className="flex items-center text-green-600 font-bold group-hover:gap-2 transition-all">
+              دخول النظام <ExternalLink size={16} className="mr-2" />
+            </div>
+          </a>
+        </div>
+
+        {/* Settings Tab */}
+        {activeTab === "settings" && (
+          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 p-8 max-w-xl mx-auto animate-fade-in-up">
+            <h3 className="text-2xl font-black text-[#1a365d] mb-2 flex items-center gap-2"><Lock className="text-[#c5a059]" /> إعدادات الأمان</h3>
+            <p className="text-slate-500 mb-6">تغيير كلمة المرور الخاصة بحسابك.</p>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور الحالية</label>
+                <input type="password" name="old_password" required className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl outline-none focus:border-[#c5a059]" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور الجديدة</label>
+                <input type="password" name="new_password" required minLength={6} className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl outline-none focus:border-[#c5a059]" />
+              </div>
+              <button type="submit" disabled={loading} className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-bold hover:bg-[#c5a059] transition mt-4">
+                {loading ? <RefreshCw className="animate-spin mx-auto" /> : "حفظ كلمة المرور"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Users Tab */}
+        {activeTab === "users" && (
+          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
+            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-blue-600" /> قائمة الموظفين</h3>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowAddUser(!showAddUser)} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition">
+                  {showAddUser ? "إغلاق النموذج" : "إضافة موظف جديد +"}
+                </button>
+                <button onClick={loadUsers} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-300 transition">
+                  <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                </button>
+              </div>
+            </div>
+
+            {showAddUser && (
+              <div className="p-8 bg-blue-50/50 border-b border-slate-100 animate-fadeIn">
+                <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">الاسم</label><input required name="name" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">المسمى الوظيفي</label><input required name="job" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">البريد الإلكتروني</label><input required name="email" type="email" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 mb-1 block">الصلاحية</label>
+                    <select name="role" className="w-full p-3 rounded-xl border border-slate-200 outline-none">
+                      <option value="employee">موظف (صيانة فقط)</option>
+                      <option value="admin">مدير (صلاحيات كاملة)</option>
+                    </select>
+                  </div>
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">كلمة المرور الافتراضية</label><input required name="password" type="text" defaultValue="123456" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
+                  <div className="flex items-end"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">حفظ الموظف</button></div>
+                </form>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
+                  <tr><th className="px-6 py-4">الاسم</th><th className="px-6 py-4">المنصب</th><th className="px-6 py-4">البريد الإلكتروني</th><th className="px-6 py-4">الصلاحية</th></tr>
+                </thead>
+                <tbody className="text-slate-700 divide-y divide-slate-50">
+                  {users.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-bold">{u.name}</td>
+                      <td className="px-6 py-4 text-slate-500">{u.job}</td>
+                      <td className="px-6 py-4 font-mono text-xs">{u.email}</td>
+                      <td className="px-6 py-4">
+                        {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">مدير</span> : <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Maintenance Tab */}
+        {activeTab === "maintenance" && (
+          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden mb-12 animate-fade-in-up">
+            <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
+              <div>
+                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Wrench className="text-purple-600" /> إدارة مهام الصيانة</h3>
+                <p className="text-slate-500 text-sm mt-1">توزيع المهام، تحديث الحالة، ومراسلة العميل بسهولة.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 flex">
+                  <button onClick={() => setViewMode("kanban")} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${viewMode === "kanban" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
+                    <LayoutGrid size={16} /> اللوحة
+                  </button>
+                  <button onClick={() => setViewMode("calendar")} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${viewMode === "calendar" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
+                    <CalendarDays size={16} /> التقويم
+                  </button>
+                </div>
+                <button onClick={loadMaintenance} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition flex items-center gap-2 shadow-sm w-full sm:w-auto justify-center">
+                  {loading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />} تحديث
+                </button>
+              </div>
+            </div>
+            <div className="p-4 md:p-8 bg-slate-50/50">
+              {tickets.length === 0 ? (
+                <div className="text-center py-16 text-slate-400">
+                  <p className="text-lg">لا توجد تذاكر صيانة حالياً...</p>
+                </div>
+              ) : viewMode === "kanban" ? (
+                <div className="flex overflow-x-auto pb-4 gap-6 kanban-scroll items-start">
+                  {columns.map(col => {
+                    const colTickets = tickets.filter(t => col.statuses.includes(t.status));
+                    return (
+                      <div key={col.id} className={`w-80 flex-shrink-0 rounded-2xl border-t-4 ${col.color} ${col.bg} p-4 max-h-[800px] overflow-y-auto kanban-scroll flex flex-col`}>
+                        <div className="flex justify-between items-center mb-4">
+                          <h4 className={`font-black ${col.text} text-lg`}>{col.title}</h4>
+                          <span className="bg-white text-slate-500 px-2 py-0.5 rounded-full text-xs font-bold shadow-sm">{colTickets.length}</span>
+                        </div>
+                        <div className="flex-grow">
+                          {colTickets.length === 0 ? <p className="text-xs text-center text-slate-400 py-4">لا توجد مهام</p> : colTickets.map(renderTicketCard)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-8 max-w-5xl mx-auto">
+                  {sortedDates.map(dateKey => (
+                    <div key={dateKey} className="relative">
+                      <div className="sticky top-0 bg-slate-50/90 backdrop-blur-sm z-10 py-2 mb-4 border-b-2 border-purple-200">
+                        <h4 className="text-lg font-black text-[#1a365d] flex items-center gap-2">
+                          <CalendarDays className="text-purple-600" />
+                          {dateKey === "غير مجدول" ? "طلبات غير مجدولة (بدون تاريخ)" : `الزيارات المجدولة ليوم: ${dateKey}`}
+                        </h4>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pl-4">
+                        {groupedTickets[dateKey].map(renderTicketCard)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* QR Tab */}
+        {activeTab === "qr" && (
+          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
+            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><QrCode className="text-slate-800" /> رموز الاستجابة السريعة (QR)</h3>
+                <p className="text-slate-500 text-sm mt-1">طباعة هذه رموز ولصقها في الوحدات لطلب الصيانة.</p>
+              </div>
+              <button onClick={() => window.print()} className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-900 transition flex items-center gap-2">
+                <Printer size={16} /> طباعة الصفحة
+              </button>
+            </div>
+            <div className="p-8 bg-slate-50/20">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {units.map(unit => {
+                  const url = `${window.location.origin + window.location.pathname}?unit=${unit}&auth=smak2026`;
+                  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}&margin=10`;
+                  return (
+                    <div key={unit} className="bg-white p-6 rounded-3xl border border-slate-200 text-center shadow-sm flex flex-col items-center justify-between">
+                      <div>
+                        <h4 className="font-black text-[#1a365d] text-xl mb-1">{unit}</h4>
+                        <p className="text-xs text-slate-400 mb-4">مسح لطلب الصيانة</p>
+                      </div>
+                      <img src={qrUrl} alt={`QR Code ${unit}`} className="w-full max-w-[150px] mb-4 border-2 border-slate-100 rounded-xl" crossOrigin="anonymous" />
+                      <button onClick={() => window.open(qrUrl, "_blank")} className="bg-slate-50 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-200 transition w-full no-print flex items-center justify-center gap-2">
+                        <ExternalLink size={14} /> عرض الصورة
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Leads Tab */}
+        {activeTab === "leads" && (
+          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
+            <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
+              <div>
+                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-[#c5a059]" /> سجل المهتمين</h3>
+                <p className="text-slate-500 text-sm mt-1">يتم جلب البيانات مباشرة من قاعدة البيانات المعتمدة</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={loadLeads} className="bg-[#c5a059] text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-yellow-600 transition flex items-center gap-2 shadow-lg shadow-orange-100">
+                  {loading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />} تحديث البيانات
+                </button>
+              </div>
+            </div>
+            <div className="p-6 bg-white flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="relative w-full sm:w-96">
+                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input type="text" placeholder="بحث بالاسم أو الجوال..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 pl-4 outline-none focus:border-[#c5a059] transition" />
+              </div>
+              <div className="text-slate-400 text-sm font-bold">العدد الكلي: <span className="text-[#1a365d] text-lg">{leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).length}</span></div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-4 border-b">#</th>
+                    <th className="px-6 py-4 border-b">الاسم الكريم</th>
+                    <th className="px-6 py-4 border-b">رقم الجوال</th>
+                    <th className="px-6 py-4 border-b">الوحدة المهتم بها</th>
+                    <th className="px-6 py-4 border-b">تاريخ التسجيل</th>
+                  </tr>
+                </thead>
+                <tbody className="text-slate-700 divide-y divide-slate-50">
+                  {loading ? (
+                    <tr><td colSpan="5" className="text-center py-12 text-[#c5a059]"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr>
+                  ) : leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).map((lead, i) => (
+                    <tr key={i} className="hover:bg-blue-50/50 transition-colors duration-200">
+                      <td className="px-6 py-4 text-slate-400 text-xs font-mono">{leads.length - i}</td>
+                      <td className="px-6 py-4 font-bold text-[#1a365d]">{lead.name}</td>
+                      <td className="px-6 py-4 font-sans text-slate-600 font-medium" dir="ltr">{lead.phone}</td>
+                      <td className="px-6 py-4"><span className="bg-[#c5a059]/10 text-[#c5a059] px-3 py-1 rounded-full text-xs font-bold border border-[#c5a059]/20">{lead.unit}</span></td>
+                      <td className="px-6 py-4 text-sm text-slate-400 font-sans" dir="ltr">{String(lead.date).length > 25 ? String(lead.date).substring(0, 16) + "..." : lead.date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
+  const [data, setData] = useState({
+    date: new Date().toISOString().split("T")[0],
+    recipient: "شركاء النجاح المحترمين",
+    subject: "",
+    body: "",
+    signName: user?.name || "أحمد البادي",
+    signTitle: user?.job || "المدير العام",
+    showStamp: user?.role === "admin"
+  });
+
+  const [dbTemplates, setDbTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
+
+  const fetchTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_templates`);
+      const result = await res.json();
+      setDbTemplates(result);
+    } catch (error) {
+      console.error("تعذر جلب النماذج", error);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
+
+  const groupedTemplates = dbTemplates.reduce((acc, curr) => {
+    if (!acc[curr.category]) acc[curr.category] = [];
+    acc[curr.category].push(curr);
+    return acc;
+  }, {});
+
+  const handleTemplateChange = (e) => {
+    const val = e.target.value;
+    if (val === "custom") {
+      setData({ ...data, subject: "", body: "" });
+      return;
+    }
+    const selected = dbTemplates.find(t => t.id.toString() === val);
+    if (selected) {
+      setData({ ...data, subject: selected.subject, body: selected.body });
+    }
+  };
+
+  const saveTemplateToDB = async () => {
+    if (!newTempMeta.title.trim()) {
+      showToast("تنبيه", "يرجى كتابة اسم للنموذج أولاً", "error");
+      return;
+    }
+    if (!data.subject.trim() || !data.body.trim()) {
+      showToast("تنبيه", "محتوى الخطاب (الموضوع والنص) فارغ!", "error");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_URL}?action=add_template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: newTempMeta.category,
+          title: newTempMeta.title,
+          subject: data.subject,
+          body: data.body
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        showToast("نجاح", result.message);
+        setShowSaveForm(false);
+        setNewTempMeta({ ...newTempMeta, title: "" });
+        fetchTemplates();
+      } else {
+        showToast("خطأ", "حدث خطأ أثناء الحفظ", "error");
+      }
+    } catch (error) {
+      showToast("خطأ", "فشل الاتصال بالسيرفر", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-100 h-screen w-screen flex flex-col md:flex-row font-cairo overflow-hidden">
+      <div className="w-full md:w-1/3 min-w-[320px] bg-slate-900 text-white flex flex-col shadow-2xl h-full overflow-y-auto no-print">
+        <div className="p-6 border-b border-slate-700 flex justify-between items-center">
+          <h2 className="text-xl font-bold text-[#c5a059] flex items-center gap-2"><FilePenLine /> صانع الخطابات</h2>
+          <button onClick={() => navigateTo("dashboard")} className="p-2 bg-slate-800 rounded hover:bg-slate-700"><ArrowRight size={18} /></button>
+        </div>
+        <div className="p-6 space-y-4 flex-grow">
+          <div>
+            <label className="text-xs text-[#c5a059] block mb-1">اختر نموذجاً</label>
+            <select onChange={handleTemplateChange} className="w-full bg-slate-800 border-none rounded p-2 text-sm outline-none text-white">
+              <option value="custom">-- نموذج مخصص (فارغ) --</option>
+              {loadingTemplates ? (
+                <option disabled>جاري تحميل النماذج...</option>
+              ) : (
+                Object.keys(groupedTemplates).map(category => (
+                  <optgroup key={category} label={category}>
+                    {groupedTemplates[category].map(temp => (
+                      <option key={temp.id} value={temp.id}>{temp.title}</option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
+            </select>
+          </div>
+          <div><label className="text-xs text-slate-400 block mb-1">التاريخ</label><input type="date" value={data.date} onChange={e => setData({ ...data, date: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" style={{ colorScheme: "dark" }} /></div>
+          <div><label className="text-xs text-slate-400 block mb-1">المستلم</label><input type="text" value={data.recipient} onChange={e => setData({ ...data, recipient: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" /></div>
+          <div><label className="text-xs text-slate-400 block mb-1">الموضوع</label><input type="text" value={data.subject} onChange={e => setData({ ...data, subject: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none font-bold" /></div>
+          <div><label className="text-xs text-slate-400 block mb-1">نص الخطاب</label><textarea rows="8" value={data.body} onChange={e => setData({ ...data, body: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none leading-relaxed" /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className="text-xs text-slate-400 block mb-1">اسم الموقع</label><input type="text" value={data.signName} onChange={e => setData({ ...data, signName: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" /></div>
+            <div><label className="text-xs text-slate-400 block mb-1">المنصب</label><input type="text" value={data.signTitle} onChange={e => setData({ ...data, signTitle: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none" /></div>
+          </div>
+          
+          {user?.role === "admin" && (
+            <div className="flex justify-between items-center pt-2 border-b border-slate-700 pb-4">
+              <span className="text-sm">إظهار الختم</span>
+              <input type="checkbox" checked={data.showStamp} onChange={e => setData({ ...data, showStamp: e.target.checked })} className="w-5 h-5 accent-[#c5a059]" />
+            </div>
+          )}
+
+          {user?.role === "admin" && (
+            <div className="bg-slate-800 p-4 rounded-xl mt-4">
+              {!showSaveForm ? (
+                <button onClick={() => setShowSaveForm(true)} className="w-full text-sm font-bold text-teal-400 hover:text-teal-300 transition flex items-center justify-center gap-2">
+                  + حفظ النص الحالي كنموذج دائم
+                </button>
+              ) : (
+                <div className="space-y-3 animate-fadeIn">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">تصنيف النموذج</label>
+                    <select value={newTempMeta.category} onChange={e => setNewTempMeta({...newTempMeta, category: e.target.value})} className="w-full bg-slate-700 rounded p-2 text-sm outline-none">
+                      <option value="النماذج المالية">النماذج المالية</option>
+                      <option value="نماذج العملاء والمبيعات">نماذج العملاء والمبيعات</option>
+                      <option value="إدارة الأملاك والصيانة">إدارة الأملاك والصيانة</option>
+                      <option value="الشؤون القانونية وإدارة الأملاك">الشؤون القانونية وإدارة الأملاك</option>
+                      <option value="الموارد البشرية والموظفين">الموارد البشرية والموظفين</option>
+                      <option value="خدمة العملاء">خدمة العملاء</option>
+                      <option value="إدارية عامة">إدارية عامة</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">اسم النموذج (ليظهر في القائمة)</label>
+                    <input type="text" value={newTempMeta.title} onChange={e => setNewTempMeta({...newTempMeta, title: e.target.value})} className="w-full bg-slate-700 rounded p-2 text-sm outline-none" placeholder="مثال: استلام دفعة ثانية" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={saveTemplateToDB} disabled={isSaving} className="flex-1 bg-teal-500 text-white py-2 rounded font-bold text-sm hover:bg-teal-600 transition flex items-center justify-center">
+                      {isSaving ? <RefreshCw className="animate-spin" size={16} /> : "تأكيد الحفظ"}
+                    </button>
+                    <button onClick={() => setShowSaveForm(false)} className="px-4 bg-slate-600 text-white py-2 rounded font-bold text-sm hover:bg-slate-500 transition">إلغاء</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+        <div className="p-4 bg-slate-950 border-t border-slate-700">
+          <button onClick={() => window.print()} className="w-full bg-[#c5a059] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-yellow-600 transition">
+            <Printer /> طباعة (PDF)
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 bg-gray-200 overflow-y-auto p-10 flex justify-center items-start">
+        <div className="a4-page bg-white text-black shadow-xl" id="printArea">
+          <div className="decorative-strip" />
+          <div className="letter-header">
+            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="شعار" className="h-24 object-contain" />
+            <div className="flex flex-col items-end">
+              <p className="text-[#c5a059] font-bold text-sm mb-2 font-cairo">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
+              <div className="bg-slate-50 px-4 py-1 rounded-full border border-slate-200">
+                <p className="text-[#1a365d] text-sm font-bold tracking-wider font-cairo">الرقم الموحد: 7051031099</p>
+              </div>
+            </div>
+          </div>
+          <div className="letter-body font-amiri text-lg relative z-10 flex-grow pt-10 px-12">
+            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="watermark" alt="" />
+            <div className="text-left mb-8 font-cairo text-sm text-[#1a365d]"><strong>التاريخ:</strong> {data.date}</div>
+            <div className="mb-6"><h3 className="font-bold text-xl text-black font-cairo">{data.recipient}</h3></div>
+            <div className="mb-6 font-cairo">تحية طيبة وبعد،،</div>
+            <div className="text-center mb-10"><span className="border-b-2 border-[#c5a059] pb-2 px-8 font-bold text-xl text-[#1a365d] font-cairo">{data.subject}</span></div>
+            <div className="text-justify whitespace-pre-line leading-[2.2] flex-grow">{data.body}</div>
+            <div className="corner-accent" />
+            <div className="mt-12 mb-12 flex justify-between items-start px-12 relative min-h-[150px]">
+              <div className="relative w-48 flex justify-center">
+                {data.showStamp && user?.role === "admin" && (
+                  <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-90 mix-blend-multiply" alt="ختم" />
+                )}
+              </div>
+              <div className="text-center pt-10 pl-8 font-cairo">
+                <p className="font-bold text-[#1a365d] mb-2 text-xl">{data.signTitle}</p>
+                <p className="font-bold text-lg">{data.signName}</p>
+              </div>
+            </div>
+          </div>
+          <div className="letter-footer">
+            <div className="text-center pl-4 font-cairo">
+              <p className="font-bold text-sm mb-1">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
+              <div className="flex justify-center gap-6 text-xs text-gray-300 ltr" dir="ltr">
+                <span className="font-sans">semak.sa</span>
+                <span className="font-sans">920032842</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PartnersView = () => {
+  const partners = [
+    "18kk3r0kSgBdkQvCj7KC3fe29SQt4s_Y_", "1CFm4oTf091j04ndhYBhN4-LiirPgsywc", "1Ho4XCxeEQHTt4QRHJQnGbhSNCybY9Kli",
+    "1T_LJDA_3XAAHSHl3DLib9foDVsQHjrCE", "10BuljftpVn9MsU2XbFJQ6zkRnM4djnGs", "1DwooJvRW8QrG-pDa1am0JDjbiVNp3AKP",
+    "1Tcfv84RKa5YJ7ao-ktt9HLAk9TKQLy4F", "144wMG57xjPdnX1SYoBTzlQu0XEbIWiO3", "1NG-fNtmh8Nm2qxZdTPZs3IYlYgQGxOr8",
+    "1H1f5ByalQMYeNi91qq5eEzXIwY1GCpPZ"
+  ];
+  return (
+    <div className="py-10 bg-white border-t border-slate-100 overflow-hidden no-print" id="partners-section">
+      <div className="container mx-auto text-center mb-8">
+        <h2 className="text-[#c5a059] font-black tracking-[0.3em] text-sm mb-2">شركاء النجاح</h2>
+        <h3 className="text-2xl md:text-3xl font-black text-[#1a365d]">نختار الأفضل لبناء منزلك</h3>
+      </div>
+      <div className="marquee-container relative">
+        <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+        {[1, 2, 3].map(i => (
+          <div key={i} className="marquee-content gap-8 pr-8" aria-hidden={i !== 1}>
+            {partners.map((p, j) => (
+              <div key={j} className="w-32 h-20 flex items-center justify-center shrink-0">
+                <img src={getImg(p, "w500")} className="max-w-full max-h-full object-contain transition duration-300 hover:scale-110" alt="شريك" />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const LegalPage = ({ title, navigateTo }) => (
+  <div className="pt-32 pb-20 bg-slate-50 min-h-screen container mx-auto px-6 max-w-4xl text-right">
+    <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-slate-100">
+      <div className="flex justify-between items-center mb-10">
+        <h1 className="text-3xl font-black text-[#1a365d]">{title}</h1>
+        <button onClick={() => navigateTo("home")} className="text-slate-400 hover:text-[#c5a059]">
+          <ArrowRight size={24} />
+        </button>
+      </div>
+      <div className="prose prose-lg text-slate-600 space-y-6">
+        <p>محتوى {title} يكتب هنا...</p>
+        {title === "سياسة الخصوصية" && <p>نحرص في سماك العقارية على حماية خصوصية بيانات عملائنا...</p>}
+        {title === "الشروط والأحكام" && <p>بوصولك واستخدامك لموقع سماك العقارية، فإنك توافق على الالتزام بهذه الشروط...</p>}
+      </div>
+    </div>
+  </div>
+);
+
+// --- Main App Component ---
 export default function App() {
   const [currentPage, setCurrentPage] = useState("home");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -469,28 +1729,108 @@ export default function App() {
   const [adminUser, setAdminUser] = useState(null);
   const [customer, setCustomer] = useState(null);
 
+  useEffect(() => {
+    document.title = "سماك العقارية | سقف يعلو برؤيتك، ومسكن يحكي قصتك";
+    let icon = document.querySelector("link[rel~='icon']");
+    if (!icon) {
+      icon = document.createElement("link");
+      icon.rel = "icon";
+      document.getElementsByTagName("head")[0].appendChild(icon);
+    }
+    icon.href = getImg("1CcCFvgasNW1MEZt65AY9ZD7FzdDvuNgJ", "w128");
+  }, []);
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      if (currentScrollY > lastScrollY && currentScrollY > 100) setNavVisible(false);
+      else setNavVisible(true);
+      lastScrollY = currentScrollY;
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const unit = params.get("unit");
+    const auth = params.get("auth");
+    if (unit && auth === "smak2026") {
+      setCustomer({ username: "qr_user", name: "عميل سماك", unit });
+      window.history.replaceState({}, document.title, window.location.pathname);
+      showToast("دخول سريع", `مرحباً بك، تم تسجيل دخولك لخدمة صيانة الوحدة ${unit}`);
+      setCurrentPage("maintenance");
+    }
+  }, []);
+
   const showToast = (title, desc, type = "success") => {
     setToast({ show: true, title, desc, type });
-    setTimeout(() => setToast({ show: false }), 3000);
+    setTimeout(() => setToast({ show: false, title: "", desc: "", type: "success" }), 4000);
   };
-  const navigateTo = (page) => { setCurrentPage(page); window.scrollTo(0, 0); };
+
+  const navigateTo = (page) => {
+    setCurrentPage(page === "maintenance" && !customer ? "customer-login" : page);
+    setMobileMenuOpen(false);
+    window.scrollTo(0, 0);
+  };
+
   const hideNavOn = ["login", "customer-login", "dashboard", "letter-generator"];
 
   return (
-    <div dir="rtl" className="min-h-screen flex flex-col font-cairo bg-slate-50">
+    <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-slate-900 bg-slate-50">
       <GlobalStyles />
-      <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-white px-8 py-4 rounded-xl shadow-2xl transition-all no-print ${toast.show ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}>
-        <p className="font-bold">{toast.title}</p><p className="text-sm text-gray-500">{toast.desc}</p>
+      
+      {/* Toast Notification */}
+      <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-white border-r-4 ${toast.type === "error" ? "border-red-500" : "border-[#c5a059]"} px-8 py-4 rounded-xl shadow-2xl flex items-center gap-4 transition-all duration-500 no-print ${toast.show ? "translate-y-0 opacity-100 visible" : "translate-y-20 opacity-0 invisible"}`}>
+        <div className={`p-2 rounded-full ${toast.type === "error" ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"}`}>
+          <CircleCheckBig size={24} />
+        </div>
+        <div>
+          <p className="font-bold text-[#1a365d]">{toast.title}</p>
+          <p className="text-sm text-gray-500">{toast.desc}</p>
+        </div>
       </div>
+
+      {/* Navigation */}
       {!hideNavOn.includes(currentPage) && (
-        <nav className="bg-white/95 shadow-sm fixed w-full z-50 p-4 flex justify-between">
-          <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-10 cursor-pointer" onClick={()=>navigateTo("home")} alt="logo" />
-          <div className="hidden md:flex gap-6 items-center">
-            <button onClick={()=>navigateTo("home")}>الرئيسية</button>
-            <button onClick={()=>navigateTo("login")} className="text-[#c5a059]">دخول الموظفين</button>
+        <nav className={`bg-white/95 backdrop-blur-md shadow-sm fixed w-full z-50 transition-transform duration-300 ease-in-out no-print ${navVisible ? "translate-y-0" : "-translate-y-full"}`}>
+          <div className="container mx-auto px-4 md:px-8 py-3 flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center cursor-pointer" onClick={() => navigateTo("home")}>
+                <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="سماك العقارية" className="h-20 md:h-28 w-auto object-contain logo-blend-light" />
+              </div>
+              <div className="h-10 w-[2px] bg-[#c5a059]/30 hidden md:block" />
+              <p className="hidden md:block text-xs text-slate-400 font-medium">سقف يعلو برؤيتك، ومسكن يحكي قصتك</p>
+            </div>
+            
+            <div className="hidden md:flex items-center space-x-8 space-x-reverse">
+              <button onClick={() => navigateTo("home")} className={`font-semibold transition ${currentPage === "home" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>الرئيسية</button>
+              <button onClick={() => navigateTo("about")} className={`font-semibold transition ${currentPage === "about" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>من نحن</button>
+              <button onClick={() => navigateTo("projects")} className={`font-semibold transition ${currentPage === "projects" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>مشاريعنا</button>
+              <button onClick={() => document.getElementById("partners-section")?.scrollIntoView({ behavior: "smooth" })} className="font-semibold transition text-slate-600 hover:text-[#c5a059]">شركاؤنا</button>
+              <button onClick={() => navigateTo("maintenance")} className={`font-semibold transition ${currentPage === "maintenance" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>طلب صيانة</button>
+              <button onClick={() => navigateTo("contact")} className="bg-[#1a365d] text-white px-8 py-3 rounded-full hover:bg-[#0f172a] transition-all transform hover:scale-105 shadow-lg font-bold">احجز الآن</button>
+            </div>
+            
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-[#1a365d] text-2xl">
+              {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+            </button>
           </div>
+          {mobileMenuOpen && (
+            <div className="md:hidden bg-white border-t border-slate-100 px-6 py-8 flex flex-col space-y-6 shadow-xl no-print">
+              <button onClick={() => navigateTo("home")} className="text-xl font-bold text-[#1a365d] text-right">الرئيسية</button>
+              <button onClick={() => navigateTo("about")} className="text-xl font-bold text-[#1a365d] text-right">من نحن</button>
+              <button onClick={() => navigateTo("projects")} className="text-xl font-bold text-[#1a365d] text-right">مشاريعنا</button>
+              <button onClick={() => { document.getElementById("partners-section")?.scrollIntoView({ behavior: "smooth" }); setMobileMenuOpen(false); }} className="text-xl font-bold text-[#1a365d] text-right">شركاؤنا</button>
+              <button onClick={() => navigateTo("maintenance")} className="text-xl font-bold text-[#1a365d] text-right">طلب صيانة</button>
+              <button onClick={() => navigateTo("contact")} className="bg-[#c5a059] text-white py-4 rounded-xl text-center font-bold">احجز وحدتك</button>
+            </div>
+          )}
         </nav>
       )}
+
+      {/* Main Content Area */}
       <div className="flex-grow">
         {currentPage === "home" && <HomeView navigateTo={navigateTo} />}
         {currentPage === "about" && <AboutView />}
@@ -501,7 +1841,32 @@ export default function App() {
         {currentPage === "login" && <AdminLoginView setUser={setAdminUser} navigateTo={navigateTo} showToast={showToast} />}
         {currentPage === "dashboard" && <DashboardView user={adminUser} setUser={setAdminUser} navigateTo={navigateTo} showToast={showToast} />}
         {currentPage === "letter-generator" && <LetterGeneratorView user={adminUser} navigateTo={navigateTo} showToast={showToast} />}
+        {currentPage === "privacy" && <LegalPage title="سياسة الخصوصية" navigateTo={navigateTo} />}
+        {currentPage === "terms" && <LegalPage title="الشروط والأحكام" navigateTo={navigateTo} />}
       </div>
+
+      {/* Footer / Partners */}
+      {!hideNavOn.includes(currentPage) && <PartnersView />}
+      {!hideNavOn.includes(currentPage) && (
+        <footer className="bg-[#0f172a] text-white pt-24 pb-12 no-print">
+          <div className="container mx-auto px-6 text-center">
+            <div className="mb-12 flex flex-col items-center">
+              <img src={getImg("1HEFY56KLYGJNmc-tufIXmYDUbGyOIdDX")} alt="شعار تذييل" className="max-h-32 md:max-h-48 w-auto object-contain logo-footer-gold" />
+              <p className="text-slate-400 mt-1 tracking-widest font-bold text-xl uppercase">سقف يعلو برؤيتك، ومسكن يحكي قصتك</p>
+            </div>
+            <div className="border-t border-white/5 pt-12 flex flex-col md:flex-row justify-between items-center text-slate-100 text-sm gap-6">
+              <p>© 2026 سماك العقارية. جميع الحقوق محفوظة.</p>
+              <div className="flex flex-wrap justify-center gap-6 font-medium">
+                <button onClick={() => navigateTo("privacy")} className="hover:text-white transition">سياسة الخصوصية</button>
+                <button onClick={() => navigateTo("terms")} className="hover:text-white transition">الشروط والأحكام</button>
+                <button onClick={() => navigateTo("login")} className="hover:text-[#c5a059] transition flex items-center gap-2">
+                  <Lock size={14} /> بوابة الموظفين
+                </button>
+              </div>
+            </div>
+          </div>
+        </footer>
+      )}
     </div>
   );
 }
