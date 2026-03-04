@@ -35,4 +35,4 @@ jobs:
           port: 21 
           local-dir: ./dist/ 
           # 🔴 التعديل الثالث: المسار الصحيح لهوستينجر عشان يشتغل الموقع للزوار
-          server-dir: ./public_html/
+          server-dir: ./
