@@ -20,7 +20,7 @@ const ADMIN_CREDS = {
   role: "admin",
   job: "المدير العام",
   email: "ahmed.albadi@semak.sa",
-  pass: "Medo@32225"
+  pass: "Medo@3225"
 };
 
 const TECHNICIANS = {

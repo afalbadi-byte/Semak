@@ -31,4 +31,4 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/ # مجلد المخرجات بعد عملية البناء
-          server-dir: ./public_html/ # المسار على استضافة Hostinger، تأكد منه إذا كان مختلفاً
+          server-dir: ./ # المسار على استضافة Hostinger، تأكد منه إذا كان مختلفاً
