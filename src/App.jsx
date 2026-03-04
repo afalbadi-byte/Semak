@@ -6,11 +6,10 @@ import {
   ListChecks, Lock, LogOut, MapPin, Menu, MessageCircle, Moon, Phone, Plane,
   Printer, QrCode, Receipt, RefreshCw, Ruler, Search, Send, ShieldCheck,
   ShoppingCart, Target, TramFront, TreePine, Umbrella, UserCheck, UserCog, User,
-  Users, Wifi, Wrench, X, ZoomIn
+  Users, Wifi, Wrench, X, ZoomIn, Shield, CheckSquare
 } from 'lucide-react';
 
 // --- Global Constants ---
-// 🔴 رابط ملف API الخاص بك 🔴
 const API_URL = "https://semak.sa/api.php"; 
 
 const ADMIN_CREDS = {
@@ -34,6 +33,15 @@ const TIME_SLOTS = [
   "10:00 ص - 12:00 م",
   "01:00 م - 03:00 م",
   "04:00 م - 06:00 م"
+];
+
+// قائمة الوحدات لإدارة الصلاحيات
+const APP_MODULES = [
+  { id: "maintenance", label: "إدارة طلبات الصيانة", icon: Wrench, color: "text-purple-600", bg: "bg-purple-50" },
+  { id: "letters", label: "منشئ الخطابات", icon: FilePenLine, color: "text-orange-500", bg: "bg-orange-50" },
+  { id: "qr", label: "رموز الوحدات (QR)", icon: QrCode, color: "text-slate-800", bg: "bg-slate-100" },
+  { id: "leads", label: "سجل المهتمين (Leads)", icon: Users, color: "text-teal-600", bg: "bg-teal-50" },
+  { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
 ];
 
 const getImg = (id, sz = "w1500") => `https://drive.google.com/thumbnail?id=${id}&sz=${sz}`;
@@ -933,7 +941,15 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "calendar" | "gantt"
   const [showAddUser, setShowAddUser] = useState(false);
-  const [otpInputs, setOtpInputs] = useState({}); // لتخزين ما يكتبه الفني في خانة الـ OTP
+  const [otpInputs, setOtpInputs] = useState({}); 
+  const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
+
+  // دالة مساعدة للتحقق من الصلاحيات
+  const hasPerm = (perm) => {
+    if (user?.role === 'admin') return true;
+    if (!user?.permissions) return false;
+    return user.permissions.includes(perm);
+  };
 
   const handleLogout = () => {
     setUser(null);
@@ -1000,7 +1016,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             desc: desc,
             status: row.status || "قيد الانتظار",
             technician: row.technician || "لم يتم التعيين",
-            otp: row.otp // إذا كان هناك OTP محفوظ مسبقاً في القاعدة
+            otp: row.otp 
          };
       });
       setTickets(parsed);
@@ -1038,6 +1054,26 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     finally { setLoading(false); }
   };
 
+  const handleSavePermissions = async (userId, newPerms) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=update_permissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, permissions: newPerms })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("تم الحفظ", data.message);
+        loadUsers(); 
+        setSelectedUserForPerms(null); 
+      } else {
+        showToast("خطأ", data.message, "error");
+      }
+    } catch { showToast("خطأ", "فشل الاتصال", "error"); }
+    finally { setLoading(false); }
+  };
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -1062,48 +1098,34 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     finally { setLoading(false); }
   };
 
-  // --- التحديث الجديد الذي يربط الواجهة بقاعدة البيانات (API) ---
   const updateTicketStatus = async (id, field, value) => {
     let newOtp = null;
 
-    // 1. تحديث الواجهة فوراً لضمان سرعة الاستجابة للمستخدم
     setTickets(prev => prev.map(t => {
       if (t.id === id) {
         let updatedTicket = { ...t, [field]: value };
-        
-        // إنشاء رمز OTP تلقائياً عند الاعتماد
         if (field === "status" && value === "تم اعتماد الموعد" && !t.otp) {
           newOtp = Math.floor(1000 + Math.random() * 9000).toString();
           updatedTicket.otp = newOtp;
         }
-        
         return updatedTicket;
       }
       return t;
     }));
 
-    // 2. إرسال التحديث إلى قاعدة البيانات
     try {
-      const payload = { 
-        ticket_id: id, 
-        field_name: field, 
-        new_value: value 
-      };
-      
-      if (newOtp) {
-        payload.otp = newOtp;
-      }
+      const payload = { ticket_id: id, field_name: field, new_value: value };
+      if (newOtp) payload.otp = newOtp;
 
       const res = await fetch(`${API_URL}?action=update_maintenance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-
       const data = await res.json();
       
       if (data.success) {
-        showToast("تم الحفظ", `تم حفظ التحديث للطلب رقم ${id} في النظام.`);
+        showToast("تم الحفظ", `تم تحديث الطلب رقم ${id}`);
       } else {
         showToast("خطأ في الحفظ", data.message || "لم يتم حفظ التغيير في الخادم.", "error");
       }
@@ -1122,7 +1144,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `👨‍🔧 الفني المختص: *${ticket.technician}*` : "سيتم إعلامكم باسم الفني لاحقاً.";
     let dateText = ticket.scheduleDate ? `📅 التاريخ: *${ticket.scheduleDate}*\n⏰ الوقت: *${ticket.scheduleTime}*` : "لم يتم تحديد موعد الزيارة بعد.";
     
-    // إضافة فقرة الـ OTP للرسالة
     let otpText = ticket.otp ? `\n\n🔑 *رمز إغلاق الطلب (OTP):* ${ticket.otp}\n_(يرجى تزويد الفني بهذا الرمز عند **الانتهاء من العمل** لتأكيد إغلاق الطلب بنجاح)_` : "";
     
     let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nنفيدكم بأنه تمت مراجعة طلبكم، وحالة الطلب الآن: *${ticket.status}*.\n\n${techText}\n\n*موعد الزيارة (المعتمد / المقترح):*\n${dateText}${otpText}\n\n💡 *(في حال عدم مناسبة الموعد أعلاه، يرجى الرد على هذه الرسالة وسنقوم بتنسيق موعد بديل يناسبكم)*\n\nنسعد بخدمتكم، ونتمنى لكم يوماً سعيداً!`;
@@ -1143,10 +1164,8 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
       </div>
       
-      {/* عرض وصف المشكلة */}
       <p className="text-xs text-slate-500 mb-3 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100">{ticket.desc}</p>
       
-      {/* قسم إدارة الموعد والتكليف */}
       <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-3 mt-4">
         <div className="flex items-center gap-2 mb-1">
           <CalendarDays size={14} className="text-blue-600" />
@@ -1214,7 +1233,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
               </button>
             </div>
 
-            {/* واجهة إدخال رمز التحقق OTP للفني (لإغلاق الطلب) */}
             {ticket.status === "جاري العمل" && ticket.otp && (
               <div className="flex items-center gap-2 mt-1 p-2 bg-green-50 border border-green-200 rounded-lg animate-fadeIn shadow-inner">
                 <Lock size={14} className="text-green-600 flex-shrink-0" />
@@ -1237,12 +1255,11 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                   }}
                   className="bg-green-500 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-600 transition flex-shrink-0 whitespace-nowrap shadow-sm"
                 >
-                  إغلاق الطلب
+                  إغلاق
                 </button>
               </div>
             )}
             
-            {/* عرض الرمز للمدير في حال نسيانه العميل (يظهر في حالتي الاعتماد أو جاري العمل) */}
             {user?.role === "admin" && ticket.otp && (ticket.status === "تم اعتماد الموعد" || ticket.status === "جاري العمل") && (
                <div className="text-[9px] text-slate-400 text-center mt-1">
                  (للمدير فقط: رمز الإغلاق هو {ticket.otp})
@@ -1287,67 +1304,63 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-          {user?.role === "admin" && (
-            <div onClick={loadUsers} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
+          {/* كرت الموظفين والصلاحيات */}
+          {hasPerm("users_manage") && (
+            <div onClick={() => {loadUsers(); setActiveTab("users");}} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-[#1a365d]" />
               <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl text-[#1a365d] mb-6 group-hover:bg-[#1a365d] group-hover:text-white transition-colors">
-                <Users size={32} />
+                <Shield size={32} />
               </div>
-              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">إدارة الموظفين</h3>
-              <p className="text-slate-500 mb-6">عرض وإضافة الموظفين في النظام.</p>
-              <div className="flex items-center text-[#1a365d] font-bold group-hover:gap-2 transition-all">
-                فتح القائمة <ArrowLeft size={16} className="mr-2" />
-              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">الموظفين والصلاحيات</h3>
+              <p className="text-slate-500 mb-6">إدارة حسابات الموظفين وتحديد صلاحياتهم.</p>
             </div>
           )}
           
-          <div onClick={() => navigateTo("letter-generator")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-            <div className="absolute top-0 left-0 w-full h-2 bg-[#c5a059]" />
-            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl text-[#c5a059] mb-6 group-hover:bg-[#c5a059] group-hover:text-white transition-colors">
-              <FilePenLine size={32} />
+          {/* كرت الخطابات */}
+          {hasPerm("letters") && (
+            <div onClick={() => navigateTo("letter-generator")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-[#c5a059]" />
+              <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-3xl text-[#c5a059] mb-6 group-hover:bg-[#c5a059] group-hover:text-white transition-colors">
+                <FilePenLine size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">منشئ الخطابات</h3>
+              <p className="text-slate-500 mb-6">إنشاء وطباعة خطابات رسمية.</p>
             </div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">منشئ الخطابات</h3>
-            <p className="text-slate-500 mb-6">إنشاء وطباعة خطابات رسمية.</p>
-            <div className="flex items-center text-[#c5a059] font-bold group-hover:gap-2 transition-all">
-              فتح الأداة <ArrowLeft size={16} className="mr-2" />
-            </div>
-          </div>
+          )}
 
-          <div onClick={loadMaintenance} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-            <div className="absolute top-0 left-0 w-full h-2 bg-purple-500" />
-            <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center text-3xl text-purple-600 mb-6 group-hover:bg-purple-500 group-hover:text-white transition-colors">
-              <Wrench size={32} />
+          {/* كرت الصيانة */}
+          {hasPerm("maintenance") && (
+            <div onClick={loadMaintenance} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-purple-500" />
+              <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center text-3xl text-purple-600 mb-6 group-hover:bg-purple-500 group-hover:text-white transition-colors">
+                <Wrench size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة</h3>
+              <p className="text-slate-500 mb-6">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
             </div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة</h3>
-            <p className="text-slate-500 mb-6">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
-            <div className="flex items-center text-purple-600 font-bold group-hover:gap-2 transition-all">
-              إدارة الطلبات <ChevronDown size={16} className="mr-2" />
-            </div>
-          </div>
+          )}
 
-          <div onClick={() => setActiveTab("qr")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
-            <div className="absolute top-0 left-0 w-full h-2 bg-slate-800" />
-            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl text-slate-800 mb-6 group-hover:bg-slate-800 group-hover:text-white transition-colors">
-              <QrCode size={32} />
+          {/* كرت QR */}
+          {hasPerm("qr") && (
+            <div onClick={() => setActiveTab("qr")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-slate-800" />
+              <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl text-slate-800 mb-6 group-hover:bg-slate-800 group-hover:text-white transition-colors">
+                <QrCode size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">رموز الوحدات (QR)</h3>
+              <p className="text-slate-500 mb-6">توليد وطباعة رموز QR للعملاء.</p>
             </div>
-            <h3 className="text-2xl font-bold text-[#1a365d] mb-2">رموز الوحدات (QR)</h3>
-            <p className="text-slate-500 mb-6">توليد وطباعة رموز QR للعملاء.</p>
-            <div className="flex items-center text-slate-800 font-bold group-hover:gap-2 transition-all">
-              فتح الأداة <ChevronDown size={16} className="mr-2" />
-            </div>
-          </div>
+          )}
 
-          {user?.role === "admin" && (
-            <div onClick={loadLeads} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 group relative overflow-hidden cursor-pointer">
+          {/* كرت المهتمين */}
+          {hasPerm("leads") && (
+            <div onClick={loadLeads} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-teal-500" />
               <div className="w-16 h-16 bg-teal-50 rounded-2xl flex items-center justify-center text-3xl text-teal-600 mb-6 group-hover:bg-teal-500 group-hover:text-white transition-colors">
                 <Users size={32} />
               </div>
               <h3 className="text-2xl font-bold text-[#1a365d] mb-2">سجل المهتمين (Leads)</h3>
               <p className="text-slate-500 mb-6">متابعة الطلبات الواردة من الموقع الإلكتروني.</p>
-              <div className="flex items-center text-teal-600 font-bold group-hover:gap-2 transition-all">
-                عرض السجل <ChevronDown size={16} className="mr-2" />
-              </div>
             </div>
           )}
         </div>
@@ -1374,7 +1387,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         )}
 
         {/* Users Tab */}
-        {activeTab === "users" && (
+        {activeTab === "users" && hasPerm("users_manage") && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <div>
@@ -1399,7 +1412,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                   <div>
                     <label className="text-xs font-bold text-slate-500 mb-1 block">الصلاحية</label>
                     <select name="role" className="w-full p-3 rounded-xl border border-slate-200 outline-none">
-                      <option value="employee">موظف (صيانة فقط)</option>
+                      <option value="employee">موظف (تخصيص الصلاحيات)</option>
                       <option value="admin">مدير (صلاحيات كاملة)</option>
                     </select>
                   </div>
@@ -1412,18 +1425,72 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             <div className="overflow-x-auto">
               <table className="w-full text-right">
                 <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
-                  <tr><th className="px-6 py-4">الاسم</th><th className="px-6 py-4">المنصب</th><th className="px-6 py-4">البريد الإلكتروني</th><th className="px-6 py-4">الصلاحية</th></tr>
+                  <tr><th className="px-6 py-4">الاسم</th><th className="px-6 py-4">المنصب</th><th className="px-6 py-4">الصلاحية</th><th className="px-6 py-4">إجراءات</th></tr>
                 </thead>
                 <tbody className="text-slate-700 divide-y divide-slate-50">
                   {users.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50 transition">
-                      <td className="px-6 py-4 font-bold">{u.name}</td>
-                      <td className="px-6 py-4 text-slate-500">{u.job}</td>
-                      <td className="px-6 py-4 font-mono text-xs">{u.email}</td>
-                      <td className="px-6 py-4">
-                        {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">مدير</span> : <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
-                      </td>
-                    </tr>
+                    <React.Fragment key={u.id}>
+                      <tr className="hover:bg-slate-50 transition">
+                        <td className="px-6 py-4 font-bold">{u.name}</td>
+                        <td className="px-6 py-4 text-slate-500">{u.job} <br/><span className="text-[10px] text-slate-400 font-mono">{u.email}</span></td>
+                        <td className="px-6 py-4">
+                          {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">مدير نظام</span> : <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                          {u.role !== "admin" && (
+                            <button 
+                              onClick={() => setSelectedUserForPerms(selectedUserForPerms?.id === u.id ? null : u)} 
+                              className="text-[#c5a059] bg-[#c5a059]/10 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#c5a059] hover:text-white transition flex items-center gap-1"
+                            >
+                              <Shield size={14} /> تعديل الصلاحيات
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      
+                      {selectedUserForPerms?.id === u.id && (
+                        <tr>
+                          <td colSpan="4" className="p-0 border-b-2 border-[#c5a059]">
+                            <div className="bg-slate-900 p-6 shadow-inner animate-fadeIn relative">
+                              <h4 className="text-white font-bold mb-4 flex items-center gap-2"><CheckSquare className="text-[#c5a059]" /> حدد الصفحات المسموح لـ ({u.name}) بالدخول إليها:</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                                {APP_MODULES.map(module => {
+                                  let userPerms = [];
+                                  try { userPerms = u.permissions ? JSON.parse(u.permissions) : []; } catch(e){}
+                                  
+                                  const isChecked = selectedUserForPerms.tempPerms ? selectedUserForPerms.tempPerms.includes(module.id) : userPerms.includes(module.id);
+                                  
+                                  return (
+                                    <label key={module.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-all ${isChecked ? 'bg-white/10 border-[#c5a059]' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
+                                      <input 
+                                        type="checkbox" 
+                                        className="w-5 h-5 accent-[#c5a059]" 
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          const currentPerms = selectedUserForPerms.tempPerms || userPerms;
+                                          const newPerms = e.target.checked ? [...currentPerms, module.id] : currentPerms.filter(p => p !== module.id);
+                                          setSelectedUserForPerms({...selectedUserForPerms, tempPerms: newPerms});
+                                        }}
+                                      />
+                                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${module.bg} ${module.color}`}>
+                                        <module.icon size={16} />
+                                      </div>
+                                      <span className="text-sm font-bold text-slate-200">{module.label}</span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                              <div className="flex justify-end gap-3 border-t border-slate-700 pt-4 mt-2">
+                                <button onClick={() => setSelectedUserForPerms(null)} className="px-5 py-2 text-slate-400 font-bold hover:text-white transition text-sm">إلغاء</button>
+                                <button onClick={() => handleSavePermissions(u.id, selectedUserForPerms.tempPerms || [])} className="bg-[#c5a059] text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-600 transition flex items-center gap-2 text-sm">
+                                  {loading ? <RefreshCw size={16} className="animate-spin" /> : <Shield size={16} />} حفظ الصلاحيات للموظف
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1432,7 +1499,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         )}
 
         {/* Maintenance Tab */}
-        {activeTab === "maintenance" && (
+        {activeTab === "maintenance" && hasPerm("maintenance") && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden mb-12 animate-fade-in-up">
             <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
               <div>
@@ -1463,11 +1530,9 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                   <p className="text-lg">لا توجد تذاكر صيانة حالياً...</p>
                 </div>
               ) : viewMode === "gantt" ? (
-                /* --- بداية مخطط جانت (Gantt Chart) --- */
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
                     <div className="min-w-[1000px]">
-                      {/* رأس المخطط (الأيام والتاريخ) */}
                       <div className="grid grid-cols-[200px_repeat(7,1fr)] bg-slate-100 border-b border-slate-200">
                         <div className="p-4 font-black text-[#1a365d] border-l border-slate-200 flex items-center justify-center">
                           الفنيين / الموارد
@@ -1490,7 +1555,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                         })}
                       </div>
 
-                      {/* جسم المخطط (المهام الموزعة) */}
                       {TECHNICIANS_LIST.map((tech, techIndex) => (
                         <div key={techIndex} className="grid grid-cols-[200px_repeat(7,1fr)] border-b border-slate-100 hover:bg-slate-50 transition-colors">
                           <div className="p-4 border-l border-slate-200 flex items-center">
@@ -1540,7 +1604,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                         </div>
                       ))}
                       
-                      {/* صف للتذاكر غير المعينة لأي فني */}
                       <div className="grid grid-cols-[200px_repeat(7,1fr)] bg-red-50/30">
                         <div className="p-4 border-l border-slate-200 flex items-center text-red-600 font-bold text-sm">
                           <span className="flex items-center gap-2"><Lock size={16}/> مهام غير معينة</span>
@@ -1572,7 +1635,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                     </div>
                   </div>
                 </div>
-                /* --- نهاية مخطط جانت --- */
               ) : viewMode === "kanban" ? (
                 <div className="flex overflow-x-auto pb-4 gap-6 kanban-scroll items-start">
                   {columns.map(col => {
@@ -1612,7 +1674,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         )}
 
         {/* QR Tab */}
-        {activeTab === "qr" && (
+        {activeTab === "qr" && hasPerm("qr") && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <div>
@@ -1647,7 +1709,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
         )}
 
         {/* Leads Tab */}
-        {activeTab === "leads" && (
+        {activeTab === "leads" && hasPerm("leads") && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
               <div>
@@ -1718,7 +1780,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
 
-  // جلب النماذج من قاعدة البيانات
   const fetchTemplates = async () => {
     setLoadingTemplates(true);
     try {
@@ -1736,14 +1797,12 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
     fetchTemplates();
   }, []);
 
-  // تجميع النماذج حسب التصنيف
   const groupedTemplates = dbTemplates.reduce((acc, curr) => {
     if (!acc[curr.category]) acc[curr.category] = [];
     acc[curr.category].push(curr);
     return acc;
   }, {});
 
-  // عند اختيار نموذج من القائمة المنسدلة
   const handleTemplateChange = (e) => {
     const val = e.target.value;
     if (val === "custom") {
@@ -1754,15 +1813,12 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
     }
     const selected = dbTemplates.find(t => t.id.toString() === val);
     if (selected) {
-      // جلب محتوى النموذج
       setData({ ...data, subject: selected.subject, body: selected.body });
-      // تجهيز بيانات الحفظ المسبقة (نسخ التصنيف، وإضافة كلمة معدل للاسم)
       setNewTempMeta({ category: selected.category, title: selected.title + " - معدل" });
       setShowSaveForm(false);
     }
   };
 
-  // دالة حفظ التعديل كنموذج جديد في قاعدة البيانات
   const saveTemplateToDB = async () => {
     if (!newTempMeta.title.trim()) {
       showToast("تنبيه", "يرجى كتابة اسم للنموذج الجديد", "error");
@@ -1789,7 +1845,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
       if (result.success) {
         showToast("تم بنجاح", "تم حفظ النموذج كنسخة جديدة في قاعدة البيانات.");
         setShowSaveForm(false);
-        // تحديث القائمة فوراً لتشمل النموذج الجديد
         fetchTemplates();
       } else {
         showToast("خطأ", "حدث خطأ أثناء الحفظ", "error");
@@ -1803,7 +1858,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-100 h-screen w-screen flex flex-col md:flex-row font-cairo overflow-hidden">
-      {/* الشريط الجانبي (أدوات التحكم) */}
       <div className="w-full md:w-1/3 min-w-[320px] bg-slate-900 text-white flex flex-col shadow-2xl h-full overflow-y-auto no-print">
         <div className="p-6 border-b border-slate-700 flex justify-between items-center">
           <h2 className="text-xl font-bold text-[#c5a059] flex items-center gap-2"><FilePenLine /> صانع الخطابات</h2>
@@ -1846,7 +1900,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* قسم حفظ النموذج كنسخة جديدة */}
           {user?.role === "admin" && (
             <div className="bg-slate-800/50 p-4 rounded-xl mt-4 border border-slate-700">
               {!showSaveForm ? (
@@ -1891,7 +1944,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
         </div>
       </div>
 
-      {/* ورقة الخطاب (العرض للطباعة) */}
       <div className="flex-1 bg-gray-200 overflow-y-auto p-4 md:p-10 flex justify-center items-start">
         <div className="a4-page bg-white text-black shadow-xl" id="printArea">
           <div className="decorative-strip" />
