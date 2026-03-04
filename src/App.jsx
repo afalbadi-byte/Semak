@@ -594,11 +594,34 @@ const ContactView = ({ showToast }) => {
 };
 
 const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
+  // إضافة حالات (States) لحفظ البيانات وقيمة مربع الاختيار
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // استرجاع البيانات المحفوظة عند تحميل الصفحة
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("semak_admin_email");
+    const savedPassword = localStorage.getItem("semak_admin_password");
+    if (savedEmail && savedPassword) {
+      setEmail(savedEmail);
+      setPassword(savedPassword);
+      setRememberMe(true);
+    }
+  }, []);
+
   const handleLogin = (e) => {
     e.preventDefault();
-    const email = e.target.email.value;
-    const pass = e.target.password.value;
-    if (email === ADMIN_CREDS.email && pass === ADMIN_CREDS.pass) {
+    if (email === ADMIN_CREDS.email && password === ADMIN_CREDS.pass) {
+      // حفظ أو مسح البيانات بناءً على اختيار المستخدم
+      if (rememberMe) {
+        localStorage.setItem("semak_admin_email", email);
+        localStorage.setItem("semak_admin_password", password);
+      } else {
+        localStorage.removeItem("semak_admin_email");
+        localStorage.removeItem("semak_admin_password");
+      }
+
       setUser(ADMIN_CREDS);
       showToast("تم تسجيل الدخول بنجاح", `مرحباً بك، ${ADMIN_CREDS.name}`);
       navigateTo("dashboard");
@@ -619,16 +642,47 @@ const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
             <label className="block text-sm font-bold mb-2 text-[#1a365d]">البريد الإلكتروني</label>
             <div className="relative">
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><User size={16} /></span>
-              <input type="email" name="email" required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="Email" />
+              <input 
+                type="email" 
+                name="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required 
+                className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" 
+                placeholder="Email" 
+              />
             </div>
           </div>
           <div>
             <label className="block text-sm font-bold mb-2 text-[#1a365d]">كلمة المرور</label>
             <div className="relative">
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Lock size={16} /></span>
-              <input type="password" name="password" required className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" placeholder="••••••••" />
+              <input 
+                type="password" 
+                name="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required 
+                className="w-full bg-slate-50 border border-slate-200 px-6 py-4 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-slate-800 transition" 
+                placeholder="••••••••" 
+              />
             </div>
           </div>
+          
+          {/* خيار تذكرني المضاف */}
+          <div className="flex items-center gap-2 mt-2">
+            <input 
+              type="checkbox" 
+              id="rememberMe" 
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 accent-[#c5a059] cursor-pointer rounded border-slate-300"
+            />
+            <label htmlFor="rememberMe" className="text-sm text-slate-600 font-bold cursor-pointer select-none">
+              تذكر بيانات الدخول
+            </label>
+          </div>
+
           <button type="submit" className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-bold text-lg hover:bg-[#c5a059] transition shadow-lg shadow-[#1a365d]/30 mt-4">دخول</button>
         </form>
         <div className="mt-8 text-center pt-6 border-t border-slate-100">
