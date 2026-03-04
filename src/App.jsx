@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, ArrowRight, Award, Bath, Bed, Box, Building, CalendarDays, Car,
   ChevronDown, CircleCheckBig, CircleCheck, Clock, Droplets, ExternalLink, Eye,
-  FilePenLine, Fingerprint, HardHat, HousePlus, House, Layers, LayoutGrid, Leaf,
+  FilePenLine, Fingerprint, GanttChartSquare, HardHat, HousePlus, House, Layers, LayoutGrid, Leaf,
   ListChecks, Lock, LogOut, MapPin, Menu, MessageCircle, Moon, Phone, Plane,
   Printer, QrCode, Receipt, RefreshCw, Ruler, Search, Send, ShieldCheck,
   ShoppingCart, Target, TramFront, TreePine, Umbrella, UserCheck, UserCog, User,
@@ -777,11 +777,11 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
       });
       const result = await res.json();
       
-      showToast("نجاح", "تم استلام طلبك وتعيين الفني المختص بنجاح.");
+      showToast("نجاح", "تم استلام طلبك وبانتظار اعتماد الموعد من الإدارة.");
       e.target.reset();
       setDate("");
       setTime("");
-      setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: tech});
+      setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: tech, scheduleDate: date, scheduleTime: time});
       setTab("track");
     } catch {
       showToast("تنبيه", "حدث خطأ. حاول لاحقاً.", "error");
@@ -792,9 +792,10 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
 
   const renderTracker = () => {
     if (!ticket) return <div className="text-center py-10 text-slate-500">لا يوجد طلبات سابقة.</div>;
+    
     const steps = [
       { id: 1, label: "تم استلام الطلب", status: "قيد الانتظار", icon: ListChecks, desc: "تم استلام طلبك وبانتظار مراجعة الجدول." },
-      { id: 2, label: "تأكيد الموعد والفني", status: "تم اعتماد الموعد", icon: CalendarDays, desc: `تم الاعتماد. الفني: ${ticket.technician !== "لم يتم التعيين" ? ticket.technician : "سيتم التحديد"} | الموعد: ${ticket.scheduleDate || "سيتم التأكيد"} (${ticket.scheduleTime || ""})` },
+      { id: 2, label: "تأكيد الموعد والفني", status: "تم اعتماد الموعد", icon: CalendarDays, desc: `تم الاعتماد. الفني: ${ticket.technician && ticket.technician !== "لم يتم التعيين" ? ticket.technician : "سيتم التحديد"} | الموعد: ${ticket.scheduleDate || "سيتم التأكيد"} (${ticket.scheduleTime || ""})` },
       { id: 3, label: "جاري العمل", status: "جاري العمل", icon: HardHat, desc: "الفني في طريقه إليك أو يباشر العمل حالياً." },
       { id: 4, label: "مكتمل", status: "مكتمل", icon: CircleCheck, desc: "تم إغلاق الطلب، شكراً لتعاونكم." }
     ];
@@ -803,6 +804,7 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
     if (["تم التعيين", "تم اعتماد الموعد", "تم اقتراح موعد بديل"].includes(ticket.status)) currentStep = 1;
     if (ticket.status === "جاري العمل") currentStep = 2;
     if (ticket.status === "مكتمل") currentStep = 3;
+
     return (
       <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
         <div className="absolute top-0 right-0 w-full h-2 bg-[#1a365d]" />
@@ -882,10 +884,10 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
               </div>
               {type && (
                 <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 animate-fadeIn">
-                  <h4 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2"><CalendarDays size={16} /> تحديد موعد الزيارة (فني {type})</h4>
+                  <h4 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2"><CalendarDays size={16} /> الموعد المفضل للزيارة (حسب جدول الفني)</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-bold mb-2 text-slate-500">التاريخ المناسب</label>
+                      <label className="block text-xs font-bold mb-2 text-slate-500">التاريخ المناسب لك</label>
                       <input type="date" min={new Date().toISOString().split("T")[0]} required value={date} onChange={e => setDate(e.target.value)} className="w-full bg-white border border-blue-200 px-4 py-3 rounded-xl outline-none focus:border-blue-500 transition shadow-sm text-sm" />
                     </div>
                     <div>
@@ -901,8 +903,8 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
                   </div>
                   {date && time && (
                     <div className="mt-4 text-xs text-blue-600 font-bold bg-blue-100 p-3 rounded-lg flex justify-between items-center">
-                      <span>سيتم التعيين التلقائي لـ: {TECHNICIANS[type]}</span>
-                      <span>في موعد: {date} | {time}</span>
+                      <span>سنقوم بمراجعة الموعد وتأكيده معك.</span>
+                      <span>تفضيلك: {date} | {time}</span>
                     </div>
                   )}
                 </div>
@@ -929,7 +931,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [users, setUsers] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState("kanban");
+  const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "calendar" | "gantt"
   const [showAddUser, setShowAddUser] = useState(false);
 
   const handleLogout = () => {
@@ -1060,6 +1062,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
 
   const updateTicketStatus = (id, field, value) => {
     setTickets(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
+    // ملاحظة: هذا التحديث محلي (في الواجهة فقط) حالياً، للإنتاج الفعلي اربطه بـ API.php
     showToast("تم التحديث", `تم التحديث محلياً للطلب ${id}`);
   };
 
@@ -1164,6 +1167,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       </div>
     </div>
   );
+
   const sortedDates = Object.keys(tickets.reduce((acc, ticket) => {
     const date = ticket.scheduleDate || "غير مجدول";
     if (!acc[date]) acc[date] = [];
@@ -1350,12 +1354,15 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                 <p className="text-slate-500 text-sm mt-1">توزيع المهام، تحديث الحالة، ومراسلة العميل بسهولة.</p>
               </div>
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 flex">
-                  <button onClick={() => setViewMode("kanban")} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${viewMode === "kanban" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
+                <div className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 flex overflow-hidden">
+                  <button onClick={() => setViewMode("kanban")} className={`px-4 py-2 text-sm font-bold flex items-center gap-2 transition ${viewMode === "kanban" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
                     <LayoutGrid size={16} /> اللوحة
                   </button>
-                  <button onClick={() => setViewMode("calendar")} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition ${viewMode === "calendar" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
+                  <button onClick={() => setViewMode("calendar")} className={`px-4 py-2 text-sm font-bold flex items-center gap-2 transition border-l border-r border-slate-100 ${viewMode === "calendar" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
                     <CalendarDays size={16} /> التقويم
+                  </button>
+                  <button onClick={() => setViewMode("gantt")} className={`px-4 py-2 text-sm font-bold flex items-center gap-2 transition ${viewMode === "gantt" ? "bg-purple-100 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>
+                    <GanttChartSquare size={16} /> مخطط جانت
                   </button>
                 </div>
                 <button onClick={loadMaintenance} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition flex items-center gap-2 shadow-sm w-full sm:w-auto justify-center">
@@ -1363,11 +1370,126 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                 </button>
               </div>
             </div>
+
             <div className="p-4 md:p-8 bg-slate-50/50">
               {tickets.length === 0 ? (
                 <div className="text-center py-16 text-slate-400">
                   <p className="text-lg">لا توجد تذاكر صيانة حالياً...</p>
                 </div>
+              ) : viewMode === "gantt" ? (
+                /* --- بداية مخطط جانت (Gantt Chart) --- */
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[1000px]">
+                      {/* رأس المخطط (الأيام والتاريخ) */}
+                      <div className="grid grid-cols-[200px_repeat(7,1fr)] bg-slate-100 border-b border-slate-200">
+                        <div className="p-4 font-black text-[#1a365d] border-l border-slate-200 flex items-center justify-center">
+                          الفنيين / الموارد
+                        </div>
+                        {[...Array(7)].map((_, index) => {
+                          const date = new Date();
+                          date.setDate(date.getDate() + index);
+                          // تنسيق التاريخ ليتطابق مع (YYYY-MM-DD)
+                          const offset = date.getTimezoneOffset()
+                          const localDate = new Date(date.getTime() - (offset*60*1000))
+                          const dateString = localDate.toISOString().split("T")[0];
+                          const dayName = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' }).format(date);
+                          const isToday = index === 0;
+
+                          return (
+                            <div key={index} className={`p-3 text-center border-l border-slate-200 flex flex-col items-center justify-center ${isToday ? 'bg-purple-50' : ''}`}>
+                              <span className={`text-xs font-bold mb-1 ${isToday ? 'text-purple-600' : 'text-slate-500'}`}>{dayName}</span>
+                              <span className={`text-sm font-black ${isToday ? 'text-purple-700 bg-purple-200 px-2 py-0.5 rounded-md' : 'text-slate-700'}`}>{dateString}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* جسم المخطط (المهام الموزعة) */}
+                      {TECHNICIANS_LIST.map((tech, techIndex) => (
+                        <div key={techIndex} className="grid grid-cols-[200px_repeat(7,1fr)] border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                          <div className="p-4 border-l border-slate-200 flex items-center">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xs flex-shrink-0">
+                                <UserCog size={16} />
+                              </div>
+                              <span className="font-bold text-sm text-[#1a365d] leading-tight">{tech.split(" ")[0]} <br/><span className="text-[10px] text-slate-400 font-normal">{tech.split("(")[1]?.replace(")","") || ""}</span></span>
+                            </div>
+                          </div>
+                          
+                          {[...Array(7)].map((_, dayIndex) => {
+                            const date = new Date();
+                            date.setDate(date.getDate() + dayIndex);
+                            const offset = date.getTimezoneOffset()
+                            const localDate = new Date(date.getTime() - (offset*60*1000))
+                            const dateString = localDate.toISOString().split("T")[0];
+                            const isToday = dayIndex === 0;
+                            
+                            // جلب التذاكر الخاصة بهذا الفني في هذا اليوم
+                            const dayTickets = tickets.filter(t => t.technician === tech && t.scheduleDate === dateString);
+
+                            return (
+                              <div key={dayIndex} className={`p-2 border-l border-slate-200 min-h-[100px] relative ${isToday ? 'bg-purple-50/30' : ''}`}>
+                                {dayTickets.map(t => {
+                                  // تحديد لون الكرت بناءً على الحالة
+                                  let bgClass = "bg-slate-100 border-slate-300 text-slate-700";
+                                  if(t.status === "تم اعتماد الموعد") bgClass = "bg-blue-100 border-blue-300 text-blue-800 shadow-sm";
+                                  if(t.status === "جاري العمل") bgClass = "bg-purple-100 border-purple-300 text-purple-800 shadow-sm";
+                                  if(t.status === "مكتمل") bgClass = "bg-green-100 border-green-300 text-green-800";
+                                  if(t.status === "تم اقتراح موعد بديل") bgClass = "bg-orange-100 border-orange-300 text-orange-800";
+
+                                  return (
+                                    <div key={t.id} className={`mb-2 p-2 rounded-lg border ${bgClass} cursor-pointer hover:scale-105 transition-transform group`} title={t.desc}>
+                                      <div className="flex justify-between items-center mb-1">
+                                        <span className="text-[10px] font-black tracking-wider">#{t.id}</span>
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/50">{t.unit}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-[10px] font-bold opacity-80 mb-1">
+                                        <Clock size={10} /> {t.scheduleTime !== "غير محدد" && t.scheduleTime ? t.scheduleTime.split(" - ")[0] : "أي وقت"}
+                                      </div>
+                                      <div className="text-[10px] truncate opacity-90">{t.type}</div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                      
+                      {/* صف للتذاكر غير المعينة لأي فني */}
+                      <div className="grid grid-cols-[200px_repeat(7,1fr)] bg-red-50/30">
+                        <div className="p-4 border-l border-slate-200 flex items-center text-red-600 font-bold text-sm">
+                          <span className="flex items-center gap-2"><Lock size={16}/> مهام غير معينة</span>
+                        </div>
+                        {[...Array(7)].map((_, dayIndex) => {
+                            const date = new Date();
+                            date.setDate(date.getDate() + dayIndex);
+                            const offset = date.getTimezoneOffset()
+                            const localDate = new Date(date.getTime() - (offset*60*1000))
+                            const dateString = localDate.toISOString().split("T")[0];
+                            const unassignedTickets = tickets.filter(t => (t.technician === "لم يتم التعيين" || !t.technician) && t.scheduleDate === dateString);
+
+                            return (
+                              <div key={dayIndex} className="p-2 border-l border-slate-200 min-h-[80px]">
+                                {unassignedTickets.map(t => (
+                                  <div key={t.id} className="mb-2 p-2 rounded-lg border bg-red-100 border-red-200 text-red-700 cursor-pointer">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <span className="text-[10px] font-black">#{t.id}</span>
+                                      <span className="text-[10px] font-bold">{t.unit}</span>
+                                    </div>
+                                    <div className="text-[10px] truncate">{t.type}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                        })}
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+                /* --- نهاية مخطط جانت --- */
               ) : viewMode === "kanban" ? (
                 <div className="flex overflow-x-auto pb-4 gap-6 kanban-scroll items-start">
                   {columns.map(col => {
