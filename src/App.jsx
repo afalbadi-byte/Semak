@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css'; // تصميم محرر النصوص
 import {
   ArrowLeft, ArrowRight, Award, Bath, Bed, Box, Building, CalendarDays, Car, Calculator,
   ChevronDown, CircleCheckBig, CircleCheck, Clock, Droplets, ExternalLink, Eye,
@@ -93,6 +95,20 @@ const GlobalStyles = () => (
     .letter-header { padding: 15mm 20mm 5mm 30mm; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; }
     .letter-footer { margin-top: auto; background-color: #1a365d; color: white; padding: 12px 0; border-top: 4px solid #c5a059; z-index: 20; -webkit-print-color-adjust: exact !important; }
     .letter-body { padding: 10mm 20mm 10mm 30mm; flex-grow: 1; font-family: 'Amiri', serif; font-size: 18px; line-height: 2.2; position: relative; z-index: 5; display: flex; flex-direction: column; font-variant-ligatures: no-common-ligatures; letter-spacing: 0px; }
+
+    /* تنسيقات محرر النصوص للطباعة (React-Quill) */
+    .quill-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 10px auto; display: block; }
+    .quill-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    .quill-content th, .quill-content td { border: 1px solid #cbd5e1; padding: 8px; text-align: right; }
+    .quill-content th { background-color: #f1f5f9; font-weight: bold; }
+    .quill-content ul { list-style-type: disc; margin-right: 20px; }
+    .quill-content ol { list-style-type: decimal; margin-right: 20px; }
+    .quill-content strong { font-weight: 900; color: #1a365d; }
+    
+    /* تعديل شكل المحرر في الوضع الليلي للشريط الجانبي */
+    .ql-toolbar.ql-snow { background-color: #f8fafc; border-radius: 8px 8px 0 0; font-family: 'Cairo', sans-serif; direction: ltr;}
+    .ql-container.ql-snow { background-color: white; border-radius: 0 0 8px 8px; color: black; font-family: 'Cairo', sans-serif; font-size: 16px; min-height: 200px;}
+    .ql-editor { direction: rtl; text-align: right; }
 
     @media print {
         @page { size: A4; margin: 0; }
@@ -946,7 +962,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [otpInputs, setOtpInputs] = useState({}); 
   const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
 
-  // دالة مساعدة للتحقق من الصلاحيات
+  // دالة التحقق من الصلاحيات
   const hasPerm = (perm) => {
     if (user?.role === 'admin') return true;
     if (!user?.permissions) return false;
@@ -1343,7 +1359,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* كرت النظام المحاسبي (جديد) */}
+          {/* كرت النظام المحاسبي */}
           {hasPerm("accounting") && (
             <div onClick={() => window.open("https://semak.daftra.com/", "_blank")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500" />
@@ -1785,7 +1801,7 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
     date: new Date().toISOString().split("T")[0],
     recipient: "شركاء النجاح المحترمين",
     subject: "",
-    body: "",
+    body: "", // سيحتوي على HTML من محرر ReactQuill
     signName: user?.name || "أحمد البادي",
     signTitle: user?.job || "المدير العام",
     showStamp: user?.role === "admin"
@@ -1797,6 +1813,19 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
+
+  // إعدادات الأدوات المتاحة في المحرر (صور، خط عريض، ألوان، قوائم)
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'color': [] }, { 'background': [] }],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      [{ 'align': [] }],
+      ['link', 'image'],
+      ['clean']
+    ],
+  };
 
   const fetchTemplates = async () => {
     setLoadingTemplates(true);
@@ -1842,7 +1871,7 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
       showToast("تنبيه", "يرجى كتابة اسم للنموذج الجديد", "error");
       return;
     }
-    if (!data.subject.trim() || !data.body.trim()) {
+    if (!data.subject.trim() || data.body.replace(/<[^>]*>?/gm, '').trim() === '') {
       showToast("تنبيه", "محتوى الخطاب (الموضوع والنص) فارغ!", "error");
       return;
     }
@@ -1904,7 +1933,20 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
           <div><label className="text-xs text-slate-400 block mb-1">التاريخ</label><input type="date" value={data.date} onChange={e => setData({ ...data, date: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none border border-slate-700 focus:border-[#c5a059] transition" style={{ colorScheme: "dark" }} /></div>
           <div><label className="text-xs text-slate-400 block mb-1">المستلم</label><input type="text" value={data.recipient} onChange={e => setData({ ...data, recipient: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none border border-slate-700 focus:border-[#c5a059] transition" /></div>
           <div><label className="text-xs text-slate-400 block mb-1">الموضوع</label><input type="text" value={data.subject} onChange={e => setData({ ...data, subject: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none font-bold border border-slate-700 focus:border-[#c5a059] transition" /></div>
-          <div><label className="text-xs text-slate-400 block mb-1">نص الخطاب</label><textarea rows="8" value={data.body} onChange={e => setData({ ...data, body: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none leading-relaxed border border-slate-700 focus:border-[#c5a059] transition" /></div>
+          
+          {/* المحرر الاحترافي الجديد */}
+          <div className="mb-4">
+            <label className="text-xs text-slate-400 block mb-1">نص الخطاب (المحرر الذكي)</label>
+            <div className="bg-white rounded-lg text-black">
+              <ReactQuill 
+                theme="snow" 
+                value={data.body} 
+                onChange={(content) => setData({ ...data, body: content })} 
+                modules={quillModules}
+                placeholder="اكتب تفاصيل الخطاب هنا... يمكنك إضافة صور ولصق جداول."
+              />
+            </div>
+          </div>
           
           <div className="grid grid-cols-2 gap-3">
             <div><label className="text-xs text-slate-400 block mb-1">اسم الموقع</label><input type="text" value={data.signName} onChange={e => setData({ ...data, signName: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none border border-slate-700 focus:border-[#c5a059] transition" /></div>
@@ -1913,46 +1955,45 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
           
           {user?.role === "admin" && (
             <div className="flex justify-between items-center pt-4 border-b border-slate-700 pb-4">
-              <span className="text-sm font-bold text-slate-300">إظهار الختم والتوقيع</span>
+              <span className="text-sm font-bold text-slate-300">إظهار الختم والتوقيع الرسمي</span>
               <input type="checkbox" checked={data.showStamp} onChange={e => setData({ ...data, showStamp: e.target.checked })} className="w-5 h-5 accent-[#c5a059] cursor-pointer" />
             </div>
           )}
 
-          {user?.role === "admin" && (
-            <div className="bg-slate-800/50 p-4 rounded-xl mt-4 border border-slate-700">
-              {!showSaveForm ? (
-                <button onClick={() => setShowSaveForm(true)} className="w-full text-sm font-bold text-teal-400 hover:text-teal-300 transition flex items-center justify-center gap-2 py-2">
-                  <FilePenLine size={16} /> حفظ التعديلات كنموذج جديد
-                </button>
-              ) : (
-                <div className="space-y-3 animate-fadeIn">
-                  <div className="text-xs text-slate-400 mb-2 text-center bg-slate-800 p-2 rounded">سيتم حفظ هذا النص كقالب جديد في قاعدة البيانات ليتم استخدامه لاحقاً.</div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-300 block mb-1">تصنيف النموذج الجديد</label>
-                    <select value={newTempMeta.category} onChange={e => setNewTempMeta({...newTempMeta, category: e.target.value})} className="w-full bg-slate-700 rounded p-2 text-sm outline-none border border-slate-600 focus:border-teal-500">
-                      <option value="النماذج المالية">النماذج المالية</option>
-                      <option value="نماذج العملاء والمبيعات">نماذج العملاء والمبيعات</option>
-                      <option value="إدارة الأملاك والصيانة">إدارة الأملاك والصيانة</option>
-                      <option value="الشؤون القانونية وإدارة الأملاك">الشؤون القانونية وإدارة الأملاك</option>
-                      <option value="الموارد البشرية والموظفين">الموارد البشرية والموظفين</option>
-                      <option value="خدمة العملاء">خدمة العملاء</option>
-                      <option value="إدارية عامة">إدارية عامة</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-300 block mb-1">اسم النموذج (في القائمة)</label>
-                    <input type="text" value={newTempMeta.title} onChange={e => setNewTempMeta({...newTempMeta, title: e.target.value})} className="w-full bg-slate-700 rounded p-2 text-sm outline-none border border-slate-600 focus:border-teal-500 text-white font-bold" placeholder="مثال: نموذج استلام جديد" />
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <button onClick={saveTemplateToDB} disabled={isSaving} className="flex-1 bg-teal-600 text-white py-2 rounded font-bold text-sm hover:bg-teal-500 transition flex items-center justify-center shadow-lg">
-                      {isSaving ? <RefreshCw className="animate-spin" size={16} /> : "تأكيد الحفظ كجديد"}
-                    </button>
-                    <button onClick={() => setShowSaveForm(false)} className="px-4 bg-slate-600 text-white py-2 rounded font-bold text-sm hover:bg-slate-500 transition">إلغاء</button>
-                  </div>
+          {/* قسم حفظ النموذج كنسخة جديدة */}
+          <div className="bg-slate-800/50 p-4 rounded-xl mt-4 border border-slate-700">
+            {!showSaveForm ? (
+              <button onClick={() => setShowSaveForm(true)} className="w-full text-sm font-bold text-teal-400 hover:text-teal-300 transition flex items-center justify-center gap-2 py-2">
+                <FilePenLine size={16} /> حفظ التعديلات كنموذج جديد
+              </button>
+            ) : (
+              <div className="space-y-3 animate-fadeIn">
+                <div className="text-xs text-slate-400 mb-2 text-center bg-slate-800 p-2 rounded">سيتم حفظ هذا النص كقالب جديد في قاعدة البيانات ليتم استخدامه لاحقاً.</div>
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">تصنيف النموذج الجديد</label>
+                  <select value={newTempMeta.category} onChange={e => setNewTempMeta({...newTempMeta, category: e.target.value})} className="w-full bg-slate-700 rounded p-2 text-sm outline-none border border-slate-600 focus:border-teal-500">
+                    <option value="النماذج المالية">النماذج المالية</option>
+                    <option value="نماذج العملاء والمبيعات">نماذج العملاء والمبيعات</option>
+                    <option value="إدارة الأملاك والصيانة">إدارة الأملاك والصيانة</option>
+                    <option value="الشؤون القانونية وإدارة الأملاك">الشؤون القانونية وإدارة الأملاك</option>
+                    <option value="الموارد البشرية والموظفين">الموارد البشرية والموظفين</option>
+                    <option value="خدمة العملاء">خدمة العملاء</option>
+                    <option value="إدارية عامة">إدارية عامة</option>
+                  </select>
                 </div>
-              )}
-            </div>
-          )}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">اسم النموذج (في القائمة)</label>
+                  <input type="text" value={newTempMeta.title} onChange={e => setNewTempMeta({...newTempMeta, title: e.target.value})} className="w-full bg-slate-700 rounded p-2 text-sm outline-none border border-slate-600 focus:border-teal-500 text-white font-bold" placeholder="مثال: نموذج استلام جديد" />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button onClick={saveTemplateToDB} disabled={isSaving} className="flex-1 bg-teal-600 text-white py-2 rounded font-bold text-sm hover:bg-teal-500 transition flex items-center justify-center shadow-lg">
+                    {isSaving ? <RefreshCw className="animate-spin" size={16} /> : "تأكيد الحفظ كجديد"}
+                  </button>
+                  <button onClick={() => setShowSaveForm(false)} className="px-4 bg-slate-600 text-white py-2 rounded font-bold text-sm hover:bg-slate-500 transition">إلغاء</button>
+                </div>
+              </div>
+            )}
+          </div>
 
         </div>
         <div className="p-4 bg-slate-950 border-t border-slate-800">
@@ -1980,7 +2021,10 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
             <div className="mb-6"><h3 className="font-bold text-lg md:text-xl text-black font-cairo">{data.recipient}</h3></div>
             <div className="mb-6 font-cairo">تحية طيبة وبعد،،</div>
             <div className="text-center mb-8 md:mb-10"><span className="border-b-2 border-[#c5a059] pb-2 px-8 font-bold text-lg md:text-xl text-[#1a365d] font-cairo">{data.subject}</span></div>
-            <div className="text-justify whitespace-pre-line leading-[2.2] flex-grow">{data.body}</div>
+            
+            {/* قراءة وعرض الـ HTML الذي تم إنتاجه من المحرر هنا */}
+            <div className="text-justify leading-[2.2] flex-grow quill-content" dangerouslySetInnerHTML={{ __html: data.body }}></div>
+            
             <div className="corner-accent" />
             <div className="mt-12 mb-12 flex justify-between items-start px-4 md:px-12 relative min-h-[150px]">
               <div className="relative w-40 md:w-48 flex justify-center">
