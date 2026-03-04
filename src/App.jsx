@@ -1000,7 +1000,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             desc: desc,
             status: row.status || "قيد الانتظار",
             technician: row.technician || "لم يتم التعيين",
-            otp: row.otp // إذا كان هناك OTP محفوظ مسبقاً
+            otp: row.otp // إذا كان هناك OTP محفوظ مسبقاً في القاعدة
          };
       });
       setTickets(parsed);
@@ -1062,22 +1062,54 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     finally { setLoading(false); }
   };
 
-  const updateTicketStatus = (id, field, value) => {
+  // --- التحديث الجديد الذي يربط الواجهة بقاعدة البيانات (API) ---
+  const updateTicketStatus = async (id, field, value) => {
+    let newOtp = null;
+
+    // 1. تحديث الواجهة فوراً لضمان سرعة الاستجابة للمستخدم
     setTickets(prev => prev.map(t => {
       if (t.id === id) {
         let updatedTicket = { ...t, [field]: value };
         
-        // إنشاء رمز OTP تلقائياً عند اعتماد الموعد (إذا لم يكن موجوداً مسبقاً)
+        // إنشاء رمز OTP تلقائياً عند الاعتماد
         if (field === "status" && value === "تم اعتماد الموعد" && !t.otp) {
-          updatedTicket.otp = Math.floor(1000 + Math.random() * 9000).toString();
+          newOtp = Math.floor(1000 + Math.random() * 9000).toString();
+          updatedTicket.otp = newOtp;
         }
         
         return updatedTicket;
       }
       return t;
     }));
-    // ملاحظة: هذا التحديث محلي (في الواجهة فقط) حالياً، للإنتاج الفعلي اربطه بـ API.php
-    showToast("تم التحديث", `تم التحديث محلياً للطلب ${id}`);
+
+    // 2. إرسال التحديث إلى قاعدة البيانات
+    try {
+      const payload = { 
+        ticket_id: id, 
+        field_name: field, 
+        new_value: value 
+      };
+      
+      if (newOtp) {
+        payload.otp = newOtp;
+      }
+
+      const res = await fetch(`${API_URL}?action=update_maintenance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      
+      if (data.success) {
+        showToast("تم الحفظ", `تم حفظ التحديث للطلب رقم ${id} في النظام.`);
+      } else {
+        showToast("خطأ في الحفظ", data.message || "لم يتم حفظ التغيير في الخادم.", "error");
+      }
+    } catch (error) {
+      showToast("خطأ اتصال", "تعذر الاتصال بقاعدة البيانات.", "error");
+    }
   };
 
   const notifyWhatsApp = (ticket) => {
@@ -1090,7 +1122,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `👨‍🔧 الفني المختص: *${ticket.technician}*` : "سيتم إعلامكم باسم الفني لاحقاً.";
     let dateText = ticket.scheduleDate ? `📅 التاريخ: *${ticket.scheduleDate}*\n⏰ الوقت: *${ticket.scheduleTime}*` : "لم يتم تحديد موعد الزيارة بعد.";
     
-    // إضافة فقرة الـ OTP للرسالة (ليتم إعطاؤه للفني بعد الانتهاء)
+    // إضافة فقرة الـ OTP للرسالة
     let otpText = ticket.otp ? `\n\n🔑 *رمز إغلاق الطلب (OTP):* ${ticket.otp}\n_(يرجى تزويد الفني بهذا الرمز عند **الانتهاء من العمل** لتأكيد إغلاق الطلب بنجاح)_` : "";
     
     let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nنفيدكم بأنه تمت مراجعة طلبكم، وحالة الطلب الآن: *${ticket.status}*.\n\n${techText}\n\n*موعد الزيارة (المعتمد / المقترح):*\n${dateText}${otpText}\n\n💡 *(في حال عدم مناسبة الموعد أعلاه، يرجى الرد على هذه الرسالة وسنقوم بتنسيق موعد بديل يناسبكم)*\n\nنسعد بخدمتكم، ونتمنى لكم يوماً سعيداً!`;
