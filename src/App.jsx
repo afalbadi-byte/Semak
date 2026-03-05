@@ -1246,6 +1246,20 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
 
   const updateTicketStatus = async (id, field, value) => {
     let newOtp = null;
+    let apiField = field;
+    let apiValue = value;
+
+    // العثور على التذكرة الحالية لإعادة بناء حقل الوصف
+    const currentTicket = tickets.find(t => t.id === id);
+
+    // إذا كان التعديل يخص التاريخ أو الوقت، ندمجهم مع الوصف ونرسلهم للعمود الفعلي descrip
+    if (field === "scheduleDate" || field === "scheduleTime") {
+      apiField = "descrip"; // اسم العمود الفعلي في قاعدة البيانات
+      const newDate = field === "scheduleDate" ? value : currentTicket.scheduleDate;
+      const newTime = field === "scheduleTime" ? value : currentTicket.scheduleTime;
+      // إعادة بناء النص بنفس الصيغة المحفوظة مسبقاً
+      apiValue = `الوقت المفضل: ${newTime}\nالتاريخ المفضل: ${newDate}\n\nالوصف:\n${currentTicket.desc}`;
+    }
 
     setTickets(prev => prev.map(t => {
       if (t.id === id) {
@@ -1260,7 +1274,8 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     }));
 
     try {
-      const payload = { ticket_id: id, field_name: field, new_value: value };
+      // استخدام الحقول المعالجة (apiField, apiValue) بدلاً من الحقول المباشرة
+      const payload = { ticket_id: id, field_name: apiField, new_value: apiValue };
       if (newOtp) payload.otp = newOtp;
 
       const res = await fetch(`${API_URL}?action=update_maintenance`, {
