@@ -1245,55 +1245,55 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   };
 
   const updateTicketStatus = async (id, field, value) => {
-    let newOtp = null;
-    let apiField = field;
-    let apiValue = value;
+    let newOtp = null;
+    let apiField = field;
+    let apiValue = value;
 
-    // العثور على التذكرة الحالية لإعادة بناء حقل الوصف
-    const currentTicket = tickets.find(t => t.id === id);
+    // العثور على التذكرة الحالية لإعادة بناء حقل الوصف
+    const currentTicket = tickets.find(t => t.id === id);
 
-    // إذا كان التعديل يخص التاريخ أو الوقت، ندمجهم مع الوصف ونرسلهم للعمود الفعلي descrip
-    if (field === "scheduleDate" || field === "scheduleTime") {
-      apiField = "descrip"; // اسم العمود الفعلي في قاعدة البيانات
-      const newDate = field === "scheduleDate" ? value : currentTicket.scheduleDate;
-      const newTime = field === "scheduleTime" ? value : currentTicket.scheduleTime;
-      // إعادة بناء النص بنفس الصيغة المحفوظة مسبقاً
-      apiValue = `الوقت المفضل: ${newTime}\nالتاريخ المفضل: ${newDate}\n\nالوصف:\n${currentTicket.desc}`;
-    }
+    // إذا كان التعديل يخص التاريخ أو الوقت، ندمجهم مع الوصف ونرسلهم للعمود الفعلي descrip
+    if (field === "scheduleDate" || field === "scheduleTime") {
+      apiField = "descrip"; // تأكد أن هذا هو اسم عمود الوصف في قاعدة بياناتك
+      const newDate = field === "scheduleDate" ? value : currentTicket.scheduleDate;
+      const newTime = field === "scheduleTime" ? value : currentTicket.scheduleTime;
+      // إعادة بناء النص بنفس الصيغة التي يقرأها النظام
+      apiValue = `الوقت المفضل: ${newTime}\nالتاريخ المفضل: ${newDate}\n\nالوصف:\n${currentTicket.desc}`;
+    }
 
-    setTickets(prev => prev.map(t => {
-      if (t.id === id) {
-        let updatedTicket = { ...t, [field]: value };
-        if (field === "status" && value === "تم اعتماد الموعد" && !t.otp) {
-          newOtp = Math.floor(1000 + Math.random() * 9000).toString();
-          updatedTicket.otp = newOtp;
-        }
-        return updatedTicket;
-      }
-      return t;
-    }));
+    setTickets(prev => prev.map(t => {
+      if (t.id === id) {
+        let updatedTicket = { ...t, [field]: value };
+        if (field === "status" && value === "تم اعتماد الموعد" && !t.otp) {
+          newOtp = Math.floor(1000 + Math.random() * 9000).toString();
+          updatedTicket.otp = newOtp;
+        }
+        return updatedTicket;
+      }
+      return t;
+    }));
 
-    try {
-      // استخدام الحقول المعالجة (apiField, apiValue) بدلاً من الحقول المباشرة
-      const payload = { ticket_id: id, field_name: apiField, new_value: apiValue };
-      if (newOtp) payload.otp = newOtp;
+    try {
+      // إرسال الحقول المعالجة للـ API
+      const payload = { ticket_id: id, field_name: apiField, new_value: apiValue };
+      if (newOtp) payload.otp = newOtp;
 
-      const res = await fetch(`${API_URL}?action=update_maintenance`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        showToast("تم الحفظ", `تم تحديث الطلب رقم ${id}`);
-      } else {
-        showToast("خطأ في الحفظ", data.message || "لم يتم حفظ التغيير في الخادم.", "error");
-      }
-    } catch (error) {
-      showToast("خطأ اتصال", "تعذر الاتصال بقاعدة البيانات.", "error");
-    }
-  };
+      const res = await fetch(`${API_URL}?action=update_maintenance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        showToast("تم الحفظ", `تم تحديث الطلب بنجاح`);
+      } else {
+        showToast("خطأ في الحفظ", data.message || "لم يتم حفظ التغيير في الخادم.", "error");
+      }
+    } catch (error) {
+      showToast("خطأ اتصال", "تعذر الاتصال بقاعدة البيانات.", "error");
+    }
+  };
 
   const notifyWhatsApp = (ticket) => {
     if (!ticket.phone || ticket.phone === "---") {
