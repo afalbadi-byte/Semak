@@ -22,13 +22,6 @@ const ADMIN_CREDS = {
   pass: "Medo@3225"
 };
 
-const TECHNICIANS = {
-  تكييف: "ديلاور (فني تكييف)",
-  سباكة: "صدام (فني كهرباء )",
-  كهرباء: "ابراهيم (مبلط)",
-  أخرى: "فريق الدعم العام"
-};
-const TECHNICIANS_LIST = Object.values(TECHNICIANS);
 const TIME_SLOTS = [
   "08:00 ص - 10:00 ص",
   "10:00 ص - 12:00 م",
@@ -643,7 +636,13 @@ const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
         }
         setUser(data.user);
         showToast("تم تسجيل الدخول", `مرحباً بك، ${data.user.name}`);
-        navigateTo("dashboard");
+        
+        // التوجيه الذكي حسب نوع الحساب
+        if (data.user.role === "technician") {
+          navigateTo("tech-dashboard");
+        } else {
+          navigateTo("dashboard");
+        }
       } else {
         showToast("خطأ", data.message, "error");
       }
@@ -660,7 +659,7 @@ const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
       <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10 border border-white/20">
         <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="سماك العقارية" className="h-16 mx-auto mb-4 object-contain" />
         <h2 className="text-2xl font-black text-[#1a365d]">بوابة الموظفين</h2>
-        <p className="text-slate-500 text-sm mt-2 mb-8">تسجيل الدخول للوصول للأدوات الإدارية</p>
+        <p className="text-slate-500 text-sm mt-2 mb-8">تسجيل الدخول للوصول للأدوات الإدارية والفنية</p>
         <form onSubmit={handleLogin} className="space-y-6 text-right">
           <div>
             <label className="block text-sm font-bold mb-2 text-[#1a365d]">البريد الإلكتروني</label>
@@ -768,7 +767,8 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
       return;
     }
     setLoading(true);
-    const tech = TECHNICIANS[e.target.type.value] || "غير محدد";
+    
+    // إزالة الربط التلقائي بالفني وإسناده لـ "لم يتم التعيين"
     const desc = `الوقت المفضل: ${time}\nالتاريخ المفضل: ${date}\n\nالوصف:\n${e.target.desc.value}`;
     
     const payload = {
@@ -791,7 +791,8 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
       e.target.reset();
       setDate("");
       setTime("");
-      setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: tech, scheduleDate: date, scheduleTime: time});
+      // تعيين الفني الافتراضي إلى "لم يتم التعيين"
+      setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: "لم يتم التعيين", scheduleDate: date, scheduleTime: time});
       setTab("track");
     } catch {
       showToast("تنبيه", "حدث خطأ. حاول لاحقاً.", "error");
@@ -934,11 +935,145 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
   );
 };
 
+// --- بوابة الفنيين (جديدة) ---
+const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [otpInputs, setOtpInputs] = useState({});
+
+  const handleLogout = () => {
+    setUser(null);
+    navigateTo("home");
+  };
+
+  const loadMyTickets = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_maintenance`);
+      let data = await res.json();
+      
+      // جلب المهام وتصفيتها لتظهر مهام هذا الفني فقط
+      const myTickets = data.filter(t => t.technician === user.name).map(row => {
+         let desc = row.descrip || "---";
+         let scheduleDate = row.date ? row.date.split(" ")[0] : "";
+         let scheduleTime = "غير محدد";
+         if (desc.includes("التاريخ المفضل:")) {
+           const dateMatch = desc.match(/التاريخ المفضل: (.*)/);
+           if (dateMatch) scheduleDate = dateMatch[1];
+           const timeMatch = desc.match(/الوقت المفضل: (.*)/);
+           if (timeMatch) scheduleTime = timeMatch[1];
+           desc = desc.split(`\n\nالوصف:\n`)[1] || desc;
+         }
+         return { ...row, scheduleDate, scheduleTime, desc };
+      });
+      setTickets(myTickets);
+    } catch (err) {
+      showToast("خطأ", "تعذر جلب المهام", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadMyTickets(); }, []);
+
+  const updateStatus = async (id, newStatus) => {
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
+    try {
+      const res = await fetch(`${API_URL}?action=update_maintenance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket_id: id, field_name: "status", new_value: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("تم التحديث", `تم تحديث حالة الطلب إلى: ${newStatus}`);
+      }
+    } catch (error) { showToast("خطأ", "تعذر الاتصال بقاعدة البيانات.", "error"); }
+  };
+
+  const handleOtpSubmit = (ticket) => {
+    const enteredOtp = otpInputs[ticket.id];
+    if (enteredOtp === ticket.otp) {
+      updateStatus(ticket.id, "مكتمل");
+    } else {
+      showToast("رمز خاطئ", "رمز التفعيل (OTP) غير صحيح، يرجى التأكد من العميل.", "error");
+    }
+  };
+
+  return (
+    <div className="pt-24 pb-20 bg-slate-50 min-h-screen">
+      <div className="container mx-auto px-4 max-w-3xl">
+        <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+          <div>
+            <h1 className="text-2xl font-black text-[#1a365d]">بوابة المهام</h1>
+            <p className="text-slate-500 text-sm mt-1">الفني: <span className="font-bold text-[#c5a059]">{user?.name}</span></p>
+          </div>
+          <button onClick={handleLogout} className="bg-red-50 text-red-600 p-3 rounded-xl hover:bg-red-600 hover:text-white transition">
+            <LogOut size={20} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-20 text-[#c5a059]"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</div>
+        ) : tickets.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-slate-100"><p className="text-slate-500">لا توجد لديك مهام مسندة حالياً.</p></div>
+        ) : (
+          <div className="space-y-4">
+            {tickets.map(ticket => (
+              <div key={ticket.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex gap-2">
+                    <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-lg text-xs font-black">#{ticket.id}</span>
+                    <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-xs font-bold">{ticket.type}</span>
+                  </div>
+                  <span className={`px-3 py-1 rounded-lg text-xs font-bold ${ticket.status === 'مكتمل' ? 'bg-green-100 text-green-700' : ticket.status === 'جاري العمل' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                    {ticket.status}
+                  </span>
+                </div>
+                
+                <h3 className="font-black text-lg text-[#1a365d] mb-2">{ticket.unit}</h3>
+                <div className="bg-slate-50 p-4 rounded-xl text-sm text-slate-600 mb-4 border border-slate-100">
+                  <div className="flex items-center gap-2 mb-2 font-bold text-[#1a365d]"><CalendarDays size={16} className="text-[#c5a059]"/> {ticket.scheduleDate} | {ticket.scheduleTime}</div>
+                  <p className="border-t border-slate-200 pt-2 mt-2 leading-relaxed">{ticket.desc}</p>
+                </div>
+
+                {/* أزرار التحكم والإجراءات */}
+                {ticket.status === "تم اعتماد الموعد" && (
+                  <button onClick={() => updateStatus(ticket.id, "جاري العمل")} className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-bold hover:bg-[#c5a059] transition flex justify-center items-center gap-2 shadow-lg">
+                    <Wrench size={18} /> بدء العمل (أنا في الموقع)
+                  </button>
+                )}
+
+                {ticket.status === "جاري العمل" && (
+                  <div className="bg-green-50 p-4 rounded-xl border border-green-200 text-center animate-fadeIn">
+                    <label className="block text-sm font-bold text-green-800 mb-2">أدخل رمز الإغلاق (OTP) من العميل لإنهاء المهمة</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" maxLength={4} placeholder="----"
+                        value={otpInputs[ticket.id] || ""}
+                        onChange={(e) => setOtpInputs({...otpInputs, [ticket.id]: e.target.value})}
+                        className="w-full text-center text-xl font-black p-3 rounded-xl border border-green-300 outline-none focus:border-green-500 tracking-widest"
+                      />
+                      <button onClick={() => handleOtpSubmit(ticket)} className="bg-green-600 text-white px-6 rounded-xl font-bold hover:bg-green-700 transition shadow-md">إغلاق</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- لوحة الإدارة ---
 const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [activeTab, setActiveTab] = useState("");
   const [leads, setLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState([]);
+  const [techList, setTechList] = useState([]); // قائمة الفنيين من قاعدة البيانات
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState("kanban"); // "kanban" | "calendar" | "gantt"
@@ -979,6 +1114,8 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       const res = await fetch(`${API_URL}?action=get_users`);
       const data = await res.json();
       setUsers(data);
+      // تحديث قائمة الفنيين من مستخدمي النظام
+      setTechList(data.filter(u => u.role === "technician").map(t => t.name));
     } catch (err) {
       showToast("خطأ", "تعذر جلب الموظفين", "error");
     } finally {
@@ -1022,6 +1159,13 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
          };
       });
       setTickets(parsed);
+
+      // جلب الفنيين صامتاً لاستخدامهم في القائمة المنسدلة للتعيين
+      fetch(`${API_URL}?action=get_users`)
+        .then(res => res.json())
+        .then(usersData => setTechList(usersData.filter(u => u.role === "technician").map(t => t.name)))
+        .catch(() => {});
+
     } catch (err) {
       showToast("خطأ", "تعذر جلب تذاكر الصيانة", "error");
     } finally {
@@ -1204,7 +1348,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
             className="w-full text-xs font-bold p-2 rounded-lg bg-white border border-slate-200 outline-none focus:border-blue-400 text-slate-700"
           >
             <option value="لم يتم التعيين" disabled>-- إسناد لفني --</option>
-            {TECHNICIANS_LIST.map(tech => <option key={tech} value={tech}>{tech}</option>)}
+            {techList.map(tech => <option key={tech} value={tech}>{tech}</option>)}
           </select>
 
           <div className="flex flex-col gap-2">
@@ -1432,6 +1576,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                     <select name="role" className="w-full p-3 rounded-xl border border-slate-200 outline-none">
                       <option value="employee">موظف (تخصيص الصلاحيات)</option>
                       <option value="admin">مدير (صلاحيات كاملة)</option>
+                      <option value="technician">فني صيانة (بوابة الفنيين)</option>
                     </select>
                   </div>
                   <div><label className="text-xs font-bold text-slate-500 mb-1 block">كلمة المرور الافتراضية</label><input required name="password" type="text" defaultValue="123456" className="w-full p-3 rounded-xl border border-slate-200 outline-none" /></div>
@@ -1452,7 +1597,9 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                         <td className="px-6 py-4 font-bold">{u.name}</td>
                         <td className="px-6 py-4 text-slate-500">{u.job} <br/><span className="text-[10px] text-slate-400 font-mono">{u.email}</span></td>
                         <td className="px-6 py-4">
-                          {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">مدير نظام</span> : <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
+                          {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">مدير نظام</span> : 
+                           u.role === "technician" ? <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded text-xs font-bold">فني صيانة</span> :
+                           <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">موظف</span>}
                         </td>
                         <td className="px-6 py-4">
                           {u.role !== "admin" && (
@@ -1573,7 +1720,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
                         })}
                       </div>
 
-                      {TECHNICIANS_LIST.map((tech, techIndex) => (
+                      {techList.map((tech, techIndex) => (
                         <div key={techIndex} className="grid grid-cols-[200px_repeat(7,1fr)] border-b border-slate-100 hover:bg-slate-50 transition-colors">
                           <div className="p-4 border-l border-slate-200 flex items-center">
                             <div className="flex items-center gap-3">
@@ -2112,7 +2259,8 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
-  const hideNavOn = ["login", "customer-login", "dashboard", "letter-generator"];
+  // إخفاء الـ Navbar عن كل هذه الصفحات الخاصة ببوابات الدخول والمهام
+  const hideNavOn = ["login", "customer-login", "dashboard", "letter-generator", "tech-dashboard"];
 
   return (
     <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-slate-900 bg-slate-50">
@@ -2175,8 +2323,12 @@ export default function App() {
         {currentPage === "contact" && <ContactView showToast={showToast} />}
         {currentPage === "customer-login" && <CustomerLoginView setCustomer={setCustomer} navigateTo={navigateTo} showToast={showToast} />}
         {currentPage === "maintenance" && <MaintenanceView customer={customer} setCustomer={setCustomer} navigateTo={navigateTo} showToast={showToast} />}
+        
+        {/* بوابات الإدارة والموظفين والفنيين */}
         {currentPage === "login" && <AdminLoginView setUser={setAdminUser} navigateTo={navigateTo} showToast={showToast} />}
         {currentPage === "dashboard" && <DashboardView user={adminUser} setUser={setAdminUser} navigateTo={navigateTo} showToast={showToast} />}
+        {currentPage === "tech-dashboard" && <TechDashboardView user={adminUser} setUser={setAdminUser} navigateTo={navigateTo} showToast={showToast} />}
+        
         {currentPage === "letter-generator" && <LetterGeneratorView user={adminUser} navigateTo={navigateTo} showToast={showToast} />}
         {currentPage === "privacy" && <LegalPage title="سياسة الخصوصية" navigateTo={navigateTo} />}
         {currentPage === "terms" && <LegalPage title="الشروط والأحكام" navigateTo={navigateTo} />}
