@@ -402,7 +402,7 @@ const ProjectsView = () => {
                     <Moon className="text-[#c5a059]" size={20} />
                     <span className="font-bold text-lg">مقابل</span>
                   </div>
-                  <p className="text-slate-400 text-sm">مسجد جامع</p>
+                  <p className="text-slate-400 text-sm">مسجد </p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
                   <div className="flex items-center gap-3 mb-2">
