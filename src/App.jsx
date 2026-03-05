@@ -1254,7 +1254,7 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       if (t.id === id) {
         let updatedTicket = { ...t, [field]: value };
         // توليد OTP في حال تم اعتماد الموعد لأول مرة
-        if (field === "status" && value === "تم اعتماد الموعد" && !t.otp) {
+        if (field === "status" && value === "تم اعـتماد الموعد" && !t.otp) {
           newOtp = Math.floor(1000 + Math.random() * 9000).toString();
           updatedTicket.otp = newOtp;
         }
