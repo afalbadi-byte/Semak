@@ -10,7 +10,7 @@ import {
   ShoppingCart, Target, TramFront, TreePine, Umbrella, UserCheck, UserCog, User,
   Users, Wifi, Wrench, X, ZoomIn, Shield, CheckSquare, AlertTriangle,
   // أيقونات أداة الفحص:
-  ClipboardCheck, DoorOpen, Sofa, ChefHat, XCircle, FileText, Save
+  ClipboardCheck, DoorOpen, Sofa, ChefHat, XCircle, FileText, Save, CheckCircle
 } from 'lucide-react';
 
 // --- Global Constants ---
