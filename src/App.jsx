@@ -2651,7 +2651,7 @@ export default function App() {
               <p className="text-slate-400 mt-1 tracking-widest font-bold text-xl uppercase">سقف يعلو برؤيتك، ومسكن يحكي قصتك</p>
             </div>
             <div className="border-t border-white/5 pt-12 flex flex-col md:flex-row justify-between items-center text-slate-100 text-sm gap-6">
-              <p>© 2026 سماك العقارية. جميع الحقوق محفوظة.</p>
+              <p>© 2026 سماك العقـــارية. جميع الحقوق محفوظة.</p>
               <div className="flex flex-wrap justify-center gap-6 font-medium">
                 <button onClick={() => navigateTo("privacy")} className="hover:text-white transition">سياسة الخصوصية</button>
                 <button onClick={() => navigateTo("terms")} className="hover:text-white transition">الشروط والأحكام</button>
