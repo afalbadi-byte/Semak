@@ -8,9 +8,9 @@ import {
   ListChecks, Lock, LogOut, MapPin, Menu, MessageCircle, Moon, Phone, Plane,
   Printer, QrCode, Receipt, RefreshCw, Ruler, Search, Send, ShieldCheck,
   ShoppingCart, Target, TramFront, TreePine, Umbrella, UserCheck, UserCog, User,
-  Users, Wifi, Wrench, X, ZoomIn, Shield, CheckSquare,
+  Users, Wifi, Wrench, X, ZoomIn, Shield, CheckSquare, AlertTriangle,
   // أيقونات أداة الفحص:
-  ClipboardCheck, DoorOpen, Sofa, ChefHat, XCircle, FileText, Save, CheckCircle
+  ClipboardCheck, DoorOpen, Sofa, ChefHat, XCircle, FileText, Save
 } from 'lucide-react';
 
 // --- Global Constants ---
@@ -78,6 +78,14 @@ const GlobalStyles = () => (
     }
     .marquee-container:hover .marquee-content { animation-play-state: paused; }
     
+    /* أنيميشن ختم الجودة */
+    @keyframes stamp-in {
+      0% { transform: scale(3) rotate(-30deg); opacity: 0; }
+      70% { transform: scale(0.9) rotate(5deg); opacity: 1; }
+      100% { transform: scale(1) rotate(-15deg); opacity: 1; }
+    }
+    .animate-stamp-in { animation: stamp-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
     /* Print Styles */
     .a4-page {
         width: 210mm; min-height: 297mm; height: auto; background: white; margin: 0 auto;
@@ -1085,7 +1093,7 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
   );
 };
 
-// --- أداة فحص واستلام الوحدات ---
+// --- أداة فحص واستلام الوحدات (تحديث: تظليل + ختم الاعتماد) ---
 const UnitInspectionView = ({ user, showToast }) => {
   const [selectedUnit, setSelectedUnit] = useState("SM-A01");
   const [activeRoom, setActiveRoom] = useState("entrance");
@@ -1105,12 +1113,12 @@ const UnitInspectionView = ({ user, showToast }) => {
     return [
       { id: "entrance", label: "المدخل ومجلس الضيوف", icon: DoorOpen },
       { id: "living", label: "صالة المعيشة", icon: Sofa },
+      { id: "kitchen", label: "المطبخ", icon: ChefHat },
       { id: "master_bed", label: "غرفة النوم الرئيسية (ماستر)", icon: Bed },
       { id: "bed_2", label: "غرفة نوم 2", icon: Bed },
       { id: "bed_3", label: "غرفة نوم 3", icon: Bed },
       { id: "bed_4", label: "غرفة نوم 4", icon: Bed },
       ...(isRoof ? [] : [{ id: "bed_5", label: "غرفة نوم 5", icon: Bed }]),
-      { id: "kitchen", label: "المطبخ", icon: ChefHat },
       { id: "bath_1", label: "دورة مياه الضيوف", icon: Bath },
       { id: "bath_2", label: "دورة مياه العائلة", icon: Bath },
       { id: "bath_3", label: "دورة مياه الماستر", icon: Bath },
@@ -1121,7 +1129,25 @@ const UnitInspectionView = ({ user, showToast }) => {
     ];
   };
 
+  // إحداثيات التظليل على المخطط (نسبة مئوية ليتناسب مع كل الشاشات)
+  // [يرجى تعديل هذه النسب لاحقاً لتطابق المخططات الهندسية الحقيقية لديكم]
+  const ROOM_ZONES = {
+    "SM-A01": {
+      "entrance": { top: "60%", left: "10%", width: "25%", height: "25%" },
+      "living": { top: "40%", left: "35%", width: "30%", height: "30%" },
+      "kitchen": { top: "10%", left: "35%", width: "20%", height: "25%" },
+      "master_bed": { top: "10%", left: "65%", width: "25%", height: "30%" },
+      "bed_2": { top: "45%", left: "65%", width: "25%", height: "20%" },
+      "bath_1": { top: "80%", left: "10%", width: "15%", height: "15%" },
+    },
+    "SM-A02": {
+      "entrance": { top: "60%", left: "10%", width: "25%", height: "25%" },
+      "living": { top: "40%", left: "35%", width: "30%", height: "30%" },
+    }
+  };
+
   const currentRooms = getRoomsForUnit(selectedUnit);
+  const currentZones = ROOM_ZONES[selectedUnit] || ROOM_ZONES["SM-A01"];
 
   const CHECKLIST = {
     "الأعمال الكهربائية والذكية ⚡": [
@@ -1136,25 +1162,20 @@ const UnitInspectionView = ({ user, showToast }) => {
       "عدم وجود تسريبات أسفل المغاسل والأحواض",
       "تصريف المياه بشكل انسيابي في الصفيات",
       "عمل السخان بكفاءة وعدم وجود تنقيط",
-      "عمل صناديق الطرد (السيفون المخفي/الظاهر) بكفاءة"
+      "عمل صناديق الطرد بكفاءة"
     ],
     "الدهانات والتشطيبات الجدارية 🎨": [
       "تجانس لون الدهان وعدم وجود بقع أو تباين",
       "خلو الجدران من الخدوش أو التشققات",
-      "سلامة الأسقف المستعارة (الجبس) واستوائها",
       "نظافة حواف الدهان عند التقائها مع النعلات والأبواب"
     ],
     "الأبواب والنوافذ 🚪": [
       "سلاسة فتح وإغلاق الأبواب بدون احتكاك",
-      "عمل الأقفال والمقابض بشكل ممتاز",
       "إحكام إغلاق النوافذ (عزل الصوت/الهواء)",
-      "سلامة الزجاج وشبك الناموس من الخدوش"
     ],
     "الأرضيات 🧱": [
       "سلامة الترويبة بين البلاط ونظافتها",
       "خلو البورسلان/الرخام من الخدوش أو الكسور",
-      "سلامة النعلات الجدارية وتماسكها",
-      "صحة ميول البلاط باتجاه الصفاية (للمناطق الرطبة)"
     ]
   };
 
@@ -1197,64 +1218,147 @@ const UnitInspectionView = ({ user, showToast }) => {
     }, 1500);
   };
 
-  const totalItems = Object.values(CHECKLIST).flat().length;
+  // --- حساب الإنجاز ---
+  const roomTotalItems = Object.values(CHECKLIST).flat().length;
   const currentUnitData = inspectionData[selectedUnit] || {};
   const currentRoomData = currentUnitData[activeRoom] || {};
-  const answeredItems = Object.keys(currentRoomData).length;
-  const progress = Math.round((answeredItems / totalItems) * 100) || 0;
+  
+  // إنجاز الغرفة الحالية
+  const roomAnsweredItems = Object.keys(currentRoomData).length;
+  const roomProgress = Math.round((roomAnsweredItems / roomTotalItems) * 100) || 0;
+
+  // إنجاز الوحدة بالكامل
+  const unitTotalItems = currentRooms.length * roomTotalItems;
+  const unitAnsweredItems = Object.values(currentUnitData).reduce((acc, roomData) => acc + Object.keys(roomData).length, 0);
+  const unitProgress = Math.round((unitAnsweredItems / unitTotalItems) * 100) || 0;
+  
+  // شروط الختم النهائي
+  const isUnitFullyEvaluated = unitProgress === 100;
+  const hasFails = Object.values(currentUnitData).some(roomData => 
+    Object.values(roomData).some(item => item.status === 'fail')
+  );
 
   return (
-    <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
+    <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up relative">
+      
+      {/* هيدر الأداة */}
       <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
           <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><ClipboardCheck className="text-indigo-600" /> فحص واستلام الوحدات</h3>
           <p className="text-slate-500 text-sm mt-1">تتبع الفراغات من المخطط وقم بالفحص الدقيق قبل التسليم النهائي.</p>
         </div>
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-grow md:w-64">
-            <span className="bg-slate-100 px-4 py-3 text-[#1a365d] font-bold text-sm border-l border-slate-200">رقم الوحدة</span>
-            <select 
-              value={selectedUnit} 
-              onChange={handleUnitChange}
-              className="bg-transparent text-[#c5a059] font-black px-4 py-3 outline-none w-full"
-            >
-              {["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"].map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
+        <div className="flex flex-col items-end gap-3 w-full md:w-auto">
+          {/* مؤشر إنجاز الوحدة بالكامل */}
+          <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mb-1">
+            <div className={`h-full transition-all duration-700 ${isUnitFullyEvaluated ? (hasFails ? 'bg-orange-500' : 'bg-green-500') : 'bg-indigo-600'}`} style={{ width: `${unitProgress}%` }} />
           </div>
-          <button onClick={handleSave} disabled={isSaving} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-lg shadow-indigo-200 whitespace-nowrap h-full">
-            {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} حفظ
-          </button>
+          <div className="flex items-center gap-3 w-full">
+            <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-grow md:w-64">
+              <span className="bg-slate-100 px-4 py-3 text-[#1a365d] font-bold text-sm border-l border-slate-200">الوحدة</span>
+              <select 
+                value={selectedUnit} 
+                onChange={handleUnitChange}
+                className="bg-transparent text-[#c5a059] font-black px-4 py-3 outline-none w-full"
+              >
+                {["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"].map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <button onClick={handleSave} disabled={isSaving} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-lg shadow-indigo-200 whitespace-nowrap h-full">
+              {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} حفظ
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="flex flex-col lg:flex-row min-h-[700px]">
-        <div className="w-full lg:w-1/3 bg-slate-100 border-l border-slate-200 p-6 flex flex-col items-center">
-          <h4 className="text-sm font-black text-[#1a365d] mb-4 bg-white px-6 py-2 rounded-full shadow-sm">مخطط الوحدة {selectedUnit}</h4>
-          <div className="bg-white p-2 rounded-3xl shadow-md w-full max-w-[350px] relative group overflow-hidden border-4 border-white">
-            <img src={getUnitImage(selectedUnit)} alt={`مخطط ${selectedUnit}`} className="w-full h-auto object-contain rounded-2xl group-hover:scale-105 transition duration-500" />
-            <div className="absolute inset-0 bg-[#1a365d]/0 group-hover:bg-[#1a365d]/10 transition-colors duration-300 pointer-events-none rounded-2xl" />
+        {/* قسم المخطط التفاعلي */}
+        <div className="w-full lg:w-1/3 bg-slate-100 border-l border-slate-200 p-6 flex flex-col items-center relative">
+          
+          <h4 className="text-sm font-black text-[#1a365d] mb-4 bg-white px-6 py-2 rounded-full shadow-sm flex items-center gap-2">
+            <MapPin size={16} className="text-[#c5a059]"/> خريطة الوحدة {selectedUnit}
+          </h4>
+          
+          <div className="relative w-full max-w-[350px] bg-white p-2 rounded-3xl shadow-md border-4 border-white">
+            <img src={getUnitImage(selectedUnit)} alt={`مخطط ${selectedUnit}`} className="w-full h-auto object-contain rounded-2xl block" />
+            
+            {/* التظليل التفاعلي للغرف */}
+            {currentRooms.map(room => {
+              const zone = currentZones[room.id];
+              if (!zone) return null; 
+              
+              const isActive = activeRoom === room.id;
+              const roomData = currentUnitData[room.id] || {};
+              const isRoomCompleted = Object.keys(roomData).length === roomTotalItems;
+              
+              return (
+                <div
+                  key={room.id}
+                  onClick={() => setActiveRoom(room.id)}
+                  title={room.label}
+                  className={`absolute cursor-pointer rounded-lg transition-all duration-300 ${
+                    isActive 
+                      ? "bg-indigo-500/50 border-2 border-indigo-600 z-20 animate-pulse shadow-[0_0_15px_rgba(79,70,229,0.5)] backdrop-blur-[1px]" 
+                      : isRoomCompleted 
+                        ? "bg-green-500/30 border border-green-500 hover:bg-green-500/50 z-10"
+                        : "hover:bg-indigo-500/20 z-10 border border-transparent hover:border-indigo-300"
+                  }`}
+                  style={{ top: zone.top, left: zone.left, width: zone.width, height: zone.height }}
+                >
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                     <room.icon size={24} className={isActive ? "text-white drop-shadow-md" : "text-indigo-900"} />
+                  </div>
+                  {isRoomCompleted && !isActive && (
+                    <div className="absolute top-1 right-1 bg-white rounded-full">
+                      <CheckCircle size={12} className="text-green-600" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* 🌟 ختم الاعتماد النهائي يظهر فوق المخطط 🌟 */}
+            {isUnitFullyEvaluated && !hasFails && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/30 backdrop-blur-[2px] rounded-2xl">
+                <div className="animate-stamp-in border-4 border-green-600 text-green-600 rounded-3xl p-4 flex flex-col items-center justify-center bg-white/95 shadow-2xl">
+                  <Award size={48} className="mb-1" />
+                  <span className="text-2xl font-black tracking-widest uppercase">وحدة معتمدة</span>
+                  <span className="text-xs font-bold mt-1 bg-green-100 px-3 py-1 rounded-full">تم الفحص وجاهزة للتسليم</span>
+                </div>
+              </div>
+            )}
+            
+            {/* 🌟 ختم المراجعة في حال وجود ملاحظات 🌟 */}
+            {isUnitFullyEvaluated && hasFails && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/30 backdrop-blur-[2px] rounded-2xl">
+                <div className="animate-stamp-in border-4 border-orange-500 text-orange-600 rounded-3xl p-4 flex flex-col items-center justify-center bg-white/95 shadow-2xl">
+                  <AlertTriangle size={48} className="mb-1" />
+                  <span className="text-2xl font-black tracking-widest uppercase">تحت المراجعة</span>
+                  <span className="text-xs font-bold mt-1 bg-orange-100 px-3 py-1 rounded-full">توجد ملاحظات قيد المعالجة</span>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="mt-8 w-full">
-            <p className="text-xs font-bold text-slate-400 mb-3 px-2">الفراغات المستخرجة من المخطط:</p>
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+            <p className="text-xs font-bold text-slate-400 mb-3 px-2">اختر الغرفة للفحص:</p>
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {currentRooms.map(room => {
                 const Icon = room.icon;
                 const isActive = activeRoom === room.id;
                 const roomData = currentUnitData[room.id] || {};
-                const isCompleted = Object.keys(roomData).length === totalItems;
+                const isRoomCompleted = Object.keys(roomData).length === roomTotalItems;
 
                 return (
                   <button 
                     key={room.id} 
                     onClick={() => setActiveRoom(room.id)}
-                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-xs text-right w-full border ${isActive ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : isCompleted ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-xs text-right w-full border ${isActive ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : isRoomCompleted ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}
                   >
                     <div className="flex items-center gap-2">
-                      <Icon size={16} className={isActive ? 'text-indigo-200' : isCompleted ? 'text-green-500' : 'text-slate-400'} />
+                      <Icon size={16} className={isActive ? 'text-indigo-200' : isRoomCompleted ? 'text-green-500' : 'text-slate-400'} />
                       <span className="truncate">{room.label}</span>
                     </div>
-                    {isCompleted && !isActive && <CheckCircle size={14} className="text-green-500" />}
+                    {isRoomCompleted && !isActive && <CheckCircle size={14} className="text-green-500" />}
                   </button>
                 );
               })}
@@ -1262,16 +1366,23 @@ const UnitInspectionView = ({ user, showToast }) => {
           </div>
         </div>
 
+        {/* قسم قائمة الفحص (Checklist) للغرفة النشطة */}
         <div className="flex-1 p-6 md:p-10 bg-white overflow-y-auto">
-          <div className="flex justify-between items-end mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4 pb-4 border-b border-slate-100">
             <div>
               <span className="text-xs font-bold text-[#c5a059] mb-1 block">جاري فحص:</span>
-              <h4 className="text-2xl font-black text-[#1a365d]">{currentRooms.find(r => r.id === activeRoom)?.label}</h4>
+              <h4 className="text-2xl font-black text-[#1a365d] flex items-center gap-2">
+                {React.createElement(currentRooms.find(r => r.id === activeRoom)?.icon || DoorOpen, {className: "text-indigo-500"})}
+                {currentRooms.find(r => r.id === activeRoom)?.label}
+              </h4>
             </div>
-            <div className="text-left w-32">
-              <span className="text-[10px] font-bold text-slate-400 mb-1.5 block">إنجاز الفحص ({progress}%)</span>
-              <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="text-right md:text-left w-full md:w-48 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <span className="text-[10px] font-bold text-slate-500 mb-1.5 flex justify-between">
+                <span>إنجاز الغرفة</span>
+                <span className={roomProgress === 100 ? "text-green-600" : "text-indigo-600"}>{roomProgress}%</span>
+              </span>
+              <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                <div className={`h-full transition-all duration-500 ${roomProgress === 100 ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${roomProgress}%` }} />
               </div>
             </div>
           </div>
@@ -1290,19 +1401,19 @@ const UnitInspectionView = ({ user, showToast }) => {
                     const isFail = itemData.status === 'fail';
 
                     return (
-                      <div key={index} className={`p-4 rounded-xl border transition-all ${isFail ? 'bg-red-50 border-red-200' : isPass ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
+                      <div key={index} className={`p-4 rounded-xl border transition-all ${isFail ? 'bg-red-50 border-red-200' : isPass ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 hover:border-indigo-300 shadow-sm'}`}>
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           <span className={`text-sm font-bold flex-1 ${isFail ? 'text-red-800' : isPass ? 'text-green-800' : 'text-slate-700'}`}>{item}</span>
                           <div className="flex gap-2 shrink-0">
                             <button 
                               onClick={() => handleCheck(category, index, 'pass')}
-                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isPass ? 'bg-green-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'}`}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isPass ? 'bg-green-500 text-white shadow-md transform scale-105' : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'}`}
                             >
                               <CheckCircle size={14} /> مطابق
                             </button>
                             <button 
                               onClick={() => handleCheck(category, index, 'fail')}
-                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isFail ? 'bg-red-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-700'}`}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isFail ? 'bg-red-500 text-white shadow-md transform scale-105' : 'bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-700'}`}
                             >
                               <XCircle size={14} /> ملاحظة
                             </button>
