@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css'; // تصميم محرر النصوص
+import 'react-quill-new/dist/quill.snow.css';
 import {
   ArrowLeft, ArrowRight, Award, Bath, Bed, Box, Building, CalendarDays, Car, Calculator,
   ChevronDown, CircleCheckBig, CircleCheck, Clock, Droplets, ExternalLink, Eye,
@@ -8,11 +8,12 @@ import {
   ListChecks, Lock, LogOut, MapPin, Menu, MessageCircle, Moon, Phone, Plane,
   Printer, QrCode, Receipt, RefreshCw, Ruler, Search, Send, ShieldCheck,
   ShoppingCart, Target, TramFront, TreePine, Umbrella, UserCheck, UserCog, User,
-  Users, Wifi, Wrench, X, ZoomIn, Shield, CheckSquare
+  Users, Wifi, Wrench, X, ZoomIn, Shield, CheckSquare,
+  // أيقونات أداة الفحص الجديدة:
+  ClipboardCheck, DoorOpen, Sofa, ChefHat, XCircle, FileText, Save
 } from 'lucide-react';
 
 // --- Global Constants ---
-// 🔴 رابط ملف API الخاص بك 🔴
 const API_URL = "https://semak.sa/api.php"; 
 
 const ADMIN_CREDS = {
@@ -31,13 +32,14 @@ const TIME_SLOTS = [
   "04:00 م - 06:00 م"
 ];
 
-// قائمة الوحدات لإدارة الصلاحيات
+// قائمة الوحدات لإدارة الصلاحيات (تمت إضافة الفحص)
 const APP_MODULES = [
   { id: "maintenance", label: "إدارة طلبات الصيانة", icon: Wrench, color: "text-purple-600", bg: "bg-purple-50" },
   { id: "letters", label: "منشئ الخطابات", icon: FilePenLine, color: "text-orange-500", bg: "bg-orange-50" },
   { id: "qr", label: "رموز الوحدات (QR)", icon: QrCode, color: "text-slate-800", bg: "bg-slate-100" },
   { id: "leads", label: "سجل المهتمين (Leads)", icon: Users, color: "text-teal-600", bg: "bg-teal-50" },
   { id: "accounting", label: "النظام المحاسبي (دفترة)", icon: Calculator, color: "text-emerald-600", bg: "bg-emerald-50" },
+  { id: "inspection", label: "فحص واستلام الوحدات", icon: ClipboardCheck, color: "text-indigo-600", bg: "bg-indigo-50" },
   { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
 ];
 
@@ -124,6 +126,11 @@ const GlobalStyles = () => (
     .kanban-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
     .kanban-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
     .kanban-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   `}</style>
 );
 
@@ -653,7 +660,6 @@ const AdminLoginView = ({ setUser, navigateTo, showToast }) => {
         setUser(data.user);
         showToast("تم تسجيل الدخول", `مرحباً بك، ${data.user.name}`);
         
-        // التوجيه الذكي حسب نوع الحساب
         if (data.user.role === "technician") {
           navigateTo("tech-dashboard");
         } else {
@@ -784,7 +790,6 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
     }
     setLoading(true);
     
-    // إزالة الربط التلقائي بالفني وإسناده لـ "لم يتم التعيين"
     const desc = `الوقت المفضل: ${time}\nالتاريخ المفضل: ${date}\n\nالوصف:\n${e.target.desc.value}`;
     
     const payload = {
@@ -807,7 +812,6 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
       e.target.reset();
       setDate("");
       setTime("");
-      // تعيين الفني الافتراضي إلى "لم يتم التعيين"
       setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: "لم يتم التعيين", scheduleDate: date, scheduleTime: time});
       setTab("track");
     } catch {
@@ -951,7 +955,7 @@ const MaintenanceView = ({ customer, setCustomer, navigateTo, showToast }) => {
   );
 };
 
-// --- بوابة الفنيين (جديدة) ---
+// --- بوابة الفنيين ---
 const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -968,7 +972,6 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
       const res = await fetch(`${API_URL}?action=get_maintenance`);
       let data = await res.json();
       
-      // جلب المهام وتصفيتها لتظهر مهام هذا الفني فقط
       const myTickets = data.filter(t => t.technician === user.name).map(row => {
          let desc = row.descrip || "---";
          let scheduleDate = row.date ? row.date.split(" ")[0] : "";
@@ -1053,7 +1056,6 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
                   <p className="border-t border-slate-200 pt-2 mt-2 leading-relaxed">{ticket.desc}</p>
                 </div>
 
-                {/* أزرار التحكم والإجراءات */}
                 {ticket.status === "تم اعتماد الموعد" && (
                   <button onClick={() => updateStatus(ticket.id, "جاري العمل")} className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-bold hover:bg-[#c5a059] transition flex justify-center items-center gap-2 shadow-lg">
                     <Wrench size={18} /> بدء العمل (أنا في الموقع)
@@ -1083,13 +1085,261 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
   );
 };
 
+// --- أداة فحص واستلام الوحدات (مربوطة بالمخططات) ---
+const UnitInspectionView = ({ user, showToast }) => {
+  const [selectedUnit, setSelectedUnit] = useState("SM-A01");
+  const [activeRoom, setActiveRoom] = useState("entrance");
+  const [inspectionData, setInspectionData] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const getUnitImage = (unit) => {
+    if (["SM-A01", "SM-A02"].includes(unit)) return getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"); 
+    if (["SM-A03", "SM-A04"].includes(unit)) return getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"); 
+    if (["SM-A05", "SM-A06"].includes(unit)) return getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"); 
+    if (unit === "SM-A07") return getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1"); 
+    return null;
+  };
+
+  const getRoomsForUnit = (unit) => {
+    const isRoof = unit === "SM-A07";
+    return [
+      { id: "entrance", label: "المدخل ومجلس الضيوف", icon: DoorOpen },
+      { id: "living", label: "صالة المعيشة", icon: Sofa },
+      { id: "master_bed", label: "غرفة النوم الرئيسية (ماستر)", icon: Bed },
+      { id: "bed_2", label: "غرفة نوم 2", icon: Bed },
+      { id: "bed_3", label: "غرفة نوم 3", icon: Bed },
+      { id: "bed_4", label: "غرفة نوم 4", icon: Bed },
+      ...(isRoof ? [] : [{ id: "bed_5", label: "غرفة نوم 5", icon: Bed }]),
+      { id: "kitchen", label: "المطبخ", icon: ChefHat },
+      { id: "bath_1", label: "دورة مياه الضيوف", icon: Bath },
+      { id: "bath_2", label: "دورة مياه العائلة", icon: Bath },
+      { id: "bath_3", label: "دورة مياه الماستر", icon: Bath },
+      { id: "bath_4", label: "دورة مياه الخادمة", icon: Bath },
+      { id: "maid", label: "غرفة الخادمة", icon: UserCheck },
+      { id: "laundry", label: "غرفة الغسيل", icon: Droplets },
+      ...(isRoof ? [{ id: "roof", label: "السطح الخاص", icon: Umbrella }] : [])
+    ];
+  };
+
+  const currentRooms = getRoomsForUnit(selectedUnit);
+
+  const CHECKLIST = {
+    "الأعمال الكهربائية والذكية ⚡": [
+      "عمل جميع مفاتيح الإضاءة والسبوت لايت بدون وميض",
+      "سلامة الأفياش وتوفر التيار الكهربائي فيها",
+      "عمل أنظمة المنزل الذكي (التحكم بالإنارة والتكييف)",
+      "عمل نظام الدخول الذكي والأقفال الإلكترونية",
+      "سلامة لوحة القواطع الرئيسية"
+    ],
+    "أعمال السباكة 🚰": [
+      "قوة ضغط المياه في جميع الخلاطات",
+      "عدم وجود تسريبات أسفل المغاسل والأحواض",
+      "تصريف المياه بشكل انسيابي في الصفيات",
+      "عمل السخان بكفاءة وعدم وجود تنقيط",
+      "عمل صناديق الطرد (السيفون المخفي/الظاهر) بكفاءة"
+    ],
+    "الدهانات والتشطيبات الجدارية 🎨": [
+      "تجانس لون الدهان وعدم وجود بقع أو تباين",
+      "خلو الجدران من الخدوش أو التشققات",
+      "سلامة الأسقف المستعارة (الجبس) واستوائها",
+      "نظافة حواف الدهان عند التقائها مع النعلات والأبواب"
+    ],
+    "الأبواب والنوافذ 🚪": [
+      "سلاسة فتح وإغلاق الأبواب بدون احتكاك",
+      "عمل الأقفال والمقابض بشكل ممتاز",
+      "إحكام إغلاق النوافذ (عزل الصوت/الهواء)",
+      "سلامة الزجاج وشبك الناموس من الخدوش"
+    ],
+    "الأرضيات 🧱": [
+      "سلامة الترويبة بين البلاط ونظافتها",
+      "خلو البورسلان/الرخام من الخدوش أو الكسور",
+      "سلامة النعلات الجدارية وتماسكها",
+      "صحة ميول البلاط باتجاه الصفاية (للمناطق الرطبة)"
+    ]
+  };
+
+  const handleUnitChange = (e) => {
+    setSelectedUnit(e.target.value);
+    setActiveRoom("entrance");
+  };
+
+  const handleCheck = (category, itemIndex, status) => {
+    setInspectionData(prev => ({
+      ...prev,
+      [selectedUnit]: {
+        ...(prev[selectedUnit] || {}),
+        [activeRoom]: {
+          ...((prev[selectedUnit] || {})[activeRoom] || {}),
+          [`${category}-${itemIndex}`]: { ...(((prev[selectedUnit] || {})[activeRoom] || {})[`${category}-${itemIndex}`] || {}), status }
+        }
+      }
+    }));
+  };
+
+  const handleNoteChange = (category, itemIndex, note) => {
+    setInspectionData(prev => ({
+      ...prev,
+      [selectedUnit]: {
+        ...(prev[selectedUnit] || {}),
+        [activeRoom]: {
+          ...((prev[selectedUnit] || {})[activeRoom] || {}),
+          [`${category}-${itemIndex}`]: { ...(((prev[selectedUnit] || {})[activeRoom] || {})[`${category}-${itemIndex}`] || {}), note }
+        }
+      }
+    }));
+  };
+
+  const handleSave = () => {
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+      showToast("تم الحفظ بنجاح", `تم تحديث تقرير استلام الوحدة ${selectedUnit}`, "success");
+    }, 1500);
+  };
+
+  const totalItems = Object.values(CHECKLIST).flat().length;
+  const currentUnitData = inspectionData[selectedUnit] || {};
+  const currentRoomData = currentUnitData[activeRoom] || {};
+  const answeredItems = Object.keys(currentRoomData).length;
+  const progress = Math.round((answeredItems / totalItems) * 100) || 0;
+
+  return (
+    <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
+      <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div>
+          <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><ClipboardCheck className="text-indigo-600" /> فحص واستلام الوحدات</h3>
+          <p className="text-slate-500 text-sm mt-1">تتبع الفراغات من المخطط وقم بالفحص الدقيق قبل التسليم النهائي.</p>
+        </div>
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-grow md:w-64">
+            <span className="bg-slate-100 px-4 py-3 text-[#1a365d] font-bold text-sm border-l border-slate-200">رقم الوحدة</span>
+            <select 
+              value={selectedUnit} 
+              onChange={handleUnitChange}
+              className="bg-transparent text-[#c5a059] font-black px-4 py-3 outline-none w-full"
+            >
+              {["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"].map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <button onClick={handleSave} disabled={isSaving} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-lg shadow-indigo-200 whitespace-nowrap h-full">
+            {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} حفظ
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row min-h-[700px]">
+        <div className="w-full lg:w-1/3 bg-slate-100 border-l border-slate-200 p-6 flex flex-col items-center">
+          <h4 className="text-sm font-black text-[#1a365d] mb-4 bg-white px-6 py-2 rounded-full shadow-sm">مخطط الوحدة {selectedUnit}</h4>
+          <div className="bg-white p-2 rounded-3xl shadow-md w-full max-w-[350px] relative group overflow-hidden border-4 border-white">
+            <img src={getUnitImage(selectedUnit)} alt={`مخطط ${selectedUnit}`} className="w-full h-auto object-contain rounded-2xl group-hover:scale-105 transition duration-500" />
+            <div className="absolute inset-0 bg-[#1a365d]/0 group-hover:bg-[#1a365d]/10 transition-colors duration-300 pointer-events-none rounded-2xl" />
+          </div>
+          
+          <div className="mt-8 w-full">
+            <p className="text-xs font-bold text-slate-400 mb-3 px-2">الفراغات المستخرجة من المخطط:</p>
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+              {currentRooms.map(room => {
+                const Icon = room.icon;
+                const isActive = activeRoom === room.id;
+                const roomData = currentUnitData[room.id] || {};
+                const isCompleted = Object.keys(roomData).length === totalItems;
+
+                return (
+                  <button 
+                    key={room.id} 
+                    onClick={() => setActiveRoom(room.id)}
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-xs text-right w-full border ${isActive ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : isCompleted ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon size={16} className={isActive ? 'text-indigo-200' : isCompleted ? 'text-green-500' : 'text-slate-400'} />
+                      <span className="truncate">{room.label}</span>
+                    </div>
+                    {isCompleted && !isActive && <CheckCircle size={14} className="text-green-500" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 p-6 md:p-10 bg-white overflow-y-auto">
+          <div className="flex justify-between items-end mb-8">
+            <div>
+              <span className="text-xs font-bold text-[#c5a059] mb-1 block">جاري فحص:</span>
+              <h4 className="text-2xl font-black text-[#1a365d]">{currentRooms.find(r => r.id === activeRoom)?.label}</h4>
+            </div>
+            <div className="text-left w-32">
+              <span className="text-[10px] font-bold text-slate-400 mb-1.5 block">إنجاز الفحص ({progress}%)</span>
+              <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {Object.entries(CHECKLIST).map(([category, items]) => (
+              <div key={category} className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                <h5 className="font-bold text-sm text-[#1a365d] mb-4 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[#c5a059]" /> {category}
+                </h5>
+                <div className="space-y-3">
+                  {items.map((item, index) => {
+                    const itemKey = `${category}-${index}`;
+                    const itemData = currentRoomData[itemKey] || {};
+                    const isPass = itemData.status === 'pass';
+                    const isFail = itemData.status === 'fail';
+
+                    return (
+                      <div key={index} className={`p-4 rounded-xl border transition-all ${isFail ? 'bg-red-50 border-red-200' : isPass ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          <span className={`text-sm font-bold flex-1 ${isFail ? 'text-red-800' : isPass ? 'text-green-800' : 'text-slate-700'}`}>{item}</span>
+                          <div className="flex gap-2 shrink-0">
+                            <button 
+                              onClick={() => handleCheck(category, index, 'pass')}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isPass ? 'bg-green-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'}`}
+                            >
+                              <CheckCircle size={14} /> مطابق
+                            </button>
+                            <button 
+                              onClick={() => handleCheck(category, index, 'fail')}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isFail ? 'bg-red-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-700'}`}
+                            >
+                              <XCircle size={14} /> ملاحظة
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {isFail && (
+                          <div className="mt-4 pt-3 border-t border-red-200/50 animate-fadeIn relative">
+                            <FileText size={16} className="absolute right-3 top-6 text-red-400" />
+                            <textarea 
+                              placeholder="اكتب وصفاً للمشكلة هنا ليتم إصدار أمر عمل لفريق الصيانة..." 
+                              value={itemData.note || ""}
+                              onChange={(e) => handleNoteChange(category, index, e.target.value)}
+                              className="w-full bg-white border border-red-200 rounded-xl p-3 pr-10 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 text-red-900 placeholder-red-300 min-h-[80px] transition-all"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- لوحة الإدارة ---
 const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [activeTab, setActiveTab] = useState("");
   const [leads, setLeads] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState([]);
-  const [techList, setTechList] = useState([]); // قائمة الفنيين من قاعدة البيانات
+  const [techList, setTechList] = useState([]); 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState("kanban");
@@ -1129,7 +1379,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       const res = await fetch(`${API_URL}?action=get_users`);
       const data = await res.json();
       setUsers(data);
-      // تحديث قائمة الفنيين من مستخدمي النظام
       setTechList(data.filter(u => u.role === "technician").map(t => t.name));
     } catch (err) {
       showToast("خطأ", "تعذر جلب الموظفين", "error");
@@ -1175,7 +1424,6 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       });
       setTickets(parsed);
 
-      // جلب الفنيين صامتاً لاستخدامهم في القائمة المنسدلة للتعيين
       fetch(`${API_URL}?action=get_users`)
         .then(res => res.json())
         .then(usersData => setTechList(usersData.filter(u => u.role === "technician").map(t => t.name)))
@@ -1264,12 +1512,10 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
     let apiField = field;
     let apiValue = value;
 
-    // 1. تحديد التذكرة الحالية وتحديثها في الواجهة فوراً
     setTickets(prev => prev.map(t => {
       if (t.id === id) {
         let updatedTicket = { ...t, [field]: value };
-        // توليد OTP في حال تم اعتماد الموعد لأول مرة
-        if (field === "status" && value === "تم اعـتماد الموعد" && !t.otp) {
+        if (field === "status" && value === "تم اعتماد الموعد" && !t.otp) {
           newOtp = Math.floor(1000 + Math.random() * 9000).toString();
           updatedTicket.otp = newOtp;
         }
@@ -1278,28 +1524,17 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       return t;
     }));
 
-    // 2. معالجة البيانات لإرسالها للداتابيس
     const currentTicket = tickets.find(t => t.id === id);
     
-    // إذا كان التعديل يخص التاريخ أو الوقت، يجب تحديث حقل "descrip" في الداتابيس
     if (field === "scheduleDate" || field === "scheduleTime") {
-      apiField = "descrip"; // الحقل الفعلي في قاعدة البيانات
+      apiField = "descrip";
       const updatedDate = field === "scheduleDate" ? value : currentTicket.scheduleDate;
       const updatedTime = field === "scheduleTime" ? value : currentTicket.scheduleTime;
-      
-      // إعادة بناء النص البرمجي ليقرأه السيرفر ولوحة الفنيين
       apiValue = `الوقت المفضل: ${updatedTime}\nالتاريخ المفضل: ${updatedDate}\n\nالوصف:\n${currentTicket.desc}`;
     }
 
     try {
-      // 3. الإرسال الفعلي للداتابيس
-      const payload = { 
-        ticket_id: id, 
-        field_name: apiField, 
-        new_value: apiValue 
-      };
-      
-      // إضافة الـ OTP للطلب إذا وُجد
+      const payload = { ticket_id: id, field_name: apiField, new_value: apiValue };
       if (newOtp) payload.otp = newOtp;
 
       const res = await fetch(`${API_URL}?action=update_maintenance`, {
@@ -1309,14 +1544,13 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
       });
       
       const data = await res.json();
-      
       if (data.success) {
         showToast("تم التحديث", "تم حفظ التغييرات في قاعدة البيانات");
       } else {
         showToast("خطأ", "فشل الحفظ في السيرفر", "error");
       }
     } catch (error) {
-      showToast("خطأ اتصال", "تعذر الوصول للسيرفر"، "error");
+      showToast("خطأ اتصال", "تعذر الوصول للسيرفر", "error");
     }
   };
 
@@ -1521,6 +1755,17 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
               </div>
               <h3 className="text-2xl font-bold text-[#1a365d] mb-2">طلبات الصيانة</h3>
               <p className="text-slate-500 mb-6">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
+            </div>
+          )}
+
+          {hasPerm("inspection") && (
+            <div onClick={() => setActiveTab("inspection")} className="bg-white p-8 rounded-[2rem] shadow-lg border border-slate-100 hover:-translate-y-2 hover:shadow-2xl transition duration-300 cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-indigo-500" />
+              <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-3xl text-indigo-600 mb-6 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                <ClipboardCheck size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-[#1a365d] mb-2">فحص واستلام الوحدات</h3>
+              <p className="text-slate-500 mb-6">قائمة تدقيق (Checklist) للغرف والأعمال الإنشائية قبل التسليم.</p>
             </div>
           )}
 
@@ -1872,6 +2117,11 @@ const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
           </div>
         )}
 
+        {/* Inspection Tab */}
+        {activeTab === "inspection" && hasPerm("inspection") && (
+          <UnitInspectionView user={user} showToast={showToast} />
+        )}
+
         {/* QR Tab */}
         {activeTab === "qr" && hasPerm("qr") && (
           <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
@@ -1966,7 +2216,7 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
     date: new Date().toISOString().split("T")[0],
     recipient: "شركاء النجاح المحترمين",
     subject: "",
-    body: "", // سيحتوي على HTML من محرر ReactQuill
+    body: "", 
     signName: user?.name || "أحمد البادي",
     signTitle: user?.job || "المدير العام",
     showStamp: user?.role === "admin"
@@ -1979,7 +2229,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
 
-  // إعدادات الأدوات المتاحة في المحرر (صور، خط عريض، ألوان، قوائم)
   const quillModules = {
     toolbar: [
       [{ 'header': [1, 2, 3, false] }],
@@ -2099,7 +2348,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
           <div><label className="text-xs text-slate-400 block mb-1">المستلم</label><input type="text" value={data.recipient} onChange={e => setData({ ...data, recipient: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none border border-slate-700 focus:border-[#c5a059] transition" /></div>
           <div><label className="text-xs text-slate-400 block mb-1">الموضوع</label><input type="text" value={data.subject} onChange={e => setData({ ...data, subject: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none font-bold border border-slate-700 focus:border-[#c5a059] transition" /></div>
           
-          {/* المحرر الاحترافي الجديد */}
           <div className="mb-4">
             <label className="text-xs text-slate-400 block mb-1">نص الخطاب (المحرر الذكي)</label>
             <div className="bg-white rounded-lg text-black">
@@ -2125,7 +2373,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
             </div>
           )}
 
-          {/* قسم حفظ النموذج كنسخة جديدة (متاح للجميع) */}
           <div className="bg-slate-800/50 p-4 rounded-xl mt-4 border border-slate-700">
             {!showSaveForm ? (
               <button onClick={() => setShowSaveForm(true)} className="w-full text-sm font-bold text-teal-400 hover:text-teal-300 transition flex items-center justify-center gap-2 py-2">
@@ -2187,7 +2434,6 @@ const LetterGeneratorView = ({ user, navigateTo, showToast }) => {
             <div className="mb-6 font-cairo">تحية طيبة وبعد،،</div>
             <div className="text-center mb-8 md:mb-10"><span className="border-b-2 border-[#c5a059] pb-2 px-8 font-bold text-lg md:text-xl text-[#1a365d] font-cairo">{data.subject}</span></div>
             
-            {/* قراءة وعرض الـ HTML الذي تم إنتاجه من المحرر هنا */}
             <div className="text-justify leading-[2.2] flex-grow quill-content" dangerouslySetInnerHTML={{ __html: data.body }}></div>
             
             <div className="corner-accent" />
@@ -2321,7 +2567,6 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
-  // إخفاء الـ Navbar عن كل هذه الصفحات الخاصة ببوابات الدخول والمهام
   const hideNavOn = ["login", "customer-login", "dashboard", "letter-generator", "tech-dashboard"];
 
   return (
