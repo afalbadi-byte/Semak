@@ -2656,7 +2656,7 @@ export default function App() {
                 <button onClick={() => navigateTo("privacy")} className="hover:text-white transition">سياسة الخصوصية</button>
                 <button onClick={() => navigateTo("terms")} className="hover:text-white transition">الشروط والأحكام</button>
                 <button onClick={() => navigateTo("login")} className="hover:text-[#c5a059] transition flex items-center gap-2">
-                  <Lock size={14} /> بوابة الموظفين
+                  <Lock size={14} /> بوابـة الموظفين
                 </button>
               </div>
             </div>
