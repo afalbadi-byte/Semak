@@ -1093,24 +1093,23 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
   );
 };
 
-// --- أداة فحص واستلام الوحدات (تحديث: تظليل + ختم الاعتماد) ---
-// --- أداة فحص واستلام الوحدات (نسخة محسنة: تظليل دقيق + مخطط مستقل لكل وحدة) ---
+// --- أداة فحص واستلام الوحدات (نسخة لوحة التحكم العملية - بدون إحداثيات) ---
 const UnitInspectionView = ({ user, showToast }) => {
   const [selectedUnit, setSelectedUnit] = useState("SM-A01");
   const [activeRoom, setActiveRoom] = useState("entrance");
   const [inspectionData, setInspectionData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
+  const [previewPlan, setPreviewPlan] = useState(null); // لفتح المخطط بحجم كامل
 
-  // 1. تحديد المخطط الخاص بكل وحدة بشكل مستقل تماماً
   const getUnitImage = (unit) => {
     const images = {
-      "SM-A01": getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"), // صورة مخطط A01
-      "SM-A02": getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"), // استبدل بـ ID صورة A02
-      "SM-A03": getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"), // صورة مخطط A03
-      "SM-A04": getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"), // استبدل بـ ID صورة A04
-      "SM-A05": getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"), // صورة مخطط A05
-      "SM-A06": getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"), // استبدل بـ ID صورة A06
-      "SM-A07": getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1")  // صورة الروف A07
+      "SM-A01": getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"),
+      "SM-A02": getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"),
+      "SM-A03": getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"),
+      "SM-A04": getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"),
+      "SM-A05": getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"),
+      "SM-A06": getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"),
+      "SM-A07": getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1") 
     };
     return images[unit];
   };
@@ -1136,38 +1135,7 @@ const UnitInspectionView = ({ user, showToast }) => {
     ];
   };
 
-  // 2. إحداثيات التظليل (نسب مئوية % من الصورة)
-  // قمت بوضع توزيعة منطقية للمربعات بحيث لا تتداخل وتغطي كامل مساحة المخطط
-  const baseLayout = {
-    "entrance":   { top: "5%",  left: "5%",  width: "25%", height: "20%" }, // أعلى اليسار
-    "living":     { top: "5%",  left: "35%", width: "30%", height: "25%" }, // أعلى المنتصف
-    "kitchen":    { top: "5%",  left: "70%", width: "25%", height: "20%" }, // أعلى اليمين
-    "bath_1":     { top: "30%", left: "5%",  width: "15%", height: "15%" }, // حمام الضيوف
-    "master_bed": { top: "60%", left: "65%", width: "30%", height: "35%" }, // أسفل اليمين (الماستر)
-    "bath_3":     { top: "60%", left: "50%", width: "10%", height: "15%" }, // حمام الماستر
-    "bed_2":      { top: "50%", left: "5%",  width: "25%", height: "20%" }, // وسط اليسار
-    "bed_3":      { top: "75%", left: "5%",  width: "20%", height: "20%" }, // أسفل اليسار
-    "bed_4":      { top: "75%", left: "30%", width: "20%", height: "20%" }, // أسفل المنتصف
-    "bed_5":      { top: "75%", left: "55%", width: "10%", height: "20%" }, // أسفل المنتصف 2
-    "bath_2":     { top: "40%", left: "35%", width: "15%", height: "15%" }, // حمام العائلة
-    "maid":       { top: "30%", left: "70%", width: "15%", height: "15%" }, // غرفة الخادمة
-    "bath_4":     { top: "30%", left: "85%", width: "10%", height: "15%" }, // حمام الخادمة
-    "laundry":    { top: "48%", left: "70%", width: "15%", height: "10%" }  // الغسيل
-  };
-
-  // تعيين نفس التوزيعة لكل الوحدات حالياً (يمكنك لاحقاً تعديل إحداثيات كل وحدة على حدة إذا أردت)
-  const ROOM_ZONES = {
-    "SM-A01": baseLayout,
-    "SM-A02": baseLayout,
-    "SM-A03": baseLayout,
-    "SM-A04": baseLayout,
-    "SM-A05": baseLayout,
-    "SM-A06": baseLayout,
-    "SM-A07": { ...baseLayout, "roof": { top: "2%", left: "2%", width: "96%", height: "96%" } } // الروف يغطي الكل كتحديد عام
-  };
-
   const currentRooms = getRoomsForUnit(selectedUnit);
-  const currentZones = ROOM_ZONES[selectedUnit] || baseLayout;
 
   const CHECKLIST = {
     "الأعمال الكهربائية والذكية ⚡": [
@@ -1234,11 +1202,11 @@ const UnitInspectionView = ({ user, showToast }) => {
     setIsSaving(true);
     setTimeout(() => {
       setIsSaving(false);
-      showToast("تم الحفظ بنجاح", `تم تحديث تقرير استلام الوحدة ${selectedUnit}`, "success");
+      showToast("تم الحفظ بنجاح", `تم حفظ تقرير الوحدة ${selectedUnit}`, "success");
     }, 1500);
   };
 
-  // --- حساب الإنجاز ---
+  // حسابات الإنجاز
   const roomTotalItems = Object.values(CHECKLIST).flat().length;
   const currentUnitData = inspectionData[selectedUnit] || {};
   const currentRoomData = currentUnitData[activeRoom] || {};
@@ -1255,108 +1223,101 @@ const UnitInspectionView = ({ user, showToast }) => {
     Object.values(roomData).some(item => item.status === 'fail')
   );
 
+  const activeRoomData = currentRooms.find(r => r.id === activeRoom) || currentRooms[0];
+
   return (
-    <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up relative">
+    <div className="bg-slate-50 rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden mb-12 animate-fade-in-up relative">
       
-      <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
+      {/* نافذة عرض المخطط (Lightbox) */}
+      {previewPlan && (
+        <div className="fixed inset-0 bg-black/95 z-[9999] flex items-center justify-center p-4 cursor-pointer backdrop-blur-sm" onClick={() => setPreviewPlan(null)}>
+          <img src={previewPlan} className="max-w-full max-h-screen object-contain rounded-xl shadow-2xl" alt="مخطط مكبر" />
+          <button className="absolute top-6 right-6 text-white bg-white/10 hover:bg-white/20 p-3 rounded-full transition">
+            <X size={32} />
+          </button>
+          <div className="absolute bottom-6 bg-black/50 text-white px-6 py-2 rounded-full backdrop-blur-md">
+            مخطط الوحدة {selectedUnit} - اضغط في أي مكان للإغلاق
+          </div>
+        </div>
+      )}
+
+      {/* الشريط العلوي */}
+      <div className="p-6 md:p-8 bg-white border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
           <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><ClipboardCheck className="text-indigo-600" /> فحص واستلام الوحدات</h3>
-          <p className="text-slate-500 text-sm mt-1">اختر الوحدة، واضغط على الغرفة في المخطط لتسجيل تقييمها.</p>
+          <p className="text-slate-500 text-sm mt-1">اختر الغرفة وسجل حالة البنود لمطابقتها مع المعايير.</p>
         </div>
         <div className="flex flex-col items-end gap-3 w-full md:w-auto">
-          <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mb-1">
+          {/* شريط إنجاز الوحدة */}
+          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-1 border border-slate-200">
             <div className={`h-full transition-all duration-700 ${isUnitFullyEvaluated ? (hasFails ? 'bg-orange-500' : 'bg-green-500') : 'bg-indigo-600'}`} style={{ width: `${unitProgress}%` }} />
           </div>
-          <div className="flex items-center gap-3 w-full">
-            <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-grow md:w-64">
-              <span className="bg-slate-100 px-4 py-3 text-[#1a365d] font-bold text-sm border-l border-slate-200">الوحدة</span>
-              <select 
-                value={selectedUnit} 
-                onChange={handleUnitChange}
-                className="bg-transparent text-[#c5a059] font-black px-4 py-3 outline-none w-full"
-              >
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full">
+            <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-grow md:w-64">
+              <span className="bg-slate-200 text-slate-700 px-4 py-3 font-bold text-sm border-l border-slate-300">الوحدة</span>
+              <select value={selectedUnit} onChange={handleUnitChange} className="bg-transparent text-[#1a365d] font-black px-4 py-3 outline-none w-full">
                 {["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"].map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
-            <button onClick={handleSave} disabled={isSaving} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-lg shadow-indigo-200 whitespace-nowrap h-full">
-              {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} حفظ
+            <button onClick={handleSave} disabled={isSaving} className="bg-[#1a365d] text-white px-8 py-3 rounded-xl text-sm font-bold hover:bg-indigo-900 transition flex items-center justify-center gap-2 shadow-lg whitespace-nowrap h-full w-full sm:w-auto">
+              {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} حفظ التقرير
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row min-h-[700px]">
-        <div className="w-full lg:w-1/3 bg-slate-100 border-l border-slate-200 p-6 flex flex-col items-center relative">
+      <div className="flex flex-col lg:flex-row">
+        
+        {/* العمود الأيمن: المخطط وقائمة الغرف */}
+        <div className="w-full lg:w-[40%] bg-white border-l border-slate-200 p-6 flex flex-col items-center">
           
-          <h4 className="text-sm font-black text-[#1a365d] mb-4 bg-white px-6 py-2 rounded-full shadow-sm flex items-center gap-2">
-            <MapPin size={16} className="text-[#c5a059]"/> خريطة الوحدة {selectedUnit}
-          </h4>
-          
-          <div className="relative w-full max-w-[350px] bg-white p-2 rounded-3xl shadow-md border-4 border-white">
-            <img src={getUnitImage(selectedUnit)} alt={`مخطط ${selectedUnit}`} className="w-full h-auto object-contain rounded-2xl block" />
+          {/* المخطط مع التأثيرات */}
+          <div 
+            className="relative w-full max-w-[400px] bg-slate-100 p-3 rounded-[2rem] shadow-inner border border-slate-200 cursor-pointer overflow-hidden group"
+            onClick={() => setPreviewPlan(getUnitImage(selectedUnit))}
+          >
+            <img src={getUnitImage(selectedUnit)} alt={`مخطط ${selectedUnit}`} className="w-full h-64 object-contain mix-blend-darken group-hover:scale-105 transition-transform duration-500" />
             
-            {/* توليد مناطق الغرف التفاعلية */}
-            {currentRooms.map(room => {
-              const zone = currentZones[room.id];
-              if (!zone) return null; 
-              
-              const isActive = activeRoom === room.id;
-              const roomData = currentUnitData[room.id] || {};
-              const isRoomCompleted = Object.keys(roomData).length === roomTotalItems;
-              
-              // الروف يحتاج تنسيق خاص لكي لا يغطي الأيقونات الأخرى إذا كان يغطي الشاشة كلها
-              const isRoofZone = room.id === "roof";
-              
-              return (
-                <div
-                  key={room.id}
-                  onClick={() => setActiveRoom(room.id)}
-                  title={room.label}
-                  className={`absolute cursor-pointer rounded-lg transition-all duration-300 ${
-                    isActive 
-                      ? "bg-indigo-500/60 border-2 border-indigo-700 z-20 animate-pulse shadow-[0_0_15px_rgba(79,70,229,0.5)] backdrop-blur-[2px]" 
-                      : isRoomCompleted 
-                        ? "bg-green-500/40 border border-green-600 hover:bg-green-500/60 z-10"
-                        : `bg-slate-800/10 hover:bg-indigo-500/30 z-10 border border-slate-400 hover:border-indigo-400 ${isRoofZone ? 'pointer-events-none' : ''}`
-                  }`}
-                  style={{ top: zone.top, left: zone.left, width: zone.width, height: zone.height }}
-                >
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                     <room.icon size={24} className={isActive ? "text-white drop-shadow-md" : "text-indigo-900"} />
-                  </div>
-                  {isRoomCompleted && !isActive && (
-                    <div className="absolute top-1 right-1 bg-white rounded-full p-0.5 shadow-sm">
-                      <CheckCircle size={14} className="text-green-600" />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {/* الشارة العائمة التفاعلية (بديل التظليل) */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#1a365d]/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl flex items-center gap-3 shadow-2xl whitespace-nowrap border border-white/20 transform group-hover:-translate-y-2 transition-all">
+               <activeRoomData.icon size={20} className="text-[#c5a059]" /> 
+               <span className="font-bold text-sm tracking-wide">جاري فحص: {activeRoomData.label}</span>
+            </div>
 
+            {/* أيقونة التكبير */}
+            <div className="absolute top-4 right-4 bg-white/80 text-slate-800 p-2 rounded-xl backdrop-blur-sm shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+               <ZoomIn size={20} />
+            </div>
+
+            {/* ختم الاعتماد النهائي */}
             {isUnitFullyEvaluated && !hasFails && (
-              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/30 backdrop-blur-[2px] rounded-2xl">
+              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/60 backdrop-blur-[2px] rounded-[2rem]">
                 <div className="animate-stamp-in border-4 border-green-600 text-green-600 rounded-3xl p-4 flex flex-col items-center justify-center bg-white/95 shadow-2xl">
                   <Award size={48} className="mb-1" />
-                  <span className="text-2xl font-black tracking-widest uppercase">وحدة معتمدة</span>
-                  <span className="text-xs font-bold mt-1 bg-green-100 px-3 py-1 rounded-full">تم الفحص وجاهزة للتسليم</span>
+                  <span className="text-2xl font-black tracking-widest uppercase">مُطابق</span>
+                  <span className="text-xs font-bold mt-1 bg-green-100 px-3 py-1 rounded-full">جاهزة للتسليم</span>
                 </div>
               </div>
             )}
-            
             {isUnitFullyEvaluated && hasFails && (
-              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/30 backdrop-blur-[2px] rounded-2xl">
+              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/60 backdrop-blur-[2px] rounded-[2rem]">
                 <div className="animate-stamp-in border-4 border-orange-500 text-orange-600 rounded-3xl p-4 flex flex-col items-center justify-center bg-white/95 shadow-2xl">
                   <AlertTriangle size={48} className="mb-1" />
-                  <span className="text-2xl font-black tracking-widest uppercase">تحت المراجعة</span>
-                  <span className="text-xs font-bold mt-1 bg-orange-100 px-3 py-1 rounded-full">توجد ملاحظات قيد المعالجة</span>
+                  <span className="text-2xl font-black tracking-widest uppercase">ملاحظات</span>
+                  <span className="text-xs font-bold mt-1 bg-orange-100 px-3 py-1 rounded-full">تتطلب معالجة الصيانة</span>
                 </div>
               </div>
             )}
           </div>
           
+          {/* شبكة الغرف (أفضل شكلاً من القائمة الطويلة) */}
           <div className="mt-8 w-full">
-            <p className="text-xs font-bold text-slate-400 mb-3 px-2">قائمة الفراغات:</p>
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="flex items-center justify-between mb-4 px-2">
+              <p className="text-sm font-bold text-slate-500">اختر الفراغ المراد فحصه:</p>
+              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">{currentRooms.length} فراغات</span>
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto p-2 custom-scrollbar">
               {currentRooms.map(room => {
                 const Icon = room.icon;
                 const isActive = activeRoom === room.id;
@@ -1367,13 +1328,22 @@ const UnitInspectionView = ({ user, showToast }) => {
                   <button 
                     key={room.id} 
                     onClick={() => setActiveRoom(room.id)}
-                    className={`flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all text-xs text-right w-full border ${isActive ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : isRoomCompleted ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}
+                    className={`relative flex flex-col items-center justify-center p-4 rounded-2xl font-bold transition-all text-xs text-center border-2 ${
+                      isActive 
+                        ? 'bg-indigo-50 text-indigo-800 border-indigo-500 shadow-md scale-105 z-10' 
+                        : isRoomCompleted 
+                          ? 'bg-green-50/50 text-green-700 border-green-200 hover:bg-green-50' 
+                          : 'bg-white text-slate-600 border-slate-100 hover:border-indigo-200 hover:bg-slate-50'
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon size={16} className={isActive ? 'text-indigo-200' : isRoomCompleted ? 'text-green-500' : 'text-slate-400'} />
-                      <span className="truncate">{room.label}</span>
-                    </div>
-                    {isRoomCompleted && !isActive && <CheckCircle size={14} className="text-green-500" />}
+                    <Icon size={24} className={`mb-2 ${isActive ? 'text-indigo-600' : isRoomCompleted ? 'text-green-500' : 'text-slate-400'}`} />
+                    <span className="line-clamp-2 leading-tight">{room.label}</span>
+                    
+                    {isRoomCompleted && (
+                      <div className="absolute top-2 right-2 bg-white rounded-full p-0.5 shadow-sm">
+                        <CheckCircle size={14} className="text-green-500" />
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -1381,21 +1351,25 @@ const UnitInspectionView = ({ user, showToast }) => {
           </div>
         </div>
 
-        <div className="flex-1 p-6 md:p-10 bg-white overflow-y-auto">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4 pb-4 border-b border-slate-100">
-            <div>
-              <span className="text-xs font-bold text-[#c5a059] mb-1 block">جاري فحص:</span>
-              <h4 className="text-2xl font-black text-[#1a365d] flex items-center gap-2">
-                {React.createElement(currentRooms.find(r => r.id === activeRoom)?.icon || DoorOpen, {className: "text-indigo-500"})}
-                {currentRooms.find(r => r.id === activeRoom)?.label}
-              </h4>
+        {/* العمود الأيسر: قائمة الفحص (Checklist) */}
+        <div className="flex-1 p-6 md:p-10 bg-slate-50 overflow-y-auto">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                <activeRoomData.icon size={24} />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-400 block">فحص وتدقيق:</span>
+                <h4 className="text-xl font-black text-[#1a365d]">{activeRoomData.label}</h4>
+              </div>
             </div>
-            <div className="text-right md:text-left w-full md:w-48 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-500 mb-1.5 flex justify-between">
-                <span>إنجاز الغرفة</span>
-                <span className={roomProgress === 100 ? "text-green-600" : "text-indigo-600"}>{roomProgress}%</span>
+            
+            <div className="w-full md:w-48">
+              <span className="text-xs font-bold text-slate-500 mb-2 flex justify-between">
+                <span>إنجاز الفراغ</span>
+                <span className={roomProgress === 100 ? "text-green-600 font-black" : "text-indigo-600 font-black"}>{roomProgress}%</span>
               </span>
-              <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200">
                 <div className={`h-full transition-all duration-500 ${roomProgress === 100 ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${roomProgress}%` }} />
               </div>
             </div>
@@ -1403,8 +1377,8 @@ const UnitInspectionView = ({ user, showToast }) => {
 
           <div className="space-y-6">
             {Object.entries(CHECKLIST).map(([category, items]) => (
-              <div key={category} className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
-                <h5 className="font-bold text-sm text-[#1a365d] mb-4 flex items-center gap-2">
+              <div key={category} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <h5 className="font-black text-sm text-[#1a365d] mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
                   <div className="w-2 h-2 rounded-full bg-[#c5a059]" /> {category}
                 </h5>
                 <div className="space-y-3">
@@ -1415,33 +1389,34 @@ const UnitInspectionView = ({ user, showToast }) => {
                     const isFail = itemData.status === 'fail';
 
                     return (
-                      <div key={index} className={`p-4 rounded-xl border transition-all ${isFail ? 'bg-red-50 border-red-200' : isPass ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 hover:border-indigo-300 shadow-sm'}`}>
+                      <div key={index} className={`p-4 rounded-xl border transition-all ${isFail ? 'bg-red-50 border-red-200' : isPass ? 'bg-green-50/30 border-green-200' : 'bg-slate-50 border-slate-200 hover:border-indigo-300'}`}>
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                          <span className={`text-sm font-bold flex-1 ${isFail ? 'text-red-800' : isPass ? 'text-green-800' : 'text-slate-700'}`}>{item}</span>
-                          <div className="flex gap-2 shrink-0">
+                          <span className={`text-sm font-bold flex-1 ${isFail ? 'text-red-900' : isPass ? 'text-green-800' : 'text-slate-700'}`}>{item}</span>
+                          <div className="flex gap-2 shrink-0 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
                             <button 
                               onClick={() => handleCheck(category, index, 'pass')}
-                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isPass ? 'bg-green-500 text-white shadow-md transform scale-105' : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'}`}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isPass ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-slate-500 hover:bg-green-50 hover:text-green-700'}`}
                             >
-                              <CheckCircle size={14} /> مطابق
+                              <CheckCircle size={16} /> مطابق
                             </button>
+                            <div className="w-px bg-slate-200 my-1"></div>
                             <button 
                               onClick={() => handleCheck(category, index, 'fail')}
-                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isFail ? 'bg-red-500 text-white shadow-md transform scale-105' : 'bg-slate-100 text-slate-500 hover:bg-red-100 hover:text-red-700'}`}
+                              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition ${isFail ? 'bg-red-500 text-white shadow-md' : 'bg-transparent text-slate-500 hover:bg-red-50 hover:text-red-700'}`}
                             >
-                              <XCircle size={14} /> ملاحظة
+                              <XCircle size={16} /> ملاحظة
                             </button>
                           </div>
                         </div>
                         
                         {isFail && (
-                          <div className="mt-4 pt-3 border-t border-red-200/50 animate-fadeIn relative">
-                            <FileText size={16} className="absolute right-3 top-6 text-red-400" />
+                          <div className="mt-4 pt-4 border-t border-red-200/50 animate-fadeIn relative">
+                            <FileText size={16} className="absolute right-3 top-7 text-red-400" />
                             <textarea 
-                              placeholder="اكتب وصفاً للمشكلة هنا ليتم إصدار أمر عمل لفريق الصيانة..." 
+                              placeholder="اكتب وصفاً دقيقاً للمشكلة ليتم إصدار أمر عمل لفريق الصيانة..." 
                               value={itemData.note || ""}
                               onChange={(e) => handleNoteChange(category, index, e.target.value)}
-                              className="w-full bg-white border border-red-200 rounded-xl p-3 pr-10 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 text-red-900 placeholder-red-300 min-h-[80px] transition-all"
+                              className="w-full bg-white border border-red-200 rounded-xl p-3 pr-10 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 text-red-900 placeholder-red-300 min-h-[80px] transition-all shadow-inner"
                             />
                           </div>
                         )}
