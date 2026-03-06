@@ -1094,18 +1094,25 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
 };
 
 // --- أداة فحص واستلام الوحدات (تحديث: تظليل + ختم الاعتماد) ---
+// --- أداة فحص واستلام الوحدات (نسخة محسنة: تظليل دقيق + مخطط مستقل لكل وحدة) ---
 const UnitInspectionView = ({ user, showToast }) => {
   const [selectedUnit, setSelectedUnit] = useState("SM-A01");
   const [activeRoom, setActiveRoom] = useState("entrance");
   const [inspectionData, setInspectionData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
+  // 1. تحديد المخطط الخاص بكل وحدة بشكل مستقل تماماً
   const getUnitImage = (unit) => {
-    if (["SM-A01", "SM-A02"].includes(unit)) return getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"); 
-    if (["SM-A03", "SM-A04"].includes(unit)) return getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"); 
-    if (["SM-A05", "SM-A06"].includes(unit)) return getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"); 
-    if (unit === "SM-A07") return getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1"); 
-    return null;
+    const images = {
+      "SM-A01": getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"), // صورة مخطط A01
+      "SM-A02": getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"), // استبدل بـ ID صورة A02
+      "SM-A03": getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"), // صورة مخطط A03
+      "SM-A04": getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"), // استبدل بـ ID صورة A04
+      "SM-A05": getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"), // صورة مخطط A05
+      "SM-A06": getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"), // استبدل بـ ID صورة A06
+      "SM-A07": getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1")  // صورة الروف A07
+    };
+    return images[unit];
   };
 
   const getRoomsForUnit = (unit) => {
@@ -1114,7 +1121,7 @@ const UnitInspectionView = ({ user, showToast }) => {
       { id: "entrance", label: "المدخل ومجلس الضيوف", icon: DoorOpen },
       { id: "living", label: "صالة المعيشة", icon: Sofa },
       { id: "kitchen", label: "المطبخ", icon: ChefHat },
-      { id: "master_bed", label: "غرفة النوم الرئيسية (ماستر)", icon: Bed },
+      { id: "master_bed", label: "غرفة النوم الرئيسية", icon: Bed },
       { id: "bed_2", label: "غرفة نوم 2", icon: Bed },
       { id: "bed_3", label: "غرفة نوم 3", icon: Bed },
       { id: "bed_4", label: "غرفة نوم 4", icon: Bed },
@@ -1129,25 +1136,38 @@ const UnitInspectionView = ({ user, showToast }) => {
     ];
   };
 
-  // إحداثيات التظليل على المخطط (نسبة مئوية ليتناسب مع كل الشاشات)
-  // [يرجى تعديل هذه النسب لاحقاً لتطابق المخططات الهندسية الحقيقية لديكم]
+  // 2. إحداثيات التظليل (نسب مئوية % من الصورة)
+  // قمت بوضع توزيعة منطقية للمربعات بحيث لا تتداخل وتغطي كامل مساحة المخطط
+  const baseLayout = {
+    "entrance":   { top: "5%",  left: "5%",  width: "25%", height: "20%" }, // أعلى اليسار
+    "living":     { top: "5%",  left: "35%", width: "30%", height: "25%" }, // أعلى المنتصف
+    "kitchen":    { top: "5%",  left: "70%", width: "25%", height: "20%" }, // أعلى اليمين
+    "bath_1":     { top: "30%", left: "5%",  width: "15%", height: "15%" }, // حمام الضيوف
+    "master_bed": { top: "60%", left: "65%", width: "30%", height: "35%" }, // أسفل اليمين (الماستر)
+    "bath_3":     { top: "60%", left: "50%", width: "10%", height: "15%" }, // حمام الماستر
+    "bed_2":      { top: "50%", left: "5%",  width: "25%", height: "20%" }, // وسط اليسار
+    "bed_3":      { top: "75%", left: "5%",  width: "20%", height: "20%" }, // أسفل اليسار
+    "bed_4":      { top: "75%", left: "30%", width: "20%", height: "20%" }, // أسفل المنتصف
+    "bed_5":      { top: "75%", left: "55%", width: "10%", height: "20%" }, // أسفل المنتصف 2
+    "bath_2":     { top: "40%", left: "35%", width: "15%", height: "15%" }, // حمام العائلة
+    "maid":       { top: "30%", left: "70%", width: "15%", height: "15%" }, // غرفة الخادمة
+    "bath_4":     { top: "30%", left: "85%", width: "10%", height: "15%" }, // حمام الخادمة
+    "laundry":    { top: "48%", left: "70%", width: "15%", height: "10%" }  // الغسيل
+  };
+
+  // تعيين نفس التوزيعة لكل الوحدات حالياً (يمكنك لاحقاً تعديل إحداثيات كل وحدة على حدة إذا أردت)
   const ROOM_ZONES = {
-    "SM-A01": {
-      "entrance": { top: "60%", left: "10%", width: "25%", height: "25%" },
-      "living": { top: "40%", left: "35%", width: "30%", height: "30%" },
-      "kitchen": { top: "10%", left: "35%", width: "20%", height: "25%" },
-      "master_bed": { top: "10%", left: "65%", width: "25%", height: "30%" },
-      "bed_2": { top: "45%", left: "65%", width: "25%", height: "20%" },
-      "bath_1": { top: "80%", left: "10%", width: "15%", height: "15%" },
-    },
-    "SM-A02": {
-      "entrance": { top: "60%", left: "10%", width: "25%", height: "25%" },
-      "living": { top: "40%", left: "35%", width: "30%", height: "30%" },
-    }
+    "SM-A01": baseLayout,
+    "SM-A02": baseLayout,
+    "SM-A03": baseLayout,
+    "SM-A04": baseLayout,
+    "SM-A05": baseLayout,
+    "SM-A06": baseLayout,
+    "SM-A07": { ...baseLayout, "roof": { top: "2%", left: "2%", width: "96%", height: "96%" } } // الروف يغطي الكل كتحديد عام
   };
 
   const currentRooms = getRoomsForUnit(selectedUnit);
-  const currentZones = ROOM_ZONES[selectedUnit] || ROOM_ZONES["SM-A01"];
+  const currentZones = ROOM_ZONES[selectedUnit] || baseLayout;
 
   const CHECKLIST = {
     "الأعمال الكهربائية والذكية ⚡": [
@@ -1223,16 +1243,13 @@ const UnitInspectionView = ({ user, showToast }) => {
   const currentUnitData = inspectionData[selectedUnit] || {};
   const currentRoomData = currentUnitData[activeRoom] || {};
   
-  // إنجاز الغرفة الحالية
   const roomAnsweredItems = Object.keys(currentRoomData).length;
   const roomProgress = Math.round((roomAnsweredItems / roomTotalItems) * 100) || 0;
 
-  // إنجاز الوحدة بالكامل
   const unitTotalItems = currentRooms.length * roomTotalItems;
   const unitAnsweredItems = Object.values(currentUnitData).reduce((acc, roomData) => acc + Object.keys(roomData).length, 0);
   const unitProgress = Math.round((unitAnsweredItems / unitTotalItems) * 100) || 0;
   
-  // شروط الختم النهائي
   const isUnitFullyEvaluated = unitProgress === 100;
   const hasFails = Object.values(currentUnitData).some(roomData => 
     Object.values(roomData).some(item => item.status === 'fail')
@@ -1241,14 +1258,12 @@ const UnitInspectionView = ({ user, showToast }) => {
   return (
     <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up relative">
       
-      {/* هيدر الأداة */}
       <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
           <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><ClipboardCheck className="text-indigo-600" /> فحص واستلام الوحدات</h3>
-          <p className="text-slate-500 text-sm mt-1">تتبع الفراغات من المخطط وقم بالفحص الدقيق قبل التسليم النهائي.</p>
+          <p className="text-slate-500 text-sm mt-1">اختر الوحدة، واضغط على الغرفة في المخطط لتسجيل تقييمها.</p>
         </div>
         <div className="flex flex-col items-end gap-3 w-full md:w-auto">
-          {/* مؤشر إنجاز الوحدة بالكامل */}
           <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mb-1">
             <div className={`h-full transition-all duration-700 ${isUnitFullyEvaluated ? (hasFails ? 'bg-orange-500' : 'bg-green-500') : 'bg-indigo-600'}`} style={{ width: `${unitProgress}%` }} />
           </div>
@@ -1271,7 +1286,6 @@ const UnitInspectionView = ({ user, showToast }) => {
       </div>
 
       <div className="flex flex-col lg:flex-row min-h-[700px]">
-        {/* قسم المخطط التفاعلي */}
         <div className="w-full lg:w-1/3 bg-slate-100 border-l border-slate-200 p-6 flex flex-col items-center relative">
           
           <h4 className="text-sm font-black text-[#1a365d] mb-4 bg-white px-6 py-2 rounded-full shadow-sm flex items-center gap-2">
@@ -1281,7 +1295,7 @@ const UnitInspectionView = ({ user, showToast }) => {
           <div className="relative w-full max-w-[350px] bg-white p-2 rounded-3xl shadow-md border-4 border-white">
             <img src={getUnitImage(selectedUnit)} alt={`مخطط ${selectedUnit}`} className="w-full h-auto object-contain rounded-2xl block" />
             
-            {/* التظليل التفاعلي للغرف */}
+            {/* توليد مناطق الغرف التفاعلية */}
             {currentRooms.map(room => {
               const zone = currentZones[room.id];
               if (!zone) return null; 
@@ -1290,6 +1304,9 @@ const UnitInspectionView = ({ user, showToast }) => {
               const roomData = currentUnitData[room.id] || {};
               const isRoomCompleted = Object.keys(roomData).length === roomTotalItems;
               
+              // الروف يحتاج تنسيق خاص لكي لا يغطي الأيقونات الأخرى إذا كان يغطي الشاشة كلها
+              const isRoofZone = room.id === "roof";
+              
               return (
                 <div
                   key={room.id}
@@ -1297,10 +1314,10 @@ const UnitInspectionView = ({ user, showToast }) => {
                   title={room.label}
                   className={`absolute cursor-pointer rounded-lg transition-all duration-300 ${
                     isActive 
-                      ? "bg-indigo-500/50 border-2 border-indigo-600 z-20 animate-pulse shadow-[0_0_15px_rgba(79,70,229,0.5)] backdrop-blur-[1px]" 
+                      ? "bg-indigo-500/60 border-2 border-indigo-700 z-20 animate-pulse shadow-[0_0_15px_rgba(79,70,229,0.5)] backdrop-blur-[2px]" 
                       : isRoomCompleted 
-                        ? "bg-green-500/30 border border-green-500 hover:bg-green-500/50 z-10"
-                        : "hover:bg-indigo-500/20 z-10 border border-transparent hover:border-indigo-300"
+                        ? "bg-green-500/40 border border-green-600 hover:bg-green-500/60 z-10"
+                        : `bg-slate-800/10 hover:bg-indigo-500/30 z-10 border border-slate-400 hover:border-indigo-400 ${isRoofZone ? 'pointer-events-none' : ''}`
                   }`}
                   style={{ top: zone.top, left: zone.left, width: zone.width, height: zone.height }}
                 >
@@ -1308,15 +1325,14 @@ const UnitInspectionView = ({ user, showToast }) => {
                      <room.icon size={24} className={isActive ? "text-white drop-shadow-md" : "text-indigo-900"} />
                   </div>
                   {isRoomCompleted && !isActive && (
-                    <div className="absolute top-1 right-1 bg-white rounded-full">
-                      <CheckCircle size={12} className="text-green-600" />
+                    <div className="absolute top-1 right-1 bg-white rounded-full p-0.5 shadow-sm">
+                      <CheckCircle size={14} className="text-green-600" />
                     </div>
                   )}
                 </div>
               );
             })}
 
-            {/* 🌟 ختم الاعتماد النهائي يظهر فوق المخطط 🌟 */}
             {isUnitFullyEvaluated && !hasFails && (
               <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/30 backdrop-blur-[2px] rounded-2xl">
                 <div className="animate-stamp-in border-4 border-green-600 text-green-600 rounded-3xl p-4 flex flex-col items-center justify-center bg-white/95 shadow-2xl">
@@ -1327,7 +1343,6 @@ const UnitInspectionView = ({ user, showToast }) => {
               </div>
             )}
             
-            {/* 🌟 ختم المراجعة في حال وجود ملاحظات 🌟 */}
             {isUnitFullyEvaluated && hasFails && (
               <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/30 backdrop-blur-[2px] rounded-2xl">
                 <div className="animate-stamp-in border-4 border-orange-500 text-orange-600 rounded-3xl p-4 flex flex-col items-center justify-center bg-white/95 shadow-2xl">
@@ -1340,7 +1355,7 @@ const UnitInspectionView = ({ user, showToast }) => {
           </div>
           
           <div className="mt-8 w-full">
-            <p className="text-xs font-bold text-slate-400 mb-3 px-2">اختر الغرفة للفحص:</p>
+            <p className="text-xs font-bold text-slate-400 mb-3 px-2">قائمة الفراغات:</p>
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {currentRooms.map(room => {
                 const Icon = room.icon;
@@ -1366,7 +1381,6 @@ const UnitInspectionView = ({ user, showToast }) => {
           </div>
         </div>
 
-        {/* قسم قائمة الفحص (Checklist) للغرفة النشطة */}
         <div className="flex-1 p-6 md:p-10 bg-white overflow-y-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4 pb-4 border-b border-slate-100">
             <div>
@@ -1443,7 +1457,6 @@ const UnitInspectionView = ({ user, showToast }) => {
     </div>
   );
 };
-
 // --- لوحة الإدارة ---
 const DashboardView = ({ user, setUser, navigateTo, showToast }) => {
   const [activeTab, setActiveTab] = useState("");
