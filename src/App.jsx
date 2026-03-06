@@ -1093,13 +1093,13 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
   );
 };
 
-// --- أداة فحص واستلام الوحدات (نسخة لوحة التحكم العملية - بدون إحداثيات) ---
+// --- أداة فحص واستلام الوحدات (نسخة المعايير الهندسية العالمية والمخصصة لكل غرفة) ---
 const UnitInspectionView = ({ user, showToast }) => {
   const [selectedUnit, setSelectedUnit] = useState("SM-A01");
   const [activeRoom, setActiveRoom] = useState("entrance");
   const [inspectionData, setInspectionData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
-  const [previewPlan, setPreviewPlan] = useState(null); // لفتح المخطط بحجم كامل
+  const [previewPlan, setPreviewPlan] = useState(null);
 
   const getUnitImage = (unit) => {
     const images = {
@@ -1137,34 +1137,116 @@ const UnitInspectionView = ({ user, showToast }) => {
 
   const currentRooms = getRoomsForUnit(selectedUnit);
 
-  const CHECKLIST = {
-    "الأعمال الكهربائية والذكية ⚡": [
-      "عمل جميع مفاتيح الإضاءة والسبوت لايت بدون وميض",
-      "سلامة الأفياش وتوفر التيار الكهربائي فيها",
-      "عمل أنظمة المنزل الذكي (التحكم بالإنارة والتكييف)",
-      "عمل نظام الدخول الذكي والأقفال الإلكترونية",
-      "سلامة لوحة القواطع الرئيسية"
-    ],
-    "أعمال السباكة 🚰": [
-      "قوة ضغط المياه في جميع الخلاطات",
-      "عدم وجود تسريبات أسفل المغاسل والأحواض",
-      "تصريف المياه بشكل انسيابي في الصفيات",
-      "عمل السخان بكفاءة وعدم وجود تنقيط",
-      "عمل صناديق الطرد بكفاءة"
-    ],
-    "الدهانات والتشطيبات الجدارية 🎨": [
-      "تجانس لون الدهان وعدم وجود بقع أو تباين",
-      "خلو الجدران من الخدوش أو التشققات",
-      "نظافة حواف الدهان عند التقائها مع النعلات والأبواب"
-    ],
-    "الأبواب والنوافذ 🚪": [
-      "سلاسة فتح وإغلاق الأبواب بدون احتكاك",
-      "إحكام إغلاق النوافذ (عزل الصوت/الهواء)",
-    ],
-    "الأرضيات 🧱": [
-      "سلامة الترويبة بين البلاط ونظافتها",
-      "خلو البورسلان/الرخام من الخدوش أو الكسور",
-    ]
+  // 🌟 قوائم الفحص الذكية (مبنية على المعايير الهندسية) 🌟
+  const ROOM_CHECKLISTS = {
+    // 1. الغرف الجافة (مداخل، صالات، غرف نوم)
+    "general_dry": { 
+      "الأبواب والنوافذ 🚪": [
+        "سلاسة الفتح والإغلاق للباب وعدم احتكاكه بالأرضية",
+        "سلامة الأقفال والمقابض والمفصلات",
+        "عزل الصوت والهواء حول النوافذ (سلامة الرابل)",
+        "خلو زجاج النوافذ وإطارات الألمنيوم من الخدوش"
+      ],
+      "الأعمال الكهربائية والأنظمة ⚡": [
+        "جاهزية الأفياش واختبار القطبية والتأريض (Polarity & Grounding)",
+        "استجابة مفاتيح الإضاءة وخلو السبوت لايت من الوميض",
+        "عمل أنظمة المنزل الذكي (التحكم بالإنارة/التكييف)",
+        "جاهزية كواشف الدخان والإنذار ضد الحريق"
+      ],
+      "التشطيبات المعمارية 🎨": [
+        "استواء الجدران والأسقف المستعارة وخلوها من التشققات",
+        "تجانس لون الدهان ونظافة حواف الالتقاء",
+        "سلامة النعلات الجدارية والتحامها بالكامل",
+        "خلو الأرضيات (رخام/بورسلان) من الكسور أو التطبيل (Hollow sounds)"
+      ],
+      "التكييف والتهوية ❄️": [
+        "كفاءة تبريد التكييف واستجابة الثرموستات",
+        "خلو وحدات التكييف من الاهتزازات أو الأصوات غير الطبيعية",
+        "نظافة مخارج ومداخل الهواء (الجريلات)"
+      ]
+    },
+    // 2. المناطق الرطبة (دورات المياه)
+    "wet_bath": { 
+      "أعمال السباكة 🚰": [
+        "قوة ضغط المياه (الحار والبارد) في جميع الخلاطات",
+        "تصريف المياه بانسيابية وسرعة (لا يوجد تجمع للمياه)",
+        "خلو أسفل المغاسل وخلف المرحاض من أي تسريبات للقطرات",
+        "عمل السيفون المخفي/الظاهر والشطاف بكفاءة",
+        "عمل السخان بكفاءة وعدم وجود أي تنقيط من محابس الزاوية"
+      ],
+      "العزل والتشطيبات 🧱": [
+        "الميول الصحيح للبلاط باتجاه الصفاية (Slope to drain)",
+        "اكتمال الترويبة (Grout) والسيليكون حول المغسلة والشاور",
+        "خلو الجدران والأسقف من أي علامات للرطوبة أو التسرب",
+        "سلامة المرايا والإكسسوارات الزجاجية وثباتها بقوة"
+      ],
+      "الكهرباء والتهوية ⚡": [
+        "عمل مروحة الشفط بكفاءة عالية وبدون ضجيج لسحب الرطوبة",
+        "سلامة الإضاءة وإحكام إغلاقها ضد الأبخرة",
+        "تأمين الأفياش الجدارية (أغطية حماية GFCI لمنع الصعق)"
+      ],
+      "الأبواب 🚪": [
+        "سلامة الباب (مقاوم للماء/WPC) من أسفل",
+        "عمل قفل الخصوصية بسلاسة"
+      ]
+    },
+    // 3. المطبخ
+    "kitchen": { 
+      "السباكة 🚰": [
+        "قوة ضغط المياه في حوض المطبخ (المجلى)",
+        "عدم وجود تسريبات نهائياً في وصلات التصريف أسفل الحوض",
+        "انسيابية التصريف في الحوض والصفاية الأرضية"
+      ],
+      "الكهرباء والتهوية ⚡": [
+        "توافر وتوصيل أفياش الأجهزة الثقيلة بأسلاك معتمدة (الفرن، الثلاجة)",
+        "عمل مروحة الشفط الجدارية أو تمديدات شفاط الطبخ (المدخنة)",
+        "تأمين أفياش سطح العمل ضد السوائل (GFCI)"
+      ],
+      "التشطيبات 🧱": [
+        "خلو الأرضيات من التكسر والميول السليم نحو الصفاية",
+        "سلامة تكسيات الجدران خلف الدواليب (الباك سبلاش)"
+      ]
+    },
+    // 4. غرفة الغسيل
+    "laundry": { 
+      "السباكة 🚰": [
+        "جاهزية محابس الغسالة (حار/بارد) وسهولة الوصول لها",
+        "انسيابية التصريف في الصفاية الأرضية (وجود ميول واضح)"
+      ],
+      "الكهرباء والأنظمة ⚡": [
+        "عمل أفياش الغسالة والنشافة (تتحمل الجهد العالي)",
+        "جاهزية مروحة الشفط والتهوية"
+      ],
+      "التشطيبات 🧱": [
+        "سلامة الأرضيات والعزل المائي المزدوج للغرفة"
+      ]
+    },
+    // 5. السطح والارتدادات (للروف)
+    "roof": { 
+      "العزل والتصريف 🌧️": [
+        "سلامة طبقات العزل المائي والحراري للسطح",
+        "الميول الهندسي الصحيح نحو مزاريب تصريف المطر",
+        "خلو المزاريب والصفايات من أي عوائق أو مخلفات بناء"
+      ],
+      "الأعمال الإنشائية 🧱": [
+        "سلامة أسوار السترة (البارابيت) وخلوها من التشققات الخطيرة",
+        "نظافة وثبات بلاط السطح واكتمال الترويبة التمددية"
+      ],
+      "الكهرباء والتكييف ⚡": [
+        "عمل الإنارة الخارجية (مصنفة IP65 لمقاومة العوامل الجوية)",
+        "العزل السليم لتمديدات التكييف الخارجية (نحاس ومواسير)",
+        "ثبات وحدات التكييف الخارجية (الكمبريسور) على قواعد عازلة للاهتزاز"
+      ]
+    }
+  };
+
+  // دالة تحديد نوع القائمة بناءً على اسم الغرفة
+  const getChecklistType = (roomId) => {
+    if (roomId.startsWith('bath')) return "wet_bath";
+    if (roomId === 'kitchen') return "kitchen";
+    if (roomId === 'laundry') return "laundry";
+    if (roomId === 'roof') return "roof";
+    return "general_dry"; // للمداخل، الصالات، وغرف النوم ومستودع الخادمة
   };
 
   const handleUnitChange = (e) => {
@@ -1202,19 +1284,24 @@ const UnitInspectionView = ({ user, showToast }) => {
     setIsSaving(true);
     setTimeout(() => {
       setIsSaving(false);
-      showToast("تم الحفظ بنجاح", `تم حفظ تقرير الوحدة ${selectedUnit}`, "success");
+      showToast("تم الحفظ بنجاح", `تم حفظ تقرير فحص الوحدة ${selectedUnit}`, "success");
     }, 1500);
   };
 
-  // حسابات الإنجاز
-  const roomTotalItems = Object.values(CHECKLIST).flat().length;
+  // --- حسابات الإنجاز الديناميكية الذكية ---
   const currentUnitData = inspectionData[selectedUnit] || {};
   const currentRoomData = currentUnitData[activeRoom] || {};
   
+  // حساب إنجاز الغرفة الحالية (بناءً على قائمة الغرفة المحددة)
+  const currentChecklist = ROOM_CHECKLISTS[getChecklistType(activeRoom)];
+  const roomTotalItems = Object.values(currentChecklist).flat().length;
   const roomAnsweredItems = Object.keys(currentRoomData).length;
   const roomProgress = Math.round((roomAnsweredItems / roomTotalItems) * 100) || 0;
 
-  const unitTotalItems = currentRooms.length * roomTotalItems;
+  // حساب الإنجاز الكلي للوحدة (مجموع بنود كل الغرف الموجودة في هذه الوحدة)
+  const unitTotalItems = currentRooms.reduce((total, room) => {
+    return total + Object.values(ROOM_CHECKLISTS[getChecklistType(room.id)]).flat().length;
+  }, 0);
   const unitAnsweredItems = Object.values(currentUnitData).reduce((acc, roomData) => acc + Object.keys(roomData).length, 0);
   const unitProgress = Math.round((unitAnsweredItems / unitTotalItems) * 100) || 0;
   
@@ -1228,7 +1315,7 @@ const UnitInspectionView = ({ user, showToast }) => {
   return (
     <div className="bg-slate-50 rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden mb-12 animate-fade-in-up relative">
       
-      {/* نافذة عرض المخطط (Lightbox) */}
+      {/* Lightbox for Blueprint */}
       {previewPlan && (
         <div className="fixed inset-0 bg-black/95 z-[9999] flex items-center justify-center p-4 cursor-pointer backdrop-blur-sm" onClick={() => setPreviewPlan(null)}>
           <img src={previewPlan} className="max-w-full max-h-screen object-contain rounded-xl shadow-2xl" alt="مخطط مكبر" />
@@ -1241,14 +1328,12 @@ const UnitInspectionView = ({ user, showToast }) => {
         </div>
       )}
 
-      {/* الشريط العلوي */}
       <div className="p-6 md:p-8 bg-white border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
-          <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><ClipboardCheck className="text-indigo-600" /> فحص واستلام الوحدات</h3>
-          <p className="text-slate-500 text-sm mt-1">اختر الغرفة وسجل حالة البنود لمطابقتها مع المعايير.</p>
+          <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><ClipboardCheck className="text-indigo-600" /> الفحص والتدقيق الفني</h3>
+          <p className="text-slate-500 text-sm mt-1">المعايير المعروضة تتغير تلقائياً حسب نوع الغرفة (حسب الـ Standards).</p>
         </div>
         <div className="flex flex-col items-end gap-3 w-full md:w-auto">
-          {/* شريط إنجاز الوحدة */}
           <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-1 border border-slate-200">
             <div className={`h-full transition-all duration-700 ${isUnitFullyEvaluated ? (hasFails ? 'bg-orange-500' : 'bg-green-500') : 'bg-indigo-600'}`} style={{ width: `${unitProgress}%` }} />
           </div>
@@ -1268,28 +1353,24 @@ const UnitInspectionView = ({ user, showToast }) => {
 
       <div className="flex flex-col lg:flex-row">
         
-        {/* العمود الأيمن: المخطط وقائمة الغرف */}
+        {/* المخطط والقائمة الجانبية */}
         <div className="w-full lg:w-[40%] bg-white border-l border-slate-200 p-6 flex flex-col items-center">
           
-          {/* المخطط مع التأثيرات */}
           <div 
             className="relative w-full max-w-[400px] bg-slate-100 p-3 rounded-[2rem] shadow-inner border border-slate-200 cursor-pointer overflow-hidden group"
             onClick={() => setPreviewPlan(getUnitImage(selectedUnit))}
           >
             <img src={getUnitImage(selectedUnit)} alt={`مخطط ${selectedUnit}`} className="w-full h-64 object-contain mix-blend-darken group-hover:scale-105 transition-transform duration-500" />
             
-            {/* الشارة العائمة التفاعلية (بديل التظليل) */}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#1a365d]/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl flex items-center gap-3 shadow-2xl whitespace-nowrap border border-white/20 transform group-hover:-translate-y-2 transition-all">
                <activeRoomData.icon size={20} className="text-[#c5a059]" /> 
                <span className="font-bold text-sm tracking-wide">جاري فحص: {activeRoomData.label}</span>
             </div>
 
-            {/* أيقونة التكبير */}
             <div className="absolute top-4 right-4 bg-white/80 text-slate-800 p-2 rounded-xl backdrop-blur-sm shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
                <ZoomIn size={20} />
             </div>
 
-            {/* ختم الاعتماد النهائي */}
             {isUnitFullyEvaluated && !hasFails && (
               <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-white/60 backdrop-blur-[2px] rounded-[2rem]">
                 <div className="animate-stamp-in border-4 border-green-600 text-green-600 rounded-3xl p-4 flex flex-col items-center justify-center bg-white/95 shadow-2xl">
@@ -1310,7 +1391,6 @@ const UnitInspectionView = ({ user, showToast }) => {
             )}
           </div>
           
-          {/* شبكة الغرف (أفضل شكلاً من القائمة الطويلة) */}
           <div className="mt-8 w-full">
             <div className="flex items-center justify-between mb-4 px-2">
               <p className="text-sm font-bold text-slate-500">اختر الفراغ المراد فحصه:</p>
@@ -1321,8 +1401,12 @@ const UnitInspectionView = ({ user, showToast }) => {
               {currentRooms.map(room => {
                 const Icon = room.icon;
                 const isActive = activeRoom === room.id;
-                const roomData = currentUnitData[room.id] || {};
-                const isRoomCompleted = Object.keys(roomData).length === roomTotalItems;
+                
+                // التحقق من حالة الفراغ بناءً على القائمة الخاصة به هو
+                const rChecklist = ROOM_CHECKLISTS[getChecklistType(room.id)];
+                const rTotalItems = Object.values(rChecklist).flat().length;
+                const rData = currentUnitData[room.id] || {};
+                const isRoomCompleted = Object.keys(rData).length === rTotalItems;
 
                 return (
                   <button 
@@ -1351,7 +1435,7 @@ const UnitInspectionView = ({ user, showToast }) => {
           </div>
         </div>
 
-        {/* العمود الأيسر: قائمة الفحص (Checklist) */}
+        {/* قسم الأسئلة الديناميكي */}
         <div className="flex-1 p-6 md:p-10 bg-slate-50 overflow-y-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-4">
@@ -1359,7 +1443,7 @@ const UnitInspectionView = ({ user, showToast }) => {
                 <activeRoomData.icon size={24} />
               </div>
               <div>
-                <span className="text-xs font-bold text-slate-400 block">فحص وتدقيق:</span>
+                <span className="text-xs font-bold text-slate-400 block">فحص وتدقيق ({getChecklistType(activeRoom)}):</span>
                 <h4 className="text-xl font-black text-[#1a365d]">{activeRoomData.label}</h4>
               </div>
             </div>
@@ -1376,7 +1460,7 @@ const UnitInspectionView = ({ user, showToast }) => {
           </div>
 
           <div className="space-y-6">
-            {Object.entries(CHECKLIST).map(([category, items]) => (
+            {Object.entries(currentChecklist).map(([category, items]) => (
               <div key={category} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                 <h5 className="font-black text-sm text-[#1a365d] mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
                   <div className="w-2 h-2 rounded-full bg-[#c5a059]" /> {category}
