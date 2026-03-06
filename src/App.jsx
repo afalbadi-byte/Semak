@@ -9,8 +9,8 @@ import {
   Printer, QrCode, Receipt, RefreshCw, Ruler, Search, Send, ShieldCheck,
   ShoppingCart, Target, TramFront, TreePine, Umbrella, UserCheck, UserCog, User,
   Users, Wifi, Wrench, X, ZoomIn, Shield, CheckSquare,
-  // أيقونات أداة الفحص الجديدة:
-  ClipboardCheck, DoorOpen, Sofa, ChefHat, XCircle, FileText, Save
+  // أيقونات أداة الفحص:
+  ClipboardCheck, DoorOpen, Sofa, ChefHat, XCircle, FileText, Save, CheckCircle
 } from 'lucide-react';
 
 // --- Global Constants ---
@@ -32,7 +32,7 @@ const TIME_SLOTS = [
   "04:00 م - 06:00 م"
 ];
 
-// قائمة الوحدات لإدارة الصلاحيات (تمت إضافة الفحص)
+// قائمة الوحدات لإدارة الصلاحيات
 const APP_MODULES = [
   { id: "maintenance", label: "إدارة طلبات الصيانة", icon: Wrench, color: "text-purple-600", bg: "bg-purple-50" },
   { id: "letters", label: "منشئ الخطابات", icon: FilePenLine, color: "text-orange-500", bg: "bg-orange-50" },
@@ -91,7 +91,7 @@ const GlobalStyles = () => (
     .letter-footer { margin-top: auto; background-color: #1a365d; color: white; padding: 12px 0; border-top: 4px solid #c5a059; z-index: 20; -webkit-print-color-adjust: exact !important; }
     .letter-body { padding: 10mm 20mm 10mm 30mm; flex-grow: 1; font-family: 'Amiri', serif; font-size: 18px; line-height: 2.2; position: relative; z-index: 5; display: flex; flex-direction: column; font-variant-ligatures: no-common-ligatures; letter-spacing: 0px; }
 
-    /* تنسيقات محرر النصوص للطباعة (React-Quill) */
+    /* تنسيقات محرر النصوص للطباعة */
     .quill-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 10px auto; display: block; }
     .quill-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
     .quill-content th, .quill-content td { border: 1px solid #cbd5e1; padding: 8px; text-align: right; }
@@ -100,7 +100,7 @@ const GlobalStyles = () => (
     .quill-content ol { list-style-type: decimal; margin-right: 20px; }
     .quill-content strong { font-weight: 900; color: #1a365d; }
     
-    /* تعديل شكل المحرر في الوضع الليلي للشريط الجانبي */
+    /* تعديل شكل المحرر في الوضع الليلي */
     .ql-toolbar.ql-snow { background-color: #f8fafc; border-radius: 8px 8px 0 0; font-family: 'Cairo', sans-serif; direction: ltr;}
     .ql-container.ql-snow { background-color: white; border-radius: 0 0 8px 8px; color: black; font-family: 'Cairo', sans-serif; font-size: 16px; min-height: 200px;}
     .ql-editor { direction: rtl; text-align: right; }
@@ -241,7 +241,7 @@ const AboutView = () => {
               <h3 className="text-4xl font-black text-[#1a365d]">الرسالة</h3>
             </div>
             <p className="text-slate-600 text-lg leading-loose text-justify border-r-4 border-slate-100 pr-6">
-              تقديم منتجات عقارية نوعية تجمع بين روحانية الجوار وأحدث تقنيات البناء الذكي، ملتزمين بأعلى معايير الجودة والخصوصية، لنخلق فرصاً استثمارية وسكنية آمنة تحقق الرفاهية.
+              تقديم منتجات العقارية نوعية تجمع بين روحانية الجوار وأحدث تقنيات البناء الذكي، ملتزمين بأعلى معايير الجودة والخصوصية، لنخلق فرصاً استثمارية وسكنية آمنة تحقق الرفاهية.
             </p>
           </div>
         </div>
@@ -438,13 +438,13 @@ const ProjectsView = () => {
             </div>
             <div className="relative h-[500px] map-container">
               <div className="absolute inset-0 bg-slate-800 rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white/5">
-                <iframe title="موقع المشروع" width="100%" height="100%" frameBorder="0" style={{ border: 0 }} src="https://maps.google.com/maps?q=حي+البوابة+مكة+المكرمة&hl=ar&z=14&output=embed" allowFullScreen={true} />
+                <iframe title="موقع المشروع" width="100%" height="100%" frameBorder="0" style={{ border: 0 }} src="https://maps.google.com/maps?q=Mecca&t=&z=13&ie=UTF8&iwloc=&output=embed" allowFullScreen={true} />
               </div>
               <div className="absolute top-10 -right-4 bg-[#c5a059] p-6 rounded-l-[2rem] shadow-2xl z-20">
                 <p className="text-white font-black text-2xl">7</p>
                 <p className="text-white/80 font-bold text-sm">وحدات<br />فقط</p>
               </div>
-              <a href="https://maps.app.goo.gl/nfJhZ8oGvE6ZrbR49" target="_blank" rel="noreferrer" className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white text-[#1a365d] px-8 py-4 rounded-2xl font-bold shadow-2xl hover:bg-[#c5a059] hover:text-white transition flex items-center gap-3 group z-20 whitespace-nowrap">
+              <a href="https://maps.google.com/" target="_blank" rel="noreferrer" className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white text-[#1a365d] px-8 py-4 rounded-2xl font-bold shadow-2xl hover:bg-[#c5a059] hover:text-white transition flex items-center gap-3 group z-20 whitespace-nowrap">
                 <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-white/20 transition">
                   <MapPin size={20} />
                 </div>
@@ -1085,7 +1085,7 @@ const TechDashboardView = ({ user, setUser, navigateTo, showToast }) => {
   );
 };
 
-// --- أداة فحص واستلام الوحدات (مربوطة بالمخططات) ---
+// --- أداة فحص واستلام الوحدات ---
 const UnitInspectionView = ({ user, showToast }) => {
   const [selectedUnit, setSelectedUnit] = useState("SM-A01");
   const [activeRoom, setActiveRoom] = useState("entrance");
