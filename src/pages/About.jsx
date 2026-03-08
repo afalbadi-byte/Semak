@@ -17,7 +17,7 @@ export default function About() {
   ];
 
   return (
-    <div className="bg-white min-h-screen">
+    <div className="bg-white min-h-screen animate-fadeIn">
       <div className="relative h-[60vh] flex items-center justify-center bg-fixed bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')" }}>
         <div className="absolute inset-0 bg-[#1a365d]/80 mix-blend-multiply" />
         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />

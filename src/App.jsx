@@ -23,6 +23,9 @@ import AdminLogin from './pages/admin/AdminLogin';
 import Dashboard from './pages/admin/Dashboard';
 import TechDashboard from './pages/admin/TechDashboard';
 import LetterGenerator from './pages/admin/LetterGenerator';
+import UnitInspection from './pages/admin/UnitInspection';
+
+
 
 // مكون الإشعارات
 const ToastNotification = () => {
@@ -58,7 +61,7 @@ const MainApp = () => {
             <Route path="/contact" element={<Contact />} />
             <Route path="/privacy" element={<LegalPage title="سياسة الخصوصية" />} />
             <Route path="/terms" element={<LegalPage title="الشروط والأحكام" />} />
-            
+            <Route path="/inspection" element={<UnitInspection />} />
             {/* بوابة العملاء */}
             <Route path="/customer-login" element={<CustomerLogin />} />
             <Route path="/maintenance" element={<Maintenance />} />

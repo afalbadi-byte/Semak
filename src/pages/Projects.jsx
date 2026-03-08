@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { X, ZoomIn, HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ZoomIn, ChevronDown, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
 import { getImg } from '../utils/helpers';
 
 export default function Projects() {
+  const navigate = useNavigate();
   const [selectedFloor, setSelectedFloor] = useState("first");
   const [expandedUnit, setExpandedUnit] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
@@ -44,7 +46,7 @@ export default function Projects() {
   };
 
   return (
-    <div className="pt-32 pb-20 bg-slate-50 min-h-screen">
+    <div className="pt-32 pb-20 bg-slate-50 min-h-screen animate-fadeIn">
       {previewImg && (
         <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4 cursor-pointer" onClick={() => setPreviewImg(null)}>
           <img src={previewImg} className="max-w-full max-h-screen rounded-lg shadow-2xl" alt="مخطط مكبر" />
@@ -186,7 +188,7 @@ export default function Projects() {
                   <div key={unit.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-md">
                     {unit.isSpecial && <div className="absolute top-0 left-0 bg-[#c5a059] text-white text-xs px-3 py-1 rounded-br-lg z-10">مميزة</div>}
                     {unit.isSold && (
-                      <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
+                      <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-[1px] pointer-events-none">
                         <div className="border-[5px] border-red-600 text-red-600 text-3xl font-black px-6 py-2 rounded-xl transform -rotate-12 opacity-80 shadow-lg tracking-wider">تم البيع / محجوز</div>
                       </div>
                     )}
@@ -203,18 +205,38 @@ export default function Projects() {
                       </div>
                     </div>
                     {expandedUnit === unit.id && (
-                      <div className="px-5 pb-5 bg-slate-50/50 border-t border-slate-100 pt-4 grid grid-cols-2 gap-3 text-sm text-slate-600 animate-fadeIn">
-                        <span className="flex items-center gap-2"><Ruler size={16} className="text-[#c5a059]" /> {unit.roof ? "422 م²" : "204 م²"}</span>
-                        <span className="flex items-center gap-2"><Bed size={16} className="text-[#c5a059]" /> {unit.roof ? "4 غرف" : "5 غرف"}</span>
-                        <span className="flex items-center gap-2"><UserCheck size={16} className="text-[#c5a059]" /> غرفة خادمة</span>
-                        <span className="flex items-center gap-2"><Droplets size={16} className="text-[#c5a059]" /> غرفة غسيل</span>
-                        {!unit.roof && <span className="flex items-center gap-2"><Fingerprint size={16} className="text-[#c5a059]" /> دخول ذكي</span>}
-                        {!unit.roof && <span className="flex items-center gap-2"><Wifi size={16} className="text-[#c5a059]" /> منزل ذكي</span>}
-                        {unit.roof && <span className="flex items-center gap-2"><Umbrella size={16} className="text-[#c5a059]" /> سطح خاص كبير</span>}
-                        {!unit.roof && <span className="flex items-center gap-2"><Box size={16} className="text-[#c5a059]" /> مستودع</span>}
-                        {!unit.roof && <span className="flex items-center gap-2"><Car size={16} className="text-[#c5a059]" /> موقف خاص</span>}
-                        <span className="col-span-2 flex items-center gap-2"><Layers size={16} className="text-[#c5a059]" /> خزان أرضي وعلوي مستقل</span>
-                        <span className="flex items-center gap-2"><Bath size={16} className="text-[#c5a059]" /> 4 دورات مياه</span>
+                      <div className="px-5 pb-5 bg-slate-50/50 border-t border-slate-100 pt-4 animate-fadeIn">
+                        <div className="grid grid-cols-2 gap-3 text-sm text-slate-600 mb-6">
+                          <span className="flex items-center gap-2"><Ruler size={16} className="text-[#c5a059]" /> {unit.roof ? "422 م²" : "204 م²"}</span>
+                          <span className="flex items-center gap-2"><Bed size={16} className="text-[#c5a059]" /> {unit.roof ? "4 غرف" : "5 غرف"}</span>
+                          <span className="flex items-center gap-2"><UserCheck size={16} className="text-[#c5a059]" /> غرفة خادمة</span>
+                          <span className="flex items-center gap-2"><Droplets size={16} className="text-[#c5a059]" /> غرفة غسيل</span>
+                          {!unit.roof && <span className="flex items-center gap-2"><Fingerprint size={16} className="text-[#c5a059]" /> دخول ذكي</span>}
+                          {!unit.roof && <span className="flex items-center gap-2"><Wifi size={16} className="text-[#c5a059]" /> منزل ذكي</span>}
+                          {unit.roof && <span className="flex items-center gap-2"><Umbrella size={16} className="text-[#c5a059]" /> سطح خاص كبير</span>}
+                          {!unit.roof && <span className="flex items-center gap-2"><Box size={16} className="text-[#c5a059]" /> مستودع</span>}
+                          {!unit.roof && <span className="flex items-center gap-2"><Car size={16} className="text-[#c5a059]" /> موقف خاص</span>}
+                          <span className="col-span-2 flex items-center gap-2"><Layers size={16} className="text-[#c5a059]" /> خزان أرضي وعلوي مستقل</span>
+                          <span className="col-span-2 flex items-center gap-2"><Bath size={16} className="text-[#c5a059]" /> 4 دورات مياه</span>
+                        </div>
+                        
+                        {/* أزرار الحجز والاتصال الجديدة */}
+                        <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200 relative z-30">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); window.scrollTo(0, 0); navigate('/contact'); }} 
+                            disabled={unit.isSold}
+                            className={`flex-1 py-3 rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 ${unit.isSold ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-[#1a365d] text-white hover:bg-[#c5a059] shadow-md'}`}
+                          >
+                            <CalendarCheck size={18} /> {unit.isSold ? "الوحدة غير متاحة" : "احجز هذه الوحدة"}
+                          </button>
+                          <a 
+                            href="tel:920032842" 
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 bg-white border-2 border-[#1a365d] text-[#1a365d] py-3 rounded-xl text-sm font-bold hover:bg-slate-50 transition flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            <PhoneCall size={18} /> 920032842
+                          </a>
+                        </div>
                       </div>
                     )}
                   </div>

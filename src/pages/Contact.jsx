@@ -1,11 +1,11 @@
 import React, { useState, useContext } from 'react';
-import { Phone, MapPin, RefreshCw, Send } from 'lucide-react';
+import { Phone, MapPin, Send, RefreshCw } from 'lucide-react';
+import { getImg, API_URL } from '../utils/helpers';
 import { AppContext } from '../context/AppContext';
-import { API_URL, getImg } from '../utils/helpers';
 
 export default function Contact() {
-  const [loading, setLoading] = useState(false);
   const { showToast } = useContext(AppContext);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,10 +37,11 @@ export default function Contact() {
   };
 
   return (
-    <div className="pt-32 pb-20 min-h-screen relative flex items-center bg-cover bg-center" style={{ backgroundImage: `url('${getImg("18fCsrolSEvo8q9wt2_z4BXlB88BZ-62-")}')` }}>
+    <div className="pt-32 pb-20 min-h-screen relative flex items-center bg-cover bg-center animate-fadeIn" style={{ backgroundImage: `url('${getImg("18fCsrolSEvo8q9wt2_z4BXlB88BZ-62-")}')` }}>
       <div className="absolute inset-0 hero-gradient" />
       <div className="container mx-auto px-6 relative z-10 max-w-5xl">
         <div className="bg-slate-900/60 backdrop-blur-lg rounded-[3rem] shadow-2xl overflow-hidden flex flex-col lg:flex-row border border-white/10">
+          
           <div className="lg:w-1/2 p-12 md:p-20 flex flex-col justify-center text-white">
             <h2 className="text-4xl font-black mb-6">احجز وحدتك السكنية الآن</h2>
             <p className="text-slate-200 text-lg mb-10 leading-relaxed">بادر بالتسجيل لتملك وحدتك في هذا المشروع.</p>
@@ -53,6 +54,7 @@ export default function Contact() {
               </div>
             </div>
           </div>
+          
           <div className="lg:w-1/2 bg-slate-900/30 p-12 md:p-20 border-r border-white/10">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
@@ -81,6 +83,7 @@ export default function Contact() {
               </button>
             </form>
           </div>
+
         </div>
       </div>
     </div>

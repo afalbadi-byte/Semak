@@ -7,9 +7,10 @@ export default function Footer() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // إخفاء الفوتر في صفحات لوحة التحكم
-  const hideOn = ["/login", "/customer-login", "/admin/dashboard", "/admin/letter-generator", "/admin/tech-dashboard"];
-  if (hideOn.includes(location.pathname)) return null;
+  const currentPage = location.pathname.substring(1) || "home";
+  const hideNavOn = ["login", "customer-login", "dashboard", "tech-dashboard", "letter-generator"];
+
+  if (hideNavOn.includes(currentPage)) return null;
 
   return (
     <footer className="bg-[#0f172a] text-white pt-24 pb-12 no-print">
@@ -21,9 +22,9 @@ export default function Footer() {
         <div className="border-t border-white/5 pt-12 flex flex-col md:flex-row justify-between items-center text-slate-100 text-sm gap-6">
           <p>© 2026 سماك العقـــارية. جميع الحقوق محفوظة.</p>
           <div className="flex flex-wrap justify-center gap-6 font-medium">
-            <button onClick={() => { navigate("/privacy"); window.scrollTo(0,0); }} className="hover:text-white transition">سياسة الخصوصية</button>
-            <button onClick={() => { navigate("/terms"); window.scrollTo(0,0); }} className="hover:text-white transition">الشروط والأحكام</button>
-            <button onClick={() => { navigate("/login"); window.scrollTo(0,0); }} className="hover:text-[#c5a059] transition flex items-center gap-2">
+            <button onClick={() => { window.scrollTo(0,0); navigate("/privacy"); }} className="hover:text-white transition">سياسة الخصوصية</button>
+            <button onClick={() => { window.scrollTo(0,0); navigate("/terms"); }} className="hover:text-white transition">الشروط والأحكام</button>
+            <button onClick={() => { window.scrollTo(0,0); navigate("/login"); }} className="hover:text-[#c5a059] transition flex items-center gap-2">
               <Lock size={14} /> بوابـة الموظفين
             </button>
           </div>

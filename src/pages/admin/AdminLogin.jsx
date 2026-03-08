@@ -1,16 +1,14 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { User, Lock, RefreshCw, ArrowRight } from 'lucide-react';
-import { AppContext } from '../../context/AppContext';
-import { API_URL, getImg } from '../../utils/helpers';
 
-export default function AdminLogin() {
+const API_URL = "https://semak.sa/api.php";
+const getImg = (id, sz = "w1500") => `https://drive.google.com/thumbnail?id=${id}&sz=${sz}`;
+
+export default function AdminLogin({ setUser, showToast }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { setAdminUser, showToast } = useContext(AppContext);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("semak_admin_email");
@@ -25,6 +23,7 @@ export default function AdminLogin() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    
     try {
       const res = await fetch(`${API_URL}?action=login`, {
         method: "POST",
@@ -41,22 +40,26 @@ export default function AdminLogin() {
           localStorage.removeItem("semak_admin_email");
           localStorage.removeItem("semak_admin_password");
         }
-        setAdminUser(data.user);
-        showToast("تم تسجيل الدخول", `مرحباً بك، ${data.user.name}`);
         
+        // حفظ الجلسة عشان ما يطردك
+        localStorage.setItem("semak_current_user", JSON.stringify(data.user));
+        
+        if (setUser) setUser(data.user);
+        if (showToast) showToast("تم تسجيل الدخول", `مرحباً بك، ${data.user.name}`);
+        
+        // 🔥 النقل الجبري والقوي للصفحة (مستحيل يعلق)
         if (data.user.role === "technician") {
-          navigate("/admin/tech-dashboard");
+          window.location.href = "/tech-dashboard";
         } else {
-          navigate("/admin/dashboard");
+          window.location.href = "/admin/dashboard";
         }
       } else {
-        showToast("خطأ", data.message, "error");
+        if (showToast) showToast("خطأ", data.message, "error");
+        else alert(data.message);
       }
-    } catch {
-      showToast("تنبيه", "جاري الدخول ببيانات تجريبية (نظراً لعدم وجود قاعدة بيانات حالياً)", "success");
-      // وضع تجريبي مؤقت لحين ربط القاعدة
-      setAdminUser({ id: 999, name: "Ahmed", role: "admin", job: "المدير العام", permissions: '["maintenance","letters","qr","leads","accounting","inspection","users_manage"]' });
-      navigate("/admin/dashboard");
+    } catch (error) {
+      if (showToast) showToast("خطأ", "فشل الاتصال بالسيرفر", "error");
+      else alert("فشل الاتصال بالسيرفر");
     } finally {
       setLoading(false);
     }
@@ -93,7 +96,7 @@ export default function AdminLogin() {
           </button>
         </form>
         <div className="mt-8 text-center pt-6 border-t border-slate-100">
-          <button onClick={() => navigate("/")} className="text-slate-400 hover:text-[#1a365d] text-sm flex items-center justify-center gap-2 mx-auto transition">
+          <button onClick={() => window.location.href = "/"} className="text-slate-400 hover:text-[#1a365d] text-sm flex items-center justify-center gap-2 mx-auto transition">
             <ArrowRight size={14} /> العودة للموقع الرئيسي
           </button>
         </div>

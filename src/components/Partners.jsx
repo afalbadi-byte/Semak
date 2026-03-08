@@ -1,21 +1,14 @@
 import React from 'react';
-import { useLocation } from 'react-router-dom';
 import { getImg } from '../utils/helpers';
 
 export default function Partners() {
-  const location = useLocation();
-  
-  // إخفاء هذا القسم في صفحات لوحة التحكم
-  const hideOn = ["/login", "/customer-login", "/admin/dashboard", "/admin/letter-generator", "/admin/tech-dashboard"];
-  if (hideOn.includes(location.pathname)) return null;
-
   const partners = [
     "18kk3r0kSgBdkQvCj7KC3fe29SQt4s_Y_", "1CFm4oTf091j04ndhYBhN4-LiirPgsywc", "1Ho4XCxeEQHTt4QRHJQnGbhSNCybY9Kli",
     "1T_LJDA_3XAAHSHl3DLib9foDVsQHjrCE", "10BuljftpVn9MsU2XbFJQ6zkRnM4djnGs", "1DwooJvRW8QrG-pDa1am0JDjbiVNp3AKP",
     "1Tcfv84RKa5YJ7ao-ktt9HLAk9TKQLy4F", "144wMG57xjPdnX1SYoBTzlQu0XEbIWiO3", "1NG-fNtmh8Nm2qxZdTPZs3IYlYgQGxOr8",
     "1H1f5ByalQMYeNi91qq5eEzXIwY1GCpPZ"
   ];
-
+  
   return (
     <div className="py-10 bg-white border-t border-slate-100 overflow-hidden no-print" id="partners-section">
       <div className="container mx-auto text-center mb-8">
