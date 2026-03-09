@@ -2,22 +2,25 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { FilePenLine, ArrowRight, Printer, RefreshCw } from 'lucide-react';
+import { FilePenLine, ArrowRight, Printer, RefreshCw, Loader2 } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, getImg } from '../../utils/helpers';
 
 export default function LetterGenerator() {
-  const { adminUser: user, showToast } = useContext(AppContext);
+  const { user: contextUser, showToast } = useContext(AppContext);
   const navigate = useNavigate();
+
+  const [dbUser, setDbUser] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true); // حالة التحميل من السيرفر
 
   const [data, setData] = useState({
     date: new Date().toISOString().split("T")[0],
     recipient: "شركاء النجاح المحترمين",
     subject: "",
     body: "", 
-    signName: user?.name || "أحمد البادي",
-    signTitle: user?.job || "المدير العام",
-    showStamp: user?.role === "admin"
+    signName: "", // سيتم تعبئتها من الداتابيس
+    signTitle: "", // سيتم تعبئتها من الداتابيس
+    showStamp: false
   });
 
   const [dbTemplates, setDbTemplates] = useState([]);
@@ -27,9 +30,44 @@ export default function LetterGenerator() {
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
 
+  // 🔥 سحب بياناتك الحية من قاعدة البيانات مباشرة
   useEffect(() => {
-    if (!user) navigate("/login");
-  }, [user, navigate]);
+    const fetchUserFromDB = async () => {
+      // نحتاج الـ ID فقط كـ "مفتاح" لمعرفة هويتك
+      const currentId = contextUser?.id || JSON.parse(localStorage.getItem("semak_current_user"))?.id;
+      
+      if (!currentId) {
+        navigate("/login");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}?action=get_users`);
+        const users = await res.json();
+        const freshUser = users.find(u => u.id === currentId);
+
+        if (freshUser) {
+          setDbUser(freshUser);
+          // تعبئة البيانات في الخطاب من قاعدة البيانات فوراً
+          setData(prev => ({
+            ...prev,
+            signName: freshUser.name || "أحمد البادي",
+            signTitle: freshUser.job || "المدير العام",
+            showStamp: freshUser.role === "admin"
+          }));
+        } else {
+          // إذا لم يجد المستخدم في الداتابيس (تم حذفه مثلاً)
+          navigate("/login");
+        }
+      } catch (error) {
+        if(showToast) showToast("خطأ", "فشل التحقق من بيانات المستخدم", "error");
+      } finally {
+        setLoadingAuth(false);
+      }
+    };
+
+    fetchUserFromDB();
+  }, [contextUser, navigate]);
 
   const quillModules = {
     toolbar: [
@@ -84,11 +122,11 @@ export default function LetterGenerator() {
 
   const saveTemplateToDB = async () => {
     if (!newTempMeta.title.trim()) {
-      showToast("تنبيه", "يرجى كتابة اسم للنموذج الجديد", "error");
+      if(showToast) showToast("تنبيه", "يرجى كتابة اسم للنموذج الجديد", "error");
       return;
     }
     if (!data.subject.trim() || data.body.replace(/<[^>]*>?/gm, '').trim() === '') {
-      showToast("تنبيه", "محتوى الخطاب (الموضوع والنص) فارغ!", "error");
+      if(showToast) showToast("تنبيه", "محتوى الخطاب (الموضوع والنص) فارغ!", "error");
       return;
     }
 
@@ -106,32 +144,42 @@ export default function LetterGenerator() {
       });
       const result = await res.json();
       if (result.success) {
-        showToast("تم بنجاح", "تم حفظ النموذج كنسخة جديدة في قاعدة البيانات.");
+        if(showToast) showToast("تم بنجاح", "تم حفظ النموذج كنسخة جديدة في قاعدة البيانات.");
         setShowSaveForm(false);
         fetchTemplates();
       } else {
-        showToast("خطأ", "حدث خطأ أثناء الحفظ", "error");
+        if(showToast) showToast("خطأ", "حدث خطأ أثناء الحفظ", "error");
       }
     } catch (error) {
-      showToast("خطأ اتصال", "فشل الاتصال بالسيرفر", "error");
+      if(showToast) showToast("خطأ اتصال", "فشل الاتصال بالسيرفر", "error");
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (!user) return null;
+  // شاشة تحميل أثناء الاتصال بقاعدة البيانات
+  if (loadingAuth) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-white font-cairo">
+        <Loader2 className="animate-spin text-[#c5a059] mb-4" size={48} />
+        <p className="font-bold text-lg">جاري التحقق من الصلاحيات والبيانات...</p>
+      </div>
+    );
+  }
+
+  if (!dbUser) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-100 h-screen w-screen flex flex-col md:flex-row font-cairo overflow-hidden">
       <div className="w-full md:w-1/3 min-w-[320px] bg-slate-900 text-white flex flex-col shadow-2xl h-full overflow-y-auto no-print">
         <div className="p-6 border-b border-slate-700 flex justify-between items-center">
           <h2 className="text-xl font-bold text-[#c5a059] flex items-center gap-2"><FilePenLine /> صانع الخطابات</h2>
-          <button onClick={() => navigate("/admin/dashboard")} className="p-2 bg-slate-800 rounded hover:bg-slate-700 transition"><ArrowRight size={18} /></button>
+          <button onClick={() => window.close()} className="p-2 bg-slate-800 rounded hover:bg-slate-700 transition" title="إغلاق النافذة"><ArrowRight size={18} /></button>
         </div>
         <div className="p-6 space-y-4 flex-grow">
           <div>
             <label className="text-xs font-bold text-[#c5a059] block mb-2">اختر نموذجاً للبدء</label>
-            <select onChange={handleTemplateChange} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm outline-none text-white focus:border-[#c5a059] transition">
+            <select onChange={handleTemplateChange} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm outline-none text-white focus:border-[#c5a059] transition cursor-pointer">
               <option value="custom">-- خطاب جديد (فارغ) --</option>
               {loadingTemplates ? (
                 <option disabled>جاري تحميل النماذج...</option>
@@ -170,7 +218,7 @@ export default function LetterGenerator() {
             <div><label className="text-xs text-slate-400 block mb-1">المنصب</label><input type="text" value={data.signTitle} onChange={e => setData({ ...data, signTitle: e.target.value })} className="w-full bg-slate-800 rounded p-2 text-sm outline-none border border-slate-700 focus:border-[#c5a059] transition" /></div>
           </div>
           
-          {user?.role === "admin" && (
+          {dbUser?.role === "admin" && (
             <div className="flex justify-between items-center pt-4 border-b border-slate-700 pb-4">
               <span className="text-sm font-bold text-slate-300">إظهار الختم والتوقيع الرسمي</span>
               <input type="checkbox" checked={data.showStamp} onChange={e => setData({ ...data, showStamp: e.target.checked })} className="w-5 h-5 accent-[#c5a059] cursor-pointer" />
@@ -242,7 +290,7 @@ export default function LetterGenerator() {
             <div className="corner-accent" />
             <div className="mt-12 mb-12 flex justify-between items-start px-4 md:px-12 relative min-h-[150px]">
               <div className="relative w-40 md:w-48 flex justify-center">
-                {data.showStamp && user?.role === "admin" && (
+                {data.showStamp && dbUser?.role === "admin" && (
                   <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-90 mix-blend-multiply" alt="ختم" />
                 )}
               </div>

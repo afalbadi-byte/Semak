@@ -33,6 +33,9 @@ export default function AdminLogin({ setUser, showToast }) {
       const data = await res.json();
       
       if (data.success) {
+        // 🔥 السر هنا: السيرفر يرسل البيانات في data.data وليس data.user
+        const userData = data.data; 
+
         if (rememberMe) {
           localStorage.setItem("semak_admin_email", email);
           localStorage.setItem("semak_admin_password", password);
@@ -41,17 +44,17 @@ export default function AdminLogin({ setUser, showToast }) {
           localStorage.removeItem("semak_admin_password");
         }
         
-        // حفظ الجلسة عشان ما يطردك
-        localStorage.setItem("semak_current_user", JSON.stringify(data.user));
+        // حفظ الجلسة
+        localStorage.setItem("semak_current_user", JSON.stringify(userData));
         
-        if (setUser) setUser(data.user);
-        if (showToast) showToast("تم تسجيل الدخول", `مرحباً بك، ${data.user.name}`);
+        if (setUser) setUser(userData);
+        if (showToast) showToast("تم تسجيل الدخول", `مرحباً بك، ${userData.name}`);
         
-        // 🔥 النقل الجبري والقوي للصفحة (مستحيل يعلق)
-        if (data.user.role === "technician") {
+        // النقل الجبري والقوي للصفحة
+        if (userData.role === "technician") {
           window.location.href = "/tech-dashboard";
         } else {
-          window.location.href = "/admin/dashboard";
+          window.location.href = "/admin/dashboard"; // تأكد أن هذا هو مسار الداش بورد عندك
         }
       } else {
         if (showToast) showToast("خطأ", data.message, "error");
