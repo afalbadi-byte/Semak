@@ -32,7 +32,7 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           port: 21 
           local-dir: ./dist/ 
-          server-dir: ./public_html/ # 👈 تأكد أن هذا هو المجلد الرئيسي في هوستينجر
+          server-dir: ./ # 👈 تأكد أن هذا هو المجلد الرئيسي في هوستينجر
           method: ftp # 👈 تحديد البروتوكول صراحة
           timeout: 900000 # 👈 زيادة وقت الانتظار جداً (15 دقيقة) لمنع الـ Timeout
           passive: true # 👈 ضروري جداً لاستضافات الفتح المشترك مثل هوستينجر
