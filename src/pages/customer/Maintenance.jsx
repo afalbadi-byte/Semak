@@ -10,28 +10,35 @@ export default function Maintenance() {
   const location = useLocation();
   
   const [loading, setLoading] = useState(false);
-  const [qrLoading, setQrLoading] = useState(true); // حالة تحميل بيانات الـ QR
+  const [qrLoading, setQrLoading] = useState(true);
   const [tab, setTab] = useState("new");
   const [type, setType] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [ticket, setTicket] = useState(null);
 
-  // 🔥 السحر هنا: قراءة رابط الـ QR وتخطي تسجيل الدخول
+  // 🔥 السحر المُعدّل: قراءة رابط الـ QR لمرة واحدة فقط وبدون تكرار الرسائل
   useEffect(() => {
     const query = new URLSearchParams(location.search);
     const unitFromQR = query.get('unit');
 
+    // 1. إذا كان العميل مسجل دخوله مسبقاً بنفس الوحدة، أوقف الكود فوراً لتجنب التكرار
+    if (customer && customer.unit === unitFromQR) {
+      setQrLoading(false);
+      return;
+    }
+
     if (unitFromQR) {
-      // إذا جاء العميل من مسح الـ QR
-      fetch(`${API_URL}?action=get_unit_owner&unit_code=${unitFromQR}`)
+      // 2. إذا جاء العميل من مسح الـ QR ولم يسجل الدخول بعد
+      fetch(`${API_URL}?action=get_unit_owner&unit_code=${encodeURIComponent(unitFromQR.trim())}`)
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            setCustomer(data.data); // تسجيل الدخول التلقائي ببيانات المالك
+            setCustomer(data.data);
+            // الرسالة ستظهر مرة واحدة فقط الآن
             showToast("أهلاً بك", `مرحباً بك، تم التعرف على وحدتك (${unitFromQR})`, "success");
           } else {
-            setCustomer(data.data); // تسجيل الدخول برقم الوحدة حتى لو مجهول
+            setCustomer(data.data);
           }
           setQrLoading(false);
         })
@@ -39,11 +46,12 @@ export default function Maintenance() {
           setQrLoading(false);
         });
     } else {
-      // إذا دخل الصفحة بدون QR ومو مسجل دخول
+      // 3. إذا دخل الصفحة بشكل عادي بدون QR
       setQrLoading(false);
       if (!customer) navigate("/customer-login");
     }
-  }, [location, customer, navigate, setCustomer, showToast]);
+    // 🔥 لاحظ هنا: أزلنا customer من القائمة حتى لا يعيد تشغيل نفسه
+  }, [location.search]); 
 
   const handleLogout = () => {
     setCustomer(null);
@@ -173,7 +181,7 @@ export default function Maintenance() {
           <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
             <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-[#c5a059] to-yellow-600" />
             
-            {/* 🔥 رسالة ترحيبية للمالك لتأكيد هويته */}
+            {/* رسالة ترحيبية للمالك لتأكيد هويته */}
             <div className="bg-slate-50 p-4 rounded-2xl mb-6 border border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
                 <div>
                     <p className="text-xs text-slate-500 font-bold">المالك المسجل:</p>
