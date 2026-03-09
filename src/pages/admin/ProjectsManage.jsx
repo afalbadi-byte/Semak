@@ -130,7 +130,7 @@ export default function ProjectsManage({ showToast }) {
                             <div className="bg-white p-4 rounded-3xl shadow-sm border-2 border-slate-100 inline-block mb-6">
                                 <QRCode
                                     // 🔥 التعديل هنا: غيرنا الرابط ليكون /maintenance عشان يطابق صفحة الملاك
-                                    value={`https://semak.sa/maintenance?unit=${qrModalData.unit_code}`}
+                                    value={`https://semak.sa/maintenance?unit=${encodeURIComponent(qrModalData.unit_code.trim())}`}
                                     size={200}
                                     bgColor="#FFFFFF"
                                     fgColor="#1a365d"
