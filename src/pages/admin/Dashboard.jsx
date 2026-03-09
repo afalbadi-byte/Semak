@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import QRCode from 'react-qr-code'; 
 import OwnersManage from './OwnersManage';
 import MaintenanceManage from './MaintenanceManage';
+import LeadsManage from './LeadsManage';
 import UsersManage from './UsersManage';
 import { AppContext } from '../../context/AppContext';
 import { 
@@ -184,6 +185,12 @@ export default function Dashboard() {
         </div>
 
         {/* --- 📋 محتوى الأقسام الفرعية --- */}
+
+        {/* قسم المهتمين (Leads) الجديد */}
+        
+        {activeTab === "leads" && hasPerm("leads") && (
+            <LeadsManage showToast={showToast} />
+        )}
 
         {activeTab === "projects_manage" && hasPerm("projects_manage") && (
             <ProjectsManage showToast={showToast} />
