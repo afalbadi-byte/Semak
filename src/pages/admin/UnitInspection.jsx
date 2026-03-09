@@ -3,7 +3,6 @@ import { ChevronRight, ClipboardCheck, CheckCircle2, Save, Printer, RefreshCw, F
 
 const API_URL = "https://semak.sa/api.php";
 
-// 🔥 التصنيفات الهندسية العامة (تطبق على أي غرفة/فراغ يجي من الداتابيس)
 const GENERIC_CATEGORIES = [
   { id: 'finishes', name: 'التشطيبات', icon: PaintRoller, color: 'text-orange-500', items: ['استواء الأرضيات والترويبة', 'جودة الدهانات وخلوها من التشققات', 'الأسقف المستعارة (الجبس)', 'العزل المائي (إن وجد)'] },
   { id: 'mep', name: 'الأعمال الكهروميكانيكية', icon: Zap, color: 'text-blue-500', items: ['عمل الأفياش والمفاتيح', 'توزيع الإضاءة', 'عمل التكييف والتهوية', 'السباكة وتصريف المياه'] },
@@ -14,9 +13,9 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const [viewMode, setViewMode] = useState('list'); 
   const [inspectionsList, setInspectionsList] = useState([]);
   
-  // 🔥 حالات البيانات الديناميكية من الداتابيس
   const [dbProjects, setDbProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedUnitObj, setSelectedUnitObj] = useState(null); // 🔥 نحتفظ بكائن الوحدة عشان فراغاتها
   const [unitName, setUnitName] = useState(""); 
   
   const [inspectionData, setInspectionData] = useState({});
@@ -25,20 +24,22 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
   const isAdmin = user?.role === 'admin';
 
-  // 1. جلب المشاريع وقائمة المهام عند فتح الأداة
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
       try {
-        // جلب المشاريع (الغرف والوحدات)
         const projRes = await fetch(`${API_URL}?action=get_projects_data`);
         const projData = await projRes.json();
         if (projData.success) {
           setDbProjects(projData.data);
-          if (projData.data.length > 0) setSelectedProject(projData.data[0]);
+          if (projData.data.length > 0) {
+              setSelectedProject(projData.data[0]);
+              const firstUnit = projData.data[0].units_details?.[0];
+              setSelectedUnitObj(firstUnit || null);
+              setUnitName(firstUnit?.unit_code || "");
+          }
         }
         
-        // جلب المهام الحالية
         const tasksRes = await fetch(`${API_URL}?action=get_all_inspections`);
         const tasksData = await tasksRes.json();
         if (tasksData.success) setInspectionsList(tasksData.data);
@@ -50,12 +51,9 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
       }
     };
     
-    if (viewMode === 'list') {
-      fetchInitialData();
-    }
+    if (viewMode === 'list') fetchInitialData();
   }, [viewMode]);
 
-  // 2. تحديث قائمة البنود بناءً على المشروع والوحدة المختارة
   useEffect(() => {
     if ((viewMode === 'setup' || viewMode === 'inspect') && unitName) {
       loadInspection();
@@ -69,13 +67,12 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
       const data = await res.json();
       
       if (data.success && data.data) {
-        // إذا الوحدة لها فحص سابق، اسحبه
         setInspectionData(JSON.parse(data.data.inspection_data));
       } else {
-        // 🔥 إذا فحص جديد، ابنِ القالب بناءً على (غرف المشروع المحدد)
+        // 🔥 بناء القالب بناءً على فراغات الوحدة المختارة فقط
         const initialData = {};
-        if (selectedProject && selectedProject.spaces) {
-          selectedProject.spaces.forEach(space => {
+        if (selectedUnitObj && selectedUnitObj.spaces) {
+          selectedUnitObj.spaces.forEach(space => {
             GENERIC_CATEGORIES.forEach(cat => {
               cat.items.forEach(item => {
                 initialData[`${space}_${cat.name}_${item}`] = { isSelected: true, passed: null, notes: '' };
@@ -99,16 +96,29 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     }
     const firstProj = dbProjects[0];
     setSelectedProject(firstProj);
-    setUnitName(firstProj.units[0] || ""); 
+    const firstUnit = firstProj.units_details?.[0];
+    setSelectedUnitObj(firstUnit || null);
+    setUnitName(firstUnit?.unit_code || ""); 
     setViewMode('setup');
   };
 
-  const handleOpenTask = (unit, dataString, mode) => {
-    // البحث عن المشروع الذي تنتمي له هذه الوحدة
-    const proj = dbProjects.find(p => p.units.includes(unit));
-    if (proj) setSelectedProject(proj);
+  const handleOpenTask = (unitCode, dataString, mode) => {
+    let foundProj = null;
+    let foundUnit = null;
     
-    setUnitName(unit);
+    for(let p of dbProjects) {
+        const u = p.units_details?.find(ud => ud.unit_code === unitCode);
+        if(u) {
+            foundProj = p;
+            foundUnit = u;
+            break;
+        }
+    }
+
+    if (foundProj) setSelectedProject(foundProj);
+    if (foundUnit) setSelectedUnitObj(foundUnit);
+    
+    setUnitName(unitCode);
     setInspectionData(JSON.parse(dataString));
     setViewMode(mode); 
   };
@@ -174,14 +184,10 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     }
   };
 
-  // ==========================================
-  // 1. شاشة القائمة
-  // ==========================================
   if (viewMode === 'list') {
     return (
       <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn">
         <div className="container mx-auto px-6 max-w-6xl">
-          
           <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
             <div className="flex items-center gap-4">
               <button onClick={() => navigateTo('dashboard')} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-full transition border border-slate-100">
@@ -212,7 +218,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                 const prog = parseInt(task.progress);
                 const statusColor = prog === 100 ? 'text-emerald-500 bg-emerald-50' : prog > 0 ? 'text-blue-500 bg-blue-50' : 'text-slate-500 bg-slate-100';
                 const statusText = prog === 100 ? 'مكتمل' : prog > 0 ? 'قيد الفحص' : 'مهمة جديدة';
-                const projName = dbProjects.find(p => p.units.includes(task.unit))?.name || "مشروع غير محدد";
+                const projName = dbProjects.find(p => p.units_details?.some(u => u.unit_code === task.unit))?.name || "مشروع غير محدد";
 
                 return (
                   <div key={idx} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-lg transition-shadow group relative overflow-hidden">
@@ -250,12 +256,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     );
   }
 
-  // ==========================================
-  // 2. شاشة التجهيز (Setup) والتنفيذ (Inspect)
-  // ==========================================
-  
-  // بناء القاموس الديناميكي بناءً على غرف المشروع المحدد
-  const dynamicDictionary = selectedProject?.spaces?.map(spaceName => ({
+  const dynamicDictionary = selectedUnitObj?.spaces?.map(spaceName => ({
     space: spaceName,
     categories: GENERIC_CATEGORIES
   })) || [];
@@ -277,7 +278,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
               </h1>
               
               <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                 {/* 🔥 القوائم الديناميكية للمشاريع والوحدات */}
                  {viewMode === 'setup' ? (
                    <>
                      <select 
@@ -285,7 +285,9 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                         onChange={(e) => {
                           const proj = dbProjects.find(p => p.id.toString() === e.target.value);
                           setSelectedProject(proj);
-                          setUnitName(proj?.units[0] || "");
+                          const firstUnit = proj?.units_details?.[0];
+                          setSelectedUnitObj(firstUnit || null);
+                          setUnitName(firstUnit?.unit_code || "");
                         }} 
                         className="bg-slate-50 border border-orange-200 text-[#1a365d] font-black outline-none px-4 py-2 rounded-xl focus:border-orange-500 transition shadow-sm cursor-pointer"
                      >
@@ -294,11 +296,15 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                      
                      <select 
                         value={unitName} 
-                        onChange={(e) => setUnitName(e.target.value)} 
+                        onChange={(e) => {
+                            setUnitName(e.target.value);
+                            const u = selectedProject?.units_details?.find(ud => ud.unit_code === e.target.value);
+                            setSelectedUnitObj(u || null);
+                        }} 
                         className="bg-slate-50 border border-orange-200 text-[#1a365d] font-black outline-none px-4 py-2 rounded-xl focus:border-orange-500 transition shadow-sm cursor-pointer"
                      >
-                       {selectedProject?.units.length > 0 ? (
-                          selectedProject.units.map(u => <option key={u} value={u}>وحدة: {u}</option>)
+                       {selectedProject?.units_details?.length > 0 ? (
+                          selectedProject.units_details.map(u => <option key={u.id} value={u.unit_code}>وحدة: {u.unit_code}</option>)
                        ) : (
                           <option disabled>لا توجد وحدات</option>
                        )}
@@ -337,10 +343,9 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
             </div>
         )}
 
-        {/* 🔥 عرض الغرف الديناميكي بناءً على المشروع */}
         <div className="space-y-8">
           {dynamicDictionary.length === 0 && !loading && (
-             <div className="text-center p-10 bg-white rounded-3xl border border-slate-100"><p className="text-slate-500 font-bold">لا توجد غرف مسجلة لهذا المشروع في قاعدة البيانات.</p></div>
+             <div className="text-center p-10 bg-white rounded-3xl border border-slate-100"><p className="text-slate-500 font-bold">لا توجد فراغات مسجلة لهذه الوحدة. يرجى إضافتها من إدارة المشاريع أولاً.</p></div>
           )}
 
           {dynamicDictionary.map((spaceData, index) => {
