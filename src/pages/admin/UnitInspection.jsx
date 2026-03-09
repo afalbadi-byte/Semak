@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ClipboardCheck, CheckCircle2, Save, Printer, RefreshCw, FileWarning, Settings2, ShieldCheck, Zap, PaintRoller, DoorOpen, PlusCircle, ListTodo, Hammer, Building, Trash2, UserCheck, X } from 'lucide-react';
+import { ChevronRight, ClipboardCheck, CheckCircle2, Save, Printer, RefreshCw, FileWarning, Settings2, ShieldCheck, Zap, PaintRoller, DoorOpen, PlusCircle, ListTodo, Hammer, Building, Trash2, X, Share2, MessageCircle } from 'lucide-react';
+import QRCode from 'react-qr-code';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -22,9 +23,8 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 🔥 حالة النافذة المنبثقة لتسليم الوحدة للعميل
-  const [showHandoverModal, setShowHandoverModal] = useState(false);
-  const [handoverData, setHandoverData] = useState({ owner_name: "", owner_phone: "", owner_email: "" });
+  // 🔥 نافذة توليد رابط/باركود التسليم
+  const [showHandoverQR, setShowHandoverQR] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -120,7 +120,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     setViewMode(mode); 
   };
 
-  // 🔥 دالة حذف مهمة الفحص
   const handleDeleteTask = async (unitCode) => {
     if(!window.confirm(`هل أنت متأكد من حذف مهمة الفحص للوحدة ${unitCode}؟`)) return;
     try {
@@ -176,28 +175,10 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     }
   };
 
-  // 🔥 دالة اعتماد وتسليم الوحدة للمالك
-  const submitHandover = async (e) => {
-      e.preventDefault();
-      setSaving(true);
-      try {
-          const payload = { unit: unitName, ...handoverData };
-          const res = await fetch(`${API_URL}?action=handover_unit`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload)
-          });
-          const data = await res.json();
-          if (data.success) {
-              if(showToast) showToast("تم الاستلام 🎉", "تم تحويل العميل كمالك رسمي للوحدة وبدأ سريان الضمان لمدة عام!");
-              setShowHandoverModal(false);
-              setHandoverData({ owner_name: "", owner_phone: "", owner_email: "" });
-              setViewMode('list');
-          }
-      } catch (e) {
-          if(showToast) showToast("خطأ", "فشل الاتصال", "error");
-      } finally {
-          setSaving(false);
-      }
+  const copyHandoverLink = () => {
+      const link = `https://semak.sa/handover?unit=${encodeURIComponent(unitName.trim())}`;
+      navigator.clipboard.writeText(link);
+      showToast("تم النسخ", "تم نسخ رابط الاستلام، يمكنك إرساله للعميل");
   };
 
   if (viewMode === 'list') {
@@ -233,7 +214,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
               {inspectionsList.map((task, idx) => {
                 const prog = parseInt(task.progress);
                 const statusColor = prog === 100 ? 'text-emerald-500 bg-emerald-50' : prog > 0 ? 'text-blue-500 bg-blue-50' : 'text-slate-500 bg-slate-100';
-                const statusText = prog === 100 ? 'جاهزة للتسليم' : prog > 0 ? 'قيد الفحص' : 'مهمة جديدة';
+                const statusText = prog === 100 ? 'جاهزة لتسليم المالك' : prog > 0 ? 'قيد الفحص' : 'مهمة جديدة';
                 const projName = dbProjects.find(p => p.units_details?.some(u => u.unit_code === task.unit))?.name || "مشروع غير محدد";
 
                 return (
@@ -282,25 +263,27 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   return (
     <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn relative">
       
-      {/* 🔥 النافذة المنبثقة لاعتماد التسليم وبدء الضمان */}
-      {showHandoverModal && (
+      {/* 🔥 نافذة توليد باركود ورابط التسليم للعميل */}
+      {showHandoverQR && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-              <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-md w-full relative border border-slate-100">
-                  <button onClick={() => setShowHandoverModal(false)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition"><X size={20} /></button>
-                  <div className="text-center mb-6">
-                      <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
-                      <h3 className="text-2xl font-black text-[#1a365d]">تسليم الوحدة للعميل</h3>
-                      <p className="text-sm text-slate-500 font-bold mt-2">وحدة رقم: <span className="text-[#c5a059]">{unitName}</span></p>
-                      <p className="text-xs text-emerald-600 font-bold mt-1">سيتم بدء سريان الضمان الشامل لمدة عام من تاريخ اليوم</p>
+              <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full relative text-center border border-slate-100">
+                  <button onClick={() => setShowHandoverQR(false)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition"><X size={20} /></button>
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
+                  <h3 className="text-2xl font-black text-[#1a365d] mb-1">تسليم الوحدة وبدء الضمان</h3>
+                  <p className="text-sm text-slate-500 font-bold mb-6">دع المالك يمسح الرمز للموافقة وتفعيل الضمان</p>
+                  
+                  <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 inline-block mb-6 shadow-inner">
+                      <QRCode value={`https://semak.sa/handover?unit=${encodeURIComponent(unitName.trim())}`} size={200} bgColor="#f8fafc" fgColor="#1a365d" level="H" />
                   </div>
-                  <form onSubmit={submitHandover} className="space-y-4">
-                      <div><label className="text-xs font-bold text-slate-500 block mb-1">اسم المالك الرباعي</label><input required type="text" value={handoverData.owner_name} onChange={e => setHandoverData({...handoverData, owner_name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700" placeholder="مثال: محمد عبدالله..." /></div>
-                      <div><label className="text-xs font-bold text-slate-500 block mb-1">رقم الجوال</label><input required type="text" value={handoverData.owner_phone} onChange={e => setHandoverData({...handoverData, owner_phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700" placeholder="05xxxxxxxx" /></div>
-                      <div><label className="text-xs font-bold text-slate-500 block mb-1">البريد الإلكتروني (اختياري)</label><input type="email" value={handoverData.owner_email} onChange={e => setHandoverData({...handoverData, owner_email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700" /></div>
-                      <button type="submit" disabled={saving} className="w-full bg-emerald-500 text-white py-4 rounded-xl font-black text-lg hover:bg-emerald-600 transition shadow-lg flex justify-center items-center gap-2 mt-4">
-                          {saving ? <RefreshCw className="animate-spin" size={20}/> : <UserCheck size={20}/>} تأكيد التسليم واعتماد المالك
+
+                  <div className="flex gap-2">
+                      <button onClick={copyHandoverLink} className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-slate-200 transition">
+                          <Share2 size={18}/> نسخ الرابط
                       </button>
-                  </form>
+                      <button onClick={() => window.open(`https://wa.me/?text=مرحباً بك، يرجى الدخول على هذا الرابط لإقرار استلام وحدتك وبدء الضمان: https://semak.sa/handover?unit=${encodeURIComponent(unitName.trim())}`, '_blank')} className="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-green-600 transition shadow-lg shadow-green-200">
+                          <MessageCircle size={18}/> واتساب
+                      </button>
+                  </div>
               </div>
           </div>
       )}
@@ -313,7 +296,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
             <div className="flex-1">
               <h1 className="text-2xl md:text-3xl font-black text-[#1a365d] flex items-center gap-3">
                 {viewMode === 'setup' ? <Settings2 className="text-orange-500" size={32} /> : <ClipboardCheck className="text-indigo-600" size={32} />} 
-                {viewMode === 'setup' ? 'تجهيز خطة الفحص (مدير)' : 'تنفيذ الفحص والتسليم'}
+                {viewMode === 'setup' ? 'تجهيز خطة الفحص (مدير)' : 'تنفيذ الفحص الهندسي'}
               </h1>
               
               <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -438,10 +421,10 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
               <Printer size={20} /> طباعة التقرير
             </button>
             
-            {/* 🔥 زر تسليم الوحدة يظهر للمشرفين، أو عندما يصل الفحص 100% */}
-            {(calculateProgress() === 100 || isAdmin) && (
-              <button onClick={() => setShowHandoverModal(true)} className="bg-emerald-500 text-white px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-emerald-600 transition-colors shadow-xl shadow-emerald-200 animate-pulse-slow">
-                <ShieldCheck size={24} /> اعتماد التسليم وبدء الضمان
+            {/* 🔥 زر إصدار رابط الاستلام للمالك (يظهر فقط إذا الفحص 100%) */}
+            {calculateProgress() === 100 && (
+              <button onClick={() => setShowHandoverQR(true)} className="bg-emerald-500 text-white px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-emerald-600 transition-colors shadow-xl shadow-emerald-200 animate-pulse-slow">
+                <ShieldCheck size={24} /> إصدار إقرار الاستلام للمالك
               </button>
             )}
           </div>
