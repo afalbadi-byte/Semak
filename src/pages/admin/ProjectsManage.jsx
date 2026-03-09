@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Plus, Trash2, LayoutGrid, ChevronRight, RefreshCw, Edit, User, Phone, Copy, Check, QrCode as QrIcon, X, Printer } from 'lucide-react';
-import QRCode from 'react-qr-code'; // 🔥 استدعاء مكتبة الباركود
+import QRCode from 'react-qr-code'; 
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -18,8 +18,6 @@ export default function ProjectsManage({ showToast }) {
     const [localLoading, setLocalLoading] = useState(false);
     
     const [copiedId, setCopiedId] = useState(null);
-    
-    // 🔥 حالة النافذة المنبثقة للباركود
     const [qrModalData, setQrModalData] = useState(null);
 
     const loadProjects = async () => {
@@ -40,7 +38,6 @@ export default function ProjectsManage({ showToast }) {
 
     useEffect(() => { loadProjects(); }, []);
 
-    // --- دوال النسخ ---
     const handleCopyText = (text, id) => {
         navigator.clipboard.writeText(text);
         setCopiedId(id);
@@ -67,7 +64,6 @@ export default function ProjectsManage({ showToast }) {
         handleCopyText(text, `unit_${u.id}`);
     };
 
-    // --- دوال الاستنساخ ---
     const handleDuplicateProject = async (e, projectId) => {
         e.stopPropagation();
         if (!window.confirm("هل تريد استنساخ هذا المشروع بالكامل بجميع وحداته وفراغاته؟")) return;
@@ -98,7 +94,6 @@ export default function ProjectsManage({ showToast }) {
         } catch (e) { } finally { setLocalLoading(false); }
     };
 
-    // --- العمليات الأساسية ---
     const handleAddProject = async (e) => { e.preventDefault(); if (!newProjectName.trim()) return; setLocalLoading(true); try { const res = await fetch(`${API_URL}?action=add_project`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newProjectName, description: newProjectDesc }) }); const data = await res.json(); if (data.success) { setNewProjectName(""); setNewProjectDesc(""); if(showToast) showToast("تم", "تم تأسيس المشروع بنجاح"); loadProjects(); } } catch (e) {} finally { setLocalLoading(false); } };
     const handleUpdateProjectInfo = async (e) => { e.preventDefault(); setLocalLoading(true); try { const res = await fetch(`${API_URL}?action=update_project_info`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(projInfoEdit) }); const data = await res.json(); if (data.success) { setIsEditingProjInfo(false); if(showToast) showToast("تم", "تم تحديث بيانات المشروع"); loadProjects(); } } catch (e) {} finally { setLocalLoading(false); } };
     const handleAddUnitCard = async (e) => { e.preventDefault(); if (!newUnitCode.trim()) return; const codeToAdd = newUnitCode.trim(); setNewUnitCode(""); setLocalLoading(true); try { const res = await fetch(`${API_URL}?action=add_unit_card`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: activeProject.id, unit_code: codeToAdd }) }); const data = await res.json(); if (data.success) { const newUnit = { id: data.unit_id, unit_code: codeToAdd, spaces: [], status: 'متاح' }; setActiveProject(prev => ({ ...prev, units_details: [...(prev.units_details || []), newUnit] })); loadProjects(); } else { if(showToast) showToast("تنبيه", data.message, "error"); } } catch (e) {} finally { setLocalLoading(false); } };
@@ -107,20 +102,18 @@ export default function ProjectsManage({ showToast }) {
     const handleRemoveSpaceFromUnit = (unit, spaceIndex) => { const updatedSpaces = unit.spaces.filter((_, i) => i !== spaceIndex); updateUnitSpaces(unit.id, updatedSpaces); };
     const handleDeleteUnit = async (unitId) => { if (!window.confirm("هل أنت متأكد من حذف هذه الوحدة؟")) return; setActiveProject(prev => ({ ...prev, units_details: prev.units_details.filter(u => u.id !== unitId) })); try { await fetch(`${API_URL}?action=delete_unit_card`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unit_id: unitId }) }); loadProjects(); } catch (e) {} };
 
-    // 🔥 دالة طباعة الباركود
     const handlePrintQR = () => {
         const printContent = document.getElementById('qr-print-area').innerHTML;
         const originalContent = document.body.innerHTML;
         document.body.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; text-align:center; font-family:sans-serif;">${printContent}</div>`;
         window.print();
         document.body.innerHTML = originalContent;
-        window.location.reload(); // إعادة تحميل خفيفة لضمان عودة الرياكت لعمله
+        window.location.reload(); 
     };
 
     return (
         <div className="bg-slate-50 min-h-[600px] rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fadeIn relative">
             
-            {/* 🔥 النافذة المنبثقة للباركود */}
             {qrModalData && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
                     <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full relative text-center border border-slate-100">
@@ -136,8 +129,8 @@ export default function ProjectsManage({ showToast }) {
 
                             <div className="bg-white p-4 rounded-3xl shadow-sm border-2 border-slate-100 inline-block mb-6">
                                 <QRCode
-                                    // عدل الرابط هذا للرابط الفعلي لنموذج الصيانة الخارجي الخاص بك
-                                    value={`https://semak.sa/maintenance-request?unit=${qrModalData.unit_code}`}
+                                    // 🔥 التعديل هنا: غيرنا الرابط ليكون /maintenance عشان يطابق صفحة الملاك
+                                    value={`https://semak.sa/maintenance?unit=${qrModalData.unit_code}`}
                                     size={200}
                                     bgColor="#FFFFFF"
                                     fgColor="#1a365d"
@@ -242,7 +235,6 @@ export default function ProjectsManage({ showToast }) {
                                             <div className={`w-3 h-3 rounded-full ${unit.owner_name ? 'bg-emerald-500' : 'bg-rose-500'}`}></div> {unit.unit_code}
                                         </h4>
                                         <div className="flex items-center gap-1">
-                                            {/* 🔥 زر الباركود السحري الجديد */}
                                             <button onClick={() => setQrModalData(unit)} className="text-slate-400 hover:text-[#1a365d] hover:bg-slate-100 p-2 rounded-lg transition" title="عرض وطباعة باركود الصيانة">
                                                 <QrIcon size={16} />
                                             </button>
