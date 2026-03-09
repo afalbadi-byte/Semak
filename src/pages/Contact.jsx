@@ -11,10 +11,12 @@ export default function Contact() {
     e.preventDefault();
     setLoading(true);
     
+    // 🔥 هنا التعديل: ربطنا الحقول بأسماء قاعدة البيانات الصحيحة
     const payload = {
       name: e.target.name.value,
       phone: e.target.phone.value,
-      unit: e.target.unit.value,
+      interest: e.target.unit.value, // غيرناها لـ interest
+      source: "الموقع الإلكتروني" // أضفنا المصدر عشان تعرف من وين جاك العميل
     };
 
     try {
@@ -23,13 +25,16 @@ export default function Contact() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      if (response.ok) {
-        showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.");
-        e.target.reset();
+      
+      const data = await response.json(); // 🔥 قراءة رد السيرفر
+      
+      if (data.success) {
+        showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.", "success");
+        e.target.reset(); // تصفير الفورم بعد الإرسال
       } else {
         throw new Error("فشل");
       }
-    } catch {
+    } catch (error) {
       showToast("تنبيه", "حدث خطأ في الاتصال، يرجى المحاولة لاحقاً.", "error");
     } finally {
       setLoading(false);
@@ -67,7 +72,7 @@ export default function Contact() {
               </div>
               <div>
                 <label className="block text-sm font-bold mb-2 text-slate-200">الوحدة المهتم بها</label>
-                <select name="unit" className="w-full bg-white/10 border border-white/20 px-6 py-4 rounded-2xl outline-none focus:border-[#c5a059] text-white transition [&>option]:text-slate-900" defaultValue="">
+                <select name="unit" required className="w-full bg-white/10 border border-white/20 px-6 py-4 rounded-2xl outline-none focus:border-[#c5a059] text-white transition [&>option]:text-slate-900" defaultValue="">
                   <option value="" disabled>اختر الوحدة</option>
                   <option value="SM-A01">SM-A01</option>
                   <option value="SM-A02">SM-A02</option>
