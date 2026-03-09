@@ -94,7 +94,8 @@ export default function LetterGenerator() {
     fetchTemplates();
   }, []);
 
-  const groupedTemplates = dbTemplates.reduce((acc, curr) => {
+// 🔥 درع الحماية: نتأكد إن النماذج عبارة عن قائمة قبل ما نرتبها عشان ما تطلع شاشة بيضاء
+  const groupedTemplates = (Array.isArray(dbTemplates) ? dbTemplates : []).reduce((acc, curr) => {
     if (!acc[curr.category]) acc[curr.category] = [];
     acc[curr.category].push(curr);
     return acc;
