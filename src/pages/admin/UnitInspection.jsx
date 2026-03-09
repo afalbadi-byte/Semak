@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ClipboardCheck, CheckCircle2, Save, Printer, RefreshCw, FileWarning, Settings2, ShieldCheck, Zap, PaintRoller, DoorOpen, PlusCircle, ListTodo, Hammer, Building } from 'lucide-react';
+import { ChevronRight, ClipboardCheck, CheckCircle2, Save, Printer, RefreshCw, FileWarning, Settings2, ShieldCheck, Zap, PaintRoller, DoorOpen, PlusCircle, ListTodo, Hammer, Building, Trash2, UserCheck, X } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -15,12 +15,16 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   
   const [dbProjects, setDbProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [selectedUnitObj, setSelectedUnitObj] = useState(null); // 🔥 نحتفظ بكائن الوحدة عشان فراغاتها
+  const [selectedUnitObj, setSelectedUnitObj] = useState(null); 
   const [unitName, setUnitName] = useState(""); 
   
   const [inspectionData, setInspectionData] = useState({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // 🔥 حالة النافذة المنبثقة لتسليم الوحدة للعميل
+  const [showHandoverModal, setShowHandoverModal] = useState(false);
+  const [handoverData, setHandoverData] = useState({ owner_name: "", owner_phone: "", owner_email: "" });
 
   const isAdmin = user?.role === 'admin';
 
@@ -69,7 +73,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
       if (data.success && data.data) {
         setInspectionData(JSON.parse(data.data.inspection_data));
       } else {
-        // 🔥 بناء القالب بناءً على فراغات الوحدة المختارة فقط
         const initialData = {};
         if (selectedUnitObj && selectedUnitObj.spaces) {
           selectedUnitObj.spaces.forEach(space => {
@@ -91,7 +94,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
   const handleCreateNewTask = () => {
     if (dbProjects.length === 0) {
-      if(showToast) showToast("تنبيه", "لا توجد مشاريع مسجلة في النظام", "error");
+      if(showToast) showToast("تنبيه", "لا توجد مشاريع مسجلة", "error");
       return;
     }
     const firstProj = dbProjects[0];
@@ -105,16 +108,10 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const handleOpenTask = (unitCode, dataString, mode) => {
     let foundProj = null;
     let foundUnit = null;
-    
     for(let p of dbProjects) {
         const u = p.units_details?.find(ud => ud.unit_code === unitCode);
-        if(u) {
-            foundProj = p;
-            foundUnit = u;
-            break;
-        }
+        if(u) { foundProj = p; foundUnit = u; break; }
     }
-
     if (foundProj) setSelectedProject(foundProj);
     if (foundUnit) setSelectedUnitObj(foundUnit);
     
@@ -123,28 +120,35 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     setViewMode(mode); 
   };
 
+  // 🔥 دالة حذف مهمة الفحص
+  const handleDeleteTask = async (unitCode) => {
+    if(!window.confirm(`هل أنت متأكد من حذف مهمة الفحص للوحدة ${unitCode}؟`)) return;
+    try {
+      const res = await fetch(`${API_URL}?action=delete_inspection`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unit: unitCode })
+      });
+      const data = await res.json();
+      if(data.success) {
+        if(showToast) showToast("تم الحذف", "تم حذف المهمة بنجاح ✅");
+        setInspectionsList(prev => prev.filter(t => t.unit !== unitCode));
+      }
+    } catch(e) {}
+  };
+
   const toggleItemSelection = (space, cat, item) => {
     const key = `${space}_${cat}_${item}`;
-    setInspectionData(prev => ({
-      ...prev,
-      [key]: { ...prev[key], isSelected: !prev[key]?.isSelected }
-    }));
+    setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], isSelected: !prev[key]?.isSelected } }));
   };
 
   const handleStatusChange = (space, cat, item, status) => {
     const key = `${space}_${cat}_${item}`;
-    setInspectionData(prev => ({
-      ...prev,
-      [key]: { ...prev[key], passed: status === 'pass' }
-    }));
+    setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], passed: status === 'pass' } }));
   };
 
   const handleNoteChange = (space, cat, item, note) => {
     const key = `${space}_${cat}_${item}`;
-    setInspectionData(prev => ({
-      ...prev,
-      [key]: { ...prev[key], notes: note }
-    }));
+    setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], notes: note } }));
   };
 
   const calculateProgress = () => {
@@ -155,23 +159,11 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   };
 
   const handleSave = async () => {
-    if (!unitName) {
-      if(showToast) showToast("تنبيه", "يجب تحديد الوحدة أولاً", "error");
-      return;
-    }
+    if (!unitName) return;
     setSaving(true);
     try {
-      const payload = {
-        unit: unitName,
-        evaluator_id: user?.id || 1,
-        inspection_data: JSON.stringify(inspectionData),
-        progress: calculateProgress()
-      };
-      const res = await fetch(`${API_URL}?action=save_inspection`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      const payload = { unit: unitName, evaluator_id: user?.id || 1, inspection_data: JSON.stringify(inspectionData), progress: calculateProgress() };
+      const res = await fetch(`${API_URL}?action=save_inspection`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (data.success) {
         if(showToast) showToast("تم الحفظ", `تم حفظ المهمة للوحدة ${unitName} بنجاح ✅`);
@@ -182,6 +174,30 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // 🔥 دالة اعتماد وتسليم الوحدة للمالك
+  const submitHandover = async (e) => {
+      e.preventDefault();
+      setSaving(true);
+      try {
+          const payload = { unit: unitName, ...handoverData };
+          const res = await fetch(`${API_URL}?action=handover_unit`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (data.success) {
+              if(showToast) showToast("تم الاستلام 🎉", "تم تحويل العميل كمالك رسمي للوحدة وبدأ سريان الضمان لمدة عام!");
+              setShowHandoverModal(false);
+              setHandoverData({ owner_name: "", owner_phone: "", owner_email: "" });
+              setViewMode('list');
+          }
+      } catch (e) {
+          if(showToast) showToast("خطأ", "فشل الاتصال", "error");
+      } finally {
+          setSaving(false);
+      }
   };
 
   if (viewMode === 'list') {
@@ -197,7 +213,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                 <h1 className="text-2xl md:text-3xl font-black text-[#1a365d] flex items-center gap-3">
                   <ListTodo className="text-indigo-600" size={32} /> مهام الفحص والاستلام
                 </h1>
-                <p className="text-slate-400 text-sm font-bold mt-1">الوحدات المجدولة للتدقيق الهندسي عبر مشاريع الشركة</p>
+                <p className="text-slate-400 text-sm font-bold mt-1">فحص الوحدات، تسليم العملاء، وبدء الضمان</p>
               </div>
             </div>
 
@@ -217,7 +233,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
               {inspectionsList.map((task, idx) => {
                 const prog = parseInt(task.progress);
                 const statusColor = prog === 100 ? 'text-emerald-500 bg-emerald-50' : prog > 0 ? 'text-blue-500 bg-blue-50' : 'text-slate-500 bg-slate-100';
-                const statusText = prog === 100 ? 'مكتمل' : prog > 0 ? 'قيد الفحص' : 'مهمة جديدة';
+                const statusText = prog === 100 ? 'جاهزة للتسليم' : prog > 0 ? 'قيد الفحص' : 'مهمة جديدة';
                 const projName = dbProjects.find(p => p.units_details?.some(u => u.unit_code === task.unit))?.name || "مشروع غير محدد";
 
                 return (
@@ -241,9 +257,14 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                         <Hammer size={16} /> {prog > 0 ? 'متابعة الفحص' : 'بدء الفحص'}
                       </button>
                       {isAdmin && (
-                        <button onClick={() => handleOpenTask(task.unit, task.inspection_data, 'setup')} className="bg-slate-50 text-slate-500 p-3 rounded-xl hover:bg-slate-200 transition" title="تعديل الخطة">
-                          <Settings2 size={16} />
-                        </button>
+                        <>
+                          <button onClick={() => handleOpenTask(task.unit, task.inspection_data, 'setup')} className="bg-slate-50 text-slate-500 p-3 rounded-xl hover:bg-slate-200 transition" title="تعديل الخطة">
+                            <Settings2 size={16} />
+                          </button>
+                          <button onClick={() => handleDeleteTask(task.unit)} className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-500 hover:text-white transition" title="حذف الفحص">
+                            <Trash2 size={16} />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -256,59 +277,50 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     );
   }
 
-  const dynamicDictionary = selectedUnitObj?.spaces?.map(spaceName => ({
-    space: spaceName,
-    categories: GENERIC_CATEGORIES
-  })) || [];
+  const dynamicDictionary = selectedUnitObj?.spaces?.map(spaceName => ({ space: spaceName, categories: GENERIC_CATEGORIES })) || [];
 
   return (
-    <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn">
+    <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn relative">
+      
+      {/* 🔥 النافذة المنبثقة لاعتماد التسليم وبدء الضمان */}
+      {showHandoverModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-md w-full relative border border-slate-100">
+                  <button onClick={() => setShowHandoverModal(false)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition"><X size={20} /></button>
+                  <div className="text-center mb-6">
+                      <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
+                      <h3 className="text-2xl font-black text-[#1a365d]">تسليم الوحدة للعميل</h3>
+                      <p className="text-sm text-slate-500 font-bold mt-2">وحدة رقم: <span className="text-[#c5a059]">{unitName}</span></p>
+                      <p className="text-xs text-emerald-600 font-bold mt-1">سيتم بدء سريان الضمان الشامل لمدة عام من تاريخ اليوم</p>
+                  </div>
+                  <form onSubmit={submitHandover} className="space-y-4">
+                      <div><label className="text-xs font-bold text-slate-500 block mb-1">اسم المالك الرباعي</label><input required type="text" value={handoverData.owner_name} onChange={e => setHandoverData({...handoverData, owner_name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700" placeholder="مثال: محمد عبدالله..." /></div>
+                      <div><label className="text-xs font-bold text-slate-500 block mb-1">رقم الجوال</label><input required type="text" value={handoverData.owner_phone} onChange={e => setHandoverData({...handoverData, owner_phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700" placeholder="05xxxxxxxx" /></div>
+                      <div><label className="text-xs font-bold text-slate-500 block mb-1">البريد الإلكتروني (اختياري)</label><input type="email" value={handoverData.owner_email} onChange={e => setHandoverData({...handoverData, owner_email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:border-emerald-500 font-bold text-slate-700" /></div>
+                      <button type="submit" disabled={saving} className="w-full bg-emerald-500 text-white py-4 rounded-xl font-black text-lg hover:bg-emerald-600 transition shadow-lg flex justify-center items-center gap-2 mt-4">
+                          {saving ? <RefreshCw className="animate-spin" size={20}/> : <UserCheck size={20}/>} تأكيد التسليم واعتماد المالك
+                      </button>
+                  </form>
+              </div>
+          </div>
+      )}
+
       <div className="container mx-auto px-6 max-w-6xl">
-        
         <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
           {viewMode === 'setup' && <div className="absolute top-0 left-0 w-full h-1 bg-orange-400"></div>}
           <div className="flex items-center gap-4 w-full md:w-auto">
-            <button onClick={() => setViewMode('list')} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-full transition border border-slate-100 hidden md:block">
-              <ChevronRight size={24} className="text-slate-600" />
-            </button>
+            <button onClick={() => setViewMode('list')} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-full transition border border-slate-100 hidden md:block"><ChevronRight size={24} className="text-slate-600" /></button>
             <div className="flex-1">
               <h1 className="text-2xl md:text-3xl font-black text-[#1a365d] flex items-center gap-3">
                 {viewMode === 'setup' ? <Settings2 className="text-orange-500" size={32} /> : <ClipboardCheck className="text-indigo-600" size={32} />} 
-                {viewMode === 'setup' ? 'تجهيز خطة الفحص (مدير)' : 'تنفيذ الفحص (مهندس)'}
+                {viewMode === 'setup' ? 'تجهيز خطة الفحص (مدير)' : 'تنفيذ الفحص والتسليم'}
               </h1>
               
               <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                  {viewMode === 'setup' ? (
                    <>
-                     <select 
-                        value={selectedProject?.id || ""} 
-                        onChange={(e) => {
-                          const proj = dbProjects.find(p => p.id.toString() === e.target.value);
-                          setSelectedProject(proj);
-                          const firstUnit = proj?.units_details?.[0];
-                          setSelectedUnitObj(firstUnit || null);
-                          setUnitName(firstUnit?.unit_code || "");
-                        }} 
-                        className="bg-slate-50 border border-orange-200 text-[#1a365d] font-black outline-none px-4 py-2 rounded-xl focus:border-orange-500 transition shadow-sm cursor-pointer"
-                     >
-                       {dbProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                     </select>
-                     
-                     <select 
-                        value={unitName} 
-                        onChange={(e) => {
-                            setUnitName(e.target.value);
-                            const u = selectedProject?.units_details?.find(ud => ud.unit_code === e.target.value);
-                            setSelectedUnitObj(u || null);
-                        }} 
-                        className="bg-slate-50 border border-orange-200 text-[#1a365d] font-black outline-none px-4 py-2 rounded-xl focus:border-orange-500 transition shadow-sm cursor-pointer"
-                     >
-                       {selectedProject?.units_details?.length > 0 ? (
-                          selectedProject.units_details.map(u => <option key={u.id} value={u.unit_code}>وحدة: {u.unit_code}</option>)
-                       ) : (
-                          <option disabled>لا توجد وحدات</option>
-                       )}
-                     </select>
+                     <select value={selectedProject?.id || ""} onChange={(e) => { const proj = dbProjects.find(p => p.id.toString() === e.target.value); setSelectedProject(proj); const firstUnit = proj?.units_details?.[0]; setSelectedUnitObj(firstUnit || null); setUnitName(firstUnit?.unit_code || ""); }} className="bg-slate-50 border border-orange-200 text-[#1a365d] font-black outline-none px-4 py-2 rounded-xl focus:border-orange-500 transition shadow-sm cursor-pointer">{dbProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                     <select value={unitName} onChange={(e) => { setUnitName(e.target.value); const u = selectedProject?.units_details?.find(ud => ud.unit_code === e.target.value); setSelectedUnitObj(u || null); }} className="bg-slate-50 border border-orange-200 text-[#1a365d] font-black outline-none px-4 py-2 rounded-xl focus:border-orange-500 transition shadow-sm cursor-pointer">{selectedProject?.units_details?.length > 0 ? (selectedProject.units_details.map(u => <option key={u.id} value={u.unit_code}>وحدة: {u.unit_code}</option>)) : (<option disabled>لا توجد وحدات</option>)}</select>
                    </>
                  ) : (
                    <div className="flex items-center gap-2">
@@ -349,9 +361,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
           )}
 
           {dynamicDictionary.map((spaceData, index) => {
-            const hasActiveItems = spaceData.categories.some(cat => 
-                cat.items.some(item => inspectionData[`${spaceData.space}_${cat.name}_${item}`]?.isSelected)
-            );
+            const hasActiveItems = spaceData.categories.some(cat => cat.items.some(item => inspectionData[`${spaceData.space}_${cat.name}_${item}`]?.isSelected));
             if (viewMode === 'inspect' && !hasActiveItems) return null;
 
             return (
@@ -389,7 +399,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                                         }
 
                                         if (!itemData.isSelected) return null;
-
                                         const isPassed = itemData.passed === true;
                                         const isFailed = itemData.passed === false;
 
@@ -424,10 +433,17 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
         </div>
 
         {viewMode === 'inspect' && (
-          <div className="mt-12 text-center">
-            <button onClick={() => window.print()} className="bg-[#1a365d] text-white px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 mx-auto hover:bg-[#c5a059] transition-colors no-print shadow-xl">
-              <Printer size={20} /> طباعة تقرير الاستلام الهندسي
+          <div className="mt-12 flex flex-col md:flex-row justify-center gap-4 border-t border-slate-200 pt-8 no-print">
+            <button onClick={() => window.print()} className="bg-white border border-slate-200 text-[#1a365d] px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-slate-50 transition-colors shadow-sm">
+              <Printer size={20} /> طباعة التقرير
             </button>
+            
+            {/* 🔥 زر تسليم الوحدة يظهر للمشرفين، أو عندما يصل الفحص 100% */}
+            {(calculateProgress() === 100 || isAdmin) && (
+              <button onClick={() => setShowHandoverModal(true)} className="bg-emerald-500 text-white px-10 py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-emerald-600 transition-colors shadow-xl shadow-emerald-200 animate-pulse-slow">
+                <ShieldCheck size={24} /> اعتماد التسليم وبدء الضمان
+              </button>
+            )}
           </div>
         )}
 
