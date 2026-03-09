@@ -3,7 +3,7 @@ name: Deploy React App to Hostinger
 on:
   push:
     branches:
-      - main # يتم تفعيل هذا السكربت عند التعديل على الفرع الرئيسي
+      - main
 
 jobs:
   build-and-deploy:
@@ -19,7 +19,6 @@ jobs:
           node-version: '20'
 
       - name: Install Dependencies
-        # 🔴 التعديل الأول: لحل مشكلة الخطأ الأحمر في تثبيت المكتبات (الصورة الثانية)
         run: npm install --legacy-peer-deps
 
       - name: Build Project
@@ -31,9 +30,10 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          # 🔴 التعديل الثاني: إضافة البورت لتجنب مشكلة الـ Timeout (الصورة الأولى)
           port: 21 
           local-dir: ./dist/ 
-          # 🔴 التعديل الثالث: المسار الصحيح لهوستينجر عشان يشتغل الموقع للزوار
-          server-dir: ./
-          
+          server-dir: ./public_html/ # 👈 تأكد أن هذا هو المجلد الرئيسي في هوستينجر
+          method: ftp # 👈 تحديد البروتوكول صراحة
+          timeout: 900000 # 👈 زيادة وقت الانتظار جداً (15 دقيقة) لمنع الـ Timeout
+          passive: true # 👈 ضروري جداً لاستضافات الفتح المشترك مثل هوستينجر
+          dangerous-clean-slate: false # 👈 عشان ما يحذف ملفاتك المهمة مثل api.php
