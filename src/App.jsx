@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { CircleCheckBig } from 'lucide-react';
+import UnitHandover from './pages/admin/UnitHandover';
 
 // المكونات المشتركة
 import GlobalStyles from './components/GlobalStyles';
@@ -59,6 +60,7 @@ const MainApp = () => {
             <Route path="/about" element={<About />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/contact" element={<Contact />} />
+            <Route path="/handover" element={<UnitHandover />} />
             <Route path="/privacy" element={<LegalPage title="سياسة الخصوصية" />} />
             <Route path="/terms" element={<LegalPage title="الشروط والأحكام" />} />
             <Route path="/inspection" element={<UnitInspection />} />
