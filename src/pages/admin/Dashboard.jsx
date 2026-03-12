@@ -136,7 +136,7 @@ export default function Dashboard({ user, onLogout }) {
                     )}
 
                     {activeTab === 'maintenance' && (
-                        <div className="p-10 text-center font-bold text-slate-400">قسم إدارة الصيانة (جاري ربطه)</div>
+                        <div className="p-10 text-center font-bold text-slate-400">قسم إدارة الصيانـة (جاري ربطه)</div>
                     )}
 
                     {activeTab === 'users' && (
