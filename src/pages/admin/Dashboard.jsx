@@ -67,10 +67,15 @@ export default function Dashboard({ user, onLogout }) {
                     <div className="flex items-center gap-6">
                         <button className="relative text-slate-400 hover:text-indigo-600"><Bell size={24} /><span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span></button>
                         <div className="flex items-center gap-3 border-r border-slate-200 pr-6">
+                            
+                            {/* 🔥 التعديل تم هنا ليعكس الصلاحية بشكل دقيق */}
                             <div className="text-left hidden md:block">
-                                <p className="text-sm font-black text-[#1a365d]">{user?.name || 'مدير النظام'}</p>
-                                <p className="text-xs font-bold text-slate-400">{user?.role === 'admin' ? 'صلاحيات كاملة' : 'موظف'}</p>
+                                <p className="text-sm font-black text-[#1a365d]">{user?.name || 'مستخدم النظام'}</p>
+                                <p className="text-xs font-bold text-slate-400">
+                                    {user?.role === 'admin' ? 'مدير نظام (صلاحيات كاملة)' : user?.role === 'technician' ? 'فني صيانة' : 'موظف'}
+                                </p>
                             </div>
+
                             <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center"><UserCircle size={28} /></div>
                         </div>
                     </div>
@@ -81,7 +86,7 @@ export default function Dashboard({ user, onLogout }) {
                     
                     {activeTab === 'overview' && (
                         <div className="p-6 md:p-8 animate-fadeIn max-w-6xl mx-auto">
-                            <h2 className="text-2xl font-black text-[#1a365d] mb-6">مرحباً بك، {user?.name || 'يا مدير'} 👋</h2>
+                            <h2 className="text-2xl font-black text-[#1a365d] mb-6">مرحباً بك، {user?.name?.split(' ')[0] || 'يا مدير'} 👋</h2>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition" onClick={() => setActiveTab('inspection')}>
                                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mb-4"><ClipboardCheck size={24}/></div>
@@ -95,7 +100,7 @@ export default function Dashboard({ user, onLogout }) {
                                 </div>
                                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition" onClick={() => setActiveTab('users')}>
                                     <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-4"><Users size={24}/></div>
-                                    <h3 className="text-slate-500 font-bold text-sm">إجمالي الملاك</h3>
+                                    <h3 className="text-slate-500 font-bold text-sm">إجمالي الموظفين</h3>
                                     <p className="text-3xl font-black text-[#1a365d] mt-2">مراجعة</p>
                                 </div>
                             </div>
@@ -108,7 +113,6 @@ export default function Dashboard({ user, onLogout }) {
                         </div>
                     )}
                     
-                    {/* 🔥 عرض قسم السناق ليست */}
                     {activeTab === 'snaglist' && (
                         <div className="animate-fadeIn p-6 md:p-8"> 
                             <SnagList />
@@ -120,10 +124,10 @@ export default function Dashboard({ user, onLogout }) {
                     )}
 
                     {activeTab === 'users' && (
-    <div className="animate-fadeIn p-6 md:p-8"> 
-        <UsersManage showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
-    </div>
-)}
+                        <div className="animate-fadeIn p-6 md:p-8"> 
+                            <UsersManage showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
+                        </div>
+                    )}
 
                 </main>
             </div>
