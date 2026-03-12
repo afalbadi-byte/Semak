@@ -28,6 +28,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const [showSelectUnitModal, setShowSelectUnitModal] = useState(false);
   const [selectedReadyUnit, setSelectedReadyUnit] = useState("");
 
+  // التحقق من صلاحيات الأدمن
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => { if (viewMode === 'list') fetchData(); }, [viewMode]);
@@ -158,7 +159,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
       if(showToast) showToast("تم الحفظ", `تم تحديد بنود العميل بنجاح وإصدار الرابط ✅`);
       setLinkUnit(unitName);
       setViewMode('list');
-      setShowLinkModal(true); // إظهار الرابط تلقائياً بعد الحفظ
+      setShowLinkModal(true);
     } catch (e) {} finally { setSaving(false); }
   };
 
@@ -166,7 +167,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const handleStatusChange = (space, cat, item, status) => { const key = `${space}_${cat}_${item}`; setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], passed: status === 'pass' } })); };
   const handleNoteChange = (space, cat, item, note) => { const key = `${space}_${cat}_${item}`; setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], notes: note } })); };
   
-  // دالة إخفاء/إظهار البند للعميل
   const toggleClientVisibility = (space, cat, item) => {
       const key = `${space}_${cat}_${item}`;
       setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], clientVisible: prev[key]?.clientVisible === false ? true : false } }));
@@ -225,7 +225,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const copyClientLink = () => {
     const link = `https://semak.sa/handover?unit=${encodeURIComponent(String(linkUnit).trim())}`;
     navigator.clipboard.writeText(link);
-    if(showToast) showToast("تم النسخ ✅", "تم نسخ رابط العميل بنجاح، يمكنك لصقه في الواتساب");
+    if(showToast) showToast("تم النسخ ✅", "تم نسخ رابط العميل بنجاح، يمكنك لصقه وإرساله الآن");
     setTimeout(() => setShowLinkModal(false), 1500); 
   };
 
@@ -350,15 +350,24 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                     </div>
                   </div>
                   
-                  {viewMode === 'client_setup' ? (
-                      <button onClick={handleSaveClientSetup} disabled={saving} className="bg-emerald-600 text-white px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition shadow-lg w-full md:w-auto">
-                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <LinkIcon size={18} />} حفظ البنود وإصدار الرابط
-                      </button>
-                  ) : (
-                      <button onClick={handleSaveEngineerTask} disabled={saving} className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition shadow-lg w-full md:w-auto">
-                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} حفظ عمل المهندس
-                      </button>
-                  )}
+                  <div className="flex gap-2 w-full md:w-auto">
+                      {/* زر الحذف يظهر فقط للأدمن */}
+                      {isAdmin && (
+                        <button onClick={() => { handleDeleteTask(unitName); setViewMode('list'); }} className="bg-red-50 text-red-600 px-4 py-4 rounded-xl font-bold flex items-center justify-center hover:bg-red-500 hover:text-white transition shadow-sm w-14 md:w-auto" title="حذف هذه المهمة بالكامل">
+                            <Trash2 size={20} />
+                        </button>
+                      )}
+
+                      {viewMode === 'client_setup' ? (
+                          <button onClick={handleSaveClientSetup} disabled={saving} className="bg-emerald-600 text-white px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition shadow-lg flex-1 md:flex-none">
+                            {saving ? <RefreshCw size={18} className="animate-spin" /> : <LinkIcon size={18} />} حفظ البنود وإصدار الرابط
+                          </button>
+                      ) : (
+                          <button onClick={handleSaveEngineerTask} disabled={saving} className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition shadow-lg flex-1 md:flex-none">
+                            {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />} حفظ عمل المهندس
+                          </button>
+                      )}
+                  </div>
               </div>
 
               {viewMode === 'setup' && (
@@ -424,7 +433,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                     <div className={`${viewMode === 'setup' ? 'bg-[#c5a059]' : viewMode === 'client_setup' ? 'bg-emerald-600' : 'bg-[#1a365d]'} p-6 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
                         <h2 className="text-2xl font-black">{spaceData.space}</h2>
                         
-                        {/* 🔥 زر تفعيل خانة "أخرى" للعميل في كل غرفة */}
                         {viewMode === 'client_setup' && (
                             <label className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-xl cursor-pointer hover:bg-white/30 transition shadow-sm border border-white/10">
                                 <input 
@@ -473,7 +481,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
                                             if (!itemData.isSelected) return null;
 
-                                            // شاشة (تجهيز العميل): تظهر فقط البنود اللي المهندس قيمها
                                             if (viewMode === 'client_setup') {
                                                 if (itemData.passed === null) return null; 
                                                 
@@ -520,7 +527,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   return (
     <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn relative">
       
-      {/* النافذة الأولى: الكرت الأزرق الكبير لفتح شاشة تجهيز العميل */}
+      {/* النافذة الأولى: اختيار الوحدة لإصدار الرابط */}
       {showSelectUnitModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
             <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-md w-full relative">
@@ -596,6 +603,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
               <button onClick={() => navigateTo('dashboard')} className="p-3 bg-slate-50 rounded-full border hidden md:block"><ChevronRight size={24} className="text-slate-600" /></button>
               <div><h1 className="text-2xl font-black text-[#1a365d]">فحص وتسليم الوحدات</h1><p className="text-slate-400 text-sm font-bold mt-1">إدارة فحوصات المهندسين والعملاء</p></div>
           </div>
+          {/* إظهار زر إدارة البنود للأدمن فقط */}
           {isAdmin && <button onClick={() => setViewMode('settings')} className="bg-orange-50 text-orange-600 px-6 py-3 rounded-xl font-black flex gap-2 border border-orange-200 w-full md:w-auto justify-center"><Settings2 size={20} /> إدارة البنود المركزية</button>}
         </div>
 
@@ -604,17 +612,23 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             
-            <div className="bg-blue-600 text-white p-6 rounded-[2rem] shadow-lg flex flex-col justify-center items-center text-center cursor-pointer hover:bg-blue-700 transition transform hover:-translate-y-1 min-h-[220px]" onClick={handleCreateNewTask}>
-                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><HardHat size={32} /></div>
-                <h3 className="text-xl font-black mb-1">تكليف فحص مهندس</h3>
-                <p className="text-sm font-medium text-blue-200">إنشاء مهمة للمهندس لفحص وحدة جديدة</p>
-            </div>
+            {/* كرت التكليف يظهر للأدمن فقط */}
+            {isAdmin && (
+                <div className="bg-blue-600 text-white p-6 rounded-[2rem] shadow-lg flex flex-col justify-center items-center text-center cursor-pointer hover:bg-blue-700 transition transform hover:-translate-y-1 min-h-[220px]" onClick={handleCreateNewTask}>
+                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><HardHat size={32} /></div>
+                    <h3 className="text-xl font-black mb-1">تكليف فحص مهندس</h3>
+                    <p className="text-sm font-medium text-blue-200">إنشاء مهمة للمهندس لفحص وحدة جديدة</p>
+                </div>
+            )}
 
-            <div className="bg-indigo-600 text-white p-6 rounded-[2rem] shadow-lg flex flex-col justify-center items-center text-center cursor-pointer hover:bg-indigo-700 transition transform hover:-translate-y-1 min-h-[220px]" onClick={() => setShowSelectUnitModal(true)}>
-                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><LinkIcon size={32} /></div>
-                <h3 className="text-xl font-black mb-1">إصدار رابط للعميل</h3>
-                <p className="text-sm font-medium text-indigo-200">مراجعة واعتماد بنود الوحدات الجاهزة للعميل</p>
-            </div>
+            {/* كرت إصدار الرابط يظهر للأدمن فقط */}
+            {isAdmin && (
+                <div className="bg-indigo-600 text-white p-6 rounded-[2rem] shadow-lg flex flex-col justify-center items-center text-center cursor-pointer hover:bg-indigo-700 transition transform hover:-translate-y-1 min-h-[220px]" onClick={() => setShowSelectUnitModal(true)}>
+                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><LinkIcon size={32} /></div>
+                    <h3 className="text-xl font-black mb-1">إصدار رابط للعميل</h3>
+                    <p className="text-sm font-medium text-indigo-200">مراجعة واعتماد بنود الوحدات الجاهزة للعميل</p>
+                </div>
+            )}
 
             {(inspectionsList || []).map((task, idx) => {
               const prog = parseInt(task.progress || 0);
@@ -639,12 +653,13 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                         ) : (
                             <button onClick={() => handleOpenTask(task.unit, task.inspection_data, 'inspect')} className="flex-1 bg-indigo-50 text-indigo-700 py-3 rounded-xl font-bold text-sm flex justify-center gap-2 hover:bg-indigo-600 hover:text-white transition"><Hammer size={16} /> الفحص الهندسي</button>
                         )}
+                        {/* أزرار الإعدادات والحذف تظهر للأدمن فقط */}
                         {isAdmin && <button onClick={() => handleOpenTask(task.unit, task.inspection_data, 'setup')} className="bg-slate-50 text-slate-500 p-3 rounded-xl hover:bg-slate-200 transition" title="تعديل خطة الفحص"><Settings2 size={16} /></button>}
                         {isAdmin && <button onClick={() => handleDeleteTask(task.unit)} className="bg-red-50 text-red-400 p-3 rounded-xl hover:bg-red-500 hover:text-white transition" title="حذف المهمة"><Trash2 size={16} /></button>}
                     </div>
 
-                    {/* 🔥 الزر الأخضر داخل الكرت يظهر للكل إذا الوحدة 100% */}
-                    {isDone && (
+                    {/* زر التجهيز للعميل يظهر للأدمن فقط */}
+                    {isDone && isAdmin && (
                         <button onClick={() => handleOpenTask(task.unit, task.inspection_data, 'client_setup')} className="w-full mt-2 bg-emerald-50 text-emerald-700 py-3 rounded-xl font-bold text-sm flex justify-center items-center gap-2 hover:bg-emerald-600 hover:text-white transition shadow-sm">
                             <Eye size={16} /> تجهيز بنود العميل وإصدار الرابط
                         </button>
