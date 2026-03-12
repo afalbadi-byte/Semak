@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ShieldCheck, Loader2, XCircle, UserCheck, ChevronDown, Check, X, Send, FileWarning } from 'lucide-react';
+import { ShieldCheck, Loader2, XCircle, UserCheck, ChevronDown, Check, X, Send, FileWarning, PlusCircle } from 'lucide-react';
 import { API_URL } from '../../utils/helpers'; 
 
 export default function UnitHandover() {
@@ -46,14 +46,11 @@ export default function UnitHandover() {
                 }
             }
             setUnitSpaces(spaces);
-            setExpandedSpace(spaces[0]);
 
             const templateRes = await fetch(`${API_URL}?action=get_inspection_template`);
             const templateData = await templateRes.json();
-            
             let template = [];
             if (templateData.success && templateData.data) {
-                // تصفية البنود: نظهر للعميل البنود المخصصة له وللجميع فقط
                 template = templateData.data.map(cat => {
                     return {
                         ...cat,
@@ -61,37 +58,70 @@ export default function UnitHandover() {
                                 .map(item => typeof item === 'string' ? { name: item, target: 'both' } : item)
                                 .filter(item => item.target === 'both' || item.target === 'client')
                     };
-                }).filter(cat => cat.items.length > 0); // نخفي الأقسام اللي صارت فاضية للعميل
+                }).filter(cat => cat.items.length > 0); 
             }
-
             setGlobalTemplate(template);
 
-            const initialData = {};
-            spaces.forEach(space => {
-                template.forEach(cat => {
-                    cat.items.forEach(item => {
-                        initialData[`${space}_${cat.name}_${item.name}`] = { passed: null, notes: '' };
-                    });
+            // جلب البيانات اللي حفظها المهندس/الأدمن
+            const insRes = await fetch(`${API_URL}?action=get_inspection&unit=${unit}`);
+            const insData = await insRes.json();
+            
+            if (insData.success && insData.data) {
+                const parsedData = JSON.parse(insData.data.inspection_data || "{}");
+                setInspectionData(parsedData);
+                
+                // تحديد أول غرفة تحتوي على بنود مرئية للعميل لفتحها تلقائياً
+                const firstActiveSpace = spaces.find(space => {
+                    return template.some(cat => cat.items.some(item => {
+                        const d = parsedData[`${space}_${cat.name}_${item.name}`];
+                        return d?.isSelected && d?.passed !== null && d?.clientVisible !== false;
+                    }));
                 });
-            });
-            setInspectionData(initialData);
+                setExpandedSpace(firstActiveSpace || null);
+
+            } else {
+                setError("لم يتم تجهيز البنود لهذه الوحدة بعد.");
+            }
 
         } catch (e) { setError("فشل الاتصال."); } finally { setLoading(false); }
     };
 
     const setItemStatus = (key, status) => {
-        setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], passed: status } }));
+        setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], client_passed: status } }));
     };
 
     const setItemNote = (key, note) => {
-        setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], notes: note } }));
+        setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], client_notes: note } }));
     };
 
-    const totalItems = Object.keys(inspectionData).length;
-    const answeredItems = Object.values(inspectionData).filter(v => v.passed !== null).length;
+    // إضافة ملاحظة حرة (أخرى) للغرفة
+    const setCustomNote = (space, note) => {
+        setInspectionData(prev => ({ ...prev, [`custom_client_note_${space}`]: note }));
+    };
+
+    // حساب البنود "المرئية للعميل" فقط
+    let totalItems = 0;
+    let answeredItems = 0;
+    let passedItemsCount = 0;
+
+    unitSpaces.forEach(space => {
+        globalTemplate.forEach(cat => {
+            cat.items.forEach(item => {
+                const key = `${space}_${cat.name}_${item.name}`;
+                const data = inspectionData[key];
+                // نحسب البند فقط إذا كان محدد، مقيم من المهندس، ومسموح للعميل برؤيته
+                if (data?.isSelected && data?.passed !== null && data?.clientVisible !== false) {
+                    totalItems++;
+                    if (data.client_passed !== undefined) {
+                        answeredItems++;
+                        if (data.client_passed === true) passedItemsCount++;
+                    }
+                }
+            });
+        });
+    });
+
     const isAllAnswered = totalItems > 0 && answeredItems === totalItems;
-    
-    const passedItemsCount = Object.values(inspectionData).filter(v => v.passed === true).length;
     const progressScore = totalItems === 0 ? 0 : Math.round((passedItemsCount / totalItems) * 100);
 
     const submitInspection = async (e) => {
@@ -139,8 +169,15 @@ export default function UnitHandover() {
         </div>
     );
 
+    // إذا مافي أي بنود ظاهرة للعميل
+    if (totalItems === 0) return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 font-cairo p-4 text-center">
+            <div className="bg-white p-8 rounded-[2rem] shadow-xl max-w-md w-full"><XCircle className="text-slate-400 mx-auto mb-4" size={60} /><h2 className="text-xl font-black text-[#1a365d] mb-2">عذراً</h2><p className="text-slate-500 font-bold">لا توجد بنود جاهزة للمراجعة حالياً.</p></div>
+        </div>
+    );
+
     return (
-        <div className="min-h-screen py-12 flex flex-col items-center bg-slate-50 font-cairo px-4">
+        <div className="min-h-screen py-12 flex flex-col items-center bg-slate-50 font-cairo px-4 animate-fadeIn">
             <div className="max-w-2xl w-full">
                 <div className="bg-[#1a365d] p-8 rounded-[2.5rem] text-center text-white shadow-xl mb-6 relative overflow-hidden">
                     <h2 className="text-2xl font-black mb-2">فحص واستلام الوحدة</h2>
@@ -153,40 +190,85 @@ export default function UnitHandover() {
 
                 <div className="space-y-4 mb-8">
                     {unitSpaces.map((space, idx) => {
+                        // نتحقق إذا هذي الغرفة فيها بنود ظاهرة للعميل أصلاً
+                        const hasVisibleItemsInSpace = globalTemplate.some(cat => cat.items.some(item => {
+                            const d = inspectionData[`${space}_${cat.name}_${item.name}`];
+                            return d?.isSelected && d?.passed !== null && d?.clientVisible !== false;
+                        }));
+
+                        const customNotesAllowed = inspectionData[`custom_notes_allowed_${space}`] !== false;
+
+                        // إذا الغرفة فاضية للعميل، ومافيها حتى خانة "أخرى"، نخفيها بالكامل
+                        if (!hasVisibleItemsInSpace && !customNotesAllowed) return null;
+
                         const isExpanded = expandedSpace === space;
                         
                         return (
                             <div key={idx} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
-                                <button onClick={() => setExpandedSpace(isExpanded ? null : space)} className="w-full p-5 flex justify-between items-center hover:bg-slate-50">
+                                <button onClick={() => setExpandedSpace(isExpanded ? null : space)} className="w-full p-5 flex justify-between items-center hover:bg-slate-50 transition-colors">
                                     <h3 className="font-black text-lg text-[#1a365d]">{space}</h3>
                                     <ChevronDown className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} size={20} />
                                 </button>
+                                
                                 {isExpanded && (
                                     <div className="p-5 pt-0 border-t border-slate-100 bg-slate-50/30 space-y-6">
-                                        {globalTemplate.map((cat, cIdx) => (
-                                            <div key={cIdx}>
-                                                <h4 className={`text-xs font-black mb-3 ${cat.color || 'text-indigo-500'}`}>{cat.name}</h4>
-                                                <div className="space-y-3">
-                                                    {cat.items.map((item, iIdx) => {
-                                                        const key = `${space}_${cat.name}_${item.name}`;
-                                                        const data = inspectionData[key];
-                                                        
-                                                        return (
-                                                            <div key={iIdx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                                                <p className="text-sm font-bold text-[#1a365d] mb-3">{item.name}</p>
-                                                                <div className="flex gap-2 mb-2">
-                                                                    <button onClick={() => setItemStatus(key, true)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.passed === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-emerald-100'}`}><Check size={16}/> سليم</button>
-                                                                    <button onClick={() => setItemStatus(key, false)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.passed === false ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-orange-100'}`}><X size={16}/> ملاحظة</button>
+                                        {globalTemplate.map((cat, cIdx) => {
+                                            // نتحقق إذا هذا القسم فيه بنود ظاهرة للعميل
+                                            const hasVisibleItemsInCat = cat.items.some(item => {
+                                                const d = inspectionData[`${space}_${cat.name}_${item.name}`];
+                                                return d?.isSelected && d?.passed !== null && d?.clientVisible !== false;
+                                            });
+
+                                            if (!hasVisibleItemsInCat) return null;
+
+                                            return (
+                                                <div key={cIdx}>
+                                                    <h4 className={`text-xs font-black mb-3 ${cat.color || 'text-indigo-500'}`}>{cat.name}</h4>
+                                                    <div className="space-y-3">
+                                                        {cat.items.map((item, iIdx) => {
+                                                            const key = `${space}_${cat.name}_${item.name}`;
+                                                            const data = inspectionData[key];
+                                                            
+                                                            // إخفاء البند إذا لم يتم تحديده أو تقييمه أو تم إخفاؤه عن العميل
+                                                            if (!data?.isSelected || data?.passed === null || data?.clientVisible === false) return null;
+                                                            
+                                                            return (
+                                                                <div key={iIdx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
+                                                                    <p className="text-sm font-bold text-[#1a365d] mb-3">{item.name}</p>
+                                                                    <div className="flex gap-2 mb-2">
+                                                                        <button onClick={() => setItemStatus(key, true)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.client_passed === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-emerald-100'}`}><Check size={16}/> سليم</button>
+                                                                        <button onClick={() => setItemStatus(key, false)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.client_passed === false ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-orange-100'}`}><X size={16}/> ملاحظة</button>
+                                                                    </div>
+                                                                    {data.client_passed === false && (
+                                                                        <div className="animate-fadeIn mt-3">
+                                                                            <textarea value={data.client_notes || ''} onChange={(e) => setItemNote(key, e.target.value)} placeholder="اكتب وصف المشكلة هنا لتسهيل عمل فريق الصيانة..." className="w-full bg-orange-50/50 border border-orange-100 p-3 rounded-lg text-xs font-bold outline-none focus:border-orange-400 resize-none" rows="2" />
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                {data.passed === false && (
-                                                                    <textarea value={data.notes} onChange={(e) => setItemNote(key, e.target.value)} placeholder="اكتب وصف المشكلة هنا..." className="w-full mt-2 bg-orange-50/50 border border-orange-100 p-3 rounded-lg text-xs font-bold outline-none focus:border-orange-400 resize-none" rows="2" />
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
+                                            )
+                                        })}
+
+                                        {/* 🔥 حقل "إضافة ملاحظة أخرى" بناءً على إعدادات الأدمن */}
+                                        {customNotesAllowed && (
+                                            <div className="mt-6 pt-4 border-t border-slate-200">
+                                                <label className="flex items-center gap-2 text-[#1a365d] font-bold text-sm mb-3 cursor-pointer select-none">
+                                                    <PlusCircle size={18} className="text-emerald-500" />
+                                                    <span>هل لديك ملاحظات أخرى في ({space})؟</span>
+                                                </label>
+                                                <textarea 
+                                                    value={inspectionData[`custom_client_note_${space}`] || ''} 
+                                                    onChange={(e) => setCustomNote(space, e.target.value)} 
+                                                    placeholder={`اكتب أي ملاحظة إضافية تخص ${space} هنا...`} 
+                                                    className="w-full bg-white border border-slate-200 p-4 rounded-xl text-sm font-medium outline-none focus:border-emerald-400 shadow-inner resize-none" 
+                                                    rows="3" 
+                                                />
                                             </div>
-                                        ))}
+                                        )}
+
                                     </div>
                                 )}
                             </div>
