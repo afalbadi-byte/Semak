@@ -3,37 +3,33 @@ name: Deploy React App to Hostinger
 on:
   push:
     branches:
-      - main
+      - main # تأكد إن هذا اسم الفرع حقك (أحياناً يكون master)
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install Dependencies
-        run: npm install --legacy-peer-deps
+      - name: 📦 Install Dependencies
+        run: npm install
 
-      - name: Build Project
+      - name: 🏗️ Build Project
         run: npm run build
 
-      - name: Upload to Hostinger via FTP
+      - name: 🚀 Deploy to Hostinger
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          port: 21 
-          local-dir: ./dist/ 
-          server-dir: ./ # 👈 تأكد أن هذا هو المجلد الرئيسي في هوستينجر
-          method: ftp # 👈 تحديد البروتوكول صراحة
-          timeout: 900000 # 👈 زيادة وقت الانتظار جداً (15 دقيقة) لمنع الـ Timeout
-          passive: true # 👈 ضروري جداً لاستضافات الفتح المشترك مثل هوستينجر
-          dangerous-clean-slate: false # 👈 عشان ما يحذف ملفاتك المهمة مثل api.php
+          local-dir: ./dist/
+          server-dir: ./
+          dangerous-clean-slate: false # هذي تمنعه يحذف ملف api.php حقك
