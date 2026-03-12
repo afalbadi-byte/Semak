@@ -19,6 +19,22 @@ export default function Dashboard({ user, onLogout }) {
         { id: 'users', title: 'إدارة الموظفين', icon: Users },
     ];
 
+    // 🔥 دالة تسجيل خروج إجبارية وقوية
+    const handleForceLogout = () => {
+        // 1. مسح كل بيانات الدخول من ذاكرة المتصفح
+        localStorage.removeItem('semak_admin_email');
+        localStorage.removeItem('semak_admin_password');
+        localStorage.removeItem('semak_current_user');
+        
+        // 2. تشغيل دالة الأب (إذا كانت موجودة)
+        if (typeof onLogout === 'function') {
+            onLogout();
+        }
+        
+        // 3. توجيه إجباري لصفحة الدخول وتحديث الصفحة
+        window.location.replace('/');
+    };
+
     return (
         <div className="flex h-screen bg-slate-50 font-cairo overflow-hidden" dir="rtl">
             
@@ -45,7 +61,8 @@ export default function Dashboard({ user, onLogout }) {
                 </nav>
 
                 <div className="p-4 border-t border-white/10">
-                    <button onClick={onLogout} className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-2xl font-bold transition-all">
+                    {/* 🔥 ربط الزر بدالة الخروج الإجبارية */}
+                    <button onClick={handleForceLogout} className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-2xl font-bold transition-all">
                         <LogOut size={20} /> تسجيل الخروج
                     </button>
                 </div>
@@ -68,7 +85,6 @@ export default function Dashboard({ user, onLogout }) {
                         <button className="relative text-slate-400 hover:text-indigo-600"><Bell size={24} /><span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span></button>
                         <div className="flex items-center gap-3 border-r border-slate-200 pr-6">
                             
-                            {/* 🔥 التعديل تم هنا ليعكس الصلاحية بشكل دقيق */}
                             <div className="text-left hidden md:block">
                                 <p className="text-sm font-black text-[#1a365d]">{user?.name || 'مستخدم النظام'}</p>
                                 <p className="text-xs font-bold text-slate-400">
