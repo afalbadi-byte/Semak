@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ShieldCheck, Loader2, XCircle, UserCheck, ChevronDown, Check, X, Send } from 'lucide-react';
+import { ShieldCheck, Loader2, XCircle, UserCheck, ChevronDown, Check, X, Send, FileWarning } from 'lucide-react';
 import { API_URL } from '../../utils/helpers'; 
 
 export default function UnitHandover() {
@@ -14,14 +14,9 @@ export default function UnitHandover() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [hasSnagsSubmitted, setHasSnagsSubmitted] = useState(false);
 
-    // البنود من الداتا بيس
     const [globalTemplate, setGlobalTemplate] = useState([]);
     const [unitSpaces, setUnitSpaces] = useState([]);
-    
-    // بيانات فحص العميل التفاعلية
     const [inspectionData, setInspectionData] = useState({});
-    
-    // بيانات المالك للإقرار
     const [formData, setFormData] = useState({ owner_name: "", owner_phone: "", agreed: false });
     const [expandedSpace, setExpandedSpace] = useState(null);
 
@@ -35,17 +30,15 @@ export default function UnitHandover() {
 
     const fetchData = async (unit) => {
         try {
-            // 1. هل هي مستلمة؟
             const ownerRes = await fetch(`${API_URL}?action=get_unit_owner&unit_code=${encodeURIComponent(unit.trim())}`);
             const ownerData = await ownerRes.json();
             if (ownerData.success && ownerData.data.name !== "غير مسجل") {
                 setError(`تم تسليم الوحدة مسبقاً للمالك: ${ownerData.data.name}`); setLoading(false); return;
             }
 
-            // 2. جلب المشاريع لمعرفة غرف الوحدة
             const projRes = await fetch(`${API_URL}?action=get_projects_data`);
             const projData = await projRes.json();
-            let spaces = ["صالة", "غرفة نوم", "مطبخ", "حمام"]; // افتراضي لو ما لقى الوحدة
+            let spaces = ["صالة", "غرفة نوم", "مطبخ", "حمام"];
             if (projData.success) {
                 for(let p of projData.data) {
                     const u = p.units_details?.find(ud => ud.unit_code === unit);
@@ -55,20 +48,29 @@ export default function UnitHandover() {
             setUnitSpaces(spaces);
             setExpandedSpace(spaces[0]);
 
-            // 3. جلب قالب البنود من الداتا بيس
             const templateRes = await fetch(`${API_URL}?action=get_inspection_template`);
             const templateData = await templateRes.json();
-            const template = templateData.success && templateData.data.length > 0 ? templateData.data : [
-                { name: "التشطيبات", items: ["الدهانات", "الأرضيات"] }
-            ];
+            
+            let template = [];
+            if (templateData.success && templateData.data) {
+                // تصفية البنود: نظهر للعميل البنود المخصصة له وللجميع فقط
+                template = templateData.data.map(cat => {
+                    return {
+                        ...cat,
+                        items: cat.items
+                                .map(item => typeof item === 'string' ? { name: item, target: 'both' } : item)
+                                .filter(item => item.target === 'both' || item.target === 'client')
+                    };
+                }).filter(cat => cat.items.length > 0); // نخفي الأقسام اللي صارت فاضية للعميل
+            }
+
             setGlobalTemplate(template);
 
-            // 4. تجهيز قاموس الفحص
             const initialData = {};
             spaces.forEach(space => {
                 template.forEach(cat => {
                     cat.items.forEach(item => {
-                        initialData[`${space}_${cat.name}_${item}`] = { passed: null, notes: '' };
+                        initialData[`${space}_${cat.name}_${item.name}`] = { passed: null, notes: '' };
                     });
                 });
             });
@@ -121,19 +123,19 @@ export default function UnitHandover() {
 
     if (error) return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 font-cairo p-4 text-center">
-            <div className="bg-white p-8 rounded-[2rem] shadow-xl max-w-md w-full"><XCircle className="text-red-500 mx-auto mb-4" size={60} /><h2 className="text-xl font-black text-[#1a365d] mb-2">تعذر الاستلام</h2><p className="text-slate-500 font-bold">{error}</p></div>
+            <div className="bg-white p-8 rounded-[2rem] shadow-xl max-w-md w-full"><XCircle className="text-red-500 mx-auto mb-4" size={60} /><h2 className="text-xl font-black text-[#1a365d] mb-2">تنبيه</h2><p className="text-slate-500 font-bold">{error}</p></div>
         </div>
     );
 
     if (isSuccess) return (
         <div className="min-h-screen flex items-center justify-center bg-[#1a365d] font-cairo p-4 text-center">
-            <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full"><ShieldCheck className="text-emerald-500 mx-auto mb-4" size={70} /><h2 className="text-3xl font-black text-[#1a365d] mb-2">تم الاعتماد! 🎉</h2><p className="text-slate-500 font-bold mb-6">تم استلامك للوحدة (<span className="text-emerald-600">{unitCode}</span>) وبدأ سريان الضمان الشامل.</p></div>
+            <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full animate-fade-in-up"><ShieldCheck className="text-emerald-500 mx-auto mb-4" size={70} /><h2 className="text-3xl font-black text-[#1a365d] mb-2">تم الاعتماد! 🎉</h2><p className="text-slate-500 font-bold mb-6">تم استلامك للوحدة (<span className="text-emerald-600">{unitCode}</span>) وبدأ سريان الضمان الشامل.</p></div>
         </div>
     );
 
     if (hasSnagsSubmitted) return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 font-cairo p-4 text-center">
-            <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full border border-orange-100"><FileWarning className="text-orange-500 mx-auto mb-4" size={70} /><h2 className="text-2xl font-black text-[#1a365d] mb-2">تم رفع الملاحظات 🛠️</h2><p className="text-slate-500 font-bold leading-relaxed">شكراً لك! تم استلام تقرير الملاحظات (Snag List) وسيقوم فريق الصيانة بمعالجتها في أقرب وقت قبل الاستلام النهائي.</p></div>
+            <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full border border-orange-100 animate-fade-in-up"><FileWarning className="text-orange-500 mx-auto mb-4" size={70} /><h2 className="text-2xl font-black text-[#1a365d] mb-2">تم رفع الملاحظات 🛠️</h2><p className="text-slate-500 font-bold leading-relaxed">شكراً لك! تم استلام تقرير الملاحظات وسيقوم فريق الصيانة بمعالجتها في أقرب وقت.</p></div>
         </div>
     );
 
@@ -141,7 +143,7 @@ export default function UnitHandover() {
         <div className="min-h-screen py-12 flex flex-col items-center bg-slate-50 font-cairo px-4">
             <div className="max-w-2xl w-full">
                 <div className="bg-[#1a365d] p-8 rounded-[2.5rem] text-center text-white shadow-xl mb-6 relative overflow-hidden">
-                    <h2 className="text-2xl font-black mb-2">التدقيق الذاتي للعميل</h2>
+                    <h2 className="text-2xl font-black mb-2">فحص واستلام الوحدة</h2>
                     <p className="text-[#c5a059] font-bold text-sm mb-6">وحدة رقم: {unitCode}</p>
                     <div className="w-full bg-[#112240] h-3 rounded-full overflow-hidden mb-2">
                         <div className="bg-gradient-to-l from-emerald-400 to-emerald-500 h-full transition-all duration-500" style={{ width: `${(answeredItems / totalItems) * 100}%` }}></div>
@@ -166,15 +168,15 @@ export default function UnitHandover() {
                                                 <h4 className={`text-xs font-black mb-3 ${cat.color || 'text-indigo-500'}`}>{cat.name}</h4>
                                                 <div className="space-y-3">
                                                     {cat.items.map((item, iIdx) => {
-                                                        const key = `${space}_${cat.name}_${item}`;
+                                                        const key = `${space}_${cat.name}_${item.name}`;
                                                         const data = inspectionData[key];
                                                         
                                                         return (
                                                             <div key={iIdx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                                                <p className="text-sm font-bold text-[#1a365d] mb-3">{item}</p>
+                                                                <p className="text-sm font-bold text-[#1a365d] mb-3">{item.name}</p>
                                                                 <div className="flex gap-2 mb-2">
-                                                                    <button onClick={() => setItemStatus(key, true)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.passed === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-emerald-100'}`}><Check size={16}/> مطابق وسليم</button>
-                                                                    <button onClick={() => setItemStatus(key, false)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.passed === false ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-orange-100'}`}><X size={16}/> يوجد ملاحظة</button>
+                                                                    <button onClick={() => setItemStatus(key, true)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.passed === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-emerald-100'}`}><Check size={16}/> سليم</button>
+                                                                    <button onClick={() => setItemStatus(key, false)} className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.passed === false ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-orange-100'}`}><X size={16}/> ملاحظة</button>
                                                                 </div>
                                                                 {data.passed === false && (
                                                                     <textarea value={data.notes} onChange={(e) => setItemNote(key, e.target.value)} placeholder="اكتب وصف المشكلة هنا..." className="w-full mt-2 bg-orange-50/50 border border-orange-100 p-3 rounded-lg text-xs font-bold outline-none focus:border-orange-400 resize-none" rows="2" />
@@ -197,10 +199,10 @@ export default function UnitHandover() {
                         <h3 className="text-xl font-black text-[#1a365d] mb-6 text-center">إقرار الاستلام النهائي ✅</h3>
                         <form onSubmit={submitInspection} className="space-y-5 text-right">
                             <input required type="text" value={formData.owner_name} onChange={e => setFormData({...formData, owner_name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold" placeholder="الاسم الرباعي للمالك" />
-                            <input required type="tel" value={formData.owner_phone} onChange={e => setFormData({...formData, owner_phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold" placeholder="رقم الجوال (05xxxx)" />
+                            <input required type="tel" value={formData.owner_phone} onChange={e => setFormData({...formData, owner_phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold" placeholder="رقم الجوال" />
                             <label className="flex items-start gap-3 cursor-pointer">
                                 <input required type="checkbox" checked={formData.agreed} onChange={e => setFormData({...formData, agreed: e.target.checked})} className="mt-1 w-5 h-5 accent-emerald-500" />
-                                <span className="text-xs font-bold text-slate-500 leading-relaxed">أقر بأنني عاينت الوحدة وفحصتها وهي خالية من العيوب ومطابقة للمواصفات، وبذلك أستلم الوحدة رسمياً ويبدأ سريان الضمان لمدة عام.</span>
+                                <span className="text-xs font-bold text-slate-500 leading-relaxed">أقر بأنني عاينت الوحدة وهي مطابقة للمواصفات وأستلمها رسمياً ويبدأ الضمان.</span>
                             </label>
                             <button type="submit" disabled={saving || !formData.agreed} className="w-full bg-emerald-500 text-white py-4 rounded-xl font-black text-lg hover:bg-emerald-600 transition shadow-xl mt-4 flex justify-center items-center gap-2">{saving ? <Loader2 className="animate-spin" size={20}/> : <UserCheck size={20}/>} توقيع واستلام الوحدة</button>
                         </form>
@@ -210,8 +212,8 @@ export default function UnitHandover() {
                 {isAllAnswered && progressScore < 100 && (
                     <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-orange-200 animate-fade-in-up text-center">
                         <FileWarning className="text-orange-500 mx-auto mb-4" size={40} />
-                        <h3 className="text-lg font-black text-[#1a365d] mb-2">إرسال الملاحظات للمقاول</h3>
-                        <p className="text-sm font-bold text-slate-500 mb-6">لقد قمت بتسجيل بعض الملاحظات. سيتم إرسالها كتقرير (Snag List) لفريق الصيانة لمعالجتها.</p>
+                        <h3 className="text-lg font-black text-[#1a365d] mb-2">إرسال الملاحظات</h3>
+                        <p className="text-sm font-bold text-slate-500 mb-6">سيتم إرسالها كتقرير (Snag List) لفريق الصيانة.</p>
                         <button onClick={submitInspection} disabled={saving} className="w-full bg-orange-500 text-white py-4 rounded-xl font-black text-lg hover:bg-orange-600 transition shadow-xl flex justify-center items-center gap-2">{saving ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>} رفع التقرير للإدارة</button>
                     </div>
                 )}
