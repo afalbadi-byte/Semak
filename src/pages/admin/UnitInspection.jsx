@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-// 🔥 تم حذف أيقونة QrCode المسببة للمشكلة نهائياً من هنا
-import { ChevronRight, ClipboardCheck, CheckCircle2, Save, RefreshCw, FileWarning, Settings2, ShieldCheck, Trash2, X, AlertTriangle, Hammer, Plus, HardHat, Copy } from 'lucide-react';
+import { ChevronRight, ClipboardCheck, CheckCircle2, Save, RefreshCw, FileWarning, Settings2, ShieldCheck, Trash2, X, AlertTriangle, Hammer, Plus, HardHat, Copy, Link as LinkIcon } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -22,8 +21,9 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
 
-  const [showQRModal, setShowQRModal] = useState(false);
-  const [qrUnit, setQrUnit] = useState("");
+  // تم تغيير الحالة لتناسب الرابط بدل الباركود
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkUnit, setLinkUnit] = useState("");
   const [showSnagModal, setShowSnagModal] = useState(false);
   const [currentSnags, setCurrentSnags] = useState([]);
   const [showSelectUnitModal, setShowSelectUnitModal] = useState(false);
@@ -111,7 +111,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
               });
               return newData;
           });
-          if(showToast) showToast("تم الاستنساخ 🧬", `تم تطبيق إعدادات الوحدة ${sourceUnitCode} بنجاح`);
+          if(showToast) showToast("تم الاستنساخ", `تم تطبيق إعدادات الوحدة ${sourceUnitCode} بنجاح`);
       } catch(e) { if(showToast) showToast("خطأ", "فشل نسخ الإعدادات", "error"); }
   };
 
@@ -204,6 +204,14 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
       } catch (e) {}
   };
 
+  // 🔥 دالة نسخ الرابط للواتساب
+  const copyClientLink = () => {
+    const link = `https://semak.sa/handover?unit=${encodeURIComponent(String(linkUnit).trim())}`;
+    navigator.clipboard.writeText(link);
+    if(showToast) showToast("تم النسخ ✅", "تم نسخ رابط العميل بنجاح، يمكنك لصقه في الواتساب");
+    setTimeout(() => setShowLinkModal(false), 1500); 
+  };
+
   if (viewMode === 'settings') {
       return (
           <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn">
@@ -281,8 +289,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   }
 
   if (viewMode === 'setup' || viewMode === 'inspect') {
-      const spacesArray = Array.isArray(selectedUnitObj?.spaces) ? selectedUnitObj.spaces : [];
-      const dynamicDictionary = spacesArray.map(spaceName => ({ space: spaceName, categories: globalTemplate || [] }));
+      const dynamicDictionary = selectedUnitObj?.spaces?.map(spaceName => ({ space: spaceName, categories: globalTemplate || [] })) || [];
 
       return (
         <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn">
@@ -428,12 +435,14 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
   return (
     <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn relative">
+      
+      {/* النافذة الأولى: اختيار الوحدة لإصدار الرابط */}
       {showSelectUnitModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-            <div className="bg-white rounded-[2rem] shadow-2xl p-8 max-w-md w-full relative">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-md w-full relative">
                 <button onClick={() => setShowSelectUnitModal(false)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition"><X size={20} /></button>
-                <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4"><ShieldCheck size={32} /></div>
-                <h3 className="text-2xl font-black text-[#1a365d] text-center mb-1">إصدار باركود التسليم</h3>
+                <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4"><LinkIcon size={32} /></div>
+                <h3 className="text-2xl font-black text-[#1a365d] text-center mb-1">إصدار رابط التسليم</h3>
                 <p className="text-sm text-slate-500 font-bold text-center mb-6">الرجاء اختيار وحدة تم الانتهاء من فحصها مسبقاً</p>
                 {(inspectionsList || []).filter(t => parseInt(t.progress || 0) === 100).length === 0 ? (
                     <div className="bg-red-50 text-red-600 p-4 rounded-xl text-center font-bold text-sm border border-red-100">لا توجد وحدات مكتملة الفحص حالياً!</div>
@@ -443,8 +452,8 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                             <option value="" disabled>-- اضغط لاختيار الوحدة الجاهزة --</option>
                             {(inspectionsList || []).filter(t => parseInt(t.progress || 0) === 100).map(t => <option key={t.unit} value={t.unit}>وحدة رقم: {t.unit}</option>)}
                         </select>
-                        <button disabled={!selectedReadyUnit} onClick={() => { setQrUnit(selectedReadyUnit); setShowSelectUnitModal(false); setShowQRModal(true); setSelectedReadyUnit(""); }} className="w-full bg-[#1a365d] text-white px-6 py-4 rounded-xl font-bold hover:bg-blue-900 transition disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg">
-                            📱 توليد باركود العميل
+                        <button disabled={!selectedReadyUnit} onClick={() => { setLinkUnit(selectedReadyUnit); setShowSelectUnitModal(false); setShowLinkModal(true); setSelectedReadyUnit(""); }} className="w-full bg-[#1a365d] text-white px-6 py-4 rounded-xl font-black text-lg hover:bg-blue-900 transition disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg">
+                            إنشاء رابط العميل
                         </button>
                     </div>
                 )}
@@ -466,23 +475,29 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
           </div>
       )}
 
-      {showQRModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full relative text-center">
-                  <button onClick={() => setShowQRModal(false)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition"><X size={20} /></button>
-                  <h3 className="text-2xl font-black text-[#1a365d] mb-2">باركود العميل</h3>
-                  <p className="text-sm font-bold text-slate-500 mb-6">وحدة رقم: {qrUnit}</p>
+      {/* 🔥 النافذة الثانية الجديدة: عرض الرابط وزر النسخ */}
+      {showLinkModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-md w-full relative text-center">
+                  <button onClick={() => setShowLinkModal(false)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition"><X size={20} /></button>
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><LinkIcon size={32} /></div>
                   
-                  <div className="inline-block p-4 border border-slate-200 rounded-[2rem] shadow-sm bg-white mb-6">
-                      {qrUnit && (
-                          <img 
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://semak.sa/handover?unit=${encodeURIComponent(String(qrUnit).trim())}`} 
-                              alt="QR Code" 
-                              className="w-48 h-48 mx-auto"
-                          />
-                      )}
+                  <h3 className="text-2xl font-black text-[#1a365d] mb-2">رابط تسليم العميل</h3>
+                  <p className="text-sm font-bold text-slate-500 mb-6">وحدة رقم: {linkUnit}</p>
+                  
+                  <div className="flex items-center gap-2 bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 overflow-hidden">
+                      <input 
+                          type="text" 
+                          readOnly 
+                          value={`https://semak.sa/handover?unit=${encodeURIComponent(String(linkUnit).trim())}`} 
+                          className="flex-1 bg-transparent text-sm font-bold text-slate-600 outline-none text-left w-full" 
+                          dir="ltr"
+                      />
                   </div>
-                  <p className="text-xs font-black text-indigo-600 bg-indigo-50 p-3 rounded-xl">امسح الكود بكاميرا الجوال للبدء 📱</p>
+                  
+                  <button onClick={copyClientLink} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-black text-lg hover:bg-blue-900 transition flex justify-center items-center gap-2 shadow-lg">
+                      <Copy size={20} /> نسخ الرابط وإرساله
+                  </button>
               </div>
           </div>
       )}
@@ -505,10 +520,12 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                 <h3 className="text-xl font-black mb-1">تكليف فحص مهندس</h3>
                 <p className="text-sm font-medium text-blue-200">إنشاء مهمة للمهندس لفحص وحدة جديدة</p>
             </div>
+            
+            {/* الكرت الأزرق تغير اسمه لأيقونة الرابط */}
             <div className="bg-indigo-600 text-white p-6 rounded-[2rem] shadow-lg flex flex-col justify-center items-center text-center cursor-pointer hover:bg-indigo-700 transition transform hover:-translate-y-1 min-h-[220px]" onClick={() => setShowSelectUnitModal(true)}>
-                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><ShieldCheck size={32} /></div>
+                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><LinkIcon size={32} /></div>
                 <h3 className="text-xl font-black mb-1">تسليم وحدة لعميل</h3>
-                <p className="text-sm font-medium text-indigo-200">إصدار باركود من الوحدات الجاهزة والمفحوصة</p>
+                <p className="text-sm font-medium text-indigo-200">إصدار رابط مباشر للوحدات الجاهزة والمفحوصة</p>
             </div>
 
             {(inspectionsList || []).map((task, idx) => {
