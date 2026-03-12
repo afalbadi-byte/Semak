@@ -166,7 +166,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const handleStatusChange = (space, cat, item, status) => { const key = `${space}_${cat}_${item}`; setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], passed: status === 'pass' } })); };
   const handleNoteChange = (space, cat, item, note) => { const key = `${space}_${cat}_${item}`; setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], notes: note } })); };
   
-  // دالة جديدة لتفعيل/إلغاء تفعيل ظهور البند للعميل
+  // دالة إخفاء/إظهار البند للعميل
   const toggleClientVisibility = (space, cat, item) => {
       const key = `${space}_${cat}_${item}`;
       setInspectionData(prev => ({ ...prev, [key]: { ...prev[key], clientVisible: prev[key]?.clientVisible === false ? true : false } }));
@@ -225,7 +225,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   const copyClientLink = () => {
     const link = `https://semak.sa/handover?unit=${encodeURIComponent(String(linkUnit).trim())}`;
     navigator.clipboard.writeText(link);
-    if(showToast) showToast("تم النسخ", "تم نسخ رابط العميل بنجاح، يمكنك لصقه وإرساله الآن");
+    if(showToast) showToast("تم النسخ ✅", "تم نسخ رابط العميل بنجاح، يمكنك لصقه في الواتساب");
     setTimeout(() => setShowLinkModal(false), 1500); 
   };
 
@@ -326,7 +326,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                          <ClipboardCheck className="text-indigo-600" size={32} />} 
                         
                         {viewMode === 'setup' ? 'تجهيز خطة الفحص للمهندس' : 
-                         viewMode === 'client_setup' ? 'تحديد البنود المرئية للعميل' : 
+                         viewMode === 'client_setup' ? 'مراجعة وتحديد البنود للعميل' : 
                          'تنفيذ الفحص الهندسي'}
                       </h1>
                       
@@ -352,7 +352,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                   
                   {viewMode === 'client_setup' ? (
                       <button onClick={handleSaveClientSetup} disabled={saving} className="bg-emerald-600 text-white px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition shadow-lg w-full md:w-auto">
-                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <LinkIcon size={18} />} حفظ وإصدار الرابط
+                        {saving ? <RefreshCw size={18} className="animate-spin" /> : <LinkIcon size={18} />} حفظ البنود وإصدار الرابط
                       </button>
                   ) : (
                       <button onClick={handleSaveEngineerTask} disabled={saving} className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition shadow-lg w-full md:w-auto">
@@ -402,18 +402,15 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
             <div className="space-y-8">
               {dynamicDictionary.map((spaceData, index) => {
-                // فلترة الأقسام بناءً على وضع الشاشة
                 const categoriesForEngineer = (spaceData.categories || []).map(cat => ({
                     ...cat, items: (cat.items || []).filter(i => i.target === 'both' || i.target === 'engineer')
                 })).filter(cat => cat.items.length > 0);
 
                 if (categoriesForEngineer.length === 0) return null;
 
-                // في شاشة الفحص أو شاشة العميل، نخفي الفراغات اللي مافيها بنود
                 const hasActiveItems = categoriesForEngineer.some(cat => cat.items.some(item => inspectionData[`${spaceData.space}_${cat.name}_${item.name}`]?.isSelected));
                 if ((viewMode === 'inspect' || viewMode === 'client_setup') && !hasActiveItems) return null;
 
-                // في شاشة العميل (تجهيز)، إذا الغرفة مافيها ولا بند فحصه المهندس، نخفيها
                 if (viewMode === 'client_setup') {
                     const hasEvaluatedItems = categoriesForEngineer.some(cat => cat.items.some(item => {
                         const d = inspectionData[`${spaceData.space}_${cat.name}_${item.name}`];
@@ -424,16 +421,31 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
                 return (
                   <div key={index} className={`bg-white rounded-[2.5rem] shadow-sm border overflow-hidden ${viewMode === 'setup' ? 'border-orange-100' : viewMode === 'client_setup' ? 'border-emerald-100' : 'border-slate-100'}`}>
-                    <div className={`${viewMode === 'setup' ? 'bg-[#c5a059]' : viewMode === 'client_setup' ? 'bg-emerald-600' : 'bg-[#1a365d]'} p-6 text-white flex justify-between items-center`}>
+                    <div className={`${viewMode === 'setup' ? 'bg-[#c5a059]' : viewMode === 'client_setup' ? 'bg-emerald-600' : 'bg-[#1a365d]'} p-6 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
                         <h2 className="text-2xl font-black">{spaceData.space}</h2>
-                        {viewMode === 'client_setup' && <span className="text-sm font-bold bg-white/20 px-4 py-1 rounded-lg">إعدادات ظهور بنود الغرفة</span>}
+                        
+                        {/* 🔥 زر تفعيل خانة "أخرى" للعميل في كل غرفة */}
+                        {viewMode === 'client_setup' && (
+                            <label className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-xl cursor-pointer hover:bg-white/30 transition shadow-sm border border-white/10">
+                                <input 
+                                    type="checkbox" 
+                                    checked={inspectionData[`custom_notes_allowed_${spaceData.space}`] !== false} 
+                                    onChange={() => {
+                                        const key = `custom_notes_allowed_${spaceData.space}`;
+                                        setInspectionData(prev => ({ ...prev, [key]: prev[key] === false ? true : false }));
+                                    }}
+                                    className="w-4 h-4 accent-emerald-500 cursor-pointer" 
+                                />
+                                <span className="text-sm font-bold">السماح للعميل بإضافة "ملاحظات أخرى" هنا</span>
+                            </label>
+                        )}
                     </div>
+
                     <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
                         {categoriesForEngineer.map((cat, catIdx) => {
                             const hasActiveCatItems = cat.items.some(item => inspectionData[`${spaceData.space}_${cat.name}_${item.name}`]?.isSelected);
                             if ((viewMode === 'inspect' || viewMode === 'client_setup') && !hasActiveCatItems) return null;
 
-                            // في شاشة العميل (تجهيز)، إذا القسم مافيه بند انحص، نخفيه
                             if (viewMode === 'client_setup') {
                                 const hasEvaluatedCatItems = cat.items.some(item => {
                                     const d = inspectionData[`${spaceData.space}_${cat.name}_${item.name}`];
@@ -461,16 +473,16 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
                                             if (!itemData.isSelected) return null;
 
-                                            // شاشة (تجهيز العميل): تظهر فقط البنود اللي المهندس قيمها!
+                                            // شاشة (تجهيز العميل): تظهر فقط البنود اللي المهندس قيمها
                                             if (viewMode === 'client_setup') {
-                                                if (itemData.passed === null) return null; // المهندس ما قيمها، لا تظهر للأدمن
+                                                if (itemData.passed === null) return null; 
                                                 
                                                 const isVisible = itemData.clientVisible !== false;
                                                 return (
                                                     <label key={itemIdx} className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer border transition-all ${isVisible ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-white border-slate-200 opacity-60 hover:bg-slate-50'}`}>
                                                         <input type="checkbox" checked={isVisible} onChange={() => toggleClientVisibility(spaceData.space, cat.name, item.name)} className="mt-0.5 w-5 h-5 accent-emerald-500 cursor-pointer" />
                                                         <div>
-                                                            <span className={`text-sm font-bold block ${isVisible ? 'text-emerald-900' : 'text-slate-500'}`}>{item.name}</span>
+                                                            <span className={`text-sm font-bold block ${isVisible ? 'text-emerald-900' : 'text-slate-500 line-through'}`}>{item.name}</span>
                                                             <span className={`text-[10px] font-black mt-1 px-2 py-0.5 rounded inline-block ${itemData.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                                                                 {itemData.passed ? 'تقييم المهندس: مطابق' : 'تقييم المهندس: ملاحظة'}
                                                             </span>
@@ -479,7 +491,6 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                                                 );
                                             }
 
-                                            // شاشة فحص المهندس
                                             const isPassed = itemData.passed === true; const isFailed = itemData.passed === false;
                                             return (
                                                 <div key={itemIdx} className={`flex flex-col p-4 rounded-xl border transition-all duration-300 ${isPassed ? 'bg-emerald-50/50 border-emerald-100' : isFailed ? 'bg-white border-red-200 shadow-sm' : 'bg-white border-slate-200'}`}>
@@ -509,7 +520,36 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
   return (
     <div className="pt-24 pb-20 bg-slate-50 min-h-screen animate-fadeIn relative">
       
-      {/* النافذة الخاصة بالرابط */}
+      {/* النافذة الأولى: الكرت الأزرق الكبير لفتح شاشة تجهيز العميل */}
+      {showSelectUnitModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-md w-full relative">
+                <button onClick={() => setShowSelectUnitModal(false)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition"><X size={20} /></button>
+                <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4"><LinkIcon size={32} /></div>
+                <h3 className="text-2xl font-black text-[#1a365d] text-center mb-1">مراجعة وإصدار الرابط</h3>
+                <p className="text-sm text-slate-500 font-bold text-center mb-6">الرجاء اختيار وحدة مكتملة الفحص لمراجعتها قبل العميل</p>
+                {(inspectionsList || []).filter(t => parseInt(t.progress || 0) === 100).length === 0 ? (
+                    <div className="bg-red-50 text-red-600 p-4 rounded-xl text-center font-bold text-sm border border-red-100">لا توجد وحدات مكتملة الفحص حالياً!</div>
+                ) : (
+                    <div className="space-y-4">
+                        <select className="w-full bg-slate-50 border border-slate-200 text-[#1a365d] rounded-xl p-4 outline-none font-bold" value={selectedReadyUnit} onChange={(e) => setSelectedReadyUnit(e.target.value)}>
+                            <option value="" disabled>-- اضغط لاختيار الوحدة المكتملة --</option>
+                            {(inspectionsList || []).filter(t => parseInt(t.progress || 0) === 100).map(t => <option key={t.unit} value={t.unit}>وحدة رقم: {t.unit}</option>)}
+                        </select>
+                        <button disabled={!selectedReadyUnit} onClick={() => { 
+                            const task = (inspectionsList || []).find(t => t.unit === selectedReadyUnit);
+                            if(task) { handleOpenTask(task.unit, task.inspection_data, 'client_setup'); }
+                            setShowSelectUnitModal(false);
+                            setSelectedReadyUnit(""); 
+                        }} className="w-full bg-[#1a365d] text-white px-6 py-4 rounded-xl font-black text-lg hover:bg-blue-900 transition disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg">
+                            <Eye size={20} /> مراجعة وتجهيز بنود العميل
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
+
       {showLinkModal && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
               <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 max-w-md w-full relative text-center">
@@ -556,17 +596,24 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
               <button onClick={() => navigateTo('dashboard')} className="p-3 bg-slate-50 rounded-full border hidden md:block"><ChevronRight size={24} className="text-slate-600" /></button>
               <div><h1 className="text-2xl font-black text-[#1a365d]">فحص وتسليم الوحدات</h1><p className="text-slate-400 text-sm font-bold mt-1">إدارة فحوصات المهندسين والعملاء</p></div>
           </div>
-          <button onClick={() => setViewMode('settings')} className="bg-orange-50 text-orange-600 px-6 py-3 rounded-xl font-black flex gap-2 border border-orange-200 w-full md:w-auto justify-center"><Settings2 size={20} /> إدارة البنود المركزية</button>
+          {isAdmin && <button onClick={() => setViewMode('settings')} className="bg-orange-50 text-orange-600 px-6 py-3 rounded-xl font-black flex gap-2 border border-orange-200 w-full md:w-auto justify-center"><Settings2 size={20} /> إدارة البنود المركزية</button>}
         </div>
 
         {loading ? (
           <div className="text-center py-20"><RefreshCw className="animate-spin mx-auto text-indigo-500 mb-4" size={40} /><p className="text-slate-500 font-bold">جاري التحميل...</p></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            
             <div className="bg-blue-600 text-white p-6 rounded-[2rem] shadow-lg flex flex-col justify-center items-center text-center cursor-pointer hover:bg-blue-700 transition transform hover:-translate-y-1 min-h-[220px]" onClick={handleCreateNewTask}>
                 <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><HardHat size={32} /></div>
                 <h3 className="text-xl font-black mb-1">تكليف فحص مهندس</h3>
                 <p className="text-sm font-medium text-blue-200">إنشاء مهمة للمهندس لفحص وحدة جديدة</p>
+            </div>
+
+            <div className="bg-indigo-600 text-white p-6 rounded-[2rem] shadow-lg flex flex-col justify-center items-center text-center cursor-pointer hover:bg-indigo-700 transition transform hover:-translate-y-1 min-h-[220px]" onClick={() => setShowSelectUnitModal(true)}>
+                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4"><LinkIcon size={32} /></div>
+                <h3 className="text-xl font-black mb-1">إصدار رابط للعميل</h3>
+                <p className="text-sm font-medium text-indigo-200">مراجعة واعتماد بنود الوحدات الجاهزة للعميل</p>
             </div>
 
             {(inspectionsList || []).map((task, idx) => {
@@ -596,10 +643,10 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
                         {isAdmin && <button onClick={() => handleDeleteTask(task.unit)} className="bg-red-50 text-red-400 p-3 rounded-xl hover:bg-red-500 hover:text-white transition" title="حذف المهمة"><Trash2 size={16} /></button>}
                     </div>
 
-                    {/* زر تجهيز العميل (يظهر فقط إذا كان הפحص مكتمل 100%) */}
-                    {isDone && isAdmin && (
+                    {/* 🔥 الزر الأخضر داخل الكرت يظهر للكل إذا الوحدة 100% */}
+                    {isDone && (
                         <button onClick={() => handleOpenTask(task.unit, task.inspection_data, 'client_setup')} className="w-full mt-2 bg-emerald-50 text-emerald-700 py-3 rounded-xl font-bold text-sm flex justify-center items-center gap-2 hover:bg-emerald-600 hover:text-white transition shadow-sm">
-                            <Eye size={16} /> تجهيز للعميل وإصدار الرابط
+                            <Eye size={16} /> تجهيز بنود العميل وإصدار الرابط
                         </button>
                     )}
                   </div>
