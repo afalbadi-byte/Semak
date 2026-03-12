@@ -32,4 +32,4 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: ./
-          dangerous-clean-slate: false # هذي تمنعه يحذف ملف api.php حقك
+          dangerous-clean-slate: false # هذي تمنعه يحـذف ملف api.php حقك
