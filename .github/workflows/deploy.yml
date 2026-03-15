@@ -3,7 +3,7 @@ name: Deploy React App to Hostinger
 on:
   push:
     branches:
-      - main # تأكد إن هذا اسم الفرع حقك (أحياناً يكون master)
+      - main # تأكد إن هذا اسم الفـــــرع حقك (أحياناً يكون master)
 
 jobs:
   build-and-deploy:
