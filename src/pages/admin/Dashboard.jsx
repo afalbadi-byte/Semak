@@ -12,13 +12,10 @@ export default function Dashboard({ onLogout }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     
-    // 🔥 حالات التحقق من السيرفر (حارس البوابة)
     const [dbUser, setDbUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
-
-    useEffect(() => {
+useEffect(() => {
         const verifyUser = async () => {
-            // أخذ المعرف المبدئي من الذاكرة للبحث عنه في السيرفر
             const localUser = JSON.parse(localStorage.getItem('semak_current_user') || 'null');
             
             if (!localUser || !localUser.id) {
@@ -28,19 +25,29 @@ export default function Dashboard({ onLogout }) {
 
             try {
                 const res = await fetch(`${API_URL}?action=get_users`);
-                const users = await res.json();
-                const freshUser = users.find(u => u.id === localUser.id);
+                const responseData = await res.json();
+                
+                // 1. التأكد من استخراج المصفوفة بشكل آمن مهما كان شكل الرد
+                let usersArray = [];
+                if (Array.isArray(responseData)) {
+                    usersArray = responseData;
+                } else if (responseData.success && Array.isArray(responseData.data)) {
+                    usersArray = responseData.data;
+                }
+                
+                // 🔥 2. الحل الجذري: تحويل الـ ID إلى نص (String) للطرفين لضمان التطابق
+                const freshUser = usersArray.find(u => String(u.id) === String(localUser.id));
                 
                 if (freshUser) {
-                    setDbUser(freshUser); // اعتماد بيانات السيرفر كمرجع وحيد
-                    // تحديث الذاكرة المحلية بالبيانات الجديدة لضمان التزامن
+                    setDbUser(freshUser); 
                     localStorage.setItem('semak_current_user', JSON.stringify(freshUser));
                 } else {
-                    // إذا لم يتم العثور عليه (تم حذفه من قبل الإدارة) يطرد فوراً
+                    console.error("المستخدم غير موجود في قاعدة البيانات:", localUser.id);
                     handleForceLogout(); 
                 }
             } catch (error) {
-                console.error("فشل الاتصال بقاعدة البيانات للتحقق من الصلاحيات");
+                console.error("فشل الاتصال بقاعدة البيانات للتحقق من الصلاحيات", error);
+                handleForceLogout(); 
             } finally {
                 setAuthLoading(false);
             }
@@ -48,12 +55,12 @@ export default function Dashboard({ onLogout }) {
 
         verifyUser();
     }, []);
+    
 
-    // 🔥 دالة التحقق من الصلاحيات (تعمل على بيانات السيرفر الحية)
     const hasPermission = (permKey) => {
         if (!dbUser) return false;
-        if (dbUser.role === 'admin') return true; // المدير يرى كل شيء
-        if (permKey === 'all') return true; // الصفحات العامة مثل الرئيسية
+        if (dbUser.role === 'admin') return true; 
+        if (permKey === 'all') return true; 
         
         try {
             const perms = JSON.parse(dbUser.permissions || "[]");
@@ -63,7 +70,6 @@ export default function Dashboard({ onLogout }) {
         }
     };
 
-    // القائمة الجانبية (نربط كل أداة بمفتاح الصلاحية الخاص بها في قاعدة البيانات)
     const ALL_MENU_ITEMS = [
         { id: 'overview', title: 'الرئيسية والإحصائيات', icon: LayoutDashboard, permKey: 'all' },
         { id: 'inspection', title: 'فحص وتسليم الوحدات', icon: ClipboardCheck, permKey: 'inspection' },
@@ -72,7 +78,6 @@ export default function Dashboard({ onLogout }) {
         { id: 'users', title: 'إدارة الموظفين', icon: Users, permKey: 'users_manage' },
     ];
 
-    // 🔥 تصفية القائمة وعرض المسموح به فقط للموظف
     const authorizedMenuItems = ALL_MENU_ITEMS.filter(item => hasPermission(item.permKey));
 
     const handleForceLogout = () => {
@@ -83,7 +88,6 @@ export default function Dashboard({ onLogout }) {
         window.location.replace('/');
     };
 
-    // 🛡️ شاشة التحميل الآمنة (لا يظهر أي شيء حتى يعطي السيرفر الموافقة)
     if (authLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-slate-50 flex-col gap-5 font-cairo">
@@ -97,8 +101,6 @@ export default function Dashboard({ onLogout }) {
 
     return (
         <div className="flex h-screen bg-slate-50 font-cairo overflow-hidden" dir="rtl">
-            
-            {/* الشريط الجانبي الديناميكي */}
             <aside className={`fixed lg:static inset-y-0 right-0 z-50 w-72 bg-[#1a365d] text-white transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'} flex flex-col shadow-2xl`}>
                 <div className="h-24 flex items-center justify-between px-6 border-b border-white/10">
                     <div className="text-2xl font-black flex items-center gap-3">
@@ -127,13 +129,9 @@ export default function Dashboard({ onLogout }) {
                 </div>
             </aside>
 
-            {/* خلفية الجوال */}
             {isMobileMenuOpen && <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>}
 
-            {/* منطقة المحتوى */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                
-                {/* الشريط العلوي */}
                 <header className="h-24 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 z-30 absolute top-0 w-full">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200"><Menu size={24} /></button>
@@ -154,7 +152,6 @@ export default function Dashboard({ onLogout }) {
                     </div>
                 </header>
 
-                {/* المحتوى المتغير داخل الشاشة مع حماية إضافية للتابات */}
                 <main className="flex-1 overflow-y-auto bg-slate-50 pt-24 relative custom-scrollbar">
                     
                     {activeTab === 'overview' && (
@@ -191,7 +188,6 @@ export default function Dashboard({ onLogout }) {
 
                     {activeTab === 'inspection' && hasPermission('inspection') && (
                         <div className="animate-fadeIn -mt-24"> 
-                            {/* نمرر dbUser الموثوق من السيرفر كـ Prop */}
                             <UnitInspection user={dbUser} navigateTo={() => setActiveTab('overview')} showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                         </div>
                     )}
