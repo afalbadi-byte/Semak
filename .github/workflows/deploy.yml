@@ -3,7 +3,7 @@ name: Deploy React App to Hostinger
 on:
   push:
     branches:
-      - main # تأكد إن هذا اسم الفـــــرع حقك (أحياناً يكون master)
+      - main # تأكد إن هذا اسم الفرع حقك (أحياناً يكون master)
 
 jobs:
   build-and-deploy:
@@ -27,9 +27,11 @@ jobs:
       - name: 🚀 Deploy to Hostinger
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ secrets.FTP_SERVER }} # 👈 تأكد في الإعدادات أن هذا هو عنوان الـ IP وليس الدومين
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          port: 21 # 👈 تحديد المنفذ بشكل صريح
+          protocol: ftp # 👈 إجبار الأداة على استخدام FTP العادي لتجاوز تعليق التشفير في Hostinger
           local-dir: dist/
-          server-dir: ./
-          dangerous-clean-slate: false # هذي تمنعه يحـذف ملف api.php حقك
+          server-dir: ./ # 👈 ملاحظة: إذا كان حساب الـ FTP يفتح على الجذر الرئيسي للاستضافة وليس داخل الموقع، قد تحتاج لتغييرها إلى public_html/
+          dangerous-clean-slate: false # هذي تمنعه يحذف ملف api.php حقك
