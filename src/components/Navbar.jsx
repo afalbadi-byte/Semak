@@ -11,7 +11,7 @@ export default function Navbar() {
 
   const currentPage = location.pathname.substring(1) || "home";
   
-  // 🔥 التعديل السحري: أي رابط يحتوي على كلمة (admin أو dashboard أو login) يختفي النافبار فوراً
+  // 🔥 التعديل السحري: أي رابط يحتوي كلمة (admin أو dashboard أو login) يختفي النافبار فوراً
   const hideNavPaths = ["login", "customer-login", "dashboard", "tech-dashboard", "letter-generator", "admin"];
   const shouldHideNav = hideNavPaths.some(path => location.pathname.toLowerCase().includes(path));
 
@@ -72,6 +72,18 @@ export default function Navbar() {
           {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
         </button>
       </div>
+
+      {/* 🔥 القائمة المنسدلة للجوال 🔥 */}
+      {mobileMenuOpen && (
+        <div className="md:hidden absolute top-full left-0 w-full bg-white border-t border-slate-100 px-6 py-8 flex flex-col space-y-6 shadow-xl no-print">
+          <button onClick={() => handleNav("/")} className={`text-xl font-bold text-right transition ${currentPage === "home" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>الرئيسية</button>
+          <button onClick={() => handleNav("/about")} className={`text-xl font-bold text-right transition ${currentPage === "about" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>من نحن</button>
+          <button onClick={() => handleNav("/projects")} className={`text-xl font-bold text-right transition ${currentPage === "projects" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>مشاريعنا</button>
+          <button onClick={handleScrollToPartners} className="text-xl font-bold text-right transition text-[#1a365d] hover:text-[#c5a059]">شركاؤنا</button>
+          <button onClick={() => handleNav("/customer-login")} className={`text-xl font-bold text-right transition ${currentPage === "customer-login" || currentPage === "maintenance" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>طلب صيانة</button>
+          <button onClick={() => handleNav("/contact")} className="bg-[#c5a059] text-white py-4 rounded-xl text-center font-bold hover:bg-yellow-600 transition shadow-md">احجز الآن</button>
+        </div>
+      )}
     </nav>
   );
 }
