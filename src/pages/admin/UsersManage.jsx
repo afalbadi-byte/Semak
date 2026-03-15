@@ -253,7 +253,7 @@ export default function UsersManage({ showToast }) {
                                 </div>
                             </div>
                             
-                            {/* 🔥 المربع الأنيق للصلاحيات (يظهر تحت كرت الموظف المحدد مباشرة) */}
+                            {/* 🔥 المربع الأنيق للصلاحيـات (يظهر تحت كرت الموظف المحدد مباشرة) */}
                             {selectedUserForPerms?.id === usr.id && (
                                 <div className="col-span-1 md:col-span-2 lg:col-span-3 -mt-2 mb-4 animate-fadeIn">
                                     <div className="bg-slate-900 p-8 rounded-[2rem] shadow-inner relative">
