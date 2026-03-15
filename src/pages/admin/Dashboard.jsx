@@ -10,6 +10,7 @@ import UnitInspection from './UnitInspection';
 import SnagList from './SnagList'; 
 import UsersManage from './UsersManage';
 import MaintenanceManage from './MaintenanceManage';
+import LeadsManage from './LeadsManage'; // 👈 أضف هذا السطر
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -329,54 +330,8 @@ export default function Dashboard({ onLogout }) {
 
                     {/* --- قسم سجل المهتمين (Leads) --- */}
                     {activeTab === 'leads' && hasPermission('leads') && (
-                        <div className="animate-fadeIn p-6 md:p-8 max-w-6xl mx-auto">
-                            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden mb-12">
-                                <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
-                                    <div>
-                                        <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-teal-600" /> سجل المهتمين بالوحدات</h3>
-                                        <p className="text-slate-500 text-sm mt-1">يتم جلب البيانات الحية لطلبات الاهتمام من الموقع الإلكتروني.</p>
-                                    </div>
-                                    <button onClick={loadLeads} className="bg-teal-500 text-white px-6 py-3 rounded-xl font-bold hover:bg-teal-600 transition flex items-center gap-2 shadow-md">
-                                        {dataLoading ? <RefreshCw className="animate-spin" size={18} /> : <RefreshCw size={18} />} تحديث البيانات
-                                    </button>
-                                </div>
-                                <div className="p-6 bg-white flex flex-col sm:flex-row justify-between items-center gap-4">
-                                    <div className="relative w-full sm:w-96">
-                                        <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                        <input type="text" placeholder="بحث بالاسم أو الجوال..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 pl-4 outline-none focus:border-teal-500 transition font-bold" />
-                                    </div>
-                                    <div className="text-slate-500 font-bold">العدد الكلي: <span className="text-[#1a365d] text-xl">{leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).length}</span></div>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-right">
-                                        <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
-                                            <tr>
-                                                <th className="px-6 py-4 border-b">#</th>
-                                                <th className="px-6 py-4 border-b">الاسم الكامل</th>
-                                                <th className="px-6 py-4 border-b">رقم الجوال</th>
-                                                <th className="px-6 py-4 border-b">الوحدة المهتم بها</th>
-                                                <th className="px-6 py-4 border-b">تاريخ التسجيل</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="text-slate-700 divide-y divide-slate-50">
-                                            {dataLoading ? (
-                                                <tr><td colSpan="5" className="text-center py-12 text-teal-600 font-bold"><RefreshCw className="animate-spin inline mr-2" /> جاري تحميل السجل...</td></tr>
-                                            ) : leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).map((lead, i) => (
-                                                <tr key={i} className="hover:bg-teal-50/30 transition-colors duration-200">
-                                                    <td className="px-6 py-4 text-slate-400 text-xs font-mono">{leads.length - i}</td>
-                                                    <td className="px-6 py-4 font-bold text-[#1a365d]">{lead.name}</td>
-                                                    <td className="px-6 py-4 font-sans font-bold text-slate-600" dir="ltr">{lead.phone}</td>
-                                                    <td className="px-6 py-4"><span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-lg text-sm font-bold border border-teal-200 shadow-sm">{lead.unit}</span></td>
-                                                    <td className="px-6 py-4 text-sm text-slate-400 font-sans font-medium" dir="ltr">{String(lead.date).substring(0, 16)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                    {leads.length === 0 && !dataLoading && (
-                                        <div className="text-center py-12 text-slate-400 font-bold">لا يوجد سجلات مهتمين مسجلة حتى الآن.</div>
-                                    )}
-                                </div>
-                            </div>
+                        <div className="animate-fadeIn p-6 md:p-8"> 
+                            <LeadsManage showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                         </div>
                     )}
 
