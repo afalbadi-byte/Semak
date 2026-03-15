@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, ShieldCheck, Trash2, RefreshCw, Key, Mail, User, X, Edit } from 'lucide-react';
+import { Users, UserPlus, Shield, ShieldCheck, Trash2, RefreshCw, Key, Mail, User, X, Edit, Wrench, FilePenLine, QrCode, Calculator, ClipboardCheck, CheckSquare } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
+
+// 🔥 قائمة الأدوات المتاحة للنظام ليتم توزيعها كصلاحيات
+const APP_MODULES = [
+  { id: "maintenance", label: "إدارة طلبات الصيانة", icon: Wrench, color: "text-purple-600", bg: "bg-purple-50" },
+  { id: "letters", label: "منشئ الخطابات", icon: FilePenLine, color: "text-orange-500", bg: "bg-orange-50" },
+  { id: "qr", label: "رموز الوحدات (QR)", icon: QrCode, color: "text-slate-800", bg: "bg-slate-100" },
+  { id: "leads", label: "سجل المهتمين (Leads)", icon: Users, color: "text-teal-600", bg: "bg-teal-50" },
+  { id: "accounting", label: "النظام المحاسبي (دفترة)", icon: Calculator, color: "text-emerald-600", bg: "bg-emerald-50" },
+  { id: "inspection", label: "فحص وتسليم الوحدات", icon: ClipboardCheck, color: "text-indigo-600", bg: "bg-indigo-50" },
+  { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
+];
 
 export default function UsersManage({ showToast }) {
     const [usersList, setUsersList] = useState([]);
@@ -10,8 +21,10 @@ export default function UsersManage({ showToast }) {
     const [showModal, setShowModal] = useState(false);
     const [modalMode, setModalMode] = useState('add'); 
     const [saving, setSaving] = useState(false);
+    
+    // 🔥 حالة التحكم بفتح نافذة الصلاحيات
+    const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
 
-    // تم التعديل ليطابق الداتا بيس: email بدلاً من username، و employee بدلاً من engineer
     const [formData, setFormData] = useState({
         id: null,
         name: '',
@@ -46,9 +59,9 @@ export default function UsersManage({ showToast }) {
         setFormData({
             id: usr.id,
             name: usr.name,
-            email: usr.email, // جلب الإيميل
+            email: usr.email, 
             password: '', 
-            role: usr.role // employee أو admin
+            role: usr.role 
         });
         setShowModal(true);
     };
@@ -92,6 +105,28 @@ export default function UsersManage({ showToast }) {
                 fetchUsers();
             }
         } catch (e) {}
+    };
+
+    // 🔥 دالة حفظ الصلاحيات للموظف
+    const handleSavePermissions = async (userId, newPerms) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_URL}?action=update_permissions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: userId, permissions: newPerms })
+            });
+            const data = await res.json();
+            if (data.success) {
+                if(showToast) showToast("تم الحفظ", data.message);
+                fetchUsers(); 
+                setSelectedUserForPerms(null); 
+            } else {
+                if(showToast) showToast("خطأ", data.message, "error");
+            }
+        } catch { 
+            if(showToast) showToast("خطأ", "فشل الاتصال", "error"); 
+        } finally { setLoading(false); }
     };
 
     return (
@@ -141,7 +176,6 @@ export default function UsersManage({ showToast }) {
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2">الصلاحية والدور</label>
                                 <div className="grid grid-cols-2 gap-4">
-                                    {/* تم تعديل القيمة هنا إلى employee بناءً على صورتك */}
                                     <label className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition ${formData.role === 'employee' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
                                         <input type="radio" name="role" value="employee" checked={formData.role === 'employee'} onChange={e => setFormData({...formData, role: e.target.value})} className="hidden" />
                                         <Shield size={24} />
@@ -182,31 +216,89 @@ export default function UsersManage({ showToast }) {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {usersList.map((usr) => (
-                        <div key={usr.id} className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition">
-                            <div className={`absolute top-0 left-0 w-1 h-full ${usr.role === 'admin' ? 'bg-[#c5a059]' : 'bg-indigo-500'}`}></div>
-                            
-                            <div className="flex items-start gap-4 mb-6">
-                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm ${usr.role === 'admin' ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                                    {usr.role === 'admin' ? <ShieldCheck size={32} /> : <Shield size={32} />}
+                        <React.Fragment key={usr.id}>
+                            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition">
+                                <div className={`absolute top-0 left-0 w-1 h-full ${usr.role === 'admin' ? 'bg-[#c5a059]' : 'bg-indigo-500'}`}></div>
+                                
+                                <div className="flex items-start gap-4 mb-6">
+                                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm ${usr.role === 'admin' ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                        {usr.role === 'admin' ? <ShieldCheck size={32} /> : <Shield size={32} />}
+                                    </div>
+                                    <div className="flex-1 overflow-hidden">
+                                        <h3 className="text-xl font-black text-[#1a365d] mb-1 truncate" title={usr.name}>{usr.name}</h3>
+                                        <span className={`px-3 py-1 text-xs font-black rounded-lg ${usr.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                                            {usr.role === 'admin' ? 'إدارة عليا' : 'موظف / مهندس'}
+                                        </span>
+                                        <p className="text-xs font-bold text-slate-400 mt-3 truncate" title={usr.email}>{usr.email}</p>
+                                    </div>
                                 </div>
-                                <div className="flex-1 overflow-hidden">
-                                    <h3 className="text-xl font-black text-[#1a365d] mb-1 truncate" title={usr.name}>{usr.name}</h3>
-                                    <p className="text-sm font-bold text-slate-500 mb-2 truncate" title={usr.email}>{usr.email}</p>
-                                    <span className={`px-3 py-1 text-xs font-black rounded-lg ${usr.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                                        {usr.role === 'admin' ? 'إدارة عليا' : 'موظف / مهندس'}
-                                    </span>
-                                </div>
-                            </div>
 
-                            <div className="flex gap-2 pt-4 border-t border-slate-100">
-                                <button onClick={() => openEditModal(usr)} className="flex-1 py-2.5 bg-slate-50 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-emerald-500 hover:text-white transition">
-                                    <Edit size={16} /> تعديل
-                                </button>
-                                <button onClick={() => handleDeleteUser(usr.id, usr.name)} className="flex-1 py-2.5 bg-red-50 text-red-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-red-500 hover:text-white transition">
-                                    <Trash2 size={16} /> حذف
-                                </button>
+                                <div className="flex gap-2 pt-4 border-t border-slate-100">
+                                    {/* زر الصلاحيات يظهر فقط للموظفين وليس للمدير */}
+                                    {usr.role !== "admin" && (
+                                        <button 
+                                            onClick={() => setSelectedUserForPerms(selectedUserForPerms?.id === usr.id ? null : usr)} 
+                                            className="flex-1 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-600 hover:text-white transition"
+                                        >
+                                            <Shield size={14} /> الصلاحيات
+                                        </button>
+                                    )}
+                                    
+                                    <button onClick={() => openEditModal(usr)} className="flex-1 py-2.5 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1 hover:bg-emerald-500 hover:text-white transition">
+                                        <Edit size={14} /> تعديل
+                                    </button>
+                                    <button onClick={() => handleDeleteUser(usr.id, usr.name)} className="flex-1 py-2.5 bg-red-50 text-red-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1 hover:bg-red-500 hover:text-white transition">
+                                        <Trash2 size={14} /> حذف
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                            
+                            {/* 🔥 المربع الأنيق للصلاحيات (يظهر تحت كرت الموظف المحدد مباشرة) */}
+                            {selectedUserForPerms?.id === usr.id && (
+                                <div className="col-span-1 md:col-span-2 lg:col-span-3 -mt-2 mb-4 animate-fadeIn">
+                                    <div className="bg-slate-900 p-8 rounded-[2rem] shadow-inner relative">
+                                        <h4 className="text-white font-bold mb-6 flex items-center gap-2">
+                                            <CheckSquare className="text-indigo-400" /> حدد الصفحات المسموح لـ ({usr.name}) بالدخول إليها:
+                                        </h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                                            {APP_MODULES.map(module => {
+                                                let userPerms = [];
+                                                try { userPerms = usr.permissions ? JSON.parse(usr.permissions) : []; } catch(e){}
+                                                
+                                                const isChecked = selectedUserForPerms.tempPerms 
+                                                    ? selectedUserForPerms.tempPerms.includes(module.id) 
+                                                    : userPerms.includes(module.id);
+                                                
+                                                return (
+                                                    <label key={module.id} className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border transition-all ${isChecked ? 'bg-white/10 border-indigo-400 shadow-md' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="w-5 h-5 accent-indigo-500 rounded cursor-pointer" 
+                                                            checked={isChecked}
+                                                            onChange={(e) => {
+                                                                const currentPerms = selectedUserForPerms.tempPerms || userPerms;
+                                                                const newPerms = e.target.checked ? [...currentPerms, module.id] : currentPerms.filter(p => p !== module.id);
+                                                                setSelectedUserForPerms({...selectedUserForPerms, tempPerms: newPerms});
+                                                            }}
+                                                        />
+                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${module.bg} ${module.color}`}>
+                                                            <module.icon size={16} />
+                                                        </div>
+                                                        <span className="text-sm font-bold text-slate-200">{module.label}</span>
+                                                    </label>
+                                                )
+                                            })}
+                                        </div>
+                                        <div className="flex justify-end gap-3 border-t border-slate-700 pt-6">
+                                            <button onClick={() => setSelectedUserForPerms(null)} className="px-6 py-2 text-slate-300 font-bold hover:text-white transition text-sm">إلغاء وتراجع</button>
+                                            <button onClick={() => handleSavePermissions(usr.id, selectedUserForPerms.tempPerms || [])} className="bg-indigo-500 text-white px-8 py-2 rounded-xl font-bold hover:bg-indigo-400 transition flex items-center gap-2 text-sm shadow-lg">
+                                                {loading ? <RefreshCw size={16} className="animate-spin" /> : <Shield size={16} />} حفظ الصلاحيات 
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </React.Fragment>
                     ))}
                 </div>
             )}
