@@ -63,7 +63,7 @@ export default function GlobalStyles() {
       .quill-content ol { list-style-type: decimal; margin-right: 20px; }
       .quill-content strong { font-weight: 900; color: #1a365d; }
       
-      /* تعديل شكل المحرر في الوضع الليلي */
+      /* تعديل شكـل المحرر في الوضع الليلي */
       .ql-toolbar.ql-snow { background-color: #f8fafc; border-radius: 8px 8px 0 0; font-family: 'Cairo', sans-serif; direction: ltr;}
       .ql-container.ql-snow { background-color: white; border-radius: 0 0 8px 8px; color: black; font-family: 'Cairo', sans-serif; font-size: 16px; min-height: 200px;}
       .ql-editor { direction: rtl; text-align: right; }
