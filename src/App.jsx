@@ -1,7 +1,9 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react'; // 🔥 تأكد من استدعاء useEffect
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { CircleCheckBig } from 'lucide-react';
+import { getImg } from './utils/helpers'; // 🔥 استدعاء دالة جلب الصور لتعيين الشعار
+
 import UnitHandover from './pages/admin/UnitHandover';
 
 // المكونات المشتركة
@@ -26,8 +28,6 @@ import TechDashboard from './pages/admin/TechDashboard';
 import LetterGenerator from './pages/admin/LetterGenerator';
 import UnitInspection from './pages/admin/UnitInspection';
 
-
-
 // مكون الإشعارات
 const ToastNotification = () => {
   const { toast } = useContext(AppContext);
@@ -45,6 +45,19 @@ const ToastNotification = () => {
 };
 
 const MainApp = () => {
+  // 🔥 التعديل هنا: تعيين اسم الموقع والشعار في تبويب المتصفح
+  useEffect(() => {
+    document.title = "سماك العقارية | سقف يعلو برؤيتك، ومسكن يحكي قصتك";
+    let icon = document.querySelector("link[rel~='icon']");
+    if (!icon) {
+      icon = document.createElement("link");
+      icon.rel = "icon";
+      document.getElementsByTagName("head")[0].appendChild(icon);
+    }
+    // وضعنا معرّف الصورة الخاص بالشعار المصغر
+    icon.href = getImg("1CcCFvgasNW1MEZt65AY9ZD7FzdDvuNgJ", "w128");
+  }, []);
+
   return (
     <Router>
       <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-slate-900 bg-slate-50">
@@ -64,6 +77,7 @@ const MainApp = () => {
             <Route path="/privacy" element={<LegalPage title="سياسة الخصوصية" />} />
             <Route path="/terms" element={<LegalPage title="الشروط والأحكام" />} />
             <Route path="/inspection" element={<UnitInspection />} />
+            
             {/* بوابة العملاء */}
             <Route path="/customer-login" element={<CustomerLogin />} />
             <Route path="/maintenance" element={<Maintenance />} />
