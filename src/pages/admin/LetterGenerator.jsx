@@ -41,8 +41,13 @@ export default function LetterGenerator() {
 
       try {
         const res = await fetch(`${API_URL}?action=get_users`);
-        const users = await res.json();
-        const freshUser = users.find(u => u.id === currentId);
+        const result = await res.json();
+        
+        // 🔥 التعديل الأول: استخراج المصفوفة من الـ data بشكل صحيح
+        const usersArray = result.success ? result.data : [];
+        
+        // استخدام toString() لضمان تطابق الأرقام والنصوص
+        const freshUser = usersArray.find(u => u.id.toString() === currentId.toString());
 
         if (freshUser) {
           setDbUser(freshUser);
@@ -82,7 +87,8 @@ export default function LetterGenerator() {
     try {
       const res = await fetch(`${API_URL}?action=get_templates`);
       const result = await res.json();
-      setDbTemplates(result);
+      // 🔥 التعديل الثاني: استخراج مصفوفة النماذج بشكل صحيح عشان ما تطلع شاشة بيضاء
+      setDbTemplates(result.success ? result.data : []);
     } catch (error) {
       console.error("تعذر جلب النماذج", error);
     } finally {
@@ -94,7 +100,7 @@ export default function LetterGenerator() {
     fetchTemplates();
   }, []);
 
-// 🔥 درع الحماية: نتأكد إن النماذج عبارة عن قائمة قبل ما نرتبها عشان ما تطلع شاشة بيضاء
+  // 🔥 درع الحماية: نتأكد إن النماذج عبارة عن قائمة قبل ما نرتبها عشان ما تطلع شاشة بيضاء
   const groupedTemplates = (Array.isArray(dbTemplates) ? dbTemplates : []).reduce((acc, curr) => {
     if (!acc[curr.category]) acc[curr.category] = [];
     acc[curr.category].push(curr);
