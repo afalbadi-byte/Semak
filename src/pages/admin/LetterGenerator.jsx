@@ -1,14 +1,18 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { FilePenLine, Printer, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, getImg } from '../../utils/helpers';
+import { useReactToPrint } from 'react-to-print'; // 🔥 المكتبة السحرية للطباعة
 
 export default function LetterGenerator() {
   const { user: contextUser, showToast } = useContext(AppContext);
   const navigate = useNavigate();
+
+  // 🔥 مرجع (Ref) لربط الورقة المخفية بالطابعة
+  const printRef = useRef();
 
   const [dbUser, setDbUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -29,6 +33,16 @@ export default function LetterGenerator() {
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
+
+  // 🔥 دالة الطباعة السحرية
+  const handlePrint = useReactToPrint({
+    content: () => printRef.current,
+    documentTitle: `خطاب_${data.recipient || 'سماك'}`,
+    pageStyle: `
+      @page { size: A4; margin: 10mm; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    `
+  });
 
   useEffect(() => {
     const fetchUserFromDB = async () => {
@@ -166,39 +180,14 @@ export default function LetterGenerator() {
   return (
     <>
       <style>{`
-        /* تنسيقات المحرر النصي */
         .quill-content p { margin-bottom: 0.8rem; }
         .quill-content li { margin-bottom: 0.5rem; }
-        
-        /* إخفاء نسخة الطباعة في الوضع العادي */
-        .print-only { display: none; }
-        
-        /* 🚀 الأوامر السحرية لإجبار المتصفح على الطباعة بشكل صحيح */
-        @media print {
-          .screen-only { display: none !important; }
-          .print-only { display: block !important; }
-          
-          /* هذا السطر يكسر حماية لوحة التحكم ويسمح بتعدد الصفحات */
-          body, html, #root, .app-container { 
-            height: auto !important; 
-            overflow: visible !important; 
-            background-color: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          
-          /* إجبار إظهار الألوان بالطباعة */
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-        }
       `}</style>
       
       {/* ========================================================= */}
-      {/* 1. نسخة العرض على الشاشة (الداشبورد) - تختفي عند الطباعة */}
+      {/* 1. نسخة العرض على الشاشة (الداشبورد) */}
       {/* ========================================================= */}
-      <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px] screen-only">
+      <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px]">
         
         {/* اللوحة الجانبية (أدوات التحكم) */}
         <div className="w-full md:w-[350px] bg-gradient-to-b from-[#112240] to-[#0a192f] text-white flex flex-col rounded-[2rem] shadow-2xl overflow-hidden border border-white/5">
@@ -277,7 +266,6 @@ export default function LetterGenerator() {
                       <option className="text-black" value="إدارة الأملاك والصيانة">إدارة الأملاك والصيانة</option>
                       <option className="text-black" value="الشؤون القانونية وإدارة الأملاك">الشؤون القانونية وإدارة الأملاك</option>
                       <option className="text-black" value="الموارد البشرية والموظفين">الموارد البشرية والموظفين</option>
-                      <option className="text-black" value="خدمة العملاء">خدمة العملاء</option>
                     </select>
                   </div>
                   <div>
@@ -296,7 +284,8 @@ export default function LetterGenerator() {
           </div>
           
           <div className="p-4 bg-[#0f172a] border-t border-white/10">
-            <button onClick={() => window.print()} className="w-full bg-gradient-to-r from-[#c5a059] to-yellow-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition shadow-[0_0_20px_rgba(197,160,89,0.3)] transform hover:-translate-y-1">
+            {/* 🔥 استدعاء دالة الطباعة السحرية هنا */}
+            <button onClick={handlePrint} className="w-full bg-gradient-to-r from-[#c5a059] to-yellow-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition shadow-[0_0_20px_rgba(197,160,89,0.3)] transform hover:-translate-y-1">
               <Printer size={20} /> طباعة أو تصدير PDF
             </button>
           </div>
@@ -385,95 +374,97 @@ export default function LetterGenerator() {
       </div>
 
       {/* ========================================================= */}
-      {/* 2. نسخة الطباعة الاحترافية (تظهر فقط عند ضغط Print) */}
+      {/* 2. نسخة الطباعة الاحترافية (مخفية، وتظهر فقط في نافذة الطباعة) */}
       {/* ========================================================= */}
-      <div className="print-only font-cairo bg-white text-black" style={{ width: '100%', margin: 0, padding: 0 }}>
-        <table className="w-full border-collapse">
-          <thead className="table-header-group">
-            <tr>
-              <td>
-                <div className="h-3 w-full flex">
-                  <div className="h-full bg-[#1a365d] w-3/4"></div>
-                  <div className="h-full bg-[#c5a059] w-1/4"></div>
-                </div>
-                <div className="px-12 pt-8 pb-6 flex justify-between items-center relative border-b border-slate-100 bg-white">
-                  <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="شعار" className="h-28 object-contain" />
-                  <div className="text-left border-l-4 border-[#c5a059] pl-6 z-10">
-                    <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
-                    <p className="text-[#c5a059] font-bold text-sm mt-2 tracking-wider">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-                    <p className="text-slate-400 text-xs mt-1 font-sans tracking-widest">CR: 7051031099</p>
+      <div style={{ display: 'none' }}>
+        <div ref={printRef} className="font-cairo bg-white text-black w-full" style={{ padding: 0, margin: 0 }}>
+          <table className="w-full border-collapse">
+            <thead className="table-header-group">
+              <tr>
+                <td>
+                  <div className="h-3 w-full flex">
+                    <div className="h-full bg-[#1a365d] w-3/4"></div>
+                    <div className="h-full bg-[#c5a059] w-1/4"></div>
                   </div>
-                </div>
-                <div className="h-4"></div>
-              </td>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div className="font-amiri text-lg relative z-10 px-12 pb-4 w-full break-words overflow-hidden">
-                  <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
-                  
-                  <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
-                    <div className="flex items-center gap-2 text-sm font-cairo">
-                      <span className="w-2 h-2 rounded-full bg-[#1a365d]"></span>
-                      <strong className="text-[#1a365d]">التاريخ:</strong>
-                      <span className="text-slate-700">{data.date}</span>
+                  <div className="px-12 pt-8 pb-6 flex justify-between items-center relative border-b border-slate-100 bg-white">
+                    <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="شعار" className="h-28 object-contain" />
+                    <div className="text-left border-l-4 border-[#c5a059] pl-6 z-10">
+                      <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
+                      <p className="text-[#c5a059] font-bold text-sm mt-2 tracking-wider">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
+                      <p className="text-slate-400 text-xs mt-1 font-sans tracking-widest">CR: 7051031099</p>
                     </div>
                   </div>
-                  
-                  <div className="mb-10 border-r-4 border-[#c5a059] pr-5 py-2 bg-slate-50/50 rounded-l-2xl">
-                    <h3 className="font-bold text-2xl text-[#1a365d] font-cairo leading-relaxed">
-                      السادة / {data.recipient} <br/>
-                      <span className="text-[#c5a059] text-xl mt-1 inline-block">المحترمين،،</span>
-                    </h3>
-                  </div>
-                  
-                  {data.subject && (
-                    <div className="flex justify-center mb-12">
-                      <div className="bg-white border-2 border-[#1a365d]/10 px-12 py-3 rounded-full shadow-sm">
-                        <span className="font-black text-xl text-[#1a365d] font-cairo relative z-10">الموضوع: {data.subject}</span>
+                  <div className="h-4"></div>
+                </td>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div className="font-amiri text-lg relative z-10 px-12 pb-4 w-full break-words overflow-hidden">
+                    <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
+                    
+                    <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
+                      <div className="flex items-center gap-2 text-sm font-cairo">
+                        <span className="w-2 h-2 rounded-full bg-[#1a365d]"></span>
+                        <strong className="text-[#1a365d]">التاريخ:</strong>
+                        <span className="text-slate-700">{data.date}</span>
                       </div>
                     </div>
-                  )}
-                  
-                  <div className="text-justify leading-[2.4] quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: data.body }}></div>
-                  
-                  <div className="mt-24 mb-4 flex justify-between items-end px-8 relative min-h-[160px]" style={{ pageBreakInside: 'avoid' }}>
-                    <div className="relative w-48 flex justify-center">
-                      {data.showStamp && dbUser?.role === "admin" && (
-                        <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0" alt="ختم" />
-                      )}
+                    
+                    <div className="mb-10 border-r-4 border-[#c5a059] pr-5 py-2 bg-slate-50/50 rounded-l-2xl">
+                      <h3 className="font-bold text-2xl text-[#1a365d] font-cairo leading-relaxed">
+                        السادة / {data.recipient} <br/>
+                        <span className="text-[#c5a059] text-xl mt-1 inline-block">المحترمين،،</span>
+                      </h3>
                     </div>
-                    <div className="text-center font-cairo relative z-10 pb-2">
-                      <p className="font-bold text-[#c5a059] mb-3 text-lg uppercase tracking-wider">{data.signTitle}</p>
-                      <p className="font-black text-2xl text-[#1a365d] border-t-2 border-slate-200 pt-4 min-w-[220px]">{data.signName}</p>
-                    </div>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-          <tfoot className="table-footer-group">
-            <tr>
-              <td>
-                <div className="h-6"></div>
-                <div className="px-10 pb-8 bg-white w-full">
-                  <div className="bg-[#1a365d] rounded-2xl p-5 flex justify-between items-center text-white relative overflow-hidden">
-                    <div className="relative z-10">
-                      <p className="font-bold text-base tracking-wide text-[#c5a059]">سماك العقارية</p>
-                      <p className="text-white/80 text-xs mt-1">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 relative z-10 font-sans tracking-wide" dir="ltr">
-                      <span className="text-white font-bold text-sm flex items-center gap-2">920032842 <span className="text-[#c5a059]">📞</span></span>
-                      <span className="text-white/80 text-xs flex items-center gap-2">semak.sa <span className="text-[#c5a059]">🌐</span></span>
+                    
+                    {data.subject && (
+                      <div className="flex justify-center mb-12">
+                        <div className="bg-white border-2 border-[#1a365d]/10 px-12 py-3 rounded-full shadow-sm">
+                          <span className="font-black text-xl text-[#1a365d] font-cairo relative z-10">الموضوع: {data.subject}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="text-justify leading-[2.4] quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: data.body }}></div>
+                    
+                    <div className="mt-24 mb-4 flex justify-between items-end px-8 relative min-h-[160px]" style={{ pageBreakInside: 'avoid' }}>
+                      <div className="relative w-48 flex justify-center">
+                        {data.showStamp && dbUser?.role === "admin" && (
+                          <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0" alt="ختم" />
+                        )}
+                      </div>
+                      <div className="text-center font-cairo relative z-10 pb-2">
+                        <p className="font-bold text-[#c5a059] mb-3 text-lg uppercase tracking-wider">{data.signTitle}</p>
+                        <p className="font-black text-2xl text-[#1a365d] border-t-2 border-slate-200 pt-4 min-w-[220px]">{data.signName}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot className="table-footer-group">
+              <tr>
+                <td>
+                  <div className="h-6"></div>
+                  <div className="px-10 pb-8 bg-white w-full">
+                    <div className="bg-[#1a365d] rounded-2xl p-5 flex justify-between items-center text-white relative overflow-hidden">
+                      <div className="relative z-10">
+                        <p className="font-bold text-base tracking-wide text-[#c5a059]">سماك العقارية</p>
+                        <p className="text-white/80 text-xs mt-1">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 relative z-10 font-sans tracking-wide" dir="ltr">
+                        <span className="text-white font-bold text-sm flex items-center gap-2">920032842 <span className="text-[#c5a059]">📞</span></span>
+                        <span className="text-white/80 text-xs flex items-center gap-2">semak.sa <span className="text-[#c5a059]">🌐</span></span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </>
   );
