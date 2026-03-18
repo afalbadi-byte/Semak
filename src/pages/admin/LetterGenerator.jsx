@@ -166,17 +166,42 @@ export default function LetterGenerator() {
   return (
     <>
       <style>{`
+        /* تنسيقات المحرر النصي */
         .quill-content p { margin-bottom: 0.8rem; }
         .quill-content li { margin-bottom: 0.5rem; }
+        
+        /* إخفاء نسخة الطباعة في الوضع العادي */
+        .print-only { display: none; }
+        
+        /* 🚀 الأوامر السحرية لإجبار المتصفح على الطباعة بشكل صحيح */
+        @media print {
+          .screen-only { display: none !important; }
+          .print-only { display: block !important; }
+          
+          /* هذا السطر يكسر حماية لوحة التحكم ويسمح بتعدد الصفحات */
+          body, html, #root, .app-container { 
+            height: auto !important; 
+            overflow: visible !important; 
+            background-color: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* إجبار إظهار الألوان بالطباعة */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
       `}</style>
       
       {/* ========================================================= */}
-      {/* 1. نسخة العرض على الشاشة (الداشبورد) */}
+      {/* 1. نسخة العرض على الشاشة (الداشبورد) - تختفي عند الطباعة */}
       {/* ========================================================= */}
-      <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px] no-print print:hidden">
+      <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px] screen-only">
         
         {/* اللوحة الجانبية (أدوات التحكم) */}
-        <div className="w-full md:w-[350px] bg-gradient-to-b from-[#112240] to-[#0a192f] text-white flex flex-col rounded-[2rem] shadow-2xl overflow-hidden border border-white/5 no-print">
+        <div className="w-full md:w-[350px] bg-gradient-to-b from-[#112240] to-[#0a192f] text-white flex flex-col rounded-[2rem] shadow-2xl overflow-hidden border border-white/5">
           <div className="p-6 bg-[#0f172a]/50 flex flex-col gap-4 border-b border-white/10 relative">
             <button onClick={() => navigate(-1)} className="self-start flex items-center gap-2 text-slate-400 hover:text-[#c5a059] transition-colors text-sm font-bold group">
               <ArrowRight size={18} className="transform group-hover:-translate-x-1 transition-transform" />
@@ -252,6 +277,7 @@ export default function LetterGenerator() {
                       <option className="text-black" value="إدارة الأملاك والصيانة">إدارة الأملاك والصيانة</option>
                       <option className="text-black" value="الشؤون القانونية وإدارة الأملاك">الشؤون القانونية وإدارة الأملاك</option>
                       <option className="text-black" value="الموارد البشرية والموظفين">الموارد البشرية والموظفين</option>
+                      <option className="text-black" value="خدمة العملاء">خدمة العملاء</option>
                     </select>
                   </div>
                   <div>
@@ -296,10 +322,8 @@ export default function LetterGenerator() {
             </div>
             
             <div className="font-amiri text-lg relative z-10 flex-grow pt-8 px-12 pb-12 w-full break-words overflow-hidden">
-              {/* العلامة المائية */}
               <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
               
-              {/* التاريخ */}
               <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
                 <div className="flex items-center gap-2 text-sm font-cairo">
                   <span className="w-2 h-2 rounded-full bg-[#1a365d]"></span>
@@ -308,7 +332,6 @@ export default function LetterGenerator() {
                 </div>
               </div>
               
-              {/* المرسل إليه */}
               <div className="mb-10 border-r-4 border-[#c5a059] pr-5 py-2 bg-gradient-to-l from-slate-50 to-transparent rounded-l-2xl">
                 <h3 className="font-bold text-2xl text-[#1a365d] font-cairo leading-relaxed">
                   السادة / {data.recipient} <br/>
@@ -316,7 +339,6 @@ export default function LetterGenerator() {
                 </h3>
               </div>
               
-              {/* الموضوع */}
               {data.subject && (
                 <div className="flex justify-center mb-12">
                   <div className="bg-white border-2 border-[#1a365d]/10 px-12 py-3 rounded-full shadow-sm relative overflow-hidden">
@@ -326,10 +348,8 @@ export default function LetterGenerator() {
                 </div>
               )}
               
-              {/* النص المكتوب */}
               <div className="text-justify leading-[2.4] flex-grow quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: data.body }}></div>
               
-              {/* التوقيع */}
               <div className="mt-24 mb-4 flex justify-between items-end px-8 relative min-h-[160px]">
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent rounded-b-3xl -z-10"></div>
                 <div className="relative w-48 flex justify-center">
@@ -365,9 +385,9 @@ export default function LetterGenerator() {
       </div>
 
       {/* ========================================================= */}
-      {/* 2. نسخة الطباعة الاحترافية (جدول يدعم تعدد الصفحات) */}
+      {/* 2. نسخة الطباعة الاحترافية (تظهر فقط عند ضغط Print) */}
       {/* ========================================================= */}
-      <div className="hidden print:block font-cairo bg-white text-black" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact', width: '100%', margin: 0, padding: 0 }}>
+      <div className="print-only font-cairo bg-white text-black" style={{ width: '100%', margin: 0, padding: 0 }}>
         <table className="w-full border-collapse">
           <thead className="table-header-group">
             <tr>
@@ -438,7 +458,7 @@ export default function LetterGenerator() {
             <tr>
               <td>
                 <div className="h-6"></div>
-                <div className="px-10 pb-8 bg-white w-full" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                <div className="px-10 pb-8 bg-white w-full">
                   <div className="bg-[#1a365d] rounded-2xl p-5 flex justify-between items-center text-white relative overflow-hidden">
                     <div className="relative z-10">
                       <p className="font-bold text-base tracking-wide text-[#c5a059]">سماك العقارية</p>
