@@ -85,7 +85,10 @@ export default function LetterGenerator() {
     try {
       const res = await fetch(`${API_URL}?action=get_templates`);
       const result = await res.json();
-      setDbTemplates(result.success ? result.data : []);
+      
+      // 🔥 التعديل هنا: نقبل البيانات مباشرة إذا كانت مصفوفة (Array) زي ما يرسلها السيرفر
+      setDbTemplates(Array.isArray(result) ? result : []);
+      
     } catch (error) {
       console.error("تعذر جلب النماذج", error);
     } finally {
