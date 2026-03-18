@@ -4996,10 +4996,21 @@ export default function Projects() {
     </div>
   );
 }
+// Ù…Ø±Ø§Ø¬Ø¹Ø©: Ø¬Ø¹Ù„ Ø§Ù„Ø¯Ø§Ù„Ø© ØªØ¯Ø¹Ù… Ø§Ù„Ù…Ø³Ø§Ø±Ø§Øª Ø§Ù„Ù…Ø­Ù„ÙŠØ© ÙˆØ§Ù„Ø±ÙˆØ§Ø¨Ø· Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠØ© Ù…Ø¹Ø§Ù‹
+export const getImg = (pathOrId, sz = "w1500") => {
+  if (!pathOrId) return "";
+
+  // Ø¥Ø°Ø§ ÙƒØ§Ù† Ø§Ù„Ù…Ø³Ø§Ø± ÙŠØ¨Ø¯Ø£ Ø¨Ù€ / Ù…Ø¹Ù†Ø§Ù‡ ØµÙˆØ±Ø© Ù…Ø­Ù„ÙŠØ© ÙÙŠ Ù…Ø¬Ù„Ø¯ public
+  if (pathOrId.startsWith('/')) {
+    return pathOrId;
+  }
+  
+  // ØºÙŠØ± Ø°Ù„ÙƒØŒ ÙŠÙØªØ±Ø¶ Ø£Ù†Ù‡ ID Ù…Ù† Ø¬ÙˆØ¬Ù„ Ø¯Ø±Ø§ÙŠÙ (ÙƒØ®ÙŠØ§Ø± Ø§Ø­ØªÙŠØ§Ø·ÙŠ)
+  return `https://drive.google.com/thumbnail?id=${pathOrId}&sz=${sz}`;
+};
+
+// Ø§Ù„Ø«ÙˆØ§Ø¨Øª Ø§Ù„Ø£Ø®Ø±Ù‰ ØªØ¨Ù‚Ù‰ ÙƒÙ…Ø§ Ù‡ÙŠ
 export const API_URL = "https://semak.sa/api.php";
-
-export const getImg = (id, sz = "w1500") => `https://drive.google.com/thumbnail?id=${id}&sz=${sz}`;
-
 export const TIME_SLOTS = [
   "08:00 Øµ - 10:00 Øµ",
   "10:00 Øµ - 12:00 Ù…",
