@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { FilePenLine, ArrowRight, Printer, RefreshCw, Loader2 } from 'lucide-react';
+import { FilePenLine, Printer, RefreshCw, Loader2 } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, getImg } from '../../utils/helpers';
 
@@ -42,20 +42,18 @@ export default function LetterGenerator() {
       try {
         const res = await fetch(`${API_URL}?action=get_users`);
         const result = await res.json();
-        
-        // 🔥 التعديل الأول: استخراج المصفوفة من الـ data بشكل صحيح
         const usersArray = result.success ? result.data : [];
-        
-        // استخدام toString() لضمان تطابق الأرقام والنصوص
         const freshUser = usersArray.find(u => u.id.toString() === currentId.toString());
 
         if (freshUser) {
           setDbUser(freshUser);
+          
+          // 🔥 التعديل هنا: سحب بيانات الموظف المسجل دخوله فعلياً
           setData(prev => ({
             ...prev,
-            signName: freshUser.name || "أحمد البادي",
-            signTitle: freshUser.job || "المدير العام",
-            showStamp: freshUser.role === "admin"
+            signName: freshUser.name || "", // اسم الموظف من الداتا بيس
+            signTitle: freshUser.job || (freshUser.role === 'admin' ? "المدير العام" : "موظف"), // المسمى الوظيفي
+            showStamp: false // الختم مقفل افتراضياً، والأدمن فقط يقدر يفعله من الزر
           }));
         } else {
           navigate("/login");
@@ -87,7 +85,6 @@ export default function LetterGenerator() {
     try {
       const res = await fetch(`${API_URL}?action=get_templates`);
       const result = await res.json();
-      // 🔥 التعديل الثاني: استخراج مصفوفة النماذج بشكل صحيح عشان ما تطلع شاشة بيضاء
       setDbTemplates(result.success ? result.data : []);
     } catch (error) {
       console.error("تعذر جلب النماذج", error);
@@ -100,7 +97,6 @@ export default function LetterGenerator() {
     fetchTemplates();
   }, []);
 
-  // 🔥 درع الحماية: نتأكد إن النماذج عبارة عن قائمة قبل ما نرتبها عشان ما تطلع شاشة بيضاء
   const groupedTemplates = (Array.isArray(dbTemplates) ? dbTemplates : []).reduce((acc, curr) => {
     if (!acc[curr.category]) acc[curr.category] = [];
     acc[curr.category].push(curr);
@@ -172,10 +168,9 @@ export default function LetterGenerator() {
   if (!dbUser) return null;
 
   return (
-    // 🔥 التعديل هنا: شلنا (fixed inset-0 h-screen w-screen) عشان يندمج صح مع الداش بورد
     <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px]">
       
-      {/* 🛠️ اللوحة الجانبية (أدوات التحكم) */}
+      {/* 🛠️ اللوحة الجانبية */}
       <div className="w-full md:w-[350px] bg-[#112240] text-white flex flex-col rounded-[2rem] shadow-xl overflow-hidden no-print">
         <div className="p-6 bg-[#0f172a] flex justify-between items-center border-b border-white/10">
           <h2 className="text-xl font-bold text-[#c5a059] flex items-center gap-2"><FilePenLine /> صانع الخطابات</h2>
@@ -213,7 +208,7 @@ export default function LetterGenerator() {
                 value={data.body} 
                 onChange={(content) => setData({ ...data, body: content })} 
                 modules={quillModules}
-                placeholder="اكتب تفاصيل الخطاب هنا... يمكنك إضافة صور ولصق جداول."
+                placeholder="اكتب تفاصيل الخطاب هنا... الخطاب سيدعم تعدد الصفحات تلقائياً."
               />
             </div>
           </div>
@@ -223,6 +218,7 @@ export default function LetterGenerator() {
             <div><label className="text-xs text-slate-400 block mb-1">المنصب</label><input type="text" value={data.signTitle} onChange={e => setData({ ...data, signTitle: e.target.value })} className="w-full bg-white/10 rounded-xl p-3 text-sm outline-none border border-white/20 focus:border-[#c5a059] transition text-white" /></div>
           </div>
           
+          {/* 🔥 شرط الختم: هذا الزر لن يظهر نهائياً إلا إذا كان دور الموظف admin */}
           {dbUser?.role === "admin" && (
             <div className="flex justify-between items-center pt-4 border-t border-white/10 mt-4">
               <span className="text-sm font-bold text-slate-300">إظهار الختم والتوقيع الرسمي</span>
@@ -272,54 +268,81 @@ export default function LetterGenerator() {
         </div>
       </div>
 
-      {/* 📜 منطقة المعاينة والطباعة (ورقة A4) */}
+      {/* 📜 منطقة المعاينة والطباعة (ورقة A4 متعددة الصفحات) */}
       <div className="flex-1 bg-slate-200 rounded-[2rem] overflow-y-auto p-4 md:p-8 flex justify-center items-start shadow-inner border border-slate-300 print:p-0 print:bg-white print:border-none print:shadow-none print:rounded-none">
-        <div className="a4-page bg-white text-black shadow-2xl relative print:shadow-none" id="printArea" style={{ width: '210mm', minHeight: '297mm', padding: '0', margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+        <div className="bg-white text-black shadow-2xl print:shadow-none" id="printArea" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', backgroundColor: 'white' }}>
           
-          <div className="decorative-strip" style={{ height: '8px', background: 'linear-gradient(90deg, #1a365d, #c5a059)', width: '100%' }} />
-          
-          <div className="letter-header flex justify-between items-center px-12 pt-8 pb-4 border-b border-gray-100">
-            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="شعار" className="h-24 object-contain" />
-            <div className="flex flex-col items-end">
-              <p className="text-[#c5a059] font-bold text-sm mb-2 font-cairo">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-              <div className="bg-slate-50 px-4 py-1 rounded-full border border-slate-200">
-                <p className="text-[#1a365d] text-sm font-bold tracking-wider font-cairo">الرقم الموحد: 7051031099</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="letter-body font-amiri text-lg relative z-10 flex-grow pt-10 px-12">
-            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-[0.03] w-[60%] pointer-events-none" alt="" />
+          <table className="w-full border-collapse">
             
-            <div className="text-left mb-8 font-cairo text-sm text-[#1a365d]"><strong>التاريخ:</strong> {data.date}</div>
-            <div className="mb-6"><h3 className="font-bold text-xl text-black font-cairo">{data.recipient}</h3></div>
-            <div className="mb-6 font-cairo">تحية طيبة وبعد،،</div>
-            <div className="text-center mb-10"><span className="border-b-2 border-[#c5a059] pb-2 px-8 font-bold text-xl text-[#1a365d] font-cairo">{data.subject}</span></div>
-            
-            <div className="text-justify leading-[2.2] flex-grow quill-content" dangerouslySetInnerHTML={{ __html: data.body }}></div>
-            
-            <div className="mt-16 mb-8 flex justify-between items-end px-4 relative min-h-[150px]">
-              <div className="relative w-48 flex justify-center">
-                {data.showStamp && dbUser?.role === "admin" && (
-                  <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-90 mix-blend-multiply absolute bottom-0" alt="ختم" />
-                )}
-              </div>
-              <div className="text-center font-cairo relative z-10 pb-4">
-                <p className="font-bold text-[#1a365d] mb-3 text-xl">{data.signTitle}</p>
-                <p className="font-bold text-lg">{data.signName}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="letter-footer mt-auto border-t border-gray-100 bg-gray-50/50">
-            <div className="text-center py-4 font-cairo">
-              <p className="font-bold text-sm mb-1 text-[#1a365d]">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
-              <div className="flex justify-center gap-6 text-xs text-gray-400 ltr" dir="ltr">
-                <span className="font-sans font-bold">semak.sa</span>
-                <span className="font-sans font-bold">920032842</span>
-              </div>
-            </div>
-          </div>
+            {/* 🔝 الترويسة: تتكرر في بداية كل صفحة مطبوعة */}
+            <thead className="table-header-group">
+              <tr>
+                <td>
+                  <div style={{ height: '8px', background: 'linear-gradient(90deg, #1a365d, #c5a059)', width: '100%' }} />
+                  <div className="flex justify-between items-center px-12 pt-8 pb-4 border-b border-gray-100 bg-white">
+                    <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="شعار" className="h-24 object-contain" />
+                    <div className="flex flex-col items-end">
+                      <p className="text-[#c5a059] font-bold text-sm mb-2 font-cairo">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
+                      <div className="bg-slate-50 px-4 py-1 rounded-full border border-slate-200">
+                        <p className="text-[#1a365d] text-sm font-bold tracking-wider font-cairo">الرقم الموحد: 7051031099</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="h-4"></div>
+                </td>
+              </tr>
+            </thead>
+
+            {/* 📝 محتوى الخطاب */}
+            <tbody>
+              <tr>
+                <td>
+                  <div className="font-amiri text-lg relative z-10 px-12 pb-4">
+                    <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-[20%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[60%] pointer-events-none" alt="" />
+                    
+                    <div className="text-left mb-8 font-cairo text-sm text-[#1a365d]"><strong>التاريخ:</strong> {data.date}</div>
+                    <div className="mb-6"><h3 className="font-bold text-xl text-black font-cairo">{data.recipient}</h3></div>
+                    <div className="mb-6 font-cairo">تحية طيبة وبعد،،</div>
+                    <div className="text-center mb-10"><span className="border-b-2 border-[#c5a059] pb-2 px-8 font-bold text-xl text-[#1a365d] font-cairo">{data.subject}</span></div>
+                    
+                    <div className="text-justify leading-[2.2] quill-content" dangerouslySetInnerHTML={{ __html: data.body }}></div>
+                    
+                    {/* التوقيع والختم (مربوط بصلاحية الأدمن) */}
+                    <div className="mt-16 mb-4 flex justify-between items-end px-4 relative min-h-[150px]" style={{ pageBreakInside: 'avoid' }}>
+                      <div className="relative w-48 flex justify-center">
+                        {data.showStamp && dbUser?.role === "admin" && (
+                          <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-90 mix-blend-multiply absolute bottom-0" alt="ختم" />
+                        )}
+                      </div>
+                      <div className="text-center font-cairo relative z-10 pb-4">
+                        <p className="font-bold text-[#1a365d] mb-3 text-xl">{data.signTitle}</p>
+                        <p className="font-bold text-lg">{data.signName}</p>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+
+            {/* ⬇️ التذييل: يتكرر في أسفل كل صفحة مطبوعة */}
+            <tfoot className="table-footer-group">
+              <tr>
+                <td>
+                  <div className="h-4"></div>
+                  <div className="border-t border-gray-100 bg-gray-50/50 w-full">
+                    <div className="text-center py-4 font-cairo">
+                      <p className="font-bold text-sm mb-1 text-[#1a365d]">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
+                      <div className="flex justify-center gap-6 text-xs text-gray-400 ltr" dir="ltr">
+                        <span className="font-sans font-bold">semak.sa</span>
+                        <span className="font-sans font-bold">920032842</span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+
+          </table>
         </div>
       </div>
     </div>
