@@ -265,6 +265,51 @@ export default function FeasibilityCalc({ showToast }) {
             </div>
         `;
 
+        // 🔥 صور المناظير للمشروع بدلاً من المخططات
+        const coverImagesHTML = `
+            <div style="width: 100%; height: 35vh; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #1a365d; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0; -webkit-print-color-adjust: exact; color-adjust: exact;">
+                <img src="${getImg("1P0nERTU6SQiWHLf-53bpp1Jsjf120Kq4")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                <img src="${getImg("18fCsrolSEvo8q9wt2_z4BXlB88BZ-62-")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                <img src="${getImg("1ahnVUVfBEL8KIY2y1YYJAoupt2WvHRV6")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(0deg, rgba(26,54,93,0.4) 0%, rgba(26,54,93,0.1) 100%); pointer-events: none;"></div>
+            </div>
+        `;
+
+        // صفحة الغلاف
+        const coverHTML = `
+            <div class="print-cover" style="position: relative; width: 100%; height: 295mm; background-color: #1a365d; display: flex; flex-direction: column; overflow: hidden; -webkit-print-color-adjust: exact; color-adjust: exact; box-sizing: border-box;">
+                
+                <div style="display: flex; height: 10px; width: 100%; flex-shrink: 0;">
+                    <div style="background-color: #c5a059; width: 30%;"></div>
+                    <div style="background-color: white; width: 70%;"></div>
+                </div>
+
+                <div style="text-align: center; padding: 40px 0; flex-shrink: 0;">
+                    <img src="${getImg("1HEFY56KLYGJNmc-tufIXmYDUbGyOIdDX")}" alt="Semak Logo" style="height: 110px; object-fit: contain;" />
+                </div>
+
+                ${coverImagesHTML}
+
+                <div style="flex: 1; padding: 40px 60px; text-align: center; color: white; direction: rtl;">
+                    <h1 style="font-size: 24px; font-weight: 900; color: #c5a059; margin: 0 0 10px 0;">سماك العقارية</h1>
+                    <h2 style="font-size: 56px; font-weight: 900; color: white; margin: 0 0 10px 0; line-height: 1;">${projectName || "سماك الصفوة 2"}</h2>
+                    <p style="font-size: 18px; color: #cbd5e1; font-weight: 900; margin: 0 0 30px 0;">دراسة جدوى فرصة استثمارية للتطوير العقاري</p>
+                    <p style="font-size: 13px; color: #94a3b8; font-weight: bold; margin: 0;">تطوير مجمع سكني فاخر بنظام البيع على الخارطة (وافي)</p>
+                    <p style="font-size: 13px; color: #94a3b8; font-weight: bold; margin: 5px 0 0 0;">إجمالي وحدات المشروع لبدء التنفيذ: <span style="color:white; font-weight:900;">${totalUnits} وحدة</span></p>
+                </div>
+
+                <div style="padding: 30px 60px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.1); flex-shrink: 0; margin-top: auto;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <div style="text-align: right; color: white;">
+                            <h4 style="margin: 0; color: #c5a059; font-weight: 900; font-size: 14px;">إدارة التطوير والاستثمار</h4>
+                            <p style="margin: 4px 0 0 0; color: white; font-size: 10px; font-weight: 900;">وثيقة سرية للمستثمرين</p>
+                            <p style="margin: 8px 0 0 0; color: #cbd5e1; font-size: 9px; font-weight: 900;" dir="ltr">info@semak.sa | semak.sa | 920032842</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
         let contentHTML = '';
         if (type === 'teaser') {
             contentHTML = `
@@ -396,7 +441,7 @@ export default function FeasibilityCalc({ showToast }) {
                     ${archDetailsHTML}
                 </div>
 
-                <div class="page-break">
+                <div class="page-break-avoid" style="margin-top: 20px;">
                     <h3 style="font-size: 18px; font-weight: 900; color: #1a365d; margin: 0 0 15px 0;">توزيع حصص التمويل والأرباح</h3>
                     <div style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 20px;">
                         <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 11px;">
@@ -439,19 +484,12 @@ export default function FeasibilityCalc({ showToast }) {
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
                     
-                    .a4-container { width: 100%; max-width: 210mm; min-height: 297mm; margin: 0 auto; display: flex; flex-direction: column; background: white; position: relative; }
+                    .print-cover { position: relative; width: 100%; height: 296mm; background-color: #1a365d; display: flex; flex-direction: column; overflow: hidden; -webkit-print-color-adjust: exact; color-adjust: exact; box-sizing: border-box; page-break-after: avoid; margin-bottom: 0;}
                     
-                    /* 🔥 كلاس صفحة الغلاف المستقلة 🔥 */
-                    .print-cover { position: relative; width: 100%; height: 290mm; page-break-after: always; background-color: #1a365d; display: block; overflow: hidden; -webkit-print-color-adjust: exact; color-adjust: exact; z-index: 2000;}
-
-                    .cover-banner-images { width: 100%; height: 35vh; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #1a365d; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0; -webkit-print-color-adjust: exact; color-adjust: exact;}
-                    .cover-banner-images img { width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;}
-
-                    .top-bar { display: flex; height: 8px; width: 100%; }
+                    .top-bar { display: flex; height: 8px; width: 100%; flex-shrink: 0; }
                     .bar-gold { background-color: #c5a059; width: 30%; }
                     .bar-navy { background-color: #1a365d; width: 70%; }
                     
-                    /* 🔥 الهيدر والفوتر المتكرر للصفحات الداخلية (عن طريق الجدول) 🔥 */
                     .report-header { background: white; border-bottom: 1px solid #f1f5f9; }
                     .header-content { padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
                     .logo-box img { height: 40px; object-fit: contain; }
@@ -465,50 +503,17 @@ export default function FeasibilityCalc({ showToast }) {
                     .footer-right h4 { margin: 0; color: #1a365d; font-weight: 900; font-size: 12px; }
                     .footer-right p { margin: 0; color: #94a3b8; font-size: 9px; }
                     
-                    table.report-table { width: 100%; border-collapse: collapse; position: relative; z-index: 10;}
+                    table.report-table { width: 100%; border-collapse: collapse; position: relative; z-index: 10; page-break-before: always;}
                     .report-body { padding: 20px 40px; position: relative; z-index: 10; min-height: 200mm;}
 
-                    /* 🔥 العلامة المائية 🔥 */
                     .watermark-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; overflow: hidden; display: flex; align-items: center; justify-content: center;}
                     .watermark { width: 70%; opacity: 0.08; -webkit-print-color-adjust: exact; color-adjust: exact;}
 
-                    .page-break { page-break-before: always; padding-top: 15px; }
                     .page-break-avoid { page-break-inside: avoid; }
                 </style>
             </head>
             <body>
-                <div class="print-cover">
-                    <div class="top-bar"><div class="bar-gold"></div><div class="bar-navy"></div></div>
-
-                    <div style="text-align: center; padding: 40px 0; flex-shrink: 0;">
-                        <img src="${getImg("1HEFY56KLYGJNmc-tufIXmYDUbGyOIdDX")}" alt="Semak Logo" style="height: 110px; object-fit: contain;" />
-                    </div>
-
-                    <div class="cover-banner-images">
-                        <img src="${getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild")}" />
-                        <img src="${getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1")}" />
-                        <img src="${getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE")}" />
-                        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(0deg, rgba(26,54,93,0.3) 0%, rgba(26,54,93,0.1) 100%); pointer-events: none;"></div>
-                    </div>
-
-                    <div style="flex: 1; padding: 40px 60px; text-align: center; color: white; direction: rtl;">
-                        <h1 style="font-size: 24px; font-weight: 900; color: #c5a059; margin: 0 0 10px 0;">سماك العقارية</h1>
-                        <h2 style="font-size: 56px; font-weight: 900; color: white; margin: 0 0 10px 0; line-height: 1;">${projectName || "سماك الصفوة 2"}</h2>
-                        <p style="font-size: 18px; color: #cbd5e1; font-weight: 900; margin: 0 0 30px 0;">دراسة جدوى فرصة استثمارية للتطوير العقاري</p>
-                        <p style="font-size: 13px; color: #94a3b8; font-weight: bold; margin: 0;">تطوير مجمع سكني فاخر بنظام البيع على الخارطة (وافي)</p>
-                        <p style="font-size: 13px; color: #94a3b8; font-weight: bold; margin: 5px 0 0 0;">إجمالي وحدات المشروع لبدء التنفيذ: <span style="color:white; font-weight:900;">${totalUnits} وحدة</span></p>
-                    </div>
-
-                    <div style="padding: 30px 60px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.1); flex-shrink: 0; margin-top: auto;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                            <div style="text-align: right; color: white;">
-                                <h4 style="margin: 0; color: #c5a059; font-weight: 900; font-size: 14px;">إدارة التطوير والاستثمار</h4>
-                                <p style="margin: 4px 0 0 0; color: white; font-size: 10px; font-weight: 900;">وثيقة سرية للمستثمرين</p>
-                                <p style="margin: 8px 0 0 0; color: #cbd5e1; font-size: 9px; font-weight: 900;" dir="ltr">info@semak.sa | semak.sa | 920032842</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                ${coverHTML}
 
                 <table class="report-table">
                     <thead>
@@ -560,7 +565,6 @@ export default function FeasibilityCalc({ showToast }) {
                 </table>
 
                 <script>
-                    // تأخير إقلاع الطباعة قليلاً لضمان تحميل الصور من جوجل درايف
                     window.onload = () => { setTimeout(() => { window.print(); }, 1500); };
                 <\/script>
             </body>
@@ -640,6 +644,7 @@ export default function FeasibilityCalc({ showToast }) {
                     <div className="bg-[#1a365d] text-white rounded-[2rem] shadow-2xl p-8 border-b-[12px] border-[#c5a059] relative overflow-hidden">
                          <div className="absolute -left-6 -top-6 opacity-[0.03] transform -rotate-12"><Calculator size={200}/></div>
                          <h3 className="text-lg font-black text-[#c5a059] mb-8 flex items-center gap-2 relative z-10"><FileText size={20}/> ملخص اقتصاديات المشروع</h3>
+                         <div className="grid grid-cols-2 gap-4 mb-8 relative z-10"><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة أرض للمتر</span><span className="text-lg font-black text-white">{formatMoney(landCostPerSqm)}</span></div><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة بناء للمتر</span><span className="text-lg font-black text-red-300">{formatMoney(totalCostPerSqm)}</span></div></div>
                          <div className="space-y-4 text-sm relative z-10">
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">إجمالي المبيعات</span> <span className="text-emerald-400 font-black text-lg">{formatMoney(totalSales)}</span></div>
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
@@ -678,6 +683,8 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
             </div>
+            {/* الحاويات المخفية لتوليد الـ PDF */}
+            <div style={{ display: 'none' }}><div id="pdf-teaser-template"></div><div id="pdf-detailed-template"></div></div>
         </div>
     );
 }
