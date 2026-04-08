@@ -43,7 +43,7 @@ export default function FeasibilityCalc({ showToast }) {
     const removeInvestor = (index) => setInvestors(prev => prev.filter((_, i) => i !== index));
     const formatMoney = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n || 0);
 
-    // --- العمليات الحسابية ---
+    // --- العمليات الحسابية والتوزيع المعماري ---
     const groundBuilt = inputs.archLandArea * (inputs.archGroundPct / 100);
     const typicalBuilt = inputs.archLandArea * (inputs.archTypicalPct / 100);
     const roofBuilt = typicalBuilt * (inputs.archRoofPct / 100);
@@ -61,14 +61,12 @@ export default function FeasibilityCalc({ showToast }) {
     const netRoof = Math.max(0, roofBuilt - inputs.archCommonArea);
     const avgRoof = inputs.uRoof > 0 ? netRoof / inputs.uRoof : 0;
 
-    const floorsData = [];
-    if (groundBuilt > 0) floorsData.push({ label: "الدور الأرضي", built: groundBuilt, net: netGround, units: inputs.uGround });
-    if (typicalBuilt > 0 && inputs.archFloorsCount > 0) {
-        for(let i=1; i<=inputs.archFloorsCount; i++) floorsData.push({ label: `متكرر ${i}`, built: typicalBuilt, net: netTypical, units: inputs.uTypical });
-    }
-    if (roofBuilt > 0) floorsData.push({ label: "الملحق (الروف)", built: roofBuilt, net: netRoof, units: inputs.uRoof });
+    // 🔥 إضافة قيمة السطح للملحق (نصف مساحة الملحق × سعر المتر)
+    const roofSurfaceSalesValue = inputs.uRoof > 0 ? (0.5 * netRoof * inputs.finSellPrice) : 0;
 
-    const totalSales = totalNet * inputs.finSellPrice;
+    // 🔥 إجمالي المبيعات شاملة قيمة بيع أسطح الملاحق
+    const totalSales = (totalNet * inputs.finSellPrice) + roofSurfaceSalesValue;
+    
     const marketingCost = totalSales * (inputs.sMarkPct / 100);
     const buildCost = (totalNet * inputs.finBuildCost) + (totalUnits * inputs.inServiceCostPerUnit);
     const insCost = buildCost * (inputs.sInsurancePct / 100);
@@ -157,7 +155,7 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 التصدير للـ PDF (مكرر الهيدر/الفوتر، صفحات متعددة)
+    // 🔥 التصدير للـ PDF (بالتصميم المطابق للصورة)
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -223,7 +221,7 @@ export default function FeasibilityCalc({ showToast }) {
                     <tbody style="background-color: white; font-weight: bold;">
                         ${inputs.uGround > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الأرضي</td><td style="padding:10px 12px; text-align:center;">${inputs.uGround}</td><td style="padding:10px 12px; text-align:center;">${netGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgGround * inputs.finSellPrice)}</td></tr>` : ''}
                         ${inputs.uTypical > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">المتكرر (${inputs.archFloorsCount} دور)</td><td style="padding:10px 12px; text-align:center;">${inputs.uTypical * inputs.archFloorsCount}</td><td style="padding:10px 12px; text-align:center;">${(netTypical * inputs.archFloorsCount).toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgTypical.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgTypical * inputs.finSellPrice)}</td></tr>` : ''}
-                        ${inputs.uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق</td><td style="padding:10px 12px; text-align:center;">${inputs.uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgRoof * inputs.finSellPrice)}</td></tr>` : ''}
+                        ${inputs.uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق + السطح</td><td style="padding:10px 12px; text-align:center;">${inputs.uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgRoof * inputs.finSellPrice * 1.5)}</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -247,7 +245,7 @@ export default function FeasibilityCalc({ showToast }) {
                         <p style="color: #059669; font-weight: bold; font-size: 10px; margin: 0;">العوائد الإجمالية المتوقعة للمشروع</p>
                     </div>
                     <div style="background-color: white; border: 1px solid #e2e8f0; border-radius: 20px; padding: 30px 20px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                        <p style="color: #64748b; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">رأس المال الاستثماري المستهدف</p>
+                        <p style="color: #64748b; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">السيولة الاستثمارية المستهدفة</p>
                         <p style="color: #1a365d; font-weight: 900; font-size: 32px; margin: 0 0 5px 0;">${invAmount}</p>
                         <p style="color: #c5a059; font-weight: bold; font-size: 10px; margin: 0;">متطلبات السيولة النقدية لبدء المشروع</p>
                     </div>
@@ -264,19 +262,22 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
 
-                <div class="page-break-avoid" style="border: 1px solid #e2e8f0; border-radius: 20px; padding: 25px;">
-                    <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 15px 0; text-align:center;">التفاصيل المعمارية</h3>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap:15px; text-align: center; margin-bottom: 15px;">
-                        <div style="background: #f8fafc; padding:15px; border-radius: 12px;">
-                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${totalUnits}</span>
-                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">إجمالي الوحدات السكنية</span>
+                <div class="page-break-avoid" style="border: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px;">
+                    <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 20px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; text-align:center;">التفاصيل المعمارية</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center;">
+                        <div>
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${totalUnits}</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">وحدة سكنية</span>
                         </div>
-                        <div style="background: #f8fafc; padding:15px; border-radius: 12px;">
-                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${formatMoney(totalNet)} م²</span>
-                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">إجمالي المساحات للبيع</span>
+                        <div>
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalBuilt)}</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مربع بناء</span>
+                        </div>
+                        <div>
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalNet)}</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مساحة للبيع</span>
                         </div>
                     </div>
-                    ${archDetailsHTML}
                 </div>
             `;
         } else {
@@ -307,6 +308,10 @@ export default function FeasibilityCalc({ showToast }) {
                                 <td style="padding: 10px 12px; color: #1a365d; font-weight: 900;">إجمالي مصاريف التأسيس والرخص</td>
                                 <td style="padding: 10px 12px; color: #1a365d; font-weight: 900;">${formatMoney(softCosts)}</td>
                             </tr>
+                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fffbeb;">
+                                <td style="padding: 12px; color: #c5a059; font-weight: 900;">السيولة الاستثمارية المستهدفة</td>
+                                <td style="padding: 12px; color: #c5a059; font-weight: 900; font-size: 15px;">${formatMoney(investorCapitalPool)}</td>
+                            </tr>
 
                             <tr style="border-bottom: 1px solid #e2e8f0;">
                                 <td style="padding: 12px; background-color: white; color: #475569;">تكلفة البناء والخدمات الإجمالية</td>
@@ -331,7 +336,7 @@ export default function FeasibilityCalc({ showToast }) {
                             </tr>
 
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ecfdf5;">
-                                <td style="padding: 12px; color: #065f46; font-weight: 900;">إجمالي المبيعات المتوقعة للمشروع</td>
+                                <td style="padding: 12px; color: #065f46; font-weight: 900;">إجمالي المبيعات المتوقعة للمشروع (شاملة مبيعات الأسطح)</td>
                                 <td style="padding: 12px; color: #059669; font-weight: 900; font-size: 16px;">${formatMoney(totalSales)}</td>
                             </tr>
                             <tr style="background-color: #1a365d; color: white;">
@@ -347,7 +352,7 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
 
                 <div class="page-break-avoid">
-                    <h3 style="font-size: 16px; font-weight: 900; color: #1a365d; margin: 0 0 10px 0;">التفاصيل المعمارية للوحدات</h3>
+                    <h3 style="font-size: 16px; font-weight: 900; color: #1a365d; margin: 0 0 10px 0;">التفاصيل المعمارية وأسعار الوحدات</h3>
                     ${archDetailsHTML}
                 </div>
 
@@ -503,9 +508,20 @@ export default function FeasibilityCalc({ showToast }) {
                         </div>
                         <div className="overflow-x-auto bg-slate-50/50 p-6 md:p-8 border-t border-slate-100">
                             <table className="w-full text-right text-sm">
-                                <thead><tr className="text-slate-400 font-black border-b-2 border-slate-200"><th className="py-3 px-4">الدور</th><th className="py-3 px-4 text-center">إجمالي البناء</th><th className="py-3 px-4 text-center">المساحة الصافية للبيع</th><th className="py-3 px-4 text-center">عدد الوحدات</th></tr></thead>
-                                <tbody>{floorsData.map((floor, i) => (<tr key={i} className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">{floor.label}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{floor.built.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600" dir="ltr">{floor.net.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{floor.units}</td></tr>))}</tbody>
-                                <tfoot><tr className="bg-[#1a365d] text-white rounded-2xl"><td className="py-4 px-4 font-black rounded-r-xl">الإجمالي الكلي</td><td className="py-4 px-4 text-center font-bold" dir="ltr">{totalBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]" dir="ltr">{totalNet.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black rounded-l-xl">{totalUnits}</td></tr></tfoot>
+                                <thead><tr className="text-slate-400 font-black border-b-2 border-slate-200">
+                                    <th className="py-3 px-4">الدور</th>
+                                    <th className="py-3 px-4 text-center">إجمالي البناء</th>
+                                    <th className="py-3 px-4 text-center">المساحة الصافية</th>
+                                    <th className="py-3 px-4 text-center">عدد الوحدات</th>
+                                    <th className="py-3 px-4 text-center">متوسط المساحة</th>
+                                    <th className="py-3 px-4 text-center text-emerald-600">السعر المتوقع</th>
+                                </tr></thead>
+                                <tbody>
+                                    {inputs.uGround > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الأرضي</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{groundBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uGround}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgGround * inputs.finSellPrice)}</td></tr>)}
+                                    {inputs.uTypical > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">المتكرر</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{(typicalBuilt * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{(netTypical * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uTypical * inputs.archFloorsCount}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgTypical.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgTypical * inputs.finSellPrice)}</td></tr>)}
+                                    {inputs.uRoof > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الملحق + السطح</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{roofBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uRoof}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgRoof * inputs.finSellPrice * 1.5)}</td></tr>)}
+                                </tbody>
+                                <tfoot><tr className="bg-[#1a365d] text-white rounded-2xl"><td className="py-4 px-4 font-black rounded-r-xl">الإجمالي الكلي</td><td className="py-4 px-4 text-center font-bold" dir="ltr">{totalBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black" dir="ltr">{totalNet.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black">{totalUnits}</td><td className="py-4 px-4 text-center font-black">--</td><td className="py-4 px-4 text-center font-black rounded-l-xl text-[#c5a059]">{formatMoney(totalSales)}</td></tr></tfoot>
                             </table>
                         </div>
                     </div>
@@ -530,7 +546,6 @@ export default function FeasibilityCalc({ showToast }) {
                     <div className="bg-[#1a365d] text-white rounded-[2rem] shadow-2xl p-8 border-b-[12px] border-[#c5a059] relative overflow-hidden">
                          <div className="absolute -left-6 -top-6 opacity-[0.03] transform -rotate-12"><Calculator size={200}/></div>
                          <h3 className="text-lg font-black text-[#c5a059] mb-8 flex items-center gap-2 relative z-10"><FileText size={20}/> ملخص اقتصاديات المشروع</h3>
-                         <div className="grid grid-cols-2 gap-4 mb-8 relative z-10"><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة أرض للمتر</span><span className="text-lg font-black text-white">{formatMoney(landCostPerSqm)}</span></div><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة بناء للمتر</span><span className="text-lg font-black text-red-300">{formatMoney(totalCostPerSqm)}</span></div></div>
                          <div className="space-y-4 text-sm relative z-10">
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">إجمالي المبيعات</span> <span className="text-emerald-400 font-black text-lg">{formatMoney(totalSales)}</span></div>
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
