@@ -195,7 +195,7 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 التصدير للـ PDF
+    // 🔥 التصدير للـ PDF (بالتصميم المطابق للصورة)
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -268,6 +268,54 @@ export default function FeasibilityCalc({ showToast }) {
             </div>
         `;
 
+        // =======================================================
+        // 🔥 صفحة الغلاف (مستقلة)
+        // =======================================================
+        const coverHTML = `
+            <div class="print-cover" style="position: relative; width: 100%; height: 297mm; background-color: #1a365d; display: flex; flex-direction: column; -webkit-print-color-adjust: exact; color-adjust: exact; page-break-after: always;">
+                
+                <div style="display: flex; height: 10px; width: 100%;">
+                    <div style="background-color: #c5a059; width: 30%;"></div>
+                    <div style="background-color: white; width: 70%;"></div>
+                </div>
+
+                <div style="text-align: center; padding: 40px 0;">
+                    <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" style="height: 100px; object-fit: contain;" />
+                </div>
+
+                <div class="cover-banner-images" style="width: 100%; height: 120mm; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #f1f5f9; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0;">
+                    <img src="${getImg("1P6pE7p2A4e658yL5k5bA9E3c6d7f9g9h")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                    <img src="${getImg("1P6pE7p2A4e658yL5k5bA9E3c6d7f9g10")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                    <img src="${getImg("1P6pE7p2A4e658yL5k5bA9E3c6d7f9g11")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(0deg, rgba(26,54,93,0.3) 0%, rgba(26,54,93,0.1) 100%); pointer-events: none;"></div>
+                </div>
+
+                <div style="flex: 1; padding: 40px 60px; text-align: center; color: white; direction: rtl;">
+                    <h1 style="font-size: 24px; font-weight: 900; color: #c5a059; margin: 0 0 10px 0;">سماك العقارية</h1>
+                    <h2 style="font-size: 56px; font-weight: 900; color: white; margin: 0 0 10px 0; line-height: 1;">${projectName || "سماك الصفوة 2"}</h2>
+                    <p style="font-size: 18px; color: #cbd5e1; font-weight: 900; margin: 0 0 30px 0;">دراسة جدوى فرصة استثمارية للتطوير العقاري</p>
+                    <p style="font-size: 13px; color: #94a3b8; font-weight: bold; margin: 0;">تطوير مجمع سكني فاخر بنظام البيع على الخارطة (وافي)</p>
+                    <p style="font-size: 13px; color: #94a3b8; font-weight: bold; margin: 5px 0 0 0;">إجمالي وحدات المشروع لبدء التنفيذ: <span style="color:white; font-weight:900;">${totalUnits} وحدة</span></p>
+                </div>
+
+                <div style="padding: 30px 60px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <div style="text-align: right; color: white;">
+                            <h4 style="margin: 0; color: #c5a059; font-weight: 900; font-size: 14px;">إدارة التطوير والاستثمار</h4>
+                            <p style="margin: 4px 0 0 0; color: white; font-size: 10px; font-weight: 900;">وثيقة سرية للمستثمرين</p>
+                            <p style="margin: 8px 0 0 0; color: #cbd5e1; font-size: 9px; font-weight: 900;" dir="ltr">info@semak.sa | semak.sa | 920032842</p>
+                        </div>
+                        <div style="text-align: left; color: #cbd5e1; font-weight: bold; font-size: 12px;">أبريل 2026</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; height: 10px; width: 100%;">
+                    <div style="background-color: white; width: 30%;"></div>
+                    <div style="background-color: #c5a059; width: 70%;"></div>
+                </div>
+            </div>
+        `;
+
         let contentHTML = '';
         if (type === 'teaser') {
             contentHTML = `
@@ -295,7 +343,7 @@ export default function FeasibilityCalc({ showToast }) {
                 <div class="page-break-avoid" style="background-color: #1a365d; border-radius: 20px; padding: 30px; display: grid; grid-template-columns: 1fr 1fr; text-align: center; margin-bottom: 20px;">
                     <div style="border-left: 1px solid rgba(255,255,255,0.2);">
                         <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">دورة المشروع المستهدفة</p>
-                        <p style="color: white; font-weight: 900; font-size: 36px; margin: 0;">${inputs.sDuration} شهراً</p>
+                        <p style="color: white; font-weight: 900; font-size: 36px; margin: 0;">${sDuration} شهراً</p>
                     </div>
                     <div>
                         <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">العائد الإجمالي المتوقع للمستثمر (ROI)</p>
@@ -441,12 +489,31 @@ export default function FeasibilityCalc({ showToast }) {
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
                     
-                    .a4-container { width: 100%; max-width: 210mm; min-height: 297mm; margin: 0 auto; display: flex; flex-direction: column; background: white; position: relative; }
+                    /* 🔥 كلاس صفحة الغلاف المستقلة لضمان طباعة صفحة A4 كاملة أولاً 🔥 */
+                    .print-cover { position: relative; width: 100%; height: 297mm; page-break-after: always; -webkit-print-color-adjust: exact; color-adjust: exact; z-index: 1000;}
+
+                    /* بارات الغلاف (ذهبي/أبيض) */
+                    .cover-bar { display: flex; height: 10px; width: 100%; }
+
+                    /* كولاج الصور للغلاف */
+                    .cover-banner-images { width: 100%; height: 120mm; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #f1f5f9; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0; -webkit-print-color-adjust: exact; color-adjust: exact;}
+                    .cover-banner-images img { width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;}
+
+                    /* 🔥 الهيدر والفوتر الثابت في كل الصفحات (من الصفحة الثانية فصاعداً) 🔥 */
+                    .fixed-header { position: fixed; top: 0; left: 0; right: 0; height: 100px; background: white; z-index: 900; -webkit-print-color-adjust: exact; color-adjust: exact;}
+                    .fixed-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: white; z-index: 900; -webkit-print-color-adjust: exact; color-adjust: exact;}
                     
-                    /* 🔥 الهيدر والفوتر الثابت في كل الصفحات للطباعة 🔥 */
-                    .fixed-header { position: fixed; top: 0; left: 0; right: 0; height: 100px; background: white; z-index: 1000; }
-                    .fixed-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: white; z-index: 1000; }
-                    
+                    /* 🔥 إخفاء الهيدر والفوتر الثابت عن صفحة الغلاف (الصفحة الأولى) 🔥 */
+                    @media print {
+                        .print-cover + .report-wrapper .fixed-header,
+                        .print-cover + .report-wrapper .fixed-footer { display: block; }
+                        .print-cover { position: relative; display: flex !important; }
+                        .report-wrapper .fixed-header,
+                        .report-wrapper .fixed-footer { display: none; }
+                        .report-wrapper > thead .fixed-header,
+                        .report-wrapper > tfoot .fixed-footer { display: block !important; }
+                    }
+
                     .top-bar { display: flex; height: 8px; width: 100%; }
                     .bar-gold { background-color: #c5a059; width: 30%; }
                     .bar-navy { background-color: #1a365d; width: 70%; }
@@ -465,50 +532,59 @@ export default function FeasibilityCalc({ showToast }) {
                     table.report-wrapper { width: 100%; border-collapse: collapse; position: relative; z-index: 10;}
                     .header-space { height: 100px; }
                     .footer-space { height: 50px; }
-                    .main-container { padding: 10px 40px; }
+                    .main-container { padding: 10px 40px; position: relative; z-index: 10;}
 
-                    /* 🔥 العلامة المائية الثابتة في المنتصف تماماً وبوضوح أعلى 🔥 */
-                    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; opacity: 0.06; z-index: 0; pointer-events: none; }
+                    /* 🔥 العلامة المائية الثابتة في المنتصف تماماً (من الصفحة الثانية فصاعداً) 🔥 */
+                    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; opacity: 0.06; z-index: 0; pointer-events: none; -webkit-print-color-adjust: exact; color-adjust: exact;}
 
                     .page-break { page-break-before: always; padding-top: 15px; }
                     .page-break-avoid { page-break-inside: avoid; }
                 </style>
             </head>
             <body>
-                <div class="fixed-header">
-                    <div class="top-bar"><div class="bar-gold"></div><div class="bar-navy"></div></div>
-                    <div class="header-content">
-                        <div class="title-box">
-                            <h1>سماك العقارية</h1>
-                            <p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-                        </div>
-                        <div class="logo-box">
-                            <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" />
-                        </div>
-                    </div>
-                </div>
-
-                <div class="fixed-footer">
-                    <div class="footer-content">
-                        <div class="footer-left" dir="ltr">info@semak.sa | semak.sa | 920032842</div>
-                        <div class="footer-right">
-                            <h4>إدارة التطوير والاستثمار</h4>
-                            <p>وثيقة سرية للمستثمرين</p>
-                        </div>
-                    </div>
-                    <div class="top-bar"><div class="bar-navy"></div><div class="bar-gold"></div></div>
-                </div>
-
-                <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" class="watermark" />
+                ${coverHTML}
 
                 <table class="report-wrapper">
-                    <thead><tr><td><div class="header-space"></div></td></tr></thead>
-                    <tbody><tr><td>
-                        <div class="main-container">
-                            ${contentHTML}
-                        </div>
-                    </td></tr></tbody>
-                    <tfoot><tr><td><div class="footer-space"></div></td></tr></tfoot>
+                    <thead>
+                        <tr><td>
+                            <div class="fixed-header">
+                                <div class="top-bar"><div class="bar-gold"></div><div class="bar-navy"></div></div>
+                                <div class="header-content">
+                                    <div class="title-box">
+                                        <h1>سماك العقارية</h1>
+                                        <p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
+                                    </div>
+                                    <div class="logo-box">
+                                        <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="header-space"></div>
+                        </td></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>
+                            <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" class="watermark" />
+                            <div class="main-container">
+                                ${contentHTML}
+                            </div>
+                        </td></tr>
+                    </tbody>
+                    <tfoot>
+                        <tr><td>
+                            <div class="footer-space"></div>
+                            <div class="fixed-footer">
+                                <div class="footer-content">
+                                    <div class="footer-left" dir="ltr">info@semak.sa | semak.sa | 920032842</div>
+                                    <div class="footer-right">
+                                        <h4>إدارة التطوير والاستثمار</h4>
+                                        <p>وثيقة سرية للمستثمرين</p>
+                                    </div>
+                                </div>
+                                <div class="top-bar"><div class="bar-navy"></div><div class="bar-gold"></div></div>
+                            </div>
+                        </td></tr>
+                    </tfoot>
                 </table>
 
                 <script>window.onload = () => { setTimeout(() => { window.print(); }, 1000); };<\/script>
@@ -589,7 +665,6 @@ export default function FeasibilityCalc({ showToast }) {
                     <div className="bg-[#1a365d] text-white rounded-[2rem] shadow-2xl p-8 border-b-[12px] border-[#c5a059] relative overflow-hidden">
                          <div className="absolute -left-6 -top-6 opacity-[0.03] transform -rotate-12"><Calculator size={200}/></div>
                          <h3 className="text-lg font-black text-[#c5a059] mb-8 flex items-center gap-2 relative z-10"><FileText size={20}/> ملخص اقتصاديات المشروع</h3>
-                         <div className="grid grid-cols-2 gap-4 mb-8 relative z-10"><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة أرض للمتر</span><span className="text-lg font-black text-white">{formatMoney(landCostPerSqm)}</span></div><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة بناء للمتر</span><span className="text-lg font-black text-red-300">{formatMoney(totalCostPerSqm)}</span></div></div>
                          <div className="space-y-4 text-sm relative z-10">
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">إجمالي المبيعات</span> <span className="text-emerald-400 font-black text-lg">{formatMoney(totalSales)}</span></div>
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
