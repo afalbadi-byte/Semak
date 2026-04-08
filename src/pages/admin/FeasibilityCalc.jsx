@@ -52,7 +52,6 @@ export default function FeasibilityCalc({ showToast }) {
     const totalNet = Math.max(0, totalBuilt - (inputs.archCommonArea * floorCountTotal));
     const totalUnits = inputs.uGround + (inputs.uTypical * inputs.archFloorsCount) + inputs.uRoof;
 
-    // متوسط مساحات الوحدات
     const netGround = Math.max(0, groundBuilt - inputs.archCommonArea);
     const avgGround = inputs.uGround > 0 ? netGround / inputs.uGround : 0;
     
@@ -217,13 +216,14 @@ export default function FeasibilityCalc({ showToast }) {
                             <th style="padding: 12px; color: #1a365d;">الدور</th>
                             <th style="padding: 12px; text-align: center; color: #1a365d;">الوحدات</th>
                             <th style="padding: 12px; text-align: center; color: #1a365d;">المساحة الصافية</th>
-                            <th style="padding: 12px; text-align: center; color: #1a365d;">متوسط مساحة الوحدة</th>
+                            <th style="padding: 12px; text-align: center; color: #1a365d;">متوسط المساحة</th>
+                            <th style="padding: 12px; text-align: center; color: #1a365d;">السعر المتوقع للوحدة</th>
                         </tr>
                     </thead>
                     <tbody style="background-color: white; font-weight: bold;">
-                        ${inputs.uGround > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الأرضي</td><td style="padding:10px 12px; text-align:center;">${inputs.uGround}</td><td style="padding:10px 12px; text-align:center;">${netGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgGround.toFixed(1)} م²</td></tr>` : ''}
-                        ${inputs.uTypical > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">المتكرر (${inputs.archFloorsCount} دور)</td><td style="padding:10px 12px; text-align:center;">${inputs.uTypical * inputs.archFloorsCount}</td><td style="padding:10px 12px; text-align:center;">${(netTypical * inputs.archFloorsCount).toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgTypical.toFixed(1)} م²</td></tr>` : ''}
-                        ${inputs.uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق</td><td style="padding:10px 12px; text-align:center;">${inputs.uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td></tr>` : ''}
+                        ${inputs.uGround > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الأرضي</td><td style="padding:10px 12px; text-align:center;">${inputs.uGround}</td><td style="padding:10px 12px; text-align:center;">${netGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgGround * inputs.finSellPrice)}</td></tr>` : ''}
+                        ${inputs.uTypical > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">المتكرر (${inputs.archFloorsCount} دور)</td><td style="padding:10px 12px; text-align:center;">${inputs.uTypical * inputs.archFloorsCount}</td><td style="padding:10px 12px; text-align:center;">${(netTypical * inputs.archFloorsCount).toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgTypical.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgTypical * inputs.finSellPrice)}</td></tr>` : ''}
+                        ${inputs.uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق</td><td style="padding:10px 12px; text-align:center;">${inputs.uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgRoof * inputs.finSellPrice)}</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -247,7 +247,7 @@ export default function FeasibilityCalc({ showToast }) {
                         <p style="color: #059669; font-weight: bold; font-size: 10px; margin: 0;">العوائد الإجمالية المتوقعة للمشروع</p>
                     </div>
                     <div style="background-color: white; border: 1px solid #e2e8f0; border-radius: 20px; padding: 30px 20px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                        <p style="color: #64748b; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">السيولة الاستثمارية المستهدفة</p>
+                        <p style="color: #64748b; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">رأس المال الاستثماري المستهدف</p>
                         <p style="color: #1a365d; font-weight: 900; font-size: 32px; margin: 0 0 5px 0;">${invAmount}</p>
                         <p style="color: #c5a059; font-weight: bold; font-size: 10px; margin: 0;">متطلبات السيولة النقدية لبدء المشروع</p>
                     </div>
@@ -259,7 +259,7 @@ export default function FeasibilityCalc({ showToast }) {
                         <p style="color: white; font-weight: 900; font-size: 36px; margin: 0;">${inputs.sDuration} شهراً</p>
                     </div>
                     <div>
-                        <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">العائد الإجمالي المتوقع (ROI)</p>
+                        <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">العائد الإجمالي المتوقع للمستثمر (ROI)</p>
                         <p style="color: #c5a059; font-weight: 900; font-size: 36px; margin: 0;">${invRoi}%</p>
                     </div>
                 </div>
@@ -269,11 +269,11 @@ export default function FeasibilityCalc({ showToast }) {
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap:15px; text-align: center; margin-bottom: 15px;">
                         <div style="background: #f8fafc; padding:15px; border-radius: 12px;">
                             <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${totalUnits}</span>
-                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">وحدة سكنية</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">إجمالي الوحدات السكنية</span>
                         </div>
                         <div style="background: #f8fafc; padding:15px; border-radius: 12px;">
-                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${formatMoney(totalNet)}</span>
-                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">إجمالي مساحات البيع (م²)</span>
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${formatMoney(totalNet)} م²</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">إجمالي المساحات للبيع</span>
                         </div>
                     </div>
                     ${archDetailsHTML}
@@ -289,11 +289,11 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
 
                 <div class="page-break-avoid" style="border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; margin-bottom: 25px;">
-                    <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 13px;">
+                    <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 12px;">
                         <tbody style="font-weight: bold;">
                             <tr style="border-bottom: 1px solid #e2e8f0;">
                                 <td style="padding: 10px 12px; background-color: #f8fafc; color: #475569; width: 65%;">قيمة الأرض الإجمالية</td>
-                                <td style="padding: 10px 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(inputs.finLandPrice)}</td>
+                                <td style="padding: 10px 12px; color: #1a365d; font-weight: 900; font-size: 14px;">${formatMoney(inputs.finLandPrice)}</td>
                             </tr>
                             
                             <tr><td colspan="2" style="padding: 8px 12px; background-color: #f1f5f9; color: #1a365d; font-weight: 900;">تفصيل المصاريف الإدارية والتأسيس والرخص</td></tr>
@@ -306,10 +306,6 @@ export default function FeasibilityCalc({ showToast }) {
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #f8fafc;">
                                 <td style="padding: 10px 12px; color: #1a365d; font-weight: 900;">إجمالي مصاريف التأسيس والرخص</td>
                                 <td style="padding: 10px 12px; color: #1a365d; font-weight: 900;">${formatMoney(softCosts)}</td>
-                            </tr>
-                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fffbeb;">
-                                <td style="padding: 12px; color: #c5a059; font-weight: 900;">السيولة الاستثمارية المستهدفة (قيمة الأرض + التأسيس)</td>
-                                <td style="padding: 12px; color: #c5a059; font-weight: 900; font-size: 15px;">${formatMoney(investorCapitalPool)}</td>
                             </tr>
 
                             <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -324,6 +320,16 @@ export default function FeasibilityCalc({ showToast }) {
                                 <td style="padding: 12px; color: #991b1b; font-weight: 900;">إجمالي التكاليف المتوقعة للمشروع</td>
                                 <td style="padding: 12px; color: #b91c1c; font-weight: 900; font-size: 16px;">${formatMoney(totalProjectCosts)}</td>
                             </tr>
+
+                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: #f8fafc;">
+                                <td style="padding: 12px; color: #475569;">إجمالي مساحات البيع للمشروع</td>
+                                <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(totalNet)} م²</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: white;">
+                                <td style="padding: 12px; color: #475569;">سعر البيع المستهدف للمتر</td>
+                                <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(inputs.finSellPrice)} ريال</td>
+                            </tr>
+
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ecfdf5;">
                                 <td style="padding: 12px; color: #065f46; font-weight: 900;">إجمالي المبيعات المتوقعة للمشروع</td>
                                 <td style="padding: 12px; color: #059669; font-weight: 900; font-size: 16px;">${formatMoney(totalSales)}</td>
@@ -333,7 +339,7 @@ export default function FeasibilityCalc({ showToast }) {
                                 <td style="padding: 16px; font-weight: 900; font-size: 20px; color: #c5a059;">${formatMoney(netProfit)}</td>
                             </tr>
                             <tr style="background-color: #0f172a; color: white;">
-                                <td style="padding: 14px 16px; font-weight: 900; font-size: 13px;">العائد السنوي المتوقع (Annual ROI)</td>
+                                <td style="padding: 14px 16px; font-weight: 900; font-size: 13px;">العائد السنوي المتوقع للمشروع (Annual ROI)</td>
                                 <td style="padding: 14px 16px; font-weight: 900; font-size: 18px; color: #10b981;">${annualROI.toFixed(1)}%</td>
                             </tr>
                         </tbody>
@@ -364,14 +370,6 @@ export default function FeasibilityCalc({ showToast }) {
                             </tbody>
                         </table>
                     </div>
-
-                    ${showDevInPrint ? `
-                        <div style="border-top: 4px solid #1a365d; background-color: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
-                            <h4 style="font-size: 14px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4>
-                            <p style="font-size: 24px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
-                            <p style="font-size: 11px; color: #64748b; margin: 0; font-weight: bold;">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
-                        </div>
-                    ` : ''}
                 </div>
             `;
         }
@@ -388,35 +386,36 @@ export default function FeasibilityCalc({ showToast }) {
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
                     
-                    /* 🔥 الهيدر والفوتر الثابت في كل الصفحات 🔥 */
-                    .fixed-header { position: fixed; top: 0; left: 0; right: 0; height: 110px; background: white; z-index: 1000; }
-                    .fixed-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: white; z-index: 1000; }
+                    .a4-container { width: 100%; max-width: 210mm; min-height: 297mm; margin: 0 auto; display: flex; flex-direction: column; background: white; position: relative; }
+                    
+                    /* 🔥 الهيدر والفوتر الثابت في كل الصفحات للطباعة 🔥 */
+                    .fixed-header { position: fixed; top: 0; left: 0; right: 0; height: 100px; background: white; z-index: 1000; }
+                    .fixed-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: white; z-index: 1000; }
                     
                     .top-bar { display: flex; height: 8px; width: 100%; }
                     .bar-gold { background-color: #c5a059; width: 30%; }
                     .bar-navy { background-color: #1a365d; width: 70%; }
                     
-                    .header-content { padding: 25px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; }
-                    .logo-box img { height: 45px; object-fit: contain; }
+                    .header-content { padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; }
+                    .logo-box img { height: 40px; object-fit: contain; }
                     .title-box { text-align: right; border-right: 4px solid #c5a059; padding-right: 15px; }
-                    .title-box h1 { margin: 0; color: #1a365d; font-weight: 900; font-size: 22px; }
-                    .title-box p { margin: 4px 0 0 0; color: #c5a059; font-weight: bold; font-size: 11px; }
+                    .title-box h1 { margin: 0; color: #1a365d; font-weight: 900; font-size: 20px; }
+                    .title-box p { margin: 2px 0 0 0; color: #c5a059; font-weight: bold; font-size: 10px; }
 
-                    .footer-content { padding: 15px 40px; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-top: 1px solid #e2e8f0; height: 52px;}
-                    .footer-left { color: #64748b; font-size: 11px; font-weight: bold; }
-                    .footer-right h4 { margin: 0; color: #1a365d; font-weight: 900; font-size: 13px; }
-                    .footer-right p { margin: 2px 0 0 0; color: #94a3b8; font-size: 10px; }
+                    .footer-content { padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-top: 1px solid #e2e8f0; height: 42px;}
+                    .footer-left { color: #64748b; font-size: 10px; font-weight: bold; }
+                    .footer-right h4 { margin: 0; color: #1a365d; font-weight: 900; font-size: 12px; }
+                    .footer-right p { margin: 0; color: #94a3b8; font-size: 9px; }
                     
-                    /* مساحة المحتوى عشان ما يغطيه الهيدر والفوتر */
-                    table.report-wrapper { width: 100%; border-collapse: collapse; }
-                    .header-space { height: 110px; }
-                    .footer-space { height: 60px; }
-                    .main-container { padding: 20px 40px; }
+                    table.report-wrapper { width: 100%; border-collapse: collapse; position: relative; z-index: 10;}
+                    .header-space { height: 100px; }
+                    .footer-space { height: 50px; }
+                    .main-container { padding: 10px 40px; }
 
-                    /* العلامة المائية الثابتة */
-                    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; opacity: 0.03; z-index: -1; pointer-events: none; }
+                    /* 🔥 العلامة المائية الثابتة في المنتصف تماماً وبوضوح أعلى 🔥 */
+                    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; opacity: 0.06; z-index: 0; pointer-events: none; }
 
-                    .page-break { page-break-before: always; padding-top: 20px; }
+                    .page-break { page-break-before: always; padding-top: 15px; }
                     .page-break-avoid { page-break-inside: avoid; }
                 </style>
             </head>
