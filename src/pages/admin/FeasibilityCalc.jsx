@@ -79,7 +79,6 @@ export default function FeasibilityCalc({ showToast }) {
     const floorCountTotal = 1 + floorsCount + (roofBuilt > 0 ? 1 : 0);
     const totalNet = Math.max(0, totalBuilt - (archCommonArea * floorCountTotal));
     
-    // 🔥 تكلفة متر الأرض محملة على المسطحات المبيوعة
     const landCostPerSqm = totalNet > 0 ? (finLandPrice / totalNet) : 0;
 
     const uGround = inputs.uGround || 0;
@@ -96,7 +95,6 @@ export default function FeasibilityCalc({ showToast }) {
     const netRoof = Math.max(0, roofBuilt - archCommonArea);
     const avgRoof = uRoof > 0 ? netRoof / uRoof : 0;
 
-    // 🔥 حساب مبيعات السطح = مساحة الشقة (الملحق) × سعر متر الأرض محمل على المسطحات المبيوعة
     const roofSurfaceSalesValue = uRoof > 0 ? (netRoof * landCostPerSqm) : 0;
     const totalSales = (totalNet * finSellPrice) + roofSurfaceSalesValue;
     
@@ -133,7 +131,6 @@ export default function FeasibilityCalc({ showToast }) {
     const totalInvestedPct = investorCapitalPool > 0 ? (totalInvestedVal / investorCapitalPool) * 100 : 0;
     const totalInvestedProfit = invProfitPool * (totalInvestedPct / 100);
 
-    // --- السحابة ---
     useEffect(() => { loadProjectsList(); }, []);
 
     const loadProjectsList = async () => {
@@ -195,7 +192,7 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 التصدير للـ PDF (بالتصميم المطابق للصورة)
+    // 🔥 التصدير للـ PDF (بالتصميم المطابق للصورة بدون أخطاء بيضاء)
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -262,31 +259,31 @@ export default function FeasibilityCalc({ showToast }) {
                     <tbody style="background-color: white; font-weight: bold;">
                         ${uGround > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الأرضي</td><td style="padding:10px 12px; text-align:center;">${uGround}</td><td style="padding:10px 12px; text-align:center;">${netGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgGround * finSellPrice)}</td></tr>` : ''}
                         ${uTypical > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">المتكرر (${floorsCount} دور)</td><td style="padding:10px 12px; text-align:center;">${uTypical * floorsCount}</td><td style="padding:10px 12px; text-align:center;">${(netTypical * floorsCount).toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgTypical.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgTypical * finSellPrice)}</td></tr>` : ''}
-                        ${uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق + السطح</td><td style="padding:10px 12px; text-align:center;">${uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgRoof * (finSellPrice + landCostPerSqm))}</td></tr>` : ''}
+                        ${uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق + السطح</td><td style="padding:10px 12px; text-align:center;">${uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgRoof * finSellPrice + (avgRoof * landCostPerSqm))}</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
         `;
 
         // =======================================================
-        // 🔥 صفحة الغلاف (مستقلة)
+        // 🔥 صفحة الغلاف (مستقلة وتستخدم الشعار الذهبي)
         // =======================================================
         const coverHTML = `
-            <div class="print-cover" style="position: relative; width: 100%; height: 297mm; background-color: #1a365d; display: flex; flex-direction: column; -webkit-print-color-adjust: exact; color-adjust: exact; page-break-after: always;">
+            <div class="print-cover" style="position: relative; width: 100%; height: 100vh; background-color: #1a365d; display: flex; flex-direction: column; -webkit-print-color-adjust: exact; color-adjust: exact; page-break-after: always; box-sizing: border-box;">
                 
-                <div style="display: flex; height: 10px; width: 100%;">
+                <div style="display: flex; height: 10px; width: 100%; flex-shrink: 0;">
                     <div style="background-color: #c5a059; width: 30%;"></div>
                     <div style="background-color: white; width: 70%;"></div>
                 </div>
 
-                <div style="text-align: center; padding: 40px 0;">
-                    <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" style="height: 100px; object-fit: contain;" />
+                <div style="text-align: center; padding: 40px 0; flex-shrink: 0;">
+                    <img src="${getImg("1HEFY56KLYGJNmc-tufIXmYDUbGyOIdDX")}" alt="Semak Logo" style="height: 110px; object-fit: contain;" />
                 </div>
 
-                <div class="cover-banner-images" style="width: 100%; height: 120mm; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #f1f5f9; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0;">
-                    <img src="${getImg("1P6pE7p2A4e658yL5k5bA9E3c6d7f9g9h")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
-                    <img src="${getImg("1P6pE7p2A4e658yL5k5bA9E3c6d7f9g10")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
-                    <img src="${getImg("1P6pE7p2A4e658yL5k5bA9E3c6d7f9g11")}" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                <div style="width: 100%; height: 35vh; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #f1f5f9; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0; flex-shrink: 0;">
+                    <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                    <img src="https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=800&q=80" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
+                    <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80" style="width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;" />
                     <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(0deg, rgba(26,54,93,0.3) 0%, rgba(26,54,93,0.1) 100%); pointer-events: none;"></div>
                 </div>
 
@@ -298,18 +295,17 @@ export default function FeasibilityCalc({ showToast }) {
                     <p style="font-size: 13px; color: #94a3b8; font-weight: bold; margin: 5px 0 0 0;">إجمالي وحدات المشروع لبدء التنفيذ: <span style="color:white; font-weight:900;">${totalUnits} وحدة</span></p>
                 </div>
 
-                <div style="padding: 30px 60px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.1);">
+                <div style="padding: 30px 60px; border-top: 1px solid rgba(255,255,255,0.1); background-color: rgba(0,0,0,0.1); flex-shrink: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <div style="text-align: right; color: white;">
                             <h4 style="margin: 0; color: #c5a059; font-weight: 900; font-size: 14px;">إدارة التطوير والاستثمار</h4>
                             <p style="margin: 4px 0 0 0; color: white; font-size: 10px; font-weight: 900;">وثيقة سرية للمستثمرين</p>
                             <p style="margin: 8px 0 0 0; color: #cbd5e1; font-size: 9px; font-weight: 900;" dir="ltr">info@semak.sa | semak.sa | 920032842</p>
                         </div>
-                        <div style="text-align: left; color: #cbd5e1; font-weight: bold; font-size: 12px;">أبريل 2026</div>
                     </div>
                 </div>
 
-                <div style="display: flex; height: 10px; width: 100%;">
+                <div style="display: flex; height: 10px; width: 100%; flex-shrink: 0;">
                     <div style="background-color: white; width: 30%;"></div>
                     <div style="background-color: #c5a059; width: 70%;"></div>
                 </div>
@@ -351,22 +347,23 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
 
-                <div class="page-break-avoid" style="border: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px;">
-                    <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 20px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; text-align:center;">التفاصيل المعمارية</h3>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center;">
-                        <div>
-                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${totalUnits}</span>
+                <div class="page-break-avoid" style="border: 1px solid #e2e8f0; border-radius: 20px; padding: 25px;">
+                    <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 15px 0; text-align:center;">التفاصيل المعمارية</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; margin-bottom: 15px;">
+                        <div style="background: #f8fafc; padding:15px; border-radius: 12px;">
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${totalUnits}</span>
                             <span style="color: #64748b; font-weight: bold; font-size: 12px;">وحدة سكنية</span>
                         </div>
-                        <div>
-                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalBuilt)}</span>
-                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مربع بناء</span>
+                        <div style="background: #f8fafc; padding:15px; border-radius: 12px;">
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${formatMoney(totalNet)} م²</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">إجمالي مساحات البيع</span>
                         </div>
-                        <div>
-                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalNet)}</span>
-                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مساحة للبيع</span>
+                        <div style="background: #f8fafc; padding:15px; border-radius: 12px;">
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 26px;">${formatMoney(finSellPrice)} ريال</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">سعر المتر المستهدف</span>
                         </div>
                     </div>
+                    ${archDetailsHTML}
                 </div>
             `;
         } else {
@@ -489,27 +486,24 @@ export default function FeasibilityCalc({ showToast }) {
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
                     
-                    /* 🔥 كلاس صفحة الغلاف المستقلة لضمان طباعة صفحة A4 كاملة أولاً 🔥 */
-                    .print-cover { position: relative; width: 100%; height: 297mm; page-break-after: always; -webkit-print-color-adjust: exact; color-adjust: exact; z-index: 1000;}
+                    .a4-container { width: 100%; max-width: 210mm; min-height: 297mm; margin: 0 auto; display: flex; flex-direction: column; background: white; position: relative; }
+                    
+                    /* 🔥 كلاس صفحة الغلاف المستقلة 🔥 */
+                    .print-cover { position: relative; width: 100%; height: 100vh; page-break-after: always; -webkit-print-color-adjust: exact; color-adjust: exact; z-index: 2000;}
 
-                    /* بارات الغلاف (ذهبي/أبيض) */
-                    .cover-bar { display: flex; height: 10px; width: 100%; }
-
-                    /* كولاج الصور للغلاف */
-                    .cover-banner-images { width: 100%; height: 120mm; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #f1f5f9; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0; -webkit-print-color-adjust: exact; color-adjust: exact;}
+                    .cover-banner-images { width: 100%; height: 35vh; overflow: hidden; position: relative; border-top: 5px solid #c5a059; border-bottom: 5px solid #c5a059; background-color: #f1f5f9; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 5px 0; -webkit-print-color-adjust: exact; color-adjust: exact;}
                     .cover-banner-images img { width: 100%; height: 100%; object-fit: cover; border-left: 2px solid white; border-right: 2px solid white;}
 
-                    /* 🔥 الهيدر والفوتر الثابت في كل الصفحات (من الصفحة الثانية فصاعداً) 🔥 */
-                    .fixed-header { position: fixed; top: 0; left: 0; right: 0; height: 100px; background: white; z-index: 900; -webkit-print-color-adjust: exact; color-adjust: exact;}
-                    .fixed-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: white; z-index: 900; -webkit-print-color-adjust: exact; color-adjust: exact;}
+                    /* 🔥 الهيدر والفوتر الثابت في كل الصفحات (يختفي في صفحة الغلاف) 🔥 */
+                    .fixed-header { position: fixed; top: 0; left: 0; right: 0; height: 100px; background: white; z-index: 1000; -webkit-print-color-adjust: exact; color-adjust: exact;}
+                    .fixed-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: white; z-index: 1000; -webkit-print-color-adjust: exact; color-adjust: exact;}
                     
-                    /* 🔥 إخفاء الهيدر والفوتر الثابت عن صفحة الغلاف (الصفحة الأولى) 🔥 */
                     @media print {
-                        .print-cover + .report-wrapper .fixed-header,
-                        .print-cover + .report-wrapper .fixed-footer { display: block; }
-                        .print-cover { position: relative; display: flex !important; }
-                        .report-wrapper .fixed-header,
-                        .report-wrapper .fixed-footer { display: none; }
+                        .print-cover { display: flex !important; }
+                        /* إخفاء الهيدر/فوتر الثابت عشان الغلاف يغطي الصفحة كاملة */
+                        .print-cover ~ .report-wrapper .fixed-header,
+                        .print-cover ~ .report-wrapper .fixed-footer { display: none !important; }
+                        /* نظهرهم فقط داخل الجدول (هذي خدعة برمجية للطباعة) */
                         .report-wrapper > thead .fixed-header,
                         .report-wrapper > tfoot .fixed-footer { display: block !important; }
                     }
@@ -534,8 +528,8 @@ export default function FeasibilityCalc({ showToast }) {
                     .footer-space { height: 50px; }
                     .main-container { padding: 10px 40px; position: relative; z-index: 10;}
 
-                    /* 🔥 العلامة المائية الثابتة في المنتصف تماماً (من الصفحة الثانية فصاعداً) 🔥 */
-                    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; opacity: 0.06; z-index: 0; pointer-events: none; -webkit-print-color-adjust: exact; color-adjust: exact;}
+                    /* 🔥 العلامة المائية الثابتة بوضوح ممتاز 🔥 */
+                    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; opacity: 0.08; z-index: 0; pointer-events: none; -webkit-print-color-adjust: exact; color-adjust: exact;}
 
                     .page-break { page-break-before: always; padding-top: 15px; }
                     .page-break-avoid { page-break-inside: avoid; }
@@ -636,9 +630,9 @@ export default function FeasibilityCalc({ showToast }) {
                                     <th className="py-3 px-4 text-center text-emerald-600">السعر المتوقع</th>
                                 </tr></thead>
                                 <tbody>
-                                    {inputs.uGround > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الأرضي</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{groundBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uGround}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgGround * finSellPrice)}</td></tr>)}
-                                    {inputs.uTypical > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">المتكرر</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{(typicalBuilt * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{(netTypical * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uTypical * inputs.archFloorsCount}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgTypical.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgTypical * finSellPrice)}</td></tr>)}
-                                    {inputs.uRoof > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الملحق + السطح</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{roofBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uRoof}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgRoof * (finSellPrice + landCostPerSqm))}</td></tr>)}
+                                    {inputs.uGround > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الأرضي</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{groundBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uGround}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgGround * inputs.finSellPrice)}</td></tr>)}
+                                    {inputs.uTypical > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">المتكرر</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{(typicalBuilt * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{(netTypical * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uTypical * inputs.archFloorsCount}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgTypical.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgTypical * inputs.finSellPrice)}</td></tr>)}
+                                    {inputs.uRoof > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الملحق + السطح</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{roofBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uRoof}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgRoof * inputs.finSellPrice + (avgRoof * landCostPerSqm))}</td></tr>)}
                                 </tbody>
                                 <tfoot><tr className="bg-[#1a365d] text-white rounded-2xl"><td className="py-4 px-4 font-black rounded-r-xl">الإجمالي الكلي</td><td className="py-4 px-4 text-center font-bold" dir="ltr">{totalBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black" dir="ltr">{totalNet.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black">{totalUnits}</td><td className="py-4 px-4 text-center font-black">--</td><td className="py-4 px-4 text-center font-black rounded-l-xl text-[#c5a059]">{formatMoney(totalSales)}</td></tr></tfoot>
                             </table>
@@ -665,6 +659,7 @@ export default function FeasibilityCalc({ showToast }) {
                     <div className="bg-[#1a365d] text-white rounded-[2rem] shadow-2xl p-8 border-b-[12px] border-[#c5a059] relative overflow-hidden">
                          <div className="absolute -left-6 -top-6 opacity-[0.03] transform -rotate-12"><Calculator size={200}/></div>
                          <h3 className="text-lg font-black text-[#c5a059] mb-8 flex items-center gap-2 relative z-10"><FileText size={20}/> ملخص اقتصاديات المشروع</h3>
+                         <div className="grid grid-cols-2 gap-4 mb-8 relative z-10"><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة أرض للمتر</span><span className="text-lg font-black text-white">{formatMoney(landCostPerSqm)}</span></div><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة بناء للمتر</span><span className="text-lg font-black text-red-300">{formatMoney(totalCostPerSqm)}</span></div></div>
                          <div className="space-y-4 text-sm relative z-10">
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">إجمالي المبيعات</span> <span className="text-emerald-400 font-black text-lg">{formatMoney(totalSales)}</span></div>
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
