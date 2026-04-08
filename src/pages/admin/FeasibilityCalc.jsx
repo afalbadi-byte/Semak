@@ -6,6 +6,21 @@ import {
 } from 'lucide-react';
 import { API_URL, getImg } from '../../utils/helpers';
 
+const InputField = ({ label, name, value, onChange, type = "number", span = 1, step, textClass = "text-[#1a365d]" }) => (
+    <div className={`col-span-${span}`}>
+        <label className="block text-[11px] font-black text-slate-500 mb-2">{label}</label>
+        <input 
+            type={type} 
+            name={name} 
+            value={value === 0 && type === "number" ? '' : value}
+            onChange={onChange} 
+            step={step} 
+            placeholder="0"
+            className={`w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20 transition-all font-black text-base ${textClass}`} 
+        />
+    </div>
+);
+
 export default function FeasibilityCalc({ showToast }) {
     const [loading, setLoading] = useState(false);
     const [savedProjects, setSavedProjects] = useState([]);
@@ -26,14 +41,20 @@ export default function FeasibilityCalc({ showToast }) {
 
     const [investors, setInvestors] = useState([{ name: "الشريك الاستراتيجي", amount: 1837201 }]);
 
-    const handleChange = (e) => setInputs(prev => ({ ...prev, [e.target.name]: parseFloat(e.target.value) || 0 }));
+    const handleChange = (e) => {
+        const val = e.target.value;
+        setInputs(prev => ({ 
+            ...prev, 
+            [e.target.name]: val === "" ? "" : parseFloat(val) 
+        }));
+    };
 
     const handleInvestorChange = (index, field, value) => {
         setInvestors(prev => {
             const newInvestors = [...prev];
             newInvestors[index] = { 
                 ...newInvestors[index], 
-                [field]: field === 'amount' ? (parseFloat(value) || 0) : value 
+                [field]: field === 'amount' ? (value === "" ? "" : parseFloat(value)) : value 
             };
             return newInvestors;
         });
@@ -43,53 +64,72 @@ export default function FeasibilityCalc({ showToast }) {
     const removeInvestor = (index) => setInvestors(prev => prev.filter((_, i) => i !== index));
     const formatMoney = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n || 0);
 
-    // --- العمليات الحسابية والتوزيع المعماري ---
-    const groundBuilt = inputs.archLandArea * (inputs.archGroundPct / 100);
-    const typicalBuilt = inputs.archLandArea * (inputs.archTypicalPct / 100);
-    const roofBuilt = typicalBuilt * (inputs.archRoofPct / 100);
-    const totalBuilt = groundBuilt + (typicalBuilt * inputs.archFloorsCount) + roofBuilt;
-    const floorCountTotal = 1 + inputs.archFloorsCount + (roofBuilt > 0 ? 1 : 0);
-    const totalNet = Math.max(0, totalBuilt - (inputs.archCommonArea * floorCountTotal));
-    const totalUnits = inputs.uGround + (inputs.uTypical * inputs.archFloorsCount) + inputs.uRoof;
+    // --- العمليات الحسابية ---
+    const archLandArea = inputs.archLandArea || 0;
+    const archCommonArea = inputs.archCommonArea || 0;
+    const finSellPrice = inputs.finSellPrice || 0;
+    const finLandPrice = inputs.finLandPrice || 0;
 
-    const netGround = Math.max(0, groundBuilt - inputs.archCommonArea);
-    const avgGround = inputs.uGround > 0 ? netGround / inputs.uGround : 0;
+    const groundBuilt = archLandArea * ((inputs.archGroundPct || 0) / 100);
+    const typicalBuilt = archLandArea * ((inputs.archTypicalPct || 0) / 100);
+    const roofBuilt = typicalBuilt * ((inputs.archRoofPct || 0) / 100);
     
-    const netTypical = Math.max(0, typicalBuilt - inputs.archCommonArea);
-    const avgTypical = inputs.uTypical > 0 ? netTypical / inputs.uTypical : 0;
+    const floorsCount = inputs.archFloorsCount || 0;
+    const totalBuilt = groundBuilt + (typicalBuilt * floorsCount) + roofBuilt;
+    const floorCountTotal = 1 + floorsCount + (roofBuilt > 0 ? 1 : 0);
+    const totalNet = Math.max(0, totalBuilt - (archCommonArea * floorCountTotal));
     
-    const netRoof = Math.max(0, roofBuilt - inputs.archCommonArea);
-    const avgRoof = inputs.uRoof > 0 ? netRoof / inputs.uRoof : 0;
+    // 🔥 تكلفة متر الأرض محملة على المسطحات المبيوعة
+    const landCostPerSqm = totalNet > 0 ? (finLandPrice / totalNet) : 0;
 
-    // 🔥 إضافة قيمة السطح للملحق (نصف مساحة الملحق × سعر المتر)
-    const roofSurfaceSalesValue = inputs.uRoof > 0 ? (0.5 * netRoof * inputs.finSellPrice) : 0;
+    const uGround = inputs.uGround || 0;
+    const uTypical = inputs.uTypical || 0;
+    const uRoof = inputs.uRoof || 0;
+    const totalUnits = uGround + (uTypical * floorsCount) + uRoof;
 
-    // 🔥 إجمالي المبيعات شاملة قيمة بيع أسطح الملاحق
-    const totalSales = (totalNet * inputs.finSellPrice) + roofSurfaceSalesValue;
+    const netGround = Math.max(0, groundBuilt - archCommonArea);
+    const avgGround = uGround > 0 ? netGround / uGround : 0;
     
-    const marketingCost = totalSales * (inputs.sMarkPct / 100);
-    const buildCost = (totalNet * inputs.finBuildCost) + (totalUnits * inputs.inServiceCostPerUnit);
-    const insCost = buildCost * (inputs.sInsurancePct / 100);
-    const testCost = buildCost * (inputs.sTestingPct / 100);
-    const softCosts = inputs.sWafi + inputs.sEng + inputs.sMunicipality + inputs.sSupervision + inputs.sAcc + inputs.sOther + insCost + testCost;
+    const netTypical = Math.max(0, typicalBuilt - archCommonArea);
+    const avgTypical = uTypical > 0 ? netTypical / uTypical : 0;
+    
+    const netRoof = Math.max(0, roofBuilt - archCommonArea);
+    const avgRoof = uRoof > 0 ? netRoof / uRoof : 0;
 
-    const totalProjectCosts = inputs.finLandPrice + buildCost + softCosts + marketingCost;
+    // 🔥 حساب مبيعات السطح = مساحة الشقة (الملحق) × سعر متر الأرض محمل على المسطحات المبيوعة
+    const roofSurfaceSalesValue = uRoof > 0 ? (netRoof * landCostPerSqm) : 0;
+    const totalSales = (totalNet * finSellPrice) + roofSurfaceSalesValue;
+    
+    const floorsData = [];
+    if (groundBuilt > 0) floorsData.push({ label: "الدور الأرضي", built: groundBuilt, net: netGround, units: uGround });
+    if (typicalBuilt > 0 && floorsCount > 0) {
+        for(let i=1; i<=floorsCount; i++) floorsData.push({ label: `متكرر ${i}`, built: typicalBuilt, net: netTypical, units: uTypical });
+    }
+    if (roofBuilt > 0) floorsData.push({ label: "الملحق (الروف)", built: roofBuilt, net: netRoof, units: uRoof });
+
+    const marketingCost = totalSales * ((inputs.sMarkPct || 0) / 100);
+    const buildCost = (totalNet * (inputs.finBuildCost || 0)) + (totalUnits * (inputs.inServiceCostPerUnit || 0));
+    const insCost = buildCost * ((inputs.sInsurancePct || 0) / 100);
+    const testCost = buildCost * ((inputs.sTestingPct || 0) / 100);
+    const softCosts = (inputs.sWafi || 0) + (inputs.sEng || 0) + (inputs.sMunicipality || 0) + (inputs.sSupervision || 0) + (inputs.sAcc || 0) + (inputs.sOther || 0) + insCost + testCost;
+
+    const totalProjectCosts = finLandPrice + buildCost + softCosts + marketingCost;
     const netProfit = totalSales - totalProjectCosts;
 
-    const investorCapitalPool = inputs.finLandPrice + softCosts;
+    const investorCapitalPool = finLandPrice + softCosts;
     const baseInvPct = totalProjectCosts > 0 ? (investorCapitalPool / totalProjectCosts) * 100 : 0;
-    const finalInvPct = Math.min(100, Math.max(0, baseInvPct + inputs.inInvBonusPct));
+    const finalInvPct = Math.min(100, Math.max(0, baseInvPct + (inputs.inInvBonusPct || 0)));
     
     const invProfitPool = netProfit * (finalInvPct / 100);
     const devProfit = netProfit * ( (100 - finalInvPct) / 100 );
 
     const overAllROI = investorCapitalPool > 0 ? (invProfitPool / investorCapitalPool) * 100 : 0;
-    const annualROI = inputs.sDuration > 0 ? overAllROI / (inputs.sDuration / 12) : 0;
+    const sDuration = inputs.sDuration || 0;
+    const annualROI = sDuration > 0 ? overAllROI / (sDuration / 12) : 0;
 
-    const landCostPerSqm = totalNet > 0 ? (inputs.finLandPrice / totalNet) : 0;
     const totalCostPerSqm = totalNet > 0 ? (totalProjectCosts / totalNet) : 0;
 
-    const totalInvestedVal = investors.reduce((sum, inv) => sum + inv.amount, 0);
+    const totalInvestedVal = investors.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
     const totalInvestedPct = investorCapitalPool > 0 ? (totalInvestedVal / investorCapitalPool) * 100 : 0;
     const totalInvestedProfit = invProfitPool * (totalInvestedPct / 100);
 
@@ -155,7 +195,7 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 التصدير للـ PDF (بالتصميم المطابق للصورة)
+    // 🔥 التصدير للـ PDF
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -190,16 +230,17 @@ export default function FeasibilityCalc({ showToast }) {
             `;
         } else {
             investors.forEach(inv => {
-                const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
+                const amount = Number(inv.amount) || 0;
+                const pct = investorCapitalPool > 0 ? (amount / investorCapitalPool) * 100 : 0;
                 const prof = invProfitPool * (pct / 100);
-                const r = inv.amount > 0 ? (prof / inv.amount * 100) : 0;
+                const r = amount > 0 ? (prof / amount * 100) : 0;
                 investorsTableRows += `
                     <tr style="border-bottom: 1px solid #f1f5f9;">
                         <td style="padding: 10px; font-weight: bold; color: #1a365d;">${inv.name}</td>
-                        <td style="padding: 10px; text-align: center; font-weight: bold;">${formatMoney(inv.amount)}</td>
+                        <td style="padding: 10px; text-align: center; font-weight: bold;">${formatMoney(amount)}</td>
                         <td style="padding: 10px; text-align: center; color: #64748b;">${pct.toFixed(1)}%</td>
                         <td style="padding: 10px; text-align: center; color: #059669; font-weight: bold;">${formatMoney(prof)}</td>
-                        <td style="padding: 10px; text-align: center; color: #c5a059; font-weight: bold;">${formatMoney(inv.amount + prof)}</td>
+                        <td style="padding: 10px; text-align: center; color: #c5a059; font-weight: bold;">${formatMoney(amount + prof)}</td>
                         <td style="padding: 10px; text-align: center; font-weight: bold;">${r.toFixed(1)}%</td>
                     </tr>
                 `;
@@ -219,9 +260,9 @@ export default function FeasibilityCalc({ showToast }) {
                         </tr>
                     </thead>
                     <tbody style="background-color: white; font-weight: bold;">
-                        ${inputs.uGround > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الأرضي</td><td style="padding:10px 12px; text-align:center;">${inputs.uGround}</td><td style="padding:10px 12px; text-align:center;">${netGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgGround * inputs.finSellPrice)}</td></tr>` : ''}
-                        ${inputs.uTypical > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">المتكرر (${inputs.archFloorsCount} دور)</td><td style="padding:10px 12px; text-align:center;">${inputs.uTypical * inputs.archFloorsCount}</td><td style="padding:10px 12px; text-align:center;">${(netTypical * inputs.archFloorsCount).toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgTypical.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgTypical * inputs.finSellPrice)}</td></tr>` : ''}
-                        ${inputs.uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق + السطح</td><td style="padding:10px 12px; text-align:center;">${inputs.uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgRoof * inputs.finSellPrice * 1.5)}</td></tr>` : ''}
+                        ${uGround > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الأرضي</td><td style="padding:10px 12px; text-align:center;">${uGround}</td><td style="padding:10px 12px; text-align:center;">${netGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgGround.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgGround * finSellPrice)}</td></tr>` : ''}
+                        ${uTypical > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">المتكرر (${floorsCount} دور)</td><td style="padding:10px 12px; text-align:center;">${uTypical * floorsCount}</td><td style="padding:10px 12px; text-align:center;">${(netTypical * floorsCount).toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgTypical.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgTypical * finSellPrice)}</td></tr>` : ''}
+                        ${uRoof > 0 ? `<tr><td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#475569;">الملحق + السطح</td><td style="padding:10px 12px; text-align:center;">${uRoof}</td><td style="padding:10px 12px; text-align:center;">${netRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#059669;">${avgRoof.toFixed(1)} م²</td><td style="padding:10px 12px; text-align:center; color:#c5a059;">${formatMoney(avgRoof * (finSellPrice + landCostPerSqm))}</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -294,20 +335,21 @@ export default function FeasibilityCalc({ showToast }) {
                         <tbody style="font-weight: bold;">
                             <tr style="border-bottom: 1px solid #e2e8f0;">
                                 <td style="padding: 10px 12px; background-color: #f8fafc; color: #475569; width: 65%;">قيمة الأرض الإجمالية</td>
-                                <td style="padding: 10px 12px; color: #1a365d; font-weight: 900; font-size: 14px;">${formatMoney(inputs.finLandPrice)}</td>
+                                <td style="padding: 10px 12px; color: #1a365d; font-weight: 900; font-size: 14px;">${formatMoney(finLandPrice)}</td>
                             </tr>
                             
                             <tr><td colspan="2" style="padding: 8px 12px; background-color: #f1f5f9; color: #1a365d; font-weight: 900;">تفصيل المصاريف الإدارية والتأسيس والرخص</td></tr>
                             <tr><td style="padding: 6px 12px; color: #475569;">- رخصة وافي</td><td style="padding: 6px 12px; color: #1a365d; font-weight: bold;">${formatMoney(inputs.sWafi)}</td></tr>
                             <tr><td style="padding: 6px 12px; color: #475569;">- المكتب الهندسي</td><td style="padding: 6px 12px; color: #1a365d; font-weight: bold;">${formatMoney(inputs.sEng)}</td></tr>
                             <tr><td style="padding: 6px 12px; color: #475569;">- رخصة البلدية</td><td style="padding: 6px 12px; color: #1a365d; font-weight: bold;">${formatMoney(inputs.sMunicipality)}</td></tr>
-                            <tr><td style="padding: 6px 12px; color: #475569;">- إشراف هندسي ومحاسبي</td><td style="padding: 6px 12px; color: #1a365d; font-weight: bold;">${formatMoney(inputs.sSupervision + inputs.sAcc)}</td></tr>
+                            <tr><td style="padding: 6px 12px; color: #475569;">- إشراف هندسي ومحاسبي</td><td style="padding: 6px 12px; color: #1a365d; font-weight: bold;">${formatMoney((inputs.sSupervision||0) + (inputs.sAcc||0))}</td></tr>
                             <tr><td style="padding: 6px 12px; color: #475569;">- فحص وتأمين المبنى</td><td style="padding: 6px 12px; color: #1a365d; font-weight: bold;">${formatMoney(insCost + testCost)}</td></tr>
                             <tr><td style="padding: 6px 12px; color: #475569;">- مصاريف أخرى</td><td style="padding: 6px 12px; color: #1a365d; font-weight: bold;">${formatMoney(inputs.sOther)}</td></tr>
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #f8fafc;">
                                 <td style="padding: 10px 12px; color: #1a365d; font-weight: 900;">إجمالي مصاريف التأسيس والرخص</td>
                                 <td style="padding: 10px 12px; color: #1a365d; font-weight: 900;">${formatMoney(softCosts)}</td>
                             </tr>
+
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fffbeb;">
                                 <td style="padding: 12px; color: #c5a059; font-weight: 900;">السيولة الاستثمارية المستهدفة</td>
                                 <td style="padding: 12px; color: #c5a059; font-weight: 900; font-size: 15px;">${formatMoney(investorCapitalPool)}</td>
@@ -332,7 +374,7 @@ export default function FeasibilityCalc({ showToast }) {
                             </tr>
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: white;">
                                 <td style="padding: 12px; color: #475569;">سعر البيع المستهدف للمتر</td>
-                                <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(inputs.finSellPrice)} ريال</td>
+                                <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(finSellPrice)} ريال</td>
                             </tr>
 
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ecfdf5;">
@@ -375,6 +417,14 @@ export default function FeasibilityCalc({ showToast }) {
                             </tbody>
                         </table>
                     </div>
+
+                    ${showDevInPrint ? `
+                        <div style="border-top: 4px solid #1a365d; background-color: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+                            <h4 style="font-size: 14px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4>
+                            <p style="font-size: 24px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
+                            <p style="font-size: 11px; color: #64748b; margin: 0; font-weight: bold;">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
+                        </div>
+                    ` : ''}
                 </div>
             `;
         }
@@ -471,13 +521,6 @@ export default function FeasibilityCalc({ showToast }) {
         win.document.close();
     };
 
-    const InputField = ({ label, name, value, onChange, type = "number", span = 1, step, textClass = "text-[#1a365d]" }) => (
-        <div className={`col-span-${span}`}>
-            <label className="block text-[11px] font-black text-slate-500 mb-2">{label}</label>
-            <input type={type} name={name} value={value} onChange={onChange} step={step} className={`w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20 transition-all font-black text-base ${textClass}`} />
-        </div>
-    );
-
     return (
         <div className="animate-fadeIn pb-12 font-cairo" dir="rtl">
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mb-8 flex flex-col lg:flex-row items-center gap-6 no-print">
@@ -517,9 +560,9 @@ export default function FeasibilityCalc({ showToast }) {
                                     <th className="py-3 px-4 text-center text-emerald-600">السعر المتوقع</th>
                                 </tr></thead>
                                 <tbody>
-                                    {inputs.uGround > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الأرضي</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{groundBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uGround}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgGround * inputs.finSellPrice)}</td></tr>)}
-                                    {inputs.uTypical > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">المتكرر</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{(typicalBuilt * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{(netTypical * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uTypical * inputs.archFloorsCount}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgTypical.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgTypical * inputs.finSellPrice)}</td></tr>)}
-                                    {inputs.uRoof > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الملحق + السطح</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{roofBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uRoof}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgRoof * inputs.finSellPrice * 1.5)}</td></tr>)}
+                                    {inputs.uGround > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الأرضي</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{groundBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uGround}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgGround.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgGround * finSellPrice)}</td></tr>)}
+                                    {inputs.uTypical > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">المتكرر</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{(typicalBuilt * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{(netTypical * inputs.archFloorsCount).toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uTypical * inputs.archFloorsCount}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgTypical.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgTypical * finSellPrice)}</td></tr>)}
+                                    {inputs.uRoof > 0 && (<tr className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">الملحق + السطح</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{roofBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-slate-600" dir="ltr">{netRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{inputs.uRoof}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{avgRoof.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600">{formatMoney(avgRoof * (finSellPrice + landCostPerSqm))}</td></tr>)}
                                 </tbody>
                                 <tfoot><tr className="bg-[#1a365d] text-white rounded-2xl"><td className="py-4 px-4 font-black rounded-r-xl">الإجمالي الكلي</td><td className="py-4 px-4 text-center font-bold" dir="ltr">{totalBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black" dir="ltr">{totalNet.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black">{totalUnits}</td><td className="py-4 px-4 text-center font-black">--</td><td className="py-4 px-4 text-center font-black rounded-l-xl text-[#c5a059]">{formatMoney(totalSales)}</td></tr></tfoot>
                             </table>
@@ -538,7 +581,7 @@ export default function FeasibilityCalc({ showToast }) {
 
                     <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                         <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center gap-4"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0"><Users size={24} /></div><div><h2 className="text-xl font-black text-[#1a365d]">3. قائمة المستثمرين</h2><p className="text-xs font-bold text-slate-400 mt-1">إضافة الشركاء وتوزيع الحصص المالية</p></div></div><button onClick={addInvestorRow} className="bg-[#1a365d] text-white px-5 py-3 rounded-xl text-sm font-black hover:bg-blue-900 transition-all flex items-center gap-2 shadow-md"><Plus size={18}/> إضافة شريك</button></div>
-                        <div className="overflow-x-auto p-6 md:p-8 bg-white"><table className="w-full text-right text-sm border-separate border-spacing-y-3"><thead><tr className="text-slate-400 font-black text-[11px] uppercase tracking-wider"><th className="px-4 pb-2">اسم المستثمر</th><th className="px-4 pb-2">المبلغ المستثمر (SAR)</th><th className="px-4 pb-2 text-center">نسبة الإسهام</th><th className="px-4 pb-2 text-center">الربح المتوقع</th><th className="px-4 pb-2 text-center">إجراء</th></tr></thead><tbody>{investors.map((inv, i) => {const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0; const prof = invProfitPool * (pct / 100); return (<tr key={i} className="bg-slate-50 transition-all rounded-2xl group"><td className="p-2 rounded-r-2xl"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" placeholder="اسم المستثمر..." /></td><td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-black text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" /></td><td className="p-2 text-center font-black text-slate-500">{pct.toFixed(1)}%</td><td className="p-2 text-center font-black text-emerald-600">{formatMoney(prof)}</td><td className="p-2 text-center rounded-l-2xl"><button onClick={() => removeInvestor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-red-100"><Trash2 size={18}/></button></td></tr>)})}</tbody><tfoot><tr><td className="p-4 font-black text-[#1a365d]">الإجمالي المجمع</td><td className="p-4 font-black text-[#1a365d] text-lg">{formatMoney(totalInvestedVal)}</td><td className="p-4 text-center font-black text-slate-400">{totalInvestedPct.toFixed(1)}%</td><td className="p-4 text-center font-black text-emerald-600 text-lg">{formatMoney(totalInvestedProfit)}</td><td className="p-4 text-center text-[10px] font-bold text-slate-400">تأكد من المطابقة</td></tr></tfoot></table></div>
+                        <div className="overflow-x-auto p-6 md:p-8 bg-white"><table className="w-full text-right text-sm border-separate border-spacing-y-3"><thead><tr className="text-slate-400 font-black text-[11px] uppercase tracking-wider"><th className="px-4 pb-2">اسم المستثمر</th><th className="px-4 pb-2">المبلغ المستثمر (SAR)</th><th className="px-4 pb-2 text-center">نسبة الإسهام</th><th className="px-4 pb-2 text-center">الربح المتوقع</th><th className="px-4 pb-2 text-center">إجراء</th></tr></thead><tbody>{investors.map((inv, i) => {const amount = Number(inv.amount) || 0; const pct = investorCapitalPool > 0 ? (amount / investorCapitalPool) * 100 : 0; const prof = invProfitPool * (pct / 100); return (<tr key={i} className="bg-slate-50 transition-all rounded-2xl group"><td className="p-2 rounded-r-2xl"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" placeholder="اسم المستثمر..." /></td><td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-black text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" /></td><td className="p-2 text-center font-black text-slate-500">{pct.toFixed(1)}%</td><td className="p-2 text-center font-black text-emerald-600">{formatMoney(prof)}</td><td className="p-2 text-center rounded-l-2xl"><button onClick={() => removeInvestor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-red-100"><Trash2 size={18}/></button></td></tr>)})}</tbody><tfoot><tr><td className="p-4 font-black text-[#1a365d]">الإجمالي المجمع</td><td className="p-4 font-black text-[#1a365d] text-lg">{formatMoney(totalInvestedVal)}</td><td className="p-4 text-center font-black text-slate-400">{totalInvestedPct.toFixed(1)}%</td><td className="p-4 text-center font-black text-emerald-600 text-lg">{formatMoney(totalInvestedProfit)}</td><td className="p-4 text-center text-[10px] font-bold text-slate-400">تأكد من المطابقة</td></tr></tfoot></table></div>
                     </div>
                 </div>
 
@@ -546,6 +589,7 @@ export default function FeasibilityCalc({ showToast }) {
                     <div className="bg-[#1a365d] text-white rounded-[2rem] shadow-2xl p-8 border-b-[12px] border-[#c5a059] relative overflow-hidden">
                          <div className="absolute -left-6 -top-6 opacity-[0.03] transform -rotate-12"><Calculator size={200}/></div>
                          <h3 className="text-lg font-black text-[#c5a059] mb-8 flex items-center gap-2 relative z-10"><FileText size={20}/> ملخص اقتصاديات المشروع</h3>
+                         <div className="grid grid-cols-2 gap-4 mb-8 relative z-10"><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة أرض للمتر</span><span className="text-lg font-black text-white">{formatMoney(landCostPerSqm)}</span></div><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة بناء للمتر</span><span className="text-lg font-black text-red-300">{formatMoney(totalCostPerSqm)}</span></div></div>
                          <div className="space-y-4 text-sm relative z-10">
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">إجمالي المبيعات</span> <span className="text-emerald-400 font-black text-lg">{formatMoney(totalSales)}</span></div>
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
