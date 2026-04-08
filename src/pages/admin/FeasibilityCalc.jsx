@@ -26,16 +26,22 @@ export default function FeasibilityCalc({ showToast }) {
 
     const [investors, setInvestors] = useState([{ name: "الشريك الاستراتيجي", amount: 1837201 }]);
 
-    const handleChange = (e) => setInputs({ ...inputs, [e.target.name]: parseFloat(e.target.value) || 0 });
+    const handleChange = (e) => setInputs(prev => ({ ...prev, [e.target.name]: parseFloat(e.target.value) || 0 }));
 
+    // 🔥 إصلاح مشكلة تحديث بيانات المستثمرين (تحديث الذاكرة فوراً)
     const handleInvestorChange = (index, field, value) => {
-        const newInvestors = [...investors];
-        newInvestors[index][field] = field === 'amount' ? (parseFloat(value) || 0) : value;
-        setInvestors(newInvestors);
+        setInvestors(prev => {
+            const newInvestors = [...prev];
+            newInvestors[index] = { 
+                ...newInvestors[index], 
+                [field]: field === 'amount' ? (parseFloat(value) || 0) : value 
+            };
+            return newInvestors;
+        });
     };
 
-    const addInvestorRow = () => setInvestors([...investors, { name: "", amount: 0 }]);
-    const removeInvestor = (index) => setInvestors(investors.filter((_, i) => i !== index));
+    const addInvestorRow = () => setInvestors(prev => [...prev, { name: "", amount: 0 }]);
+    const removeInvestor = (index) => setInvestors(prev => prev.filter((_, i) => i !== index));
     const formatMoney = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n || 0);
 
     // --- العمليات الحسابية ---
@@ -98,14 +104,22 @@ export default function FeasibilityCalc({ showToast }) {
             return;
         }
         setLoading(true);
-        const payload = { id: currentProjectId || null, project_name: projectName, data: { inputs, investors } };
+        
+        // 🔥 تغليف قوي للبيانات لضمان حفظ المستثمرين في قاعدة البيانات
+        const cleanInvestors = investors.map(inv => ({ name: inv.name, amount: Number(inv.amount) || 0 }));
+        const payload = { 
+            id: currentProjectId || null, 
+            project_name: projectName, 
+            data: { inputs: { ...inputs }, investors: cleanInvestors } 
+        };
+
         try {
             const res = await fetch(`${API_URL}?action=save_feasibility`, {
                 method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
             });
             const data = await res.json();
             if(data.success) {
-                if(showToast) showToast("نجاح", "تم حفظ المشروع في السحابة!"); else alert("تم الحفظ بنجاح");
+                if(showToast) showToast("نجاح", "تم حفظ المشروع والمستثمرين في السحابة!"); else alert("تم الحفظ بنجاح");
                 setCurrentProjectId(data.id);
                 loadProjectsList();
             }
@@ -121,19 +135,27 @@ export default function FeasibilityCalc({ showToast }) {
             const data = JSON.parse(textRes);
             if(data.success) {
                 let parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                if (parsedData && parsedData.inputs) {
-                    setInputs(prev => ({ ...prev, ...parsedData.inputs }));
-                    if(parsedData.investors) setInvestors(parsedData.investors);
+                
+                if (parsedData) {
+                    if (parsedData.inputs) setInputs(prev => ({ ...prev, ...parsedData.inputs }));
+                    
+                    // 🔥 تأكيد استدعاء المستثمرين بشكل سليم
+                    if (parsedData.investors && Array.isArray(parsedData.investors) && parsedData.investors.length > 0) {
+                        setInvestors(parsedData.investors);
+                    } else {
+                        setInvestors([{ name: "الشريك الاستراتيجي", amount: parsedData.inputs?.finLandPrice || 0 }]);
+                    }
+
                     setCurrentProjectId(id);
                     setProjectName(savedProjects.find(p=>p.id==id)?.project_name || "");
-                    if(showToast) showToast("نجاح", "تم استدعاء بيانات المشروع");
+                    if(showToast) showToast("نجاح", "تم استدعاء بيانات المشروع كاملة");
                 }
             }
         } catch(e) {} finally { setLoading(false); }
     };
 
     // =======================================================
-    // 🔥 تصدير الـ PDF المحسن
+    // 🔥 تصدير للـ PDF
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -184,7 +206,10 @@ export default function FeasibilityCalc({ showToast }) {
             });
         }
 
-        const htmlTemplate = `
+        const templateId = type === 'teaser' ? 'pdf-teaser-template' : 'pdf-detailed-template';
+        const content = document.getElementById(templateId).innerHTML;
+        const win = window.open('', '_blank');
+        win.document.write(`
             <!DOCTYPE html>
             <html lang="ar" dir="rtl">
             <head>
@@ -199,6 +224,9 @@ export default function FeasibilityCalc({ showToast }) {
                     .top-bar { display: flex; height: 8px; width: 100%; }
                     .bar-gold { background-color: #c5a059; width: 30%; }
                     .bar-navy { background-color: #1a365d; width: 70%; }
+                    .bottom-bar { display: flex; height: 8px; width: 100%; margin-top: auto; }
+                    .b-bar-navy { background-color: #1a365d; width: 70%; }
+                    .b-bar-gold { background-color: #c5a059; width: 30%; }
                     .header-section { padding: 30px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; position: relative; z-index: 10;}
                     .logo-box img { height: 50px; object-fit: contain; }
                     .title-box { text-align: right; border-right: 4px solid #c5a059; padding-right: 15px; }
@@ -210,22 +238,14 @@ export default function FeasibilityCalc({ showToast }) {
                     .footer-left { color: #64748b; font-size: 11px; font-weight: bold; }
                     .footer-right h4 { margin: 0; color: #1a365d; font-weight: 900; font-size: 14px; }
                     .footer-right p { margin: 2px 0 0 0; color: #94a3b8; font-size: 10px; }
-                    .bottom-bar { display: flex; height: 8px; width: 100%; margin-top: auto; }
-                    .b-bar-navy { background-color: #1a365d; width: 70%; }
-                    .b-bar-gold { background-color: #c5a059; width: 30%; }
                 </style>
             </head>
             <body>
                 <div class="a4-container">
                     <div class="top-bar"><div class="bar-gold"></div><div class="bar-navy"></div></div>
                     <div class="header-section">
-                        <div class="title-box">
-                            <h1>سماك العقارية</h1>
-                            <p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-                        </div>
-                        <div class="logo-box">
-                            <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" />
-                        </div>
+                        <div class="title-box"><h1>سماك العقارية</h1><p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p></div>
+                        <div class="logo-box"><img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" /></div>
                     </div>
                     <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" class="watermark" />
                     <div class="main-content">
@@ -255,25 +275,16 @@ export default function FeasibilityCalc({ showToast }) {
                                     <p style="color: white; font-weight: 900; font-size: 36px; margin: 0;">${inputs.sDuration} شهراً</p>
                                 </div>
                                 <div>
-                                    <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">العائد الإجمالي المتوقع للمستثمر (ROI)</p>
+                                    <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">العائد الإجمالي المتوقع (ROI)</p>
                                     <p style="color: #c5a059; font-weight: 900; font-size: 36px; margin: 0;">${invRoi}%</p>
                                 </div>
                             </div>
                             <div style="border: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px;">
                                 <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 20px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; text-align:center;">التفاصيل المعمارية</h3>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center;">
-                                    <div>
-                                        <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${totalUnits}</span>
-                                        <span style="color: #64748b; font-weight: bold; font-size: 12px;">وحدة سكنية</span>
-                                    </div>
-                                    <div>
-                                        <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalBuilt)}</span>
-                                        <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مربع بناء</span>
-                                    </div>
-                                    <div>
-                                        <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalNet)}</span>
-                                        <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مساحة للبيع</span>
-                                    </div>
+                                    <div><span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${totalUnits}</span><span style="color: #64748b; font-weight: bold; font-size: 12px;">وحدة سكنية</span></div>
+                                    <div><span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalBuilt)}</span><span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مربع بناء</span></div>
+                                    <div><span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalNet)}</span><span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مساحة للبيع</span></div>
                                 </div>
                             </div>
                         ` : `
@@ -297,14 +308,7 @@ export default function FeasibilityCalc({ showToast }) {
                             <div style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 11px;">
                                     <thead style="background-color: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
-                                        <tr>
-                                            <th style="padding: 10px; color: #1a365d;">المستثمر</th>
-                                            <th style="padding: 10px; text-align: center; color: #1a365d;">المبلغ المستثمر</th>
-                                            <th style="padding: 10px; text-align: center; color: #1a365d;">الحصة %</th>
-                                            <th style="padding: 10px; text-align: center; color: #1a365d;">الربح المتوقع</th>
-                                            <th style="padding: 10px; text-align: center; color: #1a365d;">إجمالي الاسترداد</th>
-                                            <th style="padding: 10px; text-align: center; color: #1a365d;">ROI</th>
-                                        </tr>
+                                        <tr><th style="padding: 10px; color: #1a365d;">المستثمر</th><th style="padding: 10px; text-align: center; color: #1a365d;">المبلغ المستثمر</th><th style="padding: 10px; text-align: center; color: #1a365d;">الحصة %</th><th style="padding: 10px; text-align: center; color: #1a365d;">الربح المتوقع</th><th style="padding: 10px; text-align: center; color: #1a365d;">إجمالي الاسترداد</th><th style="padding: 10px; text-align: center; color: #1a365d;">ROI</th></tr>
                                     </thead>
                                     <tbody style="background-color: white;">${investorsTableRows}</tbody>
                                 </table>
@@ -312,8 +316,7 @@ export default function FeasibilityCalc({ showToast }) {
                             <div style="display: grid; grid-template-columns: ${showDevInPrint ? '1fr 1fr' : '1fr'}; gap: 15px;">
                                 ${showDevInPrint ? `
                                     <div style="border-top: 4px solid #1a365d; background-color: white; padding: 15px; border-radius: 12px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
-                                        <h4 style="font-size: 12px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4>
-                                        <p style="font-size: 20px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
+                                        <h4 style="font-size: 12px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4><p style="font-size: 20px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
                                         <p style="font-size: 9px; color: #64748b; margin: 0; font-weight: bold; line-height: 1.5;">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
                                     </div>
                                 ` : ''}
@@ -324,22 +327,20 @@ export default function FeasibilityCalc({ showToast }) {
                             </div>
                         `}
                     </div>
+
                     <div class="footer-section">
                         <div class="footer-left" dir="ltr">info@semak.sa | semak.sa | 920032842</div>
                         <div class="footer-right"><h4>إدارة التطوير والاستثمار</h4><p>وثيقة سرية للمستثمرين</p></div>
                     </div>
                     <div class="bottom-bar"><div class="b-bar-navy"></div><div class="b-bar-gold"></div></div>
                 </div>
-                <script>window.onload=()=>{setTimeout(()=>{window.print();},1000);};</script>
+                <script>window.onload = () => { setTimeout(() => { window.print(); }, 800); };</script>
             </body>
             </html>
         `;
-        const win = window.open('', '_blank');
-        win.document.write(htmlTemplate);
         win.document.close();
     };
 
-    // عنصر الإدخال الموحد
     const InputField = ({ label, name, value, onChange, type = "number", span = 1, step, textClass = "text-[#1a365d]" }) => (
         <div className={`col-span-${span}`}>
             <label className="block text-[11px] font-black text-slate-500 mb-2">{label}</label>
@@ -351,13 +352,18 @@ export default function FeasibilityCalc({ showToast }) {
         <div className="animate-fadeIn pb-12 font-cairo" dir="rtl">
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 mb-8 flex flex-col lg:flex-row items-center gap-6 no-print">
                 <div className="flex items-center gap-4 w-full lg:w-auto">
-                    <div className="w-14 h-14 bg-indigo-50 text-[#1a365d] rounded-2xl flex items-center justify-center shrink-0"><DownloadCloud size={28} /></div>
-                    <div className="flex-1"><label className="block text-[11px] font-black text-slate-400 mb-1 tracking-wide">النسخة السحابية</label><h2 className="text-xl font-black text-[#1a365d]">إدارة الدراسات</h2></div>
+                    <div className="w-14 h-14 bg-indigo-50 text-[#1a365d] rounded-2xl flex items-center justify-center shrink-0">
+                        <DownloadCloud size={28} />
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-[11px] font-black text-slate-400 mb-1 tracking-wide">النسخة السحابية</label>
+                        <h2 className="text-xl font-black text-[#1a365d]">إدارة الدراسات</h2>
+                    </div>
                 </div>
                 <div className="w-full lg:w-px bg-slate-100 lg:h-16 h-px"></div>
                 <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input type="text" value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="اسم المشروع..." className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl font-black text-[#1a365d] outline-none focus:border-[#c5a059] transition-all" />
-                    <select onChange={(e) => handleLoadCloud(e.target.value)} value={currentProjectId} className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl font-black text-[#1a365d] outline-none cursor-pointer focus:border-[#c5a059] transition-all"><option value="">-- استدعاء دراسة سابقة --</option>{savedProjects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}</select>
+                    <div><label className="block text-[11px] font-black text-slate-500 mb-2">اسم المشروع الحالي</label><input type="text" value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثال: مشروع سماك الصفوة 3..." className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl font-black text-[#1a365d] outline-none focus:border-[#c5a059] transition-all" /></div>
+                    <div><label className="block text-[11px] font-black text-slate-500 mb-2">استدعاء دراسة محفوظة</label><div className="relative"><select onChange={(e) => handleLoadCloud(e.target.value)} value={currentProjectId} className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl font-black text-[#1a365d] outline-none cursor-pointer focus:border-[#c5a059] transition-all appearance-none"><option value="">-- اختر مشروعاً للقراءة --</option>{savedProjects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}</select><div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none"><ChevronDown size={16}/></div></div></div>
                 </div>
                 <button onClick={handleSaveCloud} disabled={loading} className="w-full lg:w-auto bg-[#1a365d] text-white px-10 py-4 rounded-2xl font-black hover:bg-blue-900 transition-all flex items-center justify-center gap-3 shadow-lg shrink-0">{loading ? <RefreshCw size={20} className="animate-spin"/> : <Save size={20}/>} <span>حفظ المشروع</span></button>
             </div>
@@ -365,48 +371,40 @@ export default function FeasibilityCalc({ showToast }) {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 no-print">
                 <div className="xl:col-span-8 space-y-8">
                     <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-6 md:p-8 border-b border-slate-100 flex items-center gap-4"><div className="w-12 h-12 bg-orange-50 text-[#c5a059] rounded-2xl flex items-center justify-center shrink-0"><LayoutDashboard size={24} /></div><h2 className="text-xl font-black text-[#1a365d]">1. الموجه المعماري</h2></div>
-                        <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-6">
-                            <InputField label="مساحة الأرض (م²)" name="archLandArea" value={inputs.archLandArea} onChange={handleChange} />
-                            <InputField label="مساحة الخدمات (م²)" name="archCommonArea" value={inputs.archCommonArea} onChange={handleChange} />
-                            <InputField label="الأدوار المتكررة" name="archFloorsCount" value={inputs.archFloorsCount} onChange={handleChange} />
-                            <InputField label="نسبة الملحق %" name="archRoofPct" value={inputs.archRoofPct} onChange={handleChange} />
+                        <div className="p-6 md:p-8 border-b border-slate-100 flex items-center gap-4"><div className="w-12 h-12 bg-orange-50 text-[#c5a059] rounded-2xl flex items-center justify-center shrink-0"><LayoutDashboard size={24} /></div><div><h2 className="text-xl font-black text-[#1a365d]">1. الموجه المعماري</h2><p className="text-xs font-bold text-slate-400 mt-1">توزيع المساحات والوحدات السكنية للمشروع</p></div></div>
+                        <div className="p-6 md:p-8 bg-white">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8"><InputField label="مساحة الأرض (م²)" name="archLandArea" value={inputs.archLandArea} onChange={handleChange} /><InputField label="مساحة الخدمات (م²)" name="archCommonArea" value={inputs.archCommonArea} onChange={handleChange} /><InputField label="الأدوار المتكررة" name="archFloorsCount" value={inputs.archFloorsCount} onChange={handleChange} /><InputField label="نسبة الملحق %" name="archRoofPct" value={inputs.archRoofPct} onChange={handleChange} /></div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 flex flex-col gap-4"><InputField label="بناء الأرضي %" name="archGroundPct" value={inputs.archGroundPct} onChange={handleChange} /><InputField label="وحدات الأرضي" name="uGround" value={inputs.uGround} onChange={handleChange} textClass="text-[#c5a059]" /></div><div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 flex flex-col gap-4"><InputField label="بناء المتكرر %" name="archTypicalPct" value={inputs.archTypicalPct} onChange={handleChange} /><InputField label="وحدات المتكرر" name="uTypical" value={inputs.uTypical} onChange={handleChange} textClass="text-[#c5a059]" /></div><div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 flex flex-col justify-end gap-4"><div className="hidden md:block h-[72px]"></div><InputField label="وحدات الملحق (الروف)" name="uRoof" value={inputs.uRoof} onChange={handleChange} textClass="text-[#c5a059]" /></div></div>
                         </div>
-                        <div className="p-8 border-t border-slate-100 bg-slate-50/30">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="bg-white p-5 rounded-3xl border border-slate-200 flex flex-col gap-4 shadow-sm"><InputField label="بناء الأرضي %" name="archGroundPct" value={inputs.archGroundPct} onChange={handleChange} /><InputField label="وحدات الأرضي" name="uGround" value={inputs.uGround} onChange={handleChange} textClass="text-[#c5a059]" /></div>
-                                <div className="bg-white p-5 rounded-3xl border border-slate-200 flex flex-col gap-4 shadow-sm"><InputField label="بناء المتكرر %" name="archTypicalPct" value={inputs.archTypicalPct} onChange={handleChange} /><InputField label="وحدات المتكرر" name="uTypical" value={inputs.uTypical} onChange={handleChange} textClass="text-[#c5a059]" /></div>
-                                <div className="bg-white p-5 rounded-3xl border border-slate-200 flex flex-col justify-end gap-4 shadow-sm"><div className="hidden md:block h-[72px]"></div><InputField label="وحدات الملحق" name="uRoof" value={inputs.uRoof} onChange={handleChange} textClass="text-[#c5a059]" /></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-6 md:p-8 border-b border-slate-100 flex items-center gap-4"><div className="w-12 h-12 bg-blue-50 text-[#1a365d] rounded-2xl flex items-center justify-center shrink-0"><Landmark size={24} /></div><h2 className="text-xl font-black text-[#1a365d]">2. التكاليف والمحاصة</h2></div>
-                        <div className="p-8 space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><InputField label="سعر بيع المتر" name="finSellPrice" value={inputs.finSellPrice} onChange={handleChange} textClass="text-emerald-600" /><InputField label="تكلفة بناء المتر" name="finBuildCost" value={inputs.finBuildCost} onChange={handleChange} textClass="text-red-500" /><InputField label="إدخال خدمات للوحدة" name="inServiceCostPerUnit" value={inputs.inServiceCostPerUnit} onChange={handleChange} textClass="text-red-500" /></div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField label="قيمة الأرض الإجمالية" name="finLandPrice" value={inputs.finLandPrice} onChange={handleChange} /><InputField label="مدة المشروع (شهر)" name="sDuration" value={inputs.sDuration} onChange={handleChange} textClass="text-[#c5a059]" /></div>
-                            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200"><h3 className="text-sm font-black text-[#1a365d] mb-6 flex items-center gap-2"><Briefcase size={18} className="text-[#c5a059]" /> المصاريف الإدارية والتأسيس والرخص</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-6"><InputField label="رخصة وافي" name="sWafi" value={inputs.sWafi} onChange={handleChange} /><InputField label="المكتب الهندسي" name="sEng" value={inputs.sEng} onChange={handleChange} /><InputField label="رخصة البلدية" name="sMunicipality" value={inputs.sMunicipality} onChange={handleChange} /><InputField label="مكتب مشرف" name="sSupervision" value={inputs.sSupervision} onChange={handleChange} /><InputField label="محاسب قانوني" name="sAcc" value={inputs.sAcc} onChange={handleChange} /><InputField label="مصاريف أخرى" name="sOther" value={inputs.sOther} onChange={handleChange} /><InputField label="تأمين (% من بناء)" name="sInsurancePct" value={inputs.sInsurancePct} onChange={handleChange} step="0.1" /><InputField label="فحص (% من بناء)" name="sTestingPct" value={inputs.sTestingPct} onChange={handleChange} step="0.1" /></div></div>
-                            <div className="bg-gradient-to-l from-[#1a365d] to-[#0f172a] p-8 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl"><div className="flex-1 w-full grid grid-cols-2 gap-6"><div><label className="text-[11px] font-black text-slate-300 block mb-2 uppercase">علاوة مستثمر %</label><input type="number" name="inInvBonusPct" value={inputs.inInvBonusPct} onChange={handleChange} className="w-full p-4 rounded-2xl border-none font-black text-white text-xl bg-white/10 outline-none text-center" /></div><div><label className="text-[11px] font-black text-slate-300 block mb-2 uppercase">السعي والتسويق %</label><input type="number" name="sMarkPct" value={inputs.sMarkPct} onChange={handleChange} step="0.1" className="w-full p-4 rounded-2xl border-none font-black text-[#c5a059] text-xl bg-white/10 outline-none text-center" /></div></div><div className="w-full md:w-64 text-center bg-white p-6 rounded-3xl"><span className="block text-[11px] font-black text-slate-400 mb-1">إجمالي حصة المستثمرين</span><span className="text-4xl font-black text-[#1a365d]">{finalInvPct.toFixed(1)}%</span></div></div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                        <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center"><Users size={24} /></div><h2 className="text-xl font-black text-[#1a365d]">3. المستثمرين</h2></div><button onClick={addInvestorRow} className="bg-[#1a365d] text-white px-5 py-3 rounded-xl text-sm font-black hover:bg-blue-900 transition-all flex items-center gap-2"><Plus size={18}/> إضافة شريك</button></div>
-                        <div className="overflow-x-auto p-6 md:p-8">
-                            <table className="w-full text-right text-sm border-separate border-spacing-y-3">
-                                <thead><tr className="text-slate-400 font-black text-[11px] uppercase tracking-wider"><th className="px-4 pb-2">اسم المستثمر</th><th className="px-4 pb-2">المبلغ المستثمر (SAR)</th><th className="px-4 pb-2 text-center">الإسهام</th><th className="px-4 pb-2 text-center">الربح المتوقع</th><th className="px-4 pb-2 text-center">إجراء</th></tr></thead>
-                                <tbody>{investors.map((inv, i) => { const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0; const prof = invProfitPool * (pct / 100); return (<tr key={i} className="bg-slate-50"><td className="p-2 rounded-r-2xl"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059]" placeholder="الاسم..." /></td><td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-black text-[#1a365d] outline-none focus:border-[#c5a059]" /></td><td className="p-2 text-center font-black text-slate-500">{pct.toFixed(1)}%</td><td className="p-2 text-center font-black text-emerald-600">{formatMoney(prof)}</td><td className="p-2 text-center rounded-l-2xl"><button onClick={() => removeInvestor(i)} className="text-slate-400 hover:text-red-500 p-3 bg-white rounded-xl shadow-sm border border-slate-100"><Trash2 size={18}/></button></td></tr>)})}</tbody>
-                                <tfoot><tr><td className="p-4 font-black text-[#1a365d]">الإجمالـي المجمع</td><td className="p-4 font-black text-[#1a365d] text-lg">{formatMoney(totalInvestedVal)}</td><td className="p-4 text-center font-black text-slate-400">{totalInvestedPct.toFixed(1)}%</td><td className="p-4 text-center font-black text-emerald-600 text-lg">{formatMoney(totalInvestedProfit)}</td><td className="p-4 text-center text-[10px] font-bold text-slate-400">تأكد من المطابقة</td></tr></tfoot>
+                        <div className="overflow-x-auto bg-slate-50/50 p-6 md:p-8 border-t border-slate-100">
+                            <table className="w-full text-right text-sm">
+                                <thead><tr className="text-slate-400 font-black border-b-2 border-slate-200"><th className="py-3 px-4">الدور</th><th className="py-3 px-4 text-center">إجمالي البناء</th><th className="py-3 px-4 text-center">المساحة الصافية للبيع</th><th className="py-3 px-4 text-center">عدد الوحدات</th></tr></thead>
+                                <tbody>{floorsData.map((floor, i) => (<tr key={i} className="border-b border-slate-100 hover:bg-white transition-colors"><td className="py-4 px-4 font-black text-[#1a365d]">{floor.label}</td><td className="py-4 px-4 text-center font-bold text-slate-600" dir="ltr">{floor.built.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-emerald-600" dir="ltr">{floor.net.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]">{floor.units}</td></tr>))}</tbody>
+                                <tfoot><tr className="bg-[#1a365d] text-white rounded-2xl"><td className="py-4 px-4 font-black rounded-r-xl">الإجمالي الكلي</td><td className="py-4 px-4 text-center font-bold" dir="ltr">{totalBuilt.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black text-[#c5a059]" dir="ltr">{totalNet.toFixed(1)} m²</td><td className="py-4 px-4 text-center font-black rounded-l-xl">{totalUnits}</td></tr></tfoot>
                             </table>
                         </div>
+                    </div>
+
+                    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                        <div className="p-6 md:p-8 border-b border-slate-100 flex items-center gap-4"><div className="w-12 h-12 bg-blue-50 text-[#1a365d] rounded-2xl flex items-center justify-center shrink-0"><Landmark size={24} /></div><div><h2 className="text-xl font-black text-[#1a365d]">2. التكاليف والمحاصة</h2><p className="text-xs font-bold text-slate-400 mt-1">تحديد التكاليف التشغيلية والإدارية ونسب الأرباح</p></div></div>
+                        <div className="p-6 md:p-8 space-y-8 bg-white">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><InputField label="سعر بيع المتر المستهدف" name="finSellPrice" value={inputs.finSellPrice} onChange={handleChange} textClass="text-emerald-600" /><InputField label="تكلفة بناء المتر" name="finBuildCost" value={inputs.finBuildCost} onChange={handleChange} textClass="text-red-500" /><InputField label="إدخال خدمات للوحدة" name="inServiceCostPerUnit" value={inputs.inServiceCostPerUnit} onChange={handleChange} textClass="text-red-500" /></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><InputField label="قيمة الأرض الإجمالية" name="finLandPrice" value={inputs.finLandPrice} onChange={handleChange} /><InputField label="مدة المشروع (أشهر)" name="sDuration" value={inputs.sDuration} onChange={handleChange} textClass="text-[#c5a059]" /></div>
+                            <div className="bg-[#1a365d]/5 p-6 md:p-8 rounded-[2rem] border border-[#1a365d]/10"><h3 className="text-sm font-black text-[#1a365d] mb-6 flex items-center gap-2"><Briefcase size={18} className="text-[#1a365d]" /> المصاريف الإدارية والتأسيس والرخص</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-6"><InputField label="رخصة وافي" name="sWafi" value={inputs.sWafi} onChange={handleChange} /><InputField label="المكتب الهندسي" name="sEng" value={inputs.sEng} onChange={handleChange} /><InputField label="رخصة البلدية" name="sMunicipality" value={inputs.sMunicipality} onChange={handleChange} /><InputField label="مكتب مشرف" name="sSupervision" value={inputs.sSupervision} onChange={handleChange} /><InputField label="محاسب قانوني" name="sAcc" value={inputs.sAcc} onChange={handleChange} /><InputField label="مصاريف أخرى" name="sOther" value={inputs.sOther} onChange={handleChange} /><InputField label="تأمين (% من بناء)" name="sInsurancePct" value={inputs.sInsurancePct} onChange={handleChange} step="0.1" /><InputField label="فحص (% من بناء)" name="sTestingPct" value={inputs.sTestingPct} onChange={handleChange} step="0.1" /></div></div>
+                            <div className="bg-gradient-to-l from-[#1a365d] to-[#0f172a] p-6 md:p-8 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl relative overflow-hidden"><div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -mr-10 -mt-10 blur-3xl pointer-events-none"></div><div className="flex-1 w-full grid grid-cols-2 gap-6 relative z-10"><div><label className="text-[11px] font-black text-slate-300 block mb-2 uppercase tracking-wider">علاوة لنسبة المستثمر %</label><input type="number" name="inInvBonusPct" value={inputs.inInvBonusPct} onChange={handleChange} className="w-full p-4 rounded-2xl border-none font-black text-white text-xl outline-none bg-white/10 focus:bg-white/20 transition-all text-center" /></div><div><label className="text-[11px] font-black text-slate-300 block mb-2 uppercase tracking-wider">السعي والتسويق %</label><input type="number" name="sMarkPct" value={inputs.sMarkPct} onChange={handleChange} step="0.1" className="w-full p-4 rounded-2xl border-none font-black text-[#c5a059] text-xl outline-none bg-white/10 focus:bg-white/20 transition-all text-center" /></div></div><div className="w-full md:w-64 text-center bg-white p-6 rounded-3xl shadow-inner relative z-10"><span className="block text-[11px] font-black text-slate-400 mb-1 uppercase tracking-wider">إجمالي حصة المستثمرين</span><span className="text-4xl font-black text-[#1a365d]">{finalInvPct.toFixed(1)}%</span></div></div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                        <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center gap-4"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0"><Users size={24} /></div><div><h2 className="text-xl font-black text-[#1a365d]">3. قائمة المستثمرين</h2><p className="text-xs font-bold text-slate-400 mt-1">إضافة الشركاء وتوزيع الحصص المالية</p></div></div><button onClick={addInvestorRow} className="bg-[#1a365d] text-white px-5 py-3 rounded-xl text-sm font-black hover:bg-blue-900 transition-all flex items-center gap-2 shadow-md"><Plus size={18}/> إضافة شريك</button></div>
+                        <div className="overflow-x-auto p-6 md:p-8 bg-white"><table className="w-full text-right text-sm border-separate border-spacing-y-3"><thead><tr className="text-slate-400 font-black text-[11px] uppercase tracking-wider"><th className="px-4 pb-2">اسم المستثمر</th><th className="px-4 pb-2">المبلغ المستثمر (SAR)</th><th className="px-4 pb-2 text-center">نسبة الإسهام</th><th className="px-4 pb-2 text-center">الربح المتوقع</th><th className="px-4 pb-2 text-center">إجراء</th></tr></thead><tbody>{investors.map((inv, i) => {const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0; const prof = invProfitPool * (pct / 100); return (<tr key={i} className="bg-slate-50 transition-all rounded-2xl group"><td className="p-2 rounded-r-2xl"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" placeholder="اسم المستثمر..." /></td><td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-black text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" /></td><td className="p-2 text-center font-black text-slate-500">{pct.toFixed(1)}%</td><td className="p-2 text-center font-black text-emerald-600">{formatMoney(prof)}</td><td className="p-2 text-center rounded-l-2xl"><button onClick={() => removeInvestor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-red-100"><Trash2 size={18}/></button></td></tr>)})}</tbody><tfoot><tr><td className="p-4 font-black text-[#1a365d]">الإجمالي المجمع</td><td className="p-4 font-black text-[#1a365d] text-lg">{formatMoney(totalInvestedVal)}</td><td className="p-4 text-center font-black text-slate-400">{totalInvestedPct.toFixed(1)}%</td><td className="p-4 text-center font-black text-emerald-600 text-lg">{formatMoney(totalInvestedProfit)}</td><td className="p-4 text-center text-[10px] font-bold text-slate-400">تأكد من المطابقة</td></tr></tfoot></table></div>
                     </div>
                 </div>
 
                 <div className="xl:col-span-4 space-y-8">
                     <div className="bg-[#1a365d] text-white rounded-[2rem] shadow-2xl p-8 border-b-[12px] border-[#c5a059] relative overflow-hidden">
                          <div className="absolute -left-6 -top-6 opacity-[0.03] transform -rotate-12"><Calculator size={200}/></div>
-                         <h3 className="text-lg font-black text-[#c5a059] mb-8 flex items-center gap-2 relative z-10"><FileText size={20}/> ملخص المشروع</h3>
+                         <h3 className="text-lg font-black text-[#c5a059] mb-8 flex items-center gap-2 relative z-10"><FileText size={20}/> ملخص اقتصاديات المشروع</h3>
                          <div className="grid grid-cols-2 gap-4 mb-8 relative z-10"><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة أرض للمتر</span><span className="text-lg font-black text-white">{formatMoney(landCostPerSqm)}</span></div><div className="bg-white/5 p-4 rounded-2xl text-center border border-white/10 backdrop-blur-sm"><span className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">تكلفة بناء للمتر</span><span className="text-lg font-black text-red-300">{formatMoney(totalCostPerSqm)}</span></div></div>
                          <div className="space-y-4 text-sm relative z-10">
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">إجمالي المبيعات</span> <span className="text-emerald-400 font-black text-lg">{formatMoney(totalSales)}</span></div>
@@ -416,33 +414,38 @@ export default function FeasibilityCalc({ showToast }) {
                              <div className="flex justify-between items-center pt-2"><span className="font-bold text-white">رأس المال المستهدف</span> <span className="text-white font-black text-lg">{formatMoney(investorCapitalPool)}</span></div>
                              <div className="flex justify-between items-center pt-6 mt-4 border-t border-white/20"><span className="font-black text-white text-base">صافي الربح الكلي</span> <span className="text-emerald-400 font-black text-2xl">{formatMoney(netProfit)}</span></div>
                          </div>
+                         <div className="grid grid-cols-2 gap-4 mt-8 relative z-10"><div className="bg-[#c5a059]/10 p-4 rounded-2xl text-center border border-[#c5a059]/30"><span className="block text-[10px] font-bold text-[#c5a059] mb-1">إجمالي ربح المستثمرين</span><span className="text-xl font-black text-white">{formatMoney(invProfitPool)}</span></div><div className="bg-white/10 p-4 rounded-2xl text-center border border-white/20"><span className="block text-[10px] font-bold text-slate-300 mb-1">صافي ربح المطور</span><span className="text-xl font-black text-white">{formatMoney(devProfit)}</span></div></div>
                     </div>
 
                     <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-6"><div className="flex justify-between items-start"><div><span className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">العائد الإجمالي (ROI)</span><span className="text-5xl font-black text-[#1a365d]">{overAllROI.toFixed(1)}%</span></div><div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center font-black text-2xl border border-emerald-100">%</div></div><div className="space-y-4 border-t border-slate-100 pt-6"><div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl"><span className="text-xs font-bold text-slate-500">العائد السنوي المتوقع</span><span className="text-base font-black text-emerald-600">{annualROI.toFixed(1)}%</span></div><div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl"><span className="text-xs font-bold text-slate-500">إجمالي الاسترداد المستهدف</span><span className="text-base font-black text-[#1a365d]">SAR {formatMoney(investorCapitalPool + invProfitPool)}</span></div></div></div>
 
-                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
-                        <h3 className="text-base font-black text-[#1a365d] flex items-center gap-2"><Presentation size={20} className="text-[#c5a059]" /> خيارات العروض والتصدير</h3>
-                        <div>
-                            <label className="block text-[11px] font-black text-slate-500 mb-3 uppercase tracking-wider">طريقة عرض المستثمرين في التقرير</label>
-                            <div className="relative">
-                                <select value={printMode} onChange={e=>setPrintMode(e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-4 py-3.5 rounded-2xl text-sm font-black text-[#1a365d] outline-none focus:border-[#c5a059] appearance-none cursor-pointer relative z-10"><option value="all">إظهار كافة المستثمرين</option><option value="summary">إظهار الإجمالي فقط</option><option value="single">تخصيص لمستثمر محدد</option></select>
-                                <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 z-20 pointer-events-none"><ChevronDown size={16}/></div>
-                            </div>
-                            {printMode === 'single' && (
-                                <div className="mt-3 relative animate-fadeIn">
-                                    <select value={selectedInvestorIndex} onChange={e=>setSelectedInvestorIndex(e.target.value)} className="w-full bg-orange-50 border border-[#c5a059] px-4 py-3.5 rounded-2xl text-sm font-black text-orange-900 outline-none cursor-pointer appearance-none relative z-10">{investors.map((inv, i) => <option key={i} value={i}>{inv.name || `مستثمر ${i+1}`}</option>)}</select>
-                                    <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-orange-900 z-20 pointer-events-none"><ChevronDown size={16}/></div>
+                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+                        <h3 className="text-base font-black text-[#1a365d] mb-6 flex items-center gap-2"><Presentation size={20} className="text-[#c5a059]" /> خيارات العروض والتصدير</h3>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-[11px] font-black text-slate-500 mb-3 uppercase tracking-wider">طريقة عرض المستثمرين في التقرير</label>
+                                <div className="relative">
+                                    <select value={printMode} onChange={e=>setPrintMode(e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-4 py-3.5 rounded-2xl text-sm font-black text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20 transition-all appearance-none cursor-pointer relative z-10"><option value="all">إظهار كافة المستثمرين (قائمة مفصلة)</option><option value="summary">إظهار الإجمالي فقط (ملخص بدون أسماء)</option><option value="single">تخصيص التقرير لمستثمر محدد</option></select>
+                                    <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 z-20 pointer-events-none"><ChevronDown size={16}/></div>
                                 </div>
-                            )}
-                        </div>
-                        <label className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors"><input type="checkbox" checked={showDevInPrint} onChange={e=>setShowDevInPrint(e.target.checked)} className="w-5 h-5 text-[#c5a059] accent-[#c5a059] rounded-md border-slate-300" /><span className="text-xs font-black text-[#1a365d] select-none">إظهار تفاصيل وأتعاب المطور بالملحق</span></label>
-                        <div className="flex flex-col gap-4 border-t border-slate-100 pt-6">
-                            <button onClick={() => exportToPDF('teaser')} className="w-full bg-[#c5a059] text-white py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-yellow-600 transition-all shadow-lg shadow-[#c5a059]/30 text-base"><Presentation size={22}/> تصدير العرض الاستثماري</button>
-                            <button onClick={() => exportToPDF('detailed')} className="w-full bg-[#1a365d] text-white py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-blue-900 transition-all shadow-lg shadow-blue-900/20 text-base"><FileSpreadsheet size={22}/> تصدير الملحق المالي (PDF)</button>
+                                {printMode === 'single' && (
+                                    <div className="mt-3 relative animate-fadeIn">
+                                        <select value={selectedInvestorIndex} onChange={e=>setSelectedInvestorIndex(e.target.value)} className="w-full bg-orange-50 border border-[#c5a059] px-4 py-3.5 rounded-2xl text-sm font-black text-orange-900 outline-none cursor-pointer appearance-none relative z-10">{investors.map((inv, i) => <option key={i} value={i}>{inv.name || `مستثمر ${i+1}`}</option>)}</select>
+                                        <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-orange-900 z-20 pointer-events-none"><ChevronDown size={16}/></div>
+                                    </div>
+                                )}
+                            </div>
+                            <label className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 cursor-pointer group hover:bg-slate-100 transition-colors"><input type="checkbox" checked={showDevInPrint} onChange={e=>setShowDevInPrint(e.target.checked)} className="w-5 h-5 text-[#c5a059] accent-[#c5a059] cursor-pointer rounded-md border-slate-300" /> <span className="text-xs font-black text-[#1a365d] select-none">إظهار تفاصيل وأتعاب المطور في الملحق</span></label>
+                            <div className="flex flex-col gap-4 border-t border-slate-100 pt-6">
+                                <button onClick={() => exportToPDF('teaser')} className="w-full bg-[#c5a059] text-white py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-yellow-600 transition-all shadow-lg shadow-[#c5a059]/30 text-base"><Presentation size={22}/> تصدير العرض الاستثماري</button>
+                                <button onClick={() => exportToPDF('detailed')} className="w-full bg-[#1a365d] text-white py-4 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-blue-900 transition-all shadow-lg shadow-blue-900/20 text-base"><FileSpreadsheet size={22}/> تصدير الملحق المالي (PDF)</button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+            {/* الحاويات المخفية لتوليد الـ PDF */}
+            <div style={{ display: 'none' }}><div id="pdf-teaser-template"></div><div id="pdf-detailed-template"></div></div>
         </div>
     );
 }
