@@ -7,13 +7,15 @@ export default function Footer() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  const currentPage = location.pathname.substring(1) || "home";
-  const hideNavOn = ["login", "customer-login", "dashboard", "tech-dashboard", "letter-generator"];
+  // 🔥 التعديل هنا: البحث بذكاء في كامل الرابط (عشان يغطي /admin/dashboard وغيرها)
+  const hideOnPaths = ["login", "customer-login", "dashboard", "tech-dashboard", "letter-generator", "admin"];
+  const shouldHide = hideOnPaths.some(path => location.pathname.toLowerCase().includes(path));
 
-  if (hideNavOn.includes(currentPage)) return null;
+  // إذا كانت الصفحة من ضمن القائمة، اخفِ الفوتر تماماً
+  if (shouldHide) return null;
 
   return (
-    <footer className="bg-[#0f172a] text-white pt-24 pb-12 no-print">
+    <footer className="bg-[#0f172a] text-white pt-24 pb-12 mt-auto no-print">
       <div className="container mx-auto px-6 text-center">
         <div className="mb-12 flex flex-col items-center">
           <img src={getImg("1HEFY56KLYGJNmc-tufIXmYDUbGyOIdDX")} alt="شعار تذييل" className="max-h-32 md:max-h-48 w-auto object-contain logo-footer-gold" />
