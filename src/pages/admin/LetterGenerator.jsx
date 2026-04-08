@@ -97,7 +97,8 @@ export default function LetterGenerator() {
     try {
       const res = await fetch(`${API_URL}?action=get_templates`);
       const result = await res.json();
-      setDbTemplates(Array.isArray(result) ? result : []);
+      // 🔥 استخراج النماذج بشكل صحيح سواء كانت مغلفة أو مصفوفة مباشرة
+      setDbTemplates(Array.isArray(result) ? result : (result.success ? result.data : []));
     } catch (error) {
       console.error("تعذر جلب النماذج", error);
     } finally {
@@ -266,6 +267,7 @@ export default function LetterGenerator() {
                       <option className="text-black" value="إدارة الأملاك والصيانة">إدارة الأملاك والصيانة</option>
                       <option className="text-black" value="الشؤون القانونية وإدارة الأملاك">الشؤون القانونية وإدارة الأملاك</option>
                       <option className="text-black" value="الموارد البشرية والموظفين">الموارد البشرية والموظفين</option>
+                      <option className="text-black" value="خدمة العملاء">خدمة العملاء</option>
                     </select>
                   </div>
                   <div>
@@ -284,7 +286,7 @@ export default function LetterGenerator() {
           </div>
           
           <div className="p-4 bg-[#0f172a] border-t border-white/10">
-            {/* 🔥 استدعاء دالة الطباعة السحرية هنا */}
+            {/* 🔥 الزر السحري للطباعة بعد ربطه */}
             <button onClick={handlePrint} className="w-full bg-gradient-to-r from-[#c5a059] to-yellow-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition shadow-[0_0_20px_rgba(197,160,89,0.3)] transform hover:-translate-y-1">
               <Printer size={20} /> طباعة أو تصدير PDF
             </button>
@@ -449,7 +451,7 @@ export default function LetterGenerator() {
                 <td>
                   <div className="h-6"></div>
                   <div className="px-10 pb-8 bg-white w-full">
-                    <div className="bg-[#1a365d] rounded-2xl p-5 flex justify-between items-center text-white relative overflow-hidden">
+                    <div className="bg-[#1a365d] rounded-2xl p-5 flex justify-between items-center text-white relative overflow-hidden" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                       <div className="relative z-10">
                         <p className="font-bold text-base tracking-wide text-[#c5a059]">سماك العقارية</p>
                         <p className="text-white/80 text-xs mt-1">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>

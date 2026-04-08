@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building, 
     UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator, 
-    ExternalLink, Search, Printer, RefreshCw 
+    ExternalLink, Search, Printer, RefreshCw, TrendingUp 
 } from 'lucide-react';
 
 // استدعاء الأدوات والمكونات الخارجية
@@ -10,7 +10,8 @@ import UnitInspection from './UnitInspection';
 import SnagList from './SnagList'; 
 import UsersManage from './UsersManage';
 import MaintenanceManage from './MaintenanceManage';
-import LeadsManage from './LeadsManage'; // 👈 أضف هذا السطر
+import LeadsManage from './LeadsManage';
+import FeasibilityCalc from './FeasibilityCalc'; // 🔥 استدعاء الحاسبة الجديدة
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -85,9 +86,10 @@ export default function Dashboard({ onLogout }) {
         }
     };
 
-    // القائمة الجانبية الشاملة لجميع أدوات النظام
+    // القائمة الجانبية الشاملة لجميع أدوات النظام (تم إضافة الحاسبة هنا 🔥)
     const ALL_MENU_ITEMS = [
         { id: 'overview', title: 'الرئيسية والإحصائيات', icon: LayoutDashboard, permKey: 'all' },
+        { id: 'feasibility', title: 'حاسبة الجدوى والعروض', icon: TrendingUp, permKey: 'admin' }, // 🔥 الزر الجديد
         { id: 'inspection', title: 'فحص وتسليم الوحدات', icon: ClipboardCheck, permKey: 'inspection' },
         { id: 'snaglist', title: 'تقارير الملاحظات', icon: FileWarning, permKey: 'inspection' }, 
         { id: 'maintenance', title: 'إدارة الصيانة', icon: Wrench, permKey: 'maintenance' },
@@ -104,7 +106,7 @@ export default function Dashboard({ onLogout }) {
         if (item.isExternal) {
             window.open(item.path, '_blank');
         } else if (item.isLink) {
-            window.location.href = item.path; // الانتقال لصفحة الخطابات
+            window.location.href = item.path;
         } else {
             setActiveTab(item.id);
             setIsMobileMenuOpen(false);
@@ -193,12 +195,21 @@ export default function Dashboard({ onLogout }) {
 
                 <main className="flex-1 overflow-y-auto bg-slate-50 pt-24 relative custom-scrollbar">
                     
-                    {/* --- الصفحة الرئيسية (Overview) والكروت --- */}
+                    {/* --- الصفحة الرئيسية (Overview) --- */}
                     {activeTab === 'overview' && (
                         <div className="p-6 md:p-8 animate-fadeIn max-w-6xl mx-auto">
                             <h2 className="text-2xl font-black text-[#1a365d] mb-6">مرحباً بك، {dbUser.name.split(' ')[0]} 👋</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 
+                                {/* 🔥 الكارت الجديد الخاص بالحاسبة يظهر للمدير فقط */}
+                                {hasPermission('admin') && (
+                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('feasibility')}>
+                                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors"><TrendingUp size={24}/></div>
+                                        <h3 className="text-slate-500 font-bold text-sm">حاسبة الجدوى</h3>
+                                        <p className="text-2xl font-black text-[#1a365d] mt-2">دراسة وعروض</p>
+                                    </div>
+                                )}
+
                                 {hasPermission('inspection') && (
                                     <>
                                         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('inspection')}>
@@ -230,14 +241,6 @@ export default function Dashboard({ onLogout }) {
                                     </div>
                                 )}
 
-                                {hasPermission('letters') && (
-                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => window.location.href = '/admin/letter-generator'}>
-                                        <div className="w-12 h-12 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition-colors"><FilePenLine size={24}/></div>
-                                        <h3 className="text-slate-500 font-bold text-sm">منشئ الخطابات</h3>
-                                        <p className="text-2xl font-black text-[#1a365d] mt-2">إصدار وطباعة</p>
-                                    </div>
-                                )}
-
                                 {hasPermission('qr') && (
                                     <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('qr')}>
                                         <div className="w-12 h-12 bg-slate-100 text-slate-800 rounded-full flex items-center justify-center mb-4 group-hover:bg-slate-800 group-hover:text-white transition-colors"><QrCode size={24}/></div>
@@ -254,15 +257,14 @@ export default function Dashboard({ onLogout }) {
                                     </div>
                                 )}
 
-                                {hasPermission('accounting') && (
-                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => window.open('https://semak.daftra.com/', '_blank')}>
-                                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors"><Calculator size={24}/></div>
-                                        <h3 className="text-slate-500 font-bold text-sm">النظام المحاسبي</h3>
-                                        <p className="text-2xl font-black text-[#1a365d] mt-2 flex items-center gap-2">دخول لدفترة <ExternalLink size={18} /></p>
-                                    </div>
-                                )}
-
                             </div>
+                        </div>
+                    )}
+
+                    {/* 🔥 قسم الحاسبة الجديد */}
+                    {activeTab === 'feasibility' && hasPermission('admin') && (
+                        <div className="animate-fadeIn"> 
+                            <FeasibilityCalc showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                         </div>
                     )}
 
