@@ -28,7 +28,6 @@ export default function FeasibilityCalc({ showToast }) {
 
     const handleChange = (e) => setInputs(prev => ({ ...prev, [e.target.name]: parseFloat(e.target.value) || 0 }));
 
-    // 🔥 إصلاح مشكلة تحديث بيانات المستثمرين (تحديث الذاكرة فوراً)
     const handleInvestorChange = (index, field, value) => {
         setInvestors(prev => {
             const newInvestors = [...prev];
@@ -104,8 +103,6 @@ export default function FeasibilityCalc({ showToast }) {
             return;
         }
         setLoading(true);
-        
-        // 🔥 تغليف قوي للبيانات لضمان حفظ المستثمرين في قاعدة البيانات
         const cleanInvestors = investors.map(inv => ({ name: inv.name, amount: Number(inv.amount) || 0 }));
         const payload = { 
             id: currentProjectId || null, 
@@ -135,17 +132,13 @@ export default function FeasibilityCalc({ showToast }) {
             const data = JSON.parse(textRes);
             if(data.success) {
                 let parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                
                 if (parsedData) {
                     if (parsedData.inputs) setInputs(prev => ({ ...prev, ...parsedData.inputs }));
-                    
-                    // 🔥 تأكيد استدعاء المستثمرين بشكل سليم
                     if (parsedData.investors && Array.isArray(parsedData.investors) && parsedData.investors.length > 0) {
                         setInvestors(parsedData.investors);
                     } else {
                         setInvestors([{ name: "الشريك الاستراتيجي", amount: parsedData.inputs?.finLandPrice || 0 }]);
                     }
-
                     setCurrentProjectId(id);
                     setProjectName(savedProjects.find(p=>p.id==id)?.project_name || "");
                     if(showToast) showToast("نجاح", "تم استدعاء بيانات المشروع كاملة");
@@ -155,7 +148,7 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 تصدير للـ PDF
+    // 🔥 التصدير للـ PDF (بالتصميم المطابق للصورة 100% وإصلاح الخطأ)
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -206,10 +199,141 @@ export default function FeasibilityCalc({ showToast }) {
             });
         }
 
-        const templateId = type === 'teaser' ? 'pdf-teaser-template' : 'pdf-detailed-template';
-        const content = document.getElementById(templateId).innerHTML;
-        const win = window.open('', '_blank');
-        win.document.write(`
+        let contentHTML = '';
+        if (type === 'teaser') {
+            contentHTML = `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="display: inline-block; padding: 6px 20px; border-radius: 50px; border: 1px solid #fde68a; background-color: #fffbeb; color: #c5a059; font-weight: bold; font-size: 12px; margin-bottom: 15px;">
+                        ملخص تنفيذي - فرصة استثمارية ${printMode === 'single' ? `<span style="color:#1a365d; font-weight:900;">(${invName})</span>` : ''}
+                    </div>
+                    <h2 style="font-size: 42px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${projectName || "مشروع سماك الصفوة 2"}</h2>
+                    <p style="font-size: 16px; color: #64748b; font-weight: bold; margin: 0;">بناء شراكة استراتيجية بتمويل (وافي)</p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div style="background-color: #ecfdf5; border: 1px solid #d1fae5; border-radius: 20px; padding: 30px 20px; text-align: center;">
+                        <p style="color: #065f46; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">المبيعات المتوقعة للمشروع</p>
+                        <p style="color: #059669; font-weight: 900; font-size: 32px; margin: 0 0 5px 0;">${formatMoney(totalSales)}</p>
+                        <p style="color: #059669; font-weight: bold; font-size: 10px; margin: 0;">يتم تمويل البناء من التدفقات النقدية</p>
+                    </div>
+                    <div style="background-color: white; border: 1px solid #e2e8f0; border-radius: 20px; padding: 30px 20px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                        <p style="color: #64748b; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">رأس المال الاستثماري المستهدف</p>
+                        <p style="color: #1a365d; font-weight: 900; font-size: 32px; margin: 0 0 5px 0;">${invAmount}</p>
+                        <p style="color: #c5a059; font-weight: bold; font-size: 10px; margin: 0;">يغطى بتوفير الأرض والمصاريف التأسيسية</p>
+                    </div>
+                </div>
+
+                <div style="background-color: #1a365d; border-radius: 20px; padding: 30px; display: grid; grid-template-columns: 1fr 1fr; text-align: center;">
+                    <div style="border-left: 1px solid rgba(255,255,255,0.2);">
+                        <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">دورة المشروع المستهدفة</p>
+                        <p style="color: white; font-weight: 900; font-size: 36px; margin: 0;">${inputs.sDuration} شهراً</p>
+                    </div>
+                    <div>
+                        <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">العائد الإجمالي المتوقع للمستثمر (ROI)</p>
+                        <p style="color: #c5a059; font-weight: 900; font-size: 36px; margin: 0;">${invRoi}%</p>
+                    </div>
+                </div>
+
+                <div style="border: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px;">
+                    <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 20px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; text-align:center;">التفاصيل المعمارية</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center;">
+                        <div>
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${totalUnits}</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">وحدة سكنية</span>
+                        </div>
+                        <div>
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalBuilt)}</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مربع بناء</span>
+                        </div>
+                        <div>
+                            <span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalNet)}</span>
+                            <span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مساحة للبيع</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            contentHTML = `
+                <div style="text-align: center; margin-bottom: 10px;">
+                    <div style="display: inline-block; padding: 6px 20px; border-radius: 50px; background-color: #f8fafc; border: 1px solid #e2e8f0; color: #1a365d; font-weight: bold; font-size: 12px; margin-bottom: 10px;">
+                        الملحق المالي التفصيلي
+                    </div>
+                    <h2 style="font-size: 28px; font-weight: 900; color: #1a365d; margin: 0;">${projectName || "مشروع سماك الصفوة 2"}</h2>
+                </div>
+
+                <div style="border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+                    <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 13px;">
+                        <tbody style="font-weight: bold;">
+                            <tr style="border-bottom: 1px solid #e2e8f0;">
+                                <td style="padding: 12px; background-color: #f8fafc; color: #475569; width: 65%;">رأس المال التأسيسي (الأرض + التأسيس والرخص)</td>
+                                <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(investorCapitalPool)}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #e2e8f0;">
+                                <td style="padding: 12px; background-color: white; color: #475569;">تكلفة البناء والخدمات الإجمالية (ممول من المبيعات)</td>
+                                <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(buildCost)}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #e2e8f0;">
+                                <td style="padding: 12px; background-color: #f8fafc; color: #475569;">ميزانية التسويق والسعي</td>
+                                <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(marketingCost)}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fef2f2;">
+                                <td style="padding: 12px; color: #991b1b; font-weight: 900;">إجمالي التكاليف المتوقعة للمشروع</td>
+                                <td style="padding: 12px; color: #b91c1c; font-weight: 900; font-size: 16px;">${formatMoney(totalProjectCosts)}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ecfdf5;">
+                                <td style="padding: 12px; color: #065f46; font-weight: 900;">إجمالي المبيعات المتوقعة للمشروع</td>
+                                <td style="padding: 12px; color: #059669; font-weight: 900; font-size: 16px;">${formatMoney(totalSales)}</td>
+                            </tr>
+                            <tr style="background-color: #1a365d; color: white;">
+                                <td style="padding: 16px; font-weight: 900; font-size: 15px;">صافي الربح الكلي للمشروع</td>
+                                <td style="padding: 16px; font-weight: 900; font-size: 20px; color: #c5a059;">${formatMoney(netProfit)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 style="font-size: 16px; font-weight: 900; color: #1a365d; margin: 5px 0;">توزيع حصص التمويل والأرباح على المستثمرين</h3>
+                <div style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                    <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 11px;">
+                        <thead style="background-color: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
+                            <tr>
+                                <th style="padding: 10px; color: #1a365d;">المستثمر</th>
+                                <th style="padding: 10px; text-align: center; color: #1a365d;">المبلغ المستثمر</th>
+                                <th style="padding: 10px; text-align: center; color: #1a365d;">الحصة %</th>
+                                <th style="padding: 10px; text-align: center; color: #1a365d;">الربح المتوقع</th>
+                                <th style="padding: 10px; text-align: center; color: #1a365d;">إجمالي الاسترداد</th>
+                                <th style="padding: 10px; text-align: center; color: #1a365d;">ROI</th>
+                            </tr>
+                        </thead>
+                        <tbody style="background-color: white;">
+                            ${investorsTableRows}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="display: grid; grid-template-columns: ${showDevInPrint ? '1fr 1fr' : '1fr'}; gap: 15px;">
+                    ${showDevInPrint ? `
+                        <div style="border-top: 4px solid #1a365d; background-color: white; padding: 15px; border-radius: 12px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                            <h4 style="font-size: 12px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4>
+                            <p style="font-size: 20px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
+                            <p style="font-size: 9px; color: #64748b; margin: 0; font-weight: bold; line-height: 1.5;">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
+                        </div>
+                    ` : ''}
+                    <div style="background-color: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                            <span style="font-size: 11px; font-weight: bold; color: #475569;">تكلفة الأرض للمتر المباع</span>
+                            <span style="font-size: 14px; font-weight: 900; color: #1a365d;">${formatMoney(landCostPerSqm)} SAR</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: bold; color: #475569;">إجمالي التكلفة للمتر المباع</span>
+                            <span style="font-size: 14px; font-weight: 900; color: #dc2626;">${formatMoney(totalCostPerSqm)} SAR</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const htmlTemplate = `
             <!DOCTYPE html>
             <html lang="ar" dir="rtl">
             <head>
@@ -244,100 +368,37 @@ export default function FeasibilityCalc({ showToast }) {
                 <div class="a4-container">
                     <div class="top-bar"><div class="bar-gold"></div><div class="bar-navy"></div></div>
                     <div class="header-section">
-                        <div class="title-box"><h1>سماك العقارية</h1><p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p></div>
-                        <div class="logo-box"><img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" /></div>
+                        <div class="title-box">
+                            <h1>سماك العقارية</h1>
+                            <p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
+                        </div>
+                        <div class="logo-box">
+                            <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" />
+                        </div>
                     </div>
                     <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" class="watermark" />
+                    
                     <div class="main-content">
-                        ${type === 'teaser' ? `
-                            <div style="text-align: center; margin-bottom: 20px;">
-                                <div style="display: inline-block; padding: 6px 20px; border-radius: 50px; border: 1px solid #fde68a; background-color: #fffbeb; color: #c5a059; font-weight: bold; font-size: 12px; margin-bottom: 15px;">
-                                    ملخص تنفيذي - فرصة استثمارية ${printMode === 'single' ? `<span style="color:#1a365d; font-weight:900;">(${invName})</span>` : ''}
-                                </div>
-                                <h2 style="font-size: 42px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${projectName || "مشروع سماك الصفوة 2"}</h2>
-                                <p style="font-size: 16px; color: #64748b; font-weight: bold; margin: 0;">بناء شراكة استراتيجية بتمويل (وافي)</p>
-                            </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                                <div style="background-color: #ecfdf5; border: 1px solid #d1fae5; border-radius: 20px; padding: 30px 20px; text-align: center;">
-                                    <p style="color: #065f46; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">المبيعات المتوقعة للمشروع</p>
-                                    <p style="color: #059669; font-weight: 900; font-size: 32px; margin: 0 0 5px 0;">${formatMoney(totalSales)}</p>
-                                    <p style="color: #059669; font-weight: bold; font-size: 10px; margin: 0;">يتم تمويل البناء من التدفقات النقدية</p>
-                                </div>
-                                <div style="background-color: white; border: 1px solid #e2e8f0; border-radius: 20px; padding: 30px 20px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                                    <p style="color: #64748b; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">رأس المال الاستثماري المستهدف</p>
-                                    <p style="color: #1a365d; font-weight: 900; font-size: 32px; margin: 0 0 5px 0;">${invAmount}</p>
-                                    <p style="color: #c5a059; font-weight: bold; font-size: 10px; margin: 0;">يغطى بتوفير الأرض والمصاريف التأسيسية</p>
-                                </div>
-                            </div>
-                            <div style="background-color: #1a365d; border-radius: 20px; padding: 30px; display: grid; grid-template-columns: 1fr 1fr; text-align: center;">
-                                <div style="border-left: 1px solid rgba(255,255,255,0.2);">
-                                    <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">دورة المشروع المستهدفة</p>
-                                    <p style="color: white; font-weight: 900; font-size: 36px; margin: 0;">${inputs.sDuration} شهراً</p>
-                                </div>
-                                <div>
-                                    <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">العائد الإجمالي المتوقع (ROI)</p>
-                                    <p style="color: #c5a059; font-weight: 900; font-size: 36px; margin: 0;">${invRoi}%</p>
-                                </div>
-                            </div>
-                            <div style="border: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px;">
-                                <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 20px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; text-align:center;">التفاصيل المعمارية</h3>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center;">
-                                    <div><span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${totalUnits}</span><span style="color: #64748b; font-weight: bold; font-size: 12px;">وحدة سكنية</span></div>
-                                    <div><span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalBuilt)}</span><span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مربع بناء</span></div>
-                                    <div><span style="display: block; color: #1a365d; font-weight: 900; font-size: 28px;">${formatMoney(totalNet)}</span><span style="color: #64748b; font-weight: bold; font-size: 12px;">متر مساحة للبيع</span></div>
-                                </div>
-                            </div>
-                        ` : `
-                            <div style="text-align: center; margin-bottom: 10px;">
-                                <div style="display: inline-block; padding: 6px 20px; border-radius: 50px; background-color: #f8fafc; border: 1px solid #e2e8f0; color: #1a365d; font-weight: bold; font-size: 12px; margin-bottom: 10px;">الملحق المالي التفصيلي</div>
-                                <h2 style="font-size: 28px; font-weight: 900; color: #1a365d; margin: 0;">${projectName || "مشروع سماك الصفوة 2"}</h2>
-                            </div>
-                            <div style="border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
-                                <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 13px;">
-                                    <tbody style="font-weight: bold;">
-                                        <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 12px; background-color: #f8fafc; color: #475569; width: 65%;">رأس المال التأسيسي (الأرض + التأسيس والرخص)</td><td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(investorCapitalPool)}</td></tr>
-                                        <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 12px; background-color: white; color: #475569;">تكلفة البناء والخدمات الإجمالية (ممول من المبيعات)</td><td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(buildCost)}</td></tr>
-                                        <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 12px; background-color: #f8fafc; color: #475569;">ميزانية التسويق والسعي</td><td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(marketingCost)}</td></tr>
-                                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fef2f2;"><td style="padding: 12px; color: #991b1b; font-weight: 900;">إجمالي التكاليف المتوقعة للمشروع</td><td style="padding: 12px; color: #b91c1c; font-weight: 900; font-size: 16px;">${formatMoney(totalProjectCosts)}</td></tr>
-                                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ecfdf5;"><td style="padding: 12px; color: #065f46; font-weight: 900;">إجمالي المبيعات المتوقعة للمشروع</td><td style="padding: 12px; color: #059669; font-weight: 900; font-size: 16px;">${formatMoney(totalSales)}</td></tr>
-                                        <tr style="background-color: #1a365d; color: white;"><td style="padding: 16px; font-weight: 900; font-size: 15px;">صافي الربح الكلي للمشروع</td><td style="padding: 16px; font-weight: 900; font-size: 20px; color: #c5a059;">${formatMoney(netProfit)}</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <h3 style="font-size: 16px; font-weight: 900; color: #1a365d; margin: 5px 0;">توزيع حصص التمويل والأرباح على المستثمرين</h3>
-                            <div style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-                                <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 11px;">
-                                    <thead style="background-color: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
-                                        <tr><th style="padding: 10px; color: #1a365d;">المستثمر</th><th style="padding: 10px; text-align: center; color: #1a365d;">المبلغ المستثمر</th><th style="padding: 10px; text-align: center; color: #1a365d;">الحصة %</th><th style="padding: 10px; text-align: center; color: #1a365d;">الربح المتوقع</th><th style="padding: 10px; text-align: center; color: #1a365d;">إجمالي الاسترداد</th><th style="padding: 10px; text-align: center; color: #1a365d;">ROI</th></tr>
-                                    </thead>
-                                    <tbody style="background-color: white;">${investorsTableRows}</tbody>
-                                </table>
-                            </div>
-                            <div style="display: grid; grid-template-columns: ${showDevInPrint ? '1fr 1fr' : '1fr'}; gap: 15px;">
-                                ${showDevInPrint ? `
-                                    <div style="border-top: 4px solid #1a365d; background-color: white; padding: 15px; border-radius: 12px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
-                                        <h4 style="font-size: 12px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4><p style="font-size: 20px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
-                                        <p style="font-size: 9px; color: #64748b; margin: 0; font-weight: bold; line-height: 1.5;">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
-                                    </div>
-                                ` : ''}
-                                <div style="background-color: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;"><span style="font-size: 11px; font-weight: bold; color: #475569;">تكلفة الأرض للمتر المباع</span><span style="font-size: 14px; font-weight: 900; color: #1a365d;">${formatMoney(landCostPerSqm)} SAR</span></div>
-                                    <div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-size: 11px; font-weight: bold; color: #475569;">إجمالي التكلفة للمتر المباع</span><span style="font-size: 14px; font-weight: 900; color: #dc2626;">${formatMoney(totalCostPerSqm)} SAR</span></div>
-                                </div>
-                            </div>
-                        `}
+                        ${contentHTML}
                     </div>
 
                     <div class="footer-section">
                         <div class="footer-left" dir="ltr">info@semak.sa | semak.sa | 920032842</div>
-                        <div class="footer-right"><h4>إدارة التطوير والاستثمار</h4><p>وثيقة سرية للمستثمرين</p></div>
+                        <div class="footer-right">
+                            <h4>إدارة التطوير والاستثمار</h4>
+                            <p>وثيقة سرية للمستثمرين</p>
+                        </div>
                     </div>
                     <div class="bottom-bar"><div class="b-bar-navy"></div><div class="b-bar-gold"></div></div>
                 </div>
-                <script>window.onload = () => { setTimeout(() => { window.print(); }, 800); };</script>
+                
+                <script>window.onload = () => { setTimeout(() => { window.print(); }, 1000); };<\/script>
             </body>
             </html>
         `;
+
+        const win = window.open('', '_blank');
+        win.document.write(htmlTemplate);
         win.document.close();
     };
 
@@ -425,7 +486,7 @@ export default function FeasibilityCalc({ showToast }) {
                             <div>
                                 <label className="block text-[11px] font-black text-slate-500 mb-3 uppercase tracking-wider">طريقة عرض المستثمرين في التقرير</label>
                                 <div className="relative">
-                                    <select value={printMode} onChange={e=>setPrintMode(e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-4 py-3.5 rounded-2xl text-sm font-black text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20 transition-all appearance-none cursor-pointer relative z-10"><option value="all">إظهار كافة المستثمرين (قائمة مفصلة)</option><option value="summary">إظهار الإجمالي فقط (ملخص بدون أسماء)</option><option value="single">تخصيص التقرير لمستثمر محدد</option></select>
+                                    <select value={printMode} onChange={e=>setPrintMode(e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-4 py-3.5 rounded-2xl text-sm font-black text-[#1a365d] outline-none focus:border-[#c5a059] appearance-none cursor-pointer relative z-10"><option value="all">إظهار كافة المستثمرين (قائمة مفصلة)</option><option value="summary">إظهار الإجمالي فقط (ملخص بدون أسماء)</option><option value="single">تخصيص التقرير لمستثمر محدد</option></select>
                                     <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 z-20 pointer-events-none"><ChevronDown size={16}/></div>
                                 </div>
                                 {printMode === 'single' && (
@@ -444,8 +505,6 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
             </div>
-            {/* الحاويات المخفية لتوليد الـ PDF */}
-            <div style={{ display: 'none' }}><div id="pdf-teaser-template"></div><div id="pdf-detailed-template"></div></div>
         </div>
     );
 }
