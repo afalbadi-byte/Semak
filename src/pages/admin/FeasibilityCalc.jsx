@@ -210,7 +210,7 @@ export default function FeasibilityCalc({ showToast }) {
                     <p style="font-size: 16px; color: #64748b; font-weight: bold; margin: 0;">شراكة استثمارية للتطوير العقاري</p>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="page-break-avoid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div style="background-color: #ecfdf5; border: 1px solid #d1fae5; border-radius: 20px; padding: 30px 20px; text-align: center;">
                         <p style="color: #065f46; font-weight: 900; font-size: 14px; margin: 0 0 10px 0;">المبيعات المتوقعة للمشروع</p>
                         <p style="color: #059669; font-weight: 900; font-size: 32px; margin: 0 0 5px 0;">${formatMoney(totalSales)}</p>
@@ -223,7 +223,7 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
 
-                <div style="background-color: #1a365d; border-radius: 20px; padding: 30px; display: grid; grid-template-columns: 1fr 1fr; text-align: center;">
+                <div class="page-break-avoid" style="background-color: #1a365d; border-radius: 20px; padding: 30px; display: grid; grid-template-columns: 1fr 1fr; text-align: center;">
                     <div style="border-left: 1px solid rgba(255,255,255,0.2);">
                         <p style="color: #cbd5e1; font-weight: bold; font-size: 14px; margin: 0 0 10px 0;">دورة المشروع المستهدفة</p>
                         <p style="color: white; font-weight: 900; font-size: 36px; margin: 0;">${inputs.sDuration} شهراً</p>
@@ -234,7 +234,7 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
 
-                <div style="border: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px;">
+                <div class="page-break-avoid" style="border: 1px solid rgba(197, 160, 89, 0.3); border-radius: 20px; padding: 25px;">
                     <h3 style="color: #1a365d; font-weight: 900; font-size: 18px; margin: 0 0 20px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; text-align:center;">التفاصيل المعمارية</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center;">
                         <div>
@@ -261,7 +261,7 @@ export default function FeasibilityCalc({ showToast }) {
                     <h2 style="font-size: 28px; font-weight: 900; color: #1a365d; margin: 0;">${projectName || "مشروع سماك الصفوة 2"}</h2>
                 </div>
 
-                <div style="border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; margin-bottom: 15px;">
+                <div class="page-break-avoid" style="border: 2px solid #e2e8f0; border-radius: 16px; overflow: hidden; margin-bottom: 15px;">
                     <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 12px;">
                         <tbody style="font-weight: bold;">
                             <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -310,7 +310,7 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
 
                 <h3 style="font-size: 14px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">توزيع حصص التمويل والأرباح</h3>
-                <div style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 10px;">
+                <div class="page-break-avoid" style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 10px;">
                     <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 11px;">
                         <thead style="background-color: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
                             <tr>
@@ -328,13 +328,25 @@ export default function FeasibilityCalc({ showToast }) {
                     </table>
                 </div>
 
-                ${showDevInPrint ? `
-                    <div style="border-top: 4px solid #1a365d; background-color: white; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                        <h4 style="font-size: 12px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4>
-                        <p style="font-size: 20px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
-                        <p style="font-size: 9px; color: #64748b; margin: 0; font-weight: bold; line-height: 1.5;">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
+                <div class="page-break-avoid" style="display: grid; grid-template-columns: ${showDevInPrint ? '1fr 1fr' : '1fr'}; gap: 15px;">
+                    ${showDevInPrint ? `
+                        <div style="border-top: 4px solid #1a365d; background-color: white; padding: 15px; border-radius: 12px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                            <h4 style="font-size: 12px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">حصة المطور العقاري</h4>
+                            <p style="font-size: 20px; font-weight: 900; color: #1a365d; margin: 0 0 5px 0;">${formatMoney(devProfit)} SAR</p>
+                            <p style="font-size: 9px; color: #64748b; margin: 0; font-weight: bold; line-height: 1.5;">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
+                        </div>
+                    ` : ''}
+                    <div style="background-color: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                            <span style="font-size: 11px; font-weight: bold; color: #475569;">تكلفة الأرض للمتر المباع</span>
+                            <span style="font-size: 14px; font-weight: 900; color: #1a365d;">${formatMoney(landCostPerSqm)} SAR</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: bold; color: #475569;">إجمالي التكلفة للمتر المباع</span>
+                            <span style="font-size: 14px; font-weight: 900; color: #dc2626;">${formatMoney(totalCostPerSqm)} SAR</span>
+                        </div>
                     </div>
-                ` : ''}
+                </div>
             `;
         }
 
@@ -349,24 +361,35 @@ export default function FeasibilityCalc({ showToast }) {
                     * { box-sizing: border-box; }
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
-                    .a4-container { width: 210mm; height: 296mm; margin: 0 auto; display: flex; flex-direction: column; background: white; position: relative; overflow: hidden; }
+                    
+                    /* 🔥 إزالة الارتفاع الثابت عشان تتمدد لعدة صفحات براحتها */
+                    .a4-container { width: 100%; max-width: 210mm; min-height: 297mm; margin: 0 auto; display: flex; flex-direction: column; background: white; position: relative; }
+                    
                     .top-bar { display: flex; height: 8px; width: 100%; }
                     .bar-gold { background-color: #c5a059; width: 30%; }
                     .bar-navy { background-color: #1a365d; width: 70%; }
                     .bottom-bar { display: flex; height: 8px; width: 100%; margin-top: auto; }
                     .b-bar-navy { background-color: #1a365d; width: 70%; }
                     .b-bar-gold { background-color: #c5a059; width: 30%; }
-                    .header-section { padding: 30px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; position: relative; z-index: 10;}
+                    
+                    /* حماية الهيدر والفوتر من الانقسام */
+                    .header-section { padding: 30px 40px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; position: relative; z-index: 10; page-break-after: avoid; }
                     .logo-box img { height: 50px; object-fit: contain; }
                     .title-box { text-align: right; border-right: 4px solid #c5a059; padding-right: 15px; }
                     .title-box h1 { margin: 0; color: #1a365d; font-weight: 900; font-size: 24px; }
                     .title-box p { margin: 4px 0 0 0; color: #c5a059; font-weight: bold; font-size: 11px; }
-                    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; opacity: 0.03; z-index: 1; pointer-events: none; }
+                    
+                    /* 🔥 تثبيت العلامة المائية عشان تظهر في كل الصفحات لو كثرت */
+                    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; opacity: 0.03; z-index: 1; pointer-events: none; }
+                    
                     .main-content { padding: 30px 50px; flex-grow: 1; position: relative; z-index: 10; display: flex; flex-direction: column; gap: 20px;}
-                    .footer-section { padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-top: 1px solid #e2e8f0; }
+                    .footer-section { padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; border-top: 1px solid #e2e8f0; page-break-inside: avoid; }
                     .footer-left { color: #64748b; font-size: 11px; font-weight: bold; }
                     .footer-right h4 { margin: 0; color: #1a365d; font-weight: 900; font-size: 14px; }
                     .footer-right p { margin: 2px 0 0 0; color: #94a3b8; font-size: 10px; }
+
+                    /* 🔥 كلاس مهم جداً يمنع انقسام الجداول والمربعات بالنص */
+                    .page-break-avoid { page-break-inside: avoid; }
                 </style>
             </head>
             <body>
@@ -509,6 +532,8 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
             </div>
+            {/* الحاويات المخفية لتوليد الـ PDF */}
+            <div style={{ display: 'none' }}><div id="pdf-teaser-template"></div><div id="pdf-detailed-template"></div></div>
         </div>
     );
 }
