@@ -1,7 +1,17 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { getImg } from '../utils/helpers';
 
 export default function Partners() {
+  const location = useLocation();
+  
+  // 🔴 التعديل هنا: تحديد الصفحات التي سيختفي منها شريط شركاء النجاح
+  const hideOnPaths = ["login", "customer-login", "dashboard", "tech-dashboard", "letter-generator", "admin"];
+  const shouldHide = hideOnPaths.some(path => location.pathname.toLowerCase().includes(path));
+
+  // إذا كانت الصفحة الحالية من ضمن القائمة فوق، لا تعرض شيئاً (إخفاء)
+  if (shouldHide) return null;
+
   const partners = [
     "18kk3r0kSgBdkQvCj7KC3fe29SQt4s_Y_", "1CFm4oTf091j04ndhYBhN4-LiirPgsywc", "1Ho4XCxeEQHTt4QRHJQnGbhSNCybY9Kli",
     "1T_LJDA_3XAAHSHl3DLib9foDVsQHjrCE", "10BuljftpVn9MsU2XbFJQ6zkRnM4djnGs", "1DwooJvRW8QrG-pDa1am0JDjbiVNp3AKP",
