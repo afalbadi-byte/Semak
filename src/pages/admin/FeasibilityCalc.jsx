@@ -8,8 +8,8 @@ export default function FeasibilityCalc({ showToast }) {
     const [currentProjectId, setCurrentProjectId] = useState("");
     const [projectName, setProjectName] = useState("");
 
-    // نظام الطباعة الداخلي
-    const [printingType, setPrintingType] = useState(null);
+    // خيارات الطباعة الأصلية (بدون مكتبات خارجية)
+    const [printingType, setPrintingType] = useState(null); // 'teaser' أو 'detailed'
     const [printMode, setPrintMode] = useState("all");
     const [selectedInvestorIndex, setSelectedInvestorIndex] = useState(0);
     const [showDevInPrint, setShowDevInPrint] = useState(true);
@@ -36,9 +36,10 @@ export default function FeasibilityCalc({ showToast }) {
 
     const addInvestorRow = () => setInvestors([...investors, { name: "", amount: 0 }]);
     const removeInvestor = (index) => setInvestors(investors.filter((_, i) => i !== index));
+
     const formatMoney = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n || 0);
 
-    // --- العمليات الحسابية الشاملة ---
+    // --- العمليات الحسابية ---
     const groundBuilt = inputs.archLandArea * (inputs.archGroundPct / 100);
     const typicalBuilt = inputs.archLandArea * (inputs.archTypicalPct / 100);
     const roofBuilt = typicalBuilt * (inputs.archRoofPct / 100);
@@ -47,13 +48,10 @@ export default function FeasibilityCalc({ showToast }) {
     const totalNet = Math.max(0, totalBuilt - (inputs.archCommonArea * floorCountTotal));
     const totalUnits = inputs.uGround + (inputs.uTypical * inputs.archFloorsCount) + inputs.uRoof;
 
-    // بناء بيانات جدول المساحات (اللي كانت مفقودة)
     const floorsData = [];
     if (groundBuilt > 0) floorsData.push({ label: "الدور الأرضي", built: groundBuilt, net: Math.max(0, groundBuilt - inputs.archCommonArea), units: inputs.uGround });
     if (typicalBuilt > 0 && inputs.archFloorsCount > 0) {
-        for(let i=1; i<=inputs.archFloorsCount; i++) {
-            floorsData.push({ label: `متكرر ${i}`, built: typicalBuilt, net: Math.max(0, typicalBuilt - inputs.archCommonArea), units: inputs.uTypical });
-        }
+        for(let i=1; i<=inputs.archFloorsCount; i++) floorsData.push({ label: `متكرر ${i}`, built: typicalBuilt, net: Math.max(0, typicalBuilt - inputs.archCommonArea), units: inputs.uTypical });
     }
     if (roofBuilt > 0) floorsData.push({ label: "الملحق (الروف)", built: roofBuilt, net: Math.max(0, roofBuilt - inputs.archCommonArea), units: inputs.uRoof });
 
@@ -85,7 +83,7 @@ export default function FeasibilityCalc({ showToast }) {
     const totalInvestedPct = investorCapitalPool > 0 ? (totalInvestedVal / investorCapitalPool) * 100 : 0;
     const totalInvestedProfit = invProfitPool * (totalInvestedPct / 100);
 
-    // --- الاتصال بالسحابة ---
+    // --- السحابة وقاعدة البيانات ---
     useEffect(() => { loadProjectsList(); }, []);
 
     const loadProjectsList = async () => {
@@ -140,24 +138,36 @@ export default function FeasibilityCalc({ showToast }) {
         } catch(e) {} finally { setLoading(false); }
     };
 
-    // --- نظام الطباعة المدمج ---
+    // --- نظام الطباعة الأصلي HTML ---
+    const triggerNativePrint = (type) => {
+        if (!showDevInPrint) document.body.classList.add("hide-dev-print");
+        setPrintingType(type); // يعرض ورقة الطباعة ويخفي الحاسبة
+    };
+
     useEffect(() => {
         if (printingType) {
+            // ننتظر ثانية عشان المتصفح يرسم الصفحة البيضاء الجديدة
             const timer = setTimeout(() => {
                 window.print();
-                setPrintingType(null); // إعادة الموقع لحالته الطبيعية بعد إغلاق نافذة الطباعة
-            }, 300);
+                setPrintingType(null); // نرجع الحاسبة بعد ما يقفل نافذة الطباعة
+                document.body.classList.remove("hide-dev-print");
+            }, 500);
             return () => clearTimeout(timer);
         }
     }, [printingType]);
 
+
     // ==========================================
-    // واجهة الطباعة فقط (تظهر حين طلب الطباعة)
+    // عرض ورقة الطباعة فقط (تختفي الحاسبة)
     // ==========================================
     if (printingType === 'teaser') {
         return (
-            <div className="font-cairo bg-white p-10 flex flex-col justify-between min-h-screen" dir="rtl">
-                <style>{`@page { size: A4 portrait; margin: 0mm; } body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }`}</style>
+            <div className="font-cairo bg-white p-10 flex flex-col justify-between min-h-screen" dir="rtl" style={{ width: "210mm", margin: "0 auto" }}>
+                <style>{`
+                    @page { size: A4 portrait; margin: 0; }
+                    body { background: white !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    #root > div > nav, #root > div > footer, aside, header { display: none !important; }
+                `}</style>
                 <div>
                     <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-8">
                         <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-16 object-contain" alt="Logo" />
@@ -226,8 +236,14 @@ export default function FeasibilityCalc({ showToast }) {
 
     if (printingType === 'detailed') {
         return (
-            <div className="font-cairo bg-white p-10 flex flex-col justify-between min-h-screen" dir="rtl">
-                <style>{`@page { size: A4 portrait; margin: 0mm; } body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; margin: 0; padding: 0; }`}</style>
+            <div className="font-cairo bg-white p-10 flex flex-col justify-between min-h-screen" dir="rtl" style={{ width: "210mm", margin: "0 auto" }}>
+                <style>{`
+                    @page { size: A4 portrait; margin: 0; }
+                    body { background: white !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    #root > div > nav, #root > div > footer, aside, header { display: none !important; }
+                    body.hide-dev-print .dev-profit-print-box { display: none !important; }
+                    body.hide-dev-print .print-profit-grid { grid-template-columns: 1fr !important; }
+                `}</style>
                 <div>
                     <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
                         <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-14 object-contain" alt="Logo" />
@@ -315,15 +331,14 @@ export default function FeasibilityCalc({ showToast }) {
                         </table>
                     </div>
 
-                    <div className={`grid ${showDevInPrint ? 'grid-cols-2' : 'grid-cols-1'} gap-4 flex-shrink-0`}>
-                        {showDevInPrint && (
-                            <div className="border-t-4 border-[#1a365d] bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-                                <h4 className="text-xs font-black text-[#1a365d] mb-1">حصة المطور العقاري</h4>
-                                <p className="text-xl font-black text-[#1a365d] mb-1">{formatMoney(devProfit)} SAR</p>
-                                <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
-                            </div>
-                        )}
-                        <div className="p-4 rounded-2xl border border-slate-200 flex flex-col justify-center gap-3" style={{backgroundColor:"#f8fafc"}}>
+                    <div className="grid grid-cols-2 gap-4 flex-shrink-0 print-profit-grid">
+                        <div className="border-t-4 border-[#1a365d] bg-white p-4 rounded-2xl shadow-sm border border-slate-100 dev-profit-print-box">
+                            <h4 className="text-xs font-black text-[#1a365d] mb-1">حصة المطور العقاري</h4>
+                            <p className="text-xl font-black text-[#1a365d] mb-1">{formatMoney(devProfit)} SAR</p>
+                            <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وافي.</p>
+                        </div>
+                        
+                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center gap-3" style={{backgroundColor:"#f8fafc"}}>
                             <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                                 <span className="text-[10px] font-bold text-slate-600">تكلفة الأرض للمتر المباع</span>
                                 <span className="text-sm font-black text-[#1a365d]">{formatMoney(landCostPerSqm)} SAR</span>
@@ -336,10 +351,12 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
                 </div>
 
-                <div className="mt-auto pb-4 pt-6 px-8">
-                    <div className="px-5 py-3 rounded-xl flex justify-between items-center text-xs font-bold text-slate-500" style={{backgroundColor:"#f1f5f9"}}>
-                        <div className="flex flex-col"><span className="text-[#1a365d]">إدارة التطوير والاستثمار</span><span className="text-[9px]">وثيقة سرية للمستثمرين</span></div>
-                        <div className="flex flex-col items-end gap-0.5" dir="ltr"><span>info@semak.sa | semak.sa | 920032842</span></div>
+                <div className="mt-auto px-8 pb-4 pt-4">
+                    <div className="bg-slate-100 rounded-xl p-3 flex justify-between items-center" style={{backgroundColor:"#f1f5f9", WebkitPrintColorAdjust:"exact"}}>
+                        <div><p className="font-bold text-[#1a365d] text-xs">إدارة التطوير والاستثمار</p><p className="text-slate-500 text-[9px]">وثيقة سرية للمستثمرين</p></div>
+                        <div className="text-left font-sans text-[11px] font-bold text-slate-500 flex flex-col items-end gap-0.5" dir="ltr">
+                            <span>info@semak.sa | semak.sa | 920032842</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -347,7 +364,7 @@ export default function FeasibilityCalc({ showToast }) {
     }
 
     // ==========================================
-    // الواجهة الرئيسية (شاشة الحاسبة)
+    // واجهة الحاسبة الطبيعية (لا تظهر عند الطباعة)
     // ==========================================
     return (
         <div className="animate-fadeIn pb-10 font-cairo" dir="rtl">
@@ -373,8 +390,7 @@ export default function FeasibilityCalc({ showToast }) {
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                 <div className="xl:col-span-8 space-y-8">
-                    
-                    {/* 1. المعماري والمساحات */}
+                    {/* 1. المعماري */}
                     <div className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden">
                         <div className="bg-indigo-900 p-4 text-white flex items-center gap-3">
                             <Calculator className="text-[#c5a059]" /> <h2 className="text-lg font-black">1. الموجه المعماري (توزيع المساحات)</h2>
@@ -390,7 +406,6 @@ export default function FeasibilityCalc({ showToast }) {
                             <div className="border border-slate-100 p-3 rounded-xl bg-slate-50"><label className="text-xs text-slate-500 block mb-1">بناء المتكرر %</label><input type="number" name="archTypicalPct" value={inputs.archTypicalPct} onChange={handleChange} className="w-full border border-slate-200 rounded px-2 py-1 mb-2 outline-none font-bold" /><label className="text-xs text-[#c5a059] font-bold block mb-1">وحدات المتكرر</label><input type="number" name="uTypical" value={inputs.uTypical} onChange={handleChange} className="w-full font-black text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
                             <div className="border border-slate-100 p-3 rounded-xl bg-slate-50 flex flex-col justify-end"><label className="text-xs text-[#c5a059] font-bold block mb-2">وحدات الملحق (الروف)</label><input type="number" name="uRoof" value={inputs.uRoof} onChange={handleChange} className="w-full font-black text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
                         </div>
-                        {/* جدول استعراض المساحات للأدوار */}
                         <div className="overflow-x-auto">
                             <table className="w-full text-right text-xs border-t border-slate-200">
                                 <thead className="bg-slate-100">
@@ -514,7 +529,6 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
 
                 <div className="xl:col-span-4 space-y-6">
-                    {/* ملخص اقتصاديات المشروع */}
                     <div className="bg-[#1a365d] text-white rounded-3xl shadow-xl p-6 border-b-8 border-[#c5a059] relative overflow-hidden">
                          <div className="absolute -right-4 -top-4 opacity-5"><Presentation className="w-32 h-32"/></div>
                          <h3 className="text-base font-black text-[#c5a059] mb-6 border-b border-white/10 pb-3 relative z-10">ملخص اقتصاديات المشروع</h3>
@@ -565,7 +579,6 @@ export default function FeasibilityCalc({ showToast }) {
                         </div>
                     </div>
 
-                    {/* إعدادات وتوليد الطباعة */}
                     <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200">
                         <label className="block text-sm font-black text-[#1a365d] mb-4 border-b border-slate-100 pb-3">خيارات العروض والطباعة</label>
                         
@@ -590,8 +603,8 @@ export default function FeasibilityCalc({ showToast }) {
                         </div>
 
                         <div className="flex flex-col gap-3 border-t border-slate-100 pt-5">
-                            <button onClick={() => setPrintingType('teaser')} className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-yellow-600 transition shadow-lg text-lg"><Presentation size={20}/> العرض الاستثماري</button>
-                            <button onClick={() => setPrintingType('detailed')} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-blue-900 transition shadow-lg text-lg"><FileSpreadsheet size={20}/> الملحق المالي التفصيلي</button>
+                            <button onClick={() => triggerNativePrint('teaser')} className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-yellow-600 transition shadow-lg text-lg"><Presentation size={20}/> العرض الاستثماري</button>
+                            <button onClick={() => triggerNativePrint('detailed')} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-blue-900 transition shadow-lg text-lg"><FileSpreadsheet size={20}/> الملحق المالي التفصيلي</button>
                         </div>
                     </div>
                 </div>
