@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calculator, Save, CloudDownload, RefreshCw, Printer, Plus, Trash2, Users, FileSpreadsheet, Presentation, Building } from 'lucide-react';
+import { Calculator, Save, CloudDownload, RefreshCw, Printer, Plus, Trash2, Users, FileSpreadsheet, Presentation } from 'lucide-react';
 import { API_URL, getImg } from '../../utils/helpers';
 
 export default function FeasibilityCalc({ showToast }) {
@@ -21,7 +21,7 @@ export default function FeasibilityCalc({ showToast }) {
         sInsurancePct: 1, sTestingPct: 0.5, inInvBonusPct: 0, sMarkPct: 2.5, sDuration: 18
     });
 
-    const [investors, setInvestors] = useState([{ name: "سماك", amount: 1837201 }]);
+    const [investors, setInvestors] = useState([{ name: "الشريك الاستراتيجي", amount: 1837201 }]);
 
     const handleChange = (e) => {
         setInputs({ ...inputs, [e.target.name]: parseFloat(e.target.value) || 0 });
@@ -38,7 +38,7 @@ export default function FeasibilityCalc({ showToast }) {
 
     const formatMoney = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n || 0);
 
-    // --- العمليات الحسابية ---
+    // --- العمليات الحسابية المباشرة ---
     const groundBuilt = inputs.archLandArea * (inputs.archGroundPct / 100);
     const typicalBuilt = inputs.archLandArea * (inputs.archTypicalPct / 100);
     const roofBuilt = typicalBuilt * (inputs.archRoofPct / 100);
@@ -52,14 +52,11 @@ export default function FeasibilityCalc({ showToast }) {
     const buildCost = (totalNet * inputs.finBuildCost) + (totalUnits * inputs.inServiceCostPerUnit);
     const insCost = buildCost * (inputs.sInsurancePct / 100);
     const testCost = buildCost * (inputs.sTestingPct / 100);
-    
-    // التأسيس والرخص
     const softCosts = inputs.sWafi + inputs.sEng + inputs.sMunicipality + inputs.sSupervision + inputs.sAcc + inputs.sOther + insCost + testCost;
 
     const totalProjectCosts = inputs.finLandPrice + buildCost + softCosts + marketingCost;
     const netProfit = totalSales - totalProjectCosts;
 
-    // رأس المال = الأرض + التأسيس
     const investorCapitalPool = inputs.finLandPrice + softCosts;
     const baseInvPct = totalProjectCosts > 0 ? (investorCapitalPool / totalProjectCosts) * 100 : 0;
     const finalInvPct = Math.min(100, Math.max(0, baseInvPct + inputs.inInvBonusPct));
@@ -76,7 +73,7 @@ export default function FeasibilityCalc({ showToast }) {
 
     const totalInvestedVal = investors.reduce((sum, inv) => sum + inv.amount, 0);
     const totalInvestedPct = investorCapitalPool > 0 ? (totalInvestedVal / investorCapitalPool) * 100 : 0;
-    const totalInvestedProfit = invProfitPool * (totalInvestedVal / investorCapitalPool);
+    const totalInvestedProfit = invProfitPool * (totalInvestedPct / 100);
 
     // --- الاتصال بقاعدة البيانات ---
     useEffect(() => { loadProjectsList(); }, []);
@@ -133,23 +130,25 @@ export default function FeasibilityCalc({ showToast }) {
         } catch(e) {} finally { setLoading(false); }
     };
 
-    // --- دالة الطباعة السحرية ---
+    // --- دالة الطباعة السحرية المتكاملة مع React ---
     const triggerPrint = (type) => {
-        // إضافة كلاسات للبودي لتمييز الطباعة وإخفاء/إظهار عناصر معينة
         let printClass = `print-${type}`;
         if (!showDevInPrint) printClass += " hide-dev-print";
 
-        document.body.classList.add('print-active', printClass);
+        // إضافة الكلاسات للبودي لعمل التأثيرات المخفية
+        document.body.classList.add('print-active', ...printClass.split(' '));
+        
         window.print();
+        
+        // إزالة الكلاسات بعد الطباعة
         setTimeout(() => {
-            document.body.classList.remove('print-active', printClass);
+            document.body.classList.remove('print-active', ...printClass.split(' '));
         }, 500);
     };
 
     return (
         <div className="animate-fadeIn pb-10 font-cairo" dir="rtl">
             
-            {/* إعدادات ستايل الطباعة (نفس اللي كان في الـ HTML) */}
             <style>{`
                 .print-view { display: none; }
                 
@@ -210,7 +209,6 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-                    
                     <div className="xl:col-span-8 space-y-8">
                         {/* 1. المعماري */}
                         <div className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden no-print">
@@ -321,7 +319,6 @@ export default function FeasibilityCalc({ showToast }) {
                     </div>
 
                     <div className="xl:col-span-4 space-y-6 no-print">
-                        {/* ملخص اقتصاديات المشروع */}
                         <div className="bg-[#1a365d] text-white rounded-3xl shadow-xl p-6 border-b-8 border-[#c5a059] relative overflow-hidden">
                              <div className="absolute -right-4 -top-4 opacity-5"><Presentation className="w-32 h-32"/></div>
                              <h3 className="text-base font-black text-[#c5a059] mb-6 border-b border-white/10 pb-3 relative z-10">ملخص اقتصاديات المشروع</h3>
@@ -372,7 +369,6 @@ export default function FeasibilityCalc({ showToast }) {
                             </div>
                         </div>
 
-                        {/* إعدادات وتوليد الطباعة */}
                         <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200">
                             <label className="block text-sm font-black text-[#1a365d] mb-4 border-b border-slate-100 pb-3">خيارات العروض والطباعة</label>
                             
@@ -405,11 +401,8 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
             </div>
             
-            {/* ============================================== */}
-            {/* قوالب الطباعة المخفية */}
-            {/* ============================================== */}
+            {/* قوالب الطباعة */}
             
-            {/* 1. Teaser Print Template */}
             <div id="print-teaser" className="print-view w-full h-full flex-col bg-white">
                 <div className="h-2 w-full flex"><div className="h-full bg-[#1a365d] w-3/4"></div><div className="h-full bg-[#c5a059] w-1/4"></div></div>
                 <div className="px-8 pt-6 pb-4 flex justify-between items-center border-b border-slate-100 bg-white">
@@ -445,7 +438,7 @@ export default function FeasibilityCalc({ showToast }) {
                         </div>
                     </div>
 
-                    <div className="bg-[#1a365d] text-white p-10 rounded-3xl grid grid-cols-2 text-center mb-8 relative z-10" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#1a365d", color:"white"}}>
+                    <div className="bg-[#1a365d] text-white p-10 rounded-3xl grid grid-cols-2 text-center mb-8 relative z-10" style={{WebkitPrintColorAdjust:"exact", printColorAdjust:"exact", backgroundColor:"#1a365d", color:"white"}}>
                         <div className="border-l border-white/20">
                             <p className="text-slate-300 font-bold mb-3 text-base">العائد المتوقع للمستثمر (ROI)</p>
                             <p className="text-5xl font-black text-[#c5a059]" style={{color:"#c5a059"}}>
@@ -476,15 +469,11 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
             </div>
 
-            {/* 2. Detailed Print Template */}
             <div id="print-detailed" className="print-view w-full h-full flex-col bg-white">
                 <div className="h-2 w-full flex"><div className="h-full bg-[#1a365d] w-3/4"></div><div className="h-full bg-[#c5a059] w-1/4"></div></div>
                 <div className="px-8 pt-6 pb-4 flex justify-between items-center border-b border-slate-100 bg-white">
                     <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-14 object-contain" alt="Logo" />
-                    <div className="text-left border-l-4 border-[#c5a059] pl-4">
-                        <h1 className="text-xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
-                        <p className="text-[#c5a059] font-bold text-[10px] mt-1 tracking-wider">الملحق المالي التفصيلي للمشروع</p>
-                    </div>
+                    <div className="text-left border-l-4 border-[#c5a059] pl-4"><h1 className="text-xl font-black text-[#1a365d]">الملحق المالي التفصيلي</h1><p className="text-[#c5a059] font-bold text-[10px] mt-1">{projectName || "مشروع سماك الصفوة 2"}</p></div>
                 </div>
 
                 <div className="flex-grow px-8 pt-6 relative flex flex-col">
@@ -503,95 +492,87 @@ export default function FeasibilityCalc({ showToast }) {
                         </table>
                     </div>
 
-                    <h3 className="text-base font-black text-[#1a365d] mb-3">توزيع حصص التمويل والأرباح على المستثمرين</h3>
-                    <div className="rounded-xl border border-slate-200 overflow-hidden mb-8">
-                        <table className="w-full text-right text-xs">
-                            <thead className="bg-slate-100 border-b border-slate-200" style={{backgroundColor: "#f1f5f9", WebkitPrintColorAdjust:"exact"}}>
+                    <h3 className="text-sm font-black text-[#1a365d] mb-2">توزيع حصص الشركاء</h3>
+                    <table className="w-full text-right text-[10px] border mb-6">
+                        <thead className="bg-slate-100 border-b" style={{backgroundColor: "#f1f5f9", WebkitPrintColorAdjust:"exact"}}><tr><th className="p-2">المستثمر</th><th className="p-2 text-center">المبلغ المستثمر</th><th className="p-2 text-center">الحصة %</th><th className="p-2 text-center">الربح المتوقع</th><th className="p-2 text-center">إجمالي الاسترداد</th><th className="p-2 text-center">ROI</th><th className="p-2 text-center">عائد سنوي</th></tr></thead>
+                        <tbody>
+                            {printMode === 'single' ? (
                                 <tr>
-                                    <th className="p-3 text-[#1a365d] font-black">المستثمر / البيان</th>
-                                    <th className="p-3 text-center text-[#1a365d] font-black">المبلغ المستثمر</th>
-                                    <th className="p-3 text-center text-[#1a365d] font-black">الحصة %</th>
-                                    <th className="p-3 text-center text-[#1a365d] font-black">صافي الربح المتوقع</th>
-                                    <th className="p-3 text-center text-[#1a365d] font-black">العائد السنوي %</th>
-                                    <th className="p-3 text-center text-[#1a365d] font-black">إجمالي الاسترداد</th>
+                                    <td className="p-2 border-r font-bold">{investors[selectedInvestorIndex]?.name}</td>
+                                    <td className="p-2 border-r text-center">{formatMoney(investors[selectedInvestorIndex]?.amount)}</td>
+                                    <td className="p-2 border-r text-center text-slate-500">{investorCapitalPool > 0 ? ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool*100).toFixed(1) : 0}%</td>
+                                    <td className="p-2 border-r text-center text-emerald-600 font-black">{formatMoney(invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
+                                    <td className="p-2 border-r text-center text-[#c5a059] font-black">{formatMoney((investors[selectedInvestorIndex]?.amount||0) + invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
+                                    <td className="p-2 border-r text-center">{((invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool)) / (investors[selectedInvestorIndex]?.amount||1) * 100).toFixed(1)}%</td>
+                                    <td className="p-2 border-r text-center text-blue-600">{(((invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool)) / (investors[selectedInvestorIndex]?.amount||1) * 100) / (inputs.sDuration/12)).toFixed(1)}%</td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 font-bold bg-white">
-                                {printMode === 'single' ? (
-                                    <tr>
-                                        <td className="p-3 border-r border-slate-100 text-[#1a365d]">{investors[selectedInvestorIndex]?.name}</td>
-                                        <td className="p-3 text-center border-r border-slate-100">{formatMoney(investors[selectedInvestorIndex]?.amount)}</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-slate-500">{investorCapitalPool > 0 ? ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool*100).toFixed(1) : 0}%</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-emerald-600">{formatMoney(invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-blue-600">{(((invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool)) / (investors[selectedInvestorIndex]?.amount||1) * 100) / (inputs.sDuration/12)).toFixed(1)}%</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney((investors[selectedInvestorIndex]?.amount||0) + invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
+                            ) : printMode === 'summary' ? (
+                                <tr>
+                                    <td className="p-2 border-r font-bold">إجمالي المستثمرين</td>
+                                    <td className="p-2 border-r text-center">{formatMoney(totalInvestedVal)}</td>
+                                    <td className="p-2 border-r text-center text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
+                                    <td className="p-2 border-r text-center text-emerald-600 font-black">{formatMoney(totalInvestedProfit)}</td>
+                                    <td className="p-2 border-r text-center text-[#c5a059] font-black">{formatMoney(totalInvestedVal + totalInvestedProfit)}</td>
+                                    <td className="p-2 border-r text-center">{overAllROI.toFixed(1)}%</td>
+                                    <td className="p-2 border-r text-center text-blue-600">{annualROI.toFixed(1)}%</td>
+                                </tr>
+                            ) : (
+                                <>
+                                    {investors.map((inv, i) => {
+                                        const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
+                                        const prof = invProfitPool * (pct / 100);
+                                        const r = inv.amount > 0 ? (prof / inv.amount * 100) : 0;
+                                        return (
+                                            <tr key={i}>
+                                                <td className="p-2 border-r font-bold">{inv.name}</td>
+                                                <td className="p-2 border-r text-center">{formatMoney(inv.amount)}</td>
+                                                <td className="p-2 border-r text-center text-slate-500">{pct.toFixed(1)}%</td>
+                                                <td className="p-2 border-r text-center text-emerald-600 font-black">{formatMoney(prof)}</td>
+                                                <td className="p-2 border-r text-center text-[#c5a059] font-black">{formatMoney(inv.amount + prof)}</td>
+                                                <td className="p-2 border-r text-center">{r.toFixed(1)}%</td>
+                                                <td className="p-2 border-r text-center text-blue-600">{(r / (inputs.sDuration/12)).toFixed(1)}%</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    <tr style={{backgroundColor: "#f8fafc", WebkitPrintColorAdjust:"exact"}}>
+                                        <td className="p-2 border-r text-navy font-black">الإجمالي المجمع</td>
+                                        <td className="p-2 border-r text-center font-black">{formatMoney(totalInvestedVal)}</td>
+                                        <td className="p-2 border-r text-center font-black text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
+                                        <td className="p-2 border-r text-center font-black text-emerald-600">{formatMoney(totalInvestedProfit)}</td>
+                                        <td className="p-2 border-r text-center font-black text-[#c5a059]">{formatMoney(totalInvestedVal + totalInvestedProfit)}</td>
+                                        <td className="p-2 border-r text-center font-black">{overAllROI.toFixed(1)}%</td>
+                                        <td className="p-2 border-r text-center font-black text-blue-600">{annualROI.toFixed(1)}%</td>
                                     </tr>
-                                ) : printMode === 'summary' ? (
-                                    <tr>
-                                        <td className="p-3 border-r border-slate-100 text-[#1a365d]">إجمالي المستثمرين المساهمين</td>
-                                        <td className="p-3 text-center border-r border-slate-100">{formatMoney(totalInvestedVal)}</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-emerald-600">{formatMoney(totalInvestedProfit)}</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-blue-600">{annualROI.toFixed(1)}%</td>
-                                        <td className="p-3 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney(totalInvestedVal + totalInvestedProfit)}</td>
-                                    </tr>
-                                ) : (
-                                    <>
-                                        {investors.map((inv, i) => {
-                                            const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
-                                            const prof = invProfitPool * (pct / 100);
-                                            const r = inv.amount > 0 ? (prof / inv.amount * 100) : 0;
-                                            return (
-                                                <tr key={i}>
-                                                    <td className="p-3 border-r border-slate-100 text-[#1a365d]">{inv.name || '---'}</td>
-                                                    <td className="p-3 text-center border-r border-slate-100">{formatMoney(inv.amount)}</td>
-                                                    <td className="p-3 text-center border-r border-slate-100 text-slate-500">{pct.toFixed(1)}%</td>
-                                                    <td className="p-3 text-center border-r border-slate-100 text-emerald-600">{formatMoney(prof)}</td>
-                                                    <td className="p-3 text-center border-r border-slate-100 text-blue-600">{(r / (inputs.sDuration/12)).toFixed(1)}%</td>
-                                                    <td className="p-3 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney(inv.amount + prof)}</td>
-                                                </tr>
-                                            );
-                                        })}
-                                        <tr style={{backgroundColor: "#f8fafc", WebkitPrintColorAdjust:"exact"}}>
-                                            <td className="p-3 border-r border-slate-100 text-navy font-black">الإجمالي المجمع</td>
-                                            <td className="p-3 text-center border-r border-slate-100 font-black">{formatMoney(totalInvestedVal)}</td>
-                                            <td className="p-3 text-center border-r border-slate-100 font-black text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
-                                            <td className="p-3 text-center border-r border-slate-100 font-black text-emerald-600">{formatMoney(totalInvestedProfit)}</td>
-                                            <td className="p-3 text-center border-r border-slate-100 font-black text-blue-600">{annualROI.toFixed(1)}%</td>
-                                            <td className="p-3 text-center border-r border-slate-100 font-black text-[#c5a059]">{formatMoney(totalInvestedVal + totalInvestedProfit)}</td>
-                                        </tr>
-                                    </>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                </>
+                            )}
+                        </tbody>
+                    </table>
 
-                    <div className="grid grid-cols-2 gap-6 flex-shrink-0 print-profit-grid">
-                        <div className="border-t-4 border-[#1a365d] bg-white p-5 rounded-2xl shadow-sm border border-slate-100 dev-profit-print-box">
-                            <h4 className="text-sm font-black text-[#1a365d] mb-2">حصة المطور العقاري (أتعاب التطوير والإدارة)</h4>
-                            <p className="text-2xl font-black text-[#1a365d] mb-3">{formatMoney(devProfit)} SAR</p>
-                            <p className="text-[10px] text-slate-500 font-bold leading-relaxed border-t border-slate-50 pt-3">
-                                يمثل هذا العائد أتعاب الإدارة والتطوير وتغطية المخاطر حتى مرحلة تسليم المفتاح عبر نظام وتراخيص "وافي". التمويل الإنشائي ممول بالكامل من المبيعات لتأمين استثمار الشركاء.
-                            </p>
+                    <div className="grid grid-cols-2 gap-4 flex-shrink-0 print-profit-grid">
+                        <div className="border-t-4 border-[#1a365d] bg-white p-4 rounded-2xl shadow-sm border border-slate-100 dev-profit-print-box">
+                            <h4 className="text-xs font-black text-[#1a365d] mb-1">حصة المطور العقاري</h4>
+                            <p className="text-xl font-black text-[#1a365d] mb-1">{formatMoney(devProfit)} SAR</p>
+                            <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">يمثل العائد أتعاب الإدارة، التطوير، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص "وافي". التمويل الإنشائي ممول بالكامل من المبيعات.</p>
                         </div>
-
-                        <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-center" style={{backgroundColor:"#f8fafc", WebkitPrintColorAdjust:"exact"}}>
-                            <div className="flex justify-between items-center border-b border-slate-200 pb-3 mb-3">
-                                <span className="text-xs font-bold text-slate-600">تكلفة الأرض للمتر المباع</span>
-                                <span className="text-base font-black text-[#1a365d]">{formatMoney(landCostPerSqm)} SAR</span>
+                        
+                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center" style={{backgroundColor:"#f8fafc", WebkitPrintColorAdjust:"exact"}}>
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-2 mb-2">
+                                <span className="text-[10px] font-bold text-slate-600">تكلفة الأرض للمتر المباع</span>
+                                <span className="text-sm font-black text-[#1a365d]">{formatMoney(landCostPerSqm)} SAR</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-slate-600">إجمالي التكلفة الكلية للمتر المباع</span>
-                                <span className="text-base font-black text-red-600">{formatMoney(totalCostPerSqm)} SAR</span>
+                                <span className="text-[10px] font-bold text-slate-600">إجمالي التكلفة للمتر المباع</span>
+                                <span className="text-sm font-black text-red-600">{formatMoney(totalCostPerSqm)} SAR</span>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <div className="mt-auto px-8 pb-6 pt-4">
-                    <div className="bg-slate-100 px-5 py-3 rounded-xl flex justify-between items-center text-xs font-bold text-slate-500" style={{backgroundColor:"#f1f5f9", WebkitPrintColorAdjust:"exact"}}>
-                        <div className="flex flex-col gap-0.5"><span className="text-[#1a365d]">إدارة التطوير والاستثمار</span><span className="text-[9px]">وثيقة سرية للمستثمرين</span></div>
-                        <div className="flex flex-col items-end gap-0.5" dir="ltr"><span>info@semak.sa | semak.sa</span><span>920032842</span></div>
+                <div className="mt-auto px-8 pb-4 pt-4">
+                    <div className="bg-slate-100 rounded-xl p-3 flex justify-between items-center" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f1f5f9"}}>
+                        <div><p className="font-bold text-[#1a365d] text-xs">إدارة التطوير والاستثمار</p><p className="text-slate-500 text-[9px]">وثيقة سرية للمستثمرين</p></div>
+                        <div className="text-left font-sans text-[11px] font-bold text-slate-500 flex flex-col items-end gap-0.5" dir="ltr">
+                            <span>info@semak.sa | semak.sa | 920032842</span>
+                        </div>
                     </div>
                 </div>
             </div>
