@@ -87,7 +87,7 @@ export default function FeasibilityCalc({ showToast }) {
             const res = await fetch(`${API_URL}?action=get_feasibilities`);
             const data = await res.json();
             if(data.success) setSavedProjects(data.data);
-        } catch(e) {}
+        } catch(e) { console.error("Error loading projects list", e); }
     };
 
     const handleSaveCloud = async () => {
@@ -125,18 +125,24 @@ export default function FeasibilityCalc({ showToast }) {
             const res = await fetch(`${API_URL}?action=get_feasibility_data&id=${id}`);
             const data = await res.json();
             if(data.success) {
-                setInputs(data.data.inputs);
-                setInvestors(data.data.investors);
-                setCurrentProjectId(id);
-                setProjectName(savedProjects.find(p=>p.id==id)?.project_name || "");
-                if(showToast) showToast("نجاح", "تم استدعاء بيانات المشروع");
+                let parsedData = data.data;
+                // معالجة ذكية للبيانات المسترجعة
+                if(typeof parsedData === 'string') parsedData = JSON.parse(parsedData);
+                
+                if (parsedData && parsedData.inputs) {
+                    setInputs(prev => ({ ...prev, ...parsedData.inputs }));
+                    if(parsedData.investors && parsedData.investors.length > 0) setInvestors(parsedData.investors);
+                    setCurrentProjectId(id);
+                    setProjectName(savedProjects.find(p=>p.id==id)?.project_name || "");
+                    if(showToast) showToast("نجاح", "تم استدعاء بيانات المشروع");
+                }
             }
         } catch(e) {} finally { setLoading(false); }
     };
 
     // --- دوال الطباعة السحرية (React To Print) ---
     const printPageStyle = `
-        @page { size: A4 portrait; margin: 10mm; }
+        @page { size: A4 portrait; margin: 5mm; }
         @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white !important; }
         }
@@ -157,218 +163,218 @@ export default function FeasibilityCalc({ showToast }) {
     return (
         <div className="animate-fadeIn pb-10 font-cairo" dir="rtl">
             
-            <div id="calculator-ui">
-                {/* شريط الإدارة السحابية */}
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mb-8 flex flex-col md:flex-row items-end gap-4">
-                    <div className="flex-1 w-full">
-                        <label className="block text-xs font-bold text-[#1a365d] mb-2">اسم المشروع الحالي</label>
-                        <input type="text" value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثال: مشروع سماك الصفوة 3..." className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059] transition" />
+            {/* شريط الإدارة السحابية */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mb-8 flex flex-col md:flex-row items-end gap-4 no-print">
+                <div className="flex-1 w-full">
+                    <label className="block text-xs font-bold text-[#1a365d] mb-2">اسم المشروع الحالي</label>
+                    <input type="text" value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="مثال: مشروع سماك الصفوة 3..." className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059] transition" />
+                </div>
+                <button onClick={handleSaveCloud} disabled={loading} className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-emerald-700 transition flex items-center gap-2 shadow-md w-full md:w-auto justify-center">
+                    {loading ? <RefreshCw size={18} className="animate-spin"/> : <Save size={18}/>} حفظ سحابياً
+                </button>
+                <div className="w-px bg-slate-200 hidden md:block h-12 mx-2"></div>
+                <div className="flex-1 w-full flex items-end gap-2">
+                    <div className="w-full">
+                        <label className="block text-xs font-bold text-slate-500 mb-2">المشاريع المحفوظة (اسحب للأسفل)</label>
+                        <select onChange={(e) => handleLoadCloud(e.target.value)} value={currentProjectId} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-[#1a365d] outline-none cursor-pointer focus:border-[#c5a059]">
+                            <option value="">-- اختر مشروعاً لاستدعائه --</option>
+                            {savedProjects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+                        </select>
                     </div>
-                    <button onClick={handleSaveCloud} disabled={loading} className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-emerald-700 transition flex items-center gap-2 shadow-md w-full md:w-auto justify-center">
-                        {loading ? <RefreshCw size={18} className="animate-spin"/> : <Save size={18}/>} حفظ في السحابة
-                    </button>
-                    <div className="w-px bg-slate-200 hidden md:block h-12 mx-2"></div>
-                    <div className="flex-1 w-full flex items-end gap-2">
-                        <div className="w-full">
-                            <label className="block text-xs font-bold text-slate-500 mb-2">المشاريع المحفوظة</label>
-                            <select onChange={(e) => handleLoadCloud(e.target.value)} value={currentProjectId} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-[#1a365d] outline-none cursor-pointer">
-                                <option value="">-- اختر مشروعاً لاستدعائه --</option>
-                                {savedProjects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
-                            </select>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                <div className="xl:col-span-8 space-y-8">
+                    
+                    {/* 1. المعماري */}
+                    <div className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden no-print">
+                        <div className="bg-indigo-900 p-4 text-white flex items-center gap-3">
+                            <Calculator className="text-[#c5a059]" /> <h2 className="text-lg font-black">1. الموجه المعماري (توزيع المساحات)</h2>
+                        </div>
+                        <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4 bg-white border-b border-slate-100">
+                            <div><label className="text-[10px] font-bold block mb-1 text-slate-600">مساحة الأرض (م²)</label><input type="number" name="archLandArea" value={inputs.archLandArea} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50 font-bold" /></div>
+                            <div><label className="text-[10px] font-bold block mb-1 text-slate-600">مساحة الخدمات (م²)</label><input type="number" name="archCommonArea" value={inputs.archCommonArea} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50 font-bold" /></div>
+                            <div><label className="text-[10px] font-bold block mb-1 text-slate-600">الأدوار المتكررة</label><input type="number" name="archFloorsCount" value={inputs.archFloorsCount} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50 font-bold" /></div>
+                            <div><label className="text-[10px] font-bold block mb-1 text-slate-600">نسبة الملحق %</label><input type="number" name="archRoofPct" value={inputs.archRoofPct} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50 font-bold" /></div>
+                        </div>
+                        <div className="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="border border-slate-100 p-3 rounded-xl bg-slate-50"><label className="text-xs text-slate-500 block mb-1">بناء الأرضي %</label><input type="number" name="archGroundPct" value={inputs.archGroundPct} onChange={handleChange} className="w-full border border-slate-200 rounded px-2 py-1 mb-2 outline-none font-bold" /><label className="text-xs text-[#c5a059] font-bold block mb-1">وحدات الأرضي</label><input type="number" name="uGround" value={inputs.uGround} onChange={handleChange} className="w-full font-black text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
+                            <div className="border border-slate-100 p-3 rounded-xl bg-slate-50"><label className="text-xs text-slate-500 block mb-1">بناء المتكرر %</label><input type="number" name="archTypicalPct" value={inputs.archTypicalPct} onChange={handleChange} className="w-full border border-slate-200 rounded px-2 py-1 mb-2 outline-none font-bold" /><label className="text-xs text-[#c5a059] font-bold block mb-1">وحدات المتكرر</label><input type="number" name="uTypical" value={inputs.uTypical} onChange={handleChange} className="w-full font-black text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
+                            <div className="border border-slate-100 p-3 rounded-xl bg-slate-50 flex flex-col justify-end"><label className="text-xs text-[#c5a059] font-bold block mb-2">وحدات الملحق (الروف)</label><input type="number" name="uRoof" value={inputs.uRoof} onChange={handleChange} className="w-full font-black text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
+                        </div>
+                    </div>
+
+                    {/* 2. المالي */}
+                    <div className="bg-white rounded-3xl shadow-md border border-slate-200 p-6 no-print">
+                        <h2 className="text-xl font-black text-[#1a365d] mb-6 border-b border-slate-100 pb-4">2. التكاليف والاتفاقية الشاملة</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <label className="block text-[11px] font-bold text-slate-600 mb-2">سعر بيع المتر / تكلفة بناء المتر / إدخال خدمات للوحدة</label>
+                                    <div className="flex gap-2">
+                                        <input type="number" name="finSellPrice" value={inputs.finSellPrice} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm font-bold" title="سعر البيع" />
+                                        <input type="number" name="finBuildCost" value={inputs.finBuildCost} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm font-bold text-orange-600" title="تكلفة البناء" />
+                                        <input type="number" name="inServiceCostPerUnit" value={inputs.inServiceCostPerUnit} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm font-bold text-orange-600" title="إدخال الخدمات" />
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <label className="block text-[11px] font-bold text-slate-600 mb-1">قيمة الأرض الإجمالية / مدة المشروع (أشهر)</label>
+                                    <div className="flex gap-2">
+                                        <input type="number" name="finLandPrice" value={inputs.finLandPrice} onChange={handleChange} className="w-2/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm font-bold" />
+                                        <input type="number" name="sDuration" value={inputs.sDuration} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm font-black text-blue-600" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-blue-50/30 p-4 rounded-2xl border border-blue-100 h-fit">
+                                <label className="block text-[11px] font-bold text-blue-800 mb-3">المصاريف الإدارية والتأسيس والرخص</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div><label className="text-[9px] text-slate-500 font-bold">وافي / هندسي / بلدية</label><div className="flex gap-1 mt-1"><input type="number" name="sWafi" value={inputs.sWafi} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none font-bold"/><input type="number" name="sEng" value={inputs.sEng} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none font-bold"/><input type="number" name="sMunicipality" value={inputs.sMunicipality} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none font-bold"/></div></div>
+                                    <div><label className="text-[9px] text-slate-500 font-bold">مشرف / محاسب / أخرى</label><div className="flex gap-1 mt-1"><input type="number" name="sSupervision" value={inputs.sSupervision} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none font-bold"/><input type="number" name="sAcc" value={inputs.sAcc} onChange={handleChange} className="w-full p-1 border border-blue-200 text-xs rounded outline-none font-bold"/><input type="number" name="sOther" value={inputs.sOther} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none font-bold"/></div></div>
+                                    <div className="bg-indigo-50 p-2 rounded border border-indigo-100"><label className="text-[9px] font-bold text-indigo-800 block">تأمين (% من بناء)</label><input type="number" name="sInsurancePct" value={inputs.sInsurancePct} onChange={handleChange} step="0.1" className="w-full p-1 rounded text-[10px] mt-1 border border-indigo-200 outline-none font-bold"/></div>
+                                    <div className="bg-indigo-50 p-2 rounded border border-indigo-100"><label className="text-[9px] font-bold text-indigo-800 block">فحص (% من بناء)</label><input type="number" name="sTestingPct" value={inputs.sTestingPct} onChange={handleChange} step="0.1" className="w-full p-1 rounded text-[10px] mt-1 border border-indigo-200 outline-none font-bold"/></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-orange-50 p-5 rounded-2xl flex flex-col md:flex-row items-center gap-4 border border-orange-100 no-print">
+                            <div className="flex-1 w-full">
+                                <label className="text-[11px] font-bold block mb-2 text-slate-600">علاوة مستثمر % / السعي والتسويق %</label>
+                                <div className="flex gap-3">
+                                    <input type="number" name="inInvBonusPct" value={inputs.inInvBonusPct} onChange={handleChange} className="w-1/2 p-2 rounded-lg border border-orange-200 font-black text-orange-600 outline-none focus:border-orange-500" />
+                                    <input type="number" name="sMarkPct" value={inputs.sMarkPct} onChange={handleChange} step="0.1" className="w-1/2 p-2 rounded-lg border border-emerald-200 font-black text-emerald-600 outline-none focus:border-emerald-500" />
+                                </div>
+                            </div>
+                            <div className="w-full md:w-48 text-center bg-white p-3 rounded-xl border shadow-sm">
+                                <span className="block text-[10px] font-bold text-slate-400 mb-1">حصة المستثمرين الإجمالية</span>
+                                <span className="text-2xl font-black text-emerald-600">{finalInvPct.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. قائمة المستثمرين */}
+                    <div className="bg-white rounded-3xl shadow-md border border-slate-200 p-6 no-print">
+                        <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                            <h2 className="text-xl font-black text-[#1a365d] flex items-center gap-2"><Users className="text-[#c5a059]"/>قائمة المستثمرين</h2>
+                            <button onClick={addInvestorRow} className="bg-[#1a365d] text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-900 transition flex items-center gap-1 shadow-sm"><Plus size={14}/> إضافة مستثمر</button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right text-sm">
+                                <thead className="bg-slate-50 border-b border-slate-100">
+                                    <tr className="text-slate-600">
+                                        <th className="p-3">اسم المستثمر</th><th className="p-3">المبلغ المستثمر (SAR)</th><th className="p-3 text-center">نسبة الإسهام</th><th className="p-3 text-center">الربح المتوقع</th><th className="p-3 text-center">إجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {investors.map((inv, i) => {
+                                        const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
+                                        const prof = invProfitPool * (pct / 100);
+                                        return (
+                                            <tr key={i} className="hover:bg-slate-50 transition">
+                                                <td className="p-2"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="border border-slate-200 p-2 rounded-lg w-full text-sm outline-none focus:border-[#c5a059]" placeholder="اسم المستثمر..." /></td>
+                                                <td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="border border-slate-200 p-2 rounded-lg w-full text-sm font-black text-[#1a365d] outline-none focus:border-[#c5a059]" /></td>
+                                                <td className="p-2 text-center text-xs font-bold text-slate-500 bg-slate-50/50">{pct.toFixed(1)}%</td>
+                                                <td className="p-2 text-emerald-600 font-black text-center">{formatMoney(prof)}</td>
+                                                <td className="p-2 text-center"><button onClick={() => removeInvestor(i)} className="text-red-400 hover:text-red-600 hover:bg-red-50 bg-white border border-slate-200 p-1.5 rounded-lg shadow-sm transition"><Trash2 size={16}/></button></td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                                <tfoot className="bg-slate-50 font-black border-t-2 border-slate-200">
+                                    <tr>
+                                        <td className="p-3 text-[#1a365d]">الإجمالي المجمع</td>
+                                        <td className="p-3 text-[#1a365d]">{formatMoney(totalInvestedVal)}</td>
+                                        <td className="p-3 text-center text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
+                                        <td className="p-3 text-center text-emerald-600">{formatMoney(totalInvestedProfit)}</td>
+                                        <td className="p-3 text-center text-[10px] text-slate-400 font-normal">تأكد من المطابقة</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
                         </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-                    <div className="xl:col-span-8 space-y-8">
-                        {/* 1. المعماري */}
-                        <div className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden">
-                            <div className="bg-indigo-900 p-4 text-white flex items-center gap-3">
-                                <Calculator className="text-[#c5a059]" /> <h2 className="text-lg font-black">1. الموجه المعماري (توزيع المساحات)</h2>
+                <div className="xl:col-span-4 space-y-6 no-print">
+                    {/* ملخص اقتصاديات المشروع */}
+                    <div className="bg-[#1a365d] text-white rounded-3xl shadow-xl p-6 border-b-8 border-[#c5a059] relative overflow-hidden">
+                         <div className="absolute -right-4 -top-4 opacity-5"><Presentation className="w-32 h-32"/></div>
+                         <h3 className="text-base font-black text-[#c5a059] mb-6 border-b border-white/10 pb-3 relative z-10">ملخص اقتصاديات المشروع</h3>
+                         
+                         <div className="grid grid-cols-2 gap-3 mb-6 bg-white/5 p-3 rounded-xl border border-white/10 relative z-10">
+                            <div className="text-center">
+                                <span className="block text-[9px] text-slate-400 mb-1">تكلفة الأرض للمتر المباع</span>
+                                <span className="text-sm font-black text-white">{formatMoney(landCostPerSqm)}</span>
                             </div>
-                            <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4 bg-white border-b border-slate-100">
-                                <div><label className="text-[10px] font-bold block mb-1 text-slate-600">مساحة الأرض (م²)</label><input type="number" name="archLandArea" value={inputs.archLandArea} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50" /></div>
-                                <div><label className="text-[10px] font-bold block mb-1 text-slate-600">مساحة الخدمات (م²)</label><input type="number" name="archCommonArea" value={inputs.archCommonArea} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50" /></div>
-                                <div><label className="text-[10px] font-bold block mb-1 text-slate-600">الأدوار المتكررة</label><input type="number" name="archFloorsCount" value={inputs.archFloorsCount} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50" /></div>
-                                <div><label className="text-[10px] font-bold block mb-1 text-slate-600">نسبة الملحق %</label><input type="number" name="archRoofPct" value={inputs.archRoofPct} onChange={handleChange} className="w-full p-2.5 rounded-lg border border-slate-200 focus:border-[#c5a059] outline-none bg-slate-50" /></div>
+                            <div className="text-center border-r border-white/10">
+                                <span className="block text-[9px] text-slate-400 mb-1">التكلفة الكلية للمتر المباع</span>
+                                <span className="text-sm font-black text-red-300">{formatMoney(totalCostPerSqm)}</span>
                             </div>
-                            <div className="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
-                                <div className="border border-slate-100 p-3 rounded-xl bg-slate-50"><label className="text-xs text-slate-500 block mb-1">بناء الأرضي %</label><input type="number" name="archGroundPct" value={inputs.archGroundPct} onChange={handleChange} className="w-full border border-slate-200 rounded px-2 py-1 mb-2 outline-none" /><label className="text-xs text-[#c5a059] font-bold block mb-1">وحدات الأرضي</label><input type="number" name="uGround" value={inputs.uGround} onChange={handleChange} className="w-full font-bold text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
-                                <div className="border border-slate-100 p-3 rounded-xl bg-slate-50"><label className="text-xs text-slate-500 block mb-1">بناء المتكرر %</label><input type="number" name="archTypicalPct" value={inputs.archTypicalPct} onChange={handleChange} className="w-full border border-slate-200 rounded px-2 py-1 mb-2 outline-none" /><label className="text-xs text-[#c5a059] font-bold block mb-1">وحدات المتكرر</label><input type="number" name="uTypical" value={inputs.uTypical} onChange={handleChange} className="w-full font-bold text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
-                                <div className="border border-slate-100 p-3 rounded-xl bg-slate-50 flex flex-col justify-end"><label className="text-xs text-[#c5a059] font-bold block mb-2">وحدات الملحق (الروف)</label><input type="number" name="uRoof" value={inputs.uRoof} onChange={handleChange} className="w-full font-bold text-[#1a365d] border border-slate-200 rounded px-2 py-1 outline-none" /></div>
+                         </div>
+
+                         <div className="space-y-3 text-sm font-bold relative z-10">
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>إجمالي المبيعات</span> <span className="text-emerald-400 font-black">{formatMoney(totalSales)}</span></div>
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>التأسيس والرخص</span> <span className="text-red-300 font-black">{formatMoney(softCosts)}</span></div>
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>السعي والتسويق</span> <span className="text-orange-400 font-black">{formatMoney(marketingCost)}</span></div>
+                             <div className="flex justify-between pt-2"><span>رأس المال (الأرض+التأسيس)</span> <span className="text-white font-black">{formatMoney(investorCapitalPool)}</span></div>
+                             <div className="flex justify-between pt-2 border-t border-white/20 text-lg"><span>صافي الربح الكلي</span> <span className="text-emerald-400 font-black">{formatMoney(netProfit)}</span></div>
+                         </div>
+
+                         <div className="grid grid-cols-2 gap-3 mt-6 relative z-10">
+                             <div className="bg-white/5 p-3 rounded-2xl text-center border border-white/10">
+                                 <span className="block text-[10px] text-slate-400 mb-1">إجمالي ربح المستثمرين</span>
+                                 <span className="text-base font-black text-[#c5a059]">{formatMoney(invProfitPool)}</span>
+                             </div>
+                             <div className="bg-white/5 p-3 rounded-2xl text-center border border-white/10">
+                                 <span className="block text-[10px] text-slate-300 mb-1">صافي ربح المطور</span>
+                                 <span className="text-base font-black text-white">{formatMoney(devProfit)}</span>
+                             </div>
+                         </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <span className="block text-sm font-bold text-slate-500">العائد الإجمالي (ROI)</span>
+                                <span className="text-4xl font-black text-[#1a365d] mt-1 block">{overAllROI.toFixed(1)}%</span>
                             </div>
+                            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black text-xl border border-emerald-100">%</div>
                         </div>
-
-                        {/* 2. المالي */}
-                        <div className="bg-white rounded-3xl shadow-md border border-slate-200 p-6">
-                            <h2 className="text-xl font-black text-[#1a365d] mb-6 border-b border-slate-100 pb-4">2. التكاليف والاتفاقية الشاملة</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                                <div className="space-y-4">
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-2">سعر بيع المتر / تكلفة بناء المتر / إدخال خدمات للوحدة</label>
-                                        <div className="flex gap-2">
-                                            <input type="number" name="finSellPrice" value={inputs.finSellPrice} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm" title="سعر البيع" />
-                                            <input type="number" name="finBuildCost" value={inputs.finBuildCost} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm text-orange-600" title="تكلفة البناء" />
-                                            <input type="number" name="inServiceCostPerUnit" value={inputs.inServiceCostPerUnit} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm text-orange-600" title="إدخال الخدمات" />
-                                        </div>
-                                    </div>
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-2">قيمة الأرض الإجمالية / مدة المشروع (أشهر)</label>
-                                        <div className="flex gap-2">
-                                            <input type="number" name="finLandPrice" value={inputs.finLandPrice} onChange={handleChange} className="w-2/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm" />
-                                            <input type="number" name="sDuration" value={inputs.sDuration} onChange={handleChange} className="w-1/3 p-2 rounded-lg border border-slate-200 outline-none focus:border-[#c5a059] text-sm font-bold text-blue-600" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-blue-50/30 p-4 rounded-2xl border border-blue-100 h-fit">
-                                    <label className="block text-[11px] font-bold text-blue-800 mb-3">المصاريف الإدارية والتأسيس والرخص</label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div><label className="text-[9px] text-slate-500">رخصة وافي / هندسي / بلدية</label><div className="flex gap-1 mt-1"><input type="number" name="sWafi" value={inputs.sWafi} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none"/><input type="number" name="sEng" value={inputs.sEng} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none"/><input type="number" name="sMunicipality" value={inputs.sMunicipality} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none"/></div></div>
-                                        <div><label className="text-[9px] text-slate-500">مشرف / محاسب / أخرى</label><div className="flex gap-1 mt-1"><input type="number" name="sSupervision" value={inputs.sSupervision} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none"/><input type="number" name="sAcc" value={inputs.sAcc} onChange={handleChange} className="w-full p-1 border border-blue-200 text-xs rounded outline-none"/><input type="number" name="sOther" value={inputs.sOther} onChange={handleChange} className="w-1/3 p-1 border border-blue-200 text-xs rounded outline-none"/></div></div>
-                                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100"><label className="text-[9px] font-bold text-indigo-800 block">تأمين (% من بناء)</label><input type="number" name="sInsurancePct" value={inputs.sInsurancePct} onChange={handleChange} step="0.1" className="w-full p-1 rounded text-[10px] mt-1 border border-indigo-200 outline-none"/></div>
-                                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100"><label className="text-[9px] font-bold text-indigo-800 block">فحص (% من بناء)</label><input type="number" name="sTestingPct" value={inputs.sTestingPct} onChange={handleChange} step="0.1" className="w-full p-1 rounded text-[10px] mt-1 border border-indigo-200 outline-none"/></div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-orange-50 p-5 rounded-2xl flex flex-col md:flex-row items-center gap-4 border border-orange-100">
-                                <div className="flex-1 w-full">
-                                    <label className="text-[11px] font-bold block mb-2 text-slate-600">علاوة مستثمر % / السعي والتسويق %</label>
-                                    <div className="flex gap-3">
-                                        <input type="number" name="inInvBonusPct" value={inputs.inInvBonusPct} onChange={handleChange} className="w-1/2 p-2 rounded-lg border border-orange-200 font-black text-orange-600 outline-none focus:border-orange-500" />
-                                        <input type="number" name="sMarkPct" value={inputs.sMarkPct} onChange={handleChange} step="0.1" className="w-1/2 p-2 rounded-lg border border-emerald-200 font-black text-emerald-600 outline-none focus:border-emerald-500" />
-                                    </div>
-                                </div>
-                                <div className="w-full md:w-48 text-center bg-white p-3 rounded-xl border shadow-sm">
-                                    <span className="block text-[10px] font-bold text-slate-400 mb-1">حصة المستثمرين الإجمالية</span>
-                                    <span className="text-2xl font-black text-emerald-600">{finalInvPct.toFixed(1)}%</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 3. قائمة المستثمرين */}
-                        <div className="bg-white rounded-3xl shadow-md border border-slate-200 p-6">
-                            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                                <h2 className="text-xl font-black text-[#1a365d] flex items-center gap-2"><Users className="text-[#c5a059]"/>قائمة المستثمرين</h2>
-                                <button onClick={addInvestorRow} className="bg-[#1a365d] text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-900 transition flex items-center gap-1 shadow-sm"><Plus size={14}/> إضافة مستثمر</button>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-right text-sm">
-                                    <thead className="bg-slate-50 border-b border-slate-100">
-                                        <tr className="text-slate-600">
-                                            <th className="p-3">اسم المستثمر</th><th className="p-3">المبلغ المستثمر (SAR)</th><th className="p-3 text-center">نسبة الإسهام</th><th className="p-3 text-center">الربح المتوقع</th><th className="p-3 text-center">إجراء</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {investors.map((inv, i) => {
-                                            const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
-                                            const prof = invProfitPool * (pct / 100);
-                                            return (
-                                                <tr key={i} className="hover:bg-slate-50 transition">
-                                                    <td className="p-2"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="border border-slate-200 p-2 rounded-lg w-full text-sm outline-none focus:border-[#c5a059]" placeholder="اسم المستثمر..." /></td>
-                                                    <td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="border border-slate-200 p-2 rounded-lg w-full text-sm font-black text-[#1a365d] outline-none focus:border-[#c5a059]" /></td>
-                                                    <td className="p-2 text-center text-xs font-bold text-slate-500 bg-slate-50/50">{pct.toFixed(1)}%</td>
-                                                    <td className="p-2 text-emerald-600 font-black text-center">{formatMoney(prof)}</td>
-                                                    <td className="p-2 text-center"><button onClick={() => removeInvestor(i)} className="text-red-400 hover:text-red-600 bg-white border border-slate-200 p-1.5 rounded-lg shadow-sm transition"><Trash2 size={16}/></button></td>
-                                                </tr>
-                                            )
-                                        })}
-                                    </tbody>
-                                    <tfoot className="bg-slate-50 font-black border-t-2 border-slate-200">
-                                        <tr>
-                                            <td className="p-3 text-[#1a365d]">الإجمالي المجمع</td>
-                                            <td className="p-3 text-[#1a365d]">{formatMoney(totalInvestedVal)}</td>
-                                            <td className="p-3 text-center text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
-                                            <td className="p-3 text-center text-emerald-600">{formatMoney(totalInvestedProfit)}</td>
-                                            <td className="p-3 text-center text-[10px] text-slate-400 font-normal">تأكد من المطابقة</td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
+                        <div className="space-y-4 border-t border-slate-100 pt-5">
+                            <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500">العائد السنوي:</span><span className="text-sm font-black text-emerald-600">{annualROI.toFixed(1)}%</span></div>
+                            <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500">إجمالي الاسترداد المستهدف:</span><span className="text-sm font-black text-[#1a365d]">SAR {formatMoney(investorCapitalPool + invProfitPool)}</span></div>
                         </div>
                     </div>
 
-                    <div className="xl:col-span-4 space-y-6">
-                        {/* ملخص اقتصاديات المشروع */}
-                        <div className="bg-[#1a365d] text-white rounded-3xl shadow-xl p-6 border-b-8 border-[#c5a059] relative overflow-hidden">
-                             <div className="absolute -right-4 -top-4 opacity-5"><Presentation className="w-32 h-32"/></div>
-                             <h3 className="text-base font-black text-[#c5a059] mb-6 border-b border-white/10 pb-3 relative z-10">ملخص اقتصاديات المشروع</h3>
-                             
-                             <div className="grid grid-cols-2 gap-3 mb-6 bg-white/5 p-3 rounded-xl border border-white/10 relative z-10">
-                                <div className="text-center">
-                                    <span className="block text-[9px] text-slate-400 mb-1">تكلفة الأرض للمتر المباع</span>
-                                    <span className="text-sm font-black text-white">{formatMoney(landCostPerSqm)}</span>
-                                </div>
-                                <div className="text-center border-r border-white/10">
-                                    <span className="block text-[9px] text-slate-400 mb-1">التكلفة الكلية للمتر المباع</span>
-                                    <span className="text-sm font-black text-red-300">{formatMoney(totalCostPerSqm)}</span>
-                                </div>
-                             </div>
-
-                             <div className="space-y-3 text-sm font-bold relative z-10">
-                                 <div className="flex justify-between border-b border-white/5 pb-2"><span>إجمالي المبيعات</span> <span className="text-emerald-400 font-black">{formatMoney(totalSales)}</span></div>
-                                 <div className="flex justify-between border-b border-white/5 pb-2"><span>تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
-                                 <div className="flex justify-between border-b border-white/5 pb-2"><span>التأسيس والرخص</span> <span className="text-red-300 font-black">{formatMoney(softCosts)}</span></div>
-                                 <div className="flex justify-between border-b border-white/5 pb-2"><span>السعي والتسويق</span> <span className="text-orange-400 font-black">{formatMoney(marketingCost)}</span></div>
-                                 <div className="flex justify-between pt-2"><span>رأس المال (الأرض+التأسيس)</span> <span className="text-white font-black">{formatMoney(investorCapitalPool)}</span></div>
-                                 <div className="flex justify-between pt-2 border-t border-white/20 text-lg"><span>صافي الربح الكلي</span> <span className="text-emerald-400 font-black">{formatMoney(netProfit)}</span></div>
-                             </div>
-
-                             <div className="grid grid-cols-2 gap-3 mt-6 relative z-10">
-                                 <div className="bg-white/5 p-3 rounded-2xl text-center border border-white/10">
-                                     <span className="block text-[10px] text-slate-400 mb-1">إجمالي ربح المستثمرين</span>
-                                     <span className="text-base font-black text-[#c5a059]">{formatMoney(invProfitPool)}</span>
-                                 </div>
-                                 <div className="bg-white/5 p-3 rounded-2xl text-center border border-white/10">
-                                     <span className="block text-[10px] text-slate-300 mb-1">صافي ربح المطور</span>
-                                     <span className="text-base font-black text-white">{formatMoney(devProfit)}</span>
-                                 </div>
-                             </div>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200">
-                            <div className="flex justify-between items-start mb-6">
-                                <div>
-                                    <span className="block text-sm font-bold text-slate-500">العائد الإجمالي (ROI)</span>
-                                    <span className="text-4xl font-black text-[#1a365d] mt-1 block">{overAllROI.toFixed(1)}%</span>
-                                </div>
-                                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black text-xl border border-emerald-100">%</div>
-                            </div>
-                            <div className="space-y-4 border-t border-slate-100 pt-5">
-                                <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500">العائد السنوي:</span><span className="text-sm font-black text-emerald-600">{annualROI.toFixed(1)}%</span></div>
-                                <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500">إجمالي الاسترداد المستهدف:</span><span className="text-sm font-black text-[#1a365d]">SAR {formatMoney(investorCapitalPool + invProfitPool)}</span></div>
-                            </div>
-                        </div>
-
-                        {/* إعدادات وتوليد الطباعة */}
-                        <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200">
-                            <label className="block text-sm font-black text-[#1a365d] mb-4 border-b border-slate-100 pb-3">خيارات العروض والطباعة</label>
+                    {/* إعدادات وتوليد الطباعة */}
+                    <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200">
+                        <label className="block text-sm font-black text-[#1a365d] mb-4 border-b border-slate-100 pb-3">خيارات العروض والطباعة</label>
+                        
+                        <div className="mb-4">
+                            <label className="block text-[11px] font-bold text-slate-500 mb-2">طريقة عرض المستثمرين في التقرير:</label>
+                            <select value={printMode} onChange={e=>setPrintMode(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl mb-2 text-sm font-bold bg-slate-50 text-navy outline-none focus:border-[#c5a059]">
+                                <option value="all">إظهار كافة المستثمرين (قائمة مفصلة)</option>
+                                <option value="summary">إظهار الإجمالي فقط (ملخص بدون أسماء)</option>
+                                <option value="single">تخصيص التقرير لمستثمر محدد</option>
+                            </select>
                             
-                            <div className="mb-4">
-                                <label className="block text-[11px] font-bold text-slate-500 mb-2">طريقة عرض المستثمرين في التقرير:</label>
-                                <select value={printMode} onChange={e=>setPrintMode(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl mb-2 text-sm font-bold bg-slate-50 text-navy outline-none focus:border-[#c5a059]">
-                                    <option value="all">إظهار كافة المستثمرين (قائمة مفصلة)</option>
-                                    <option value="summary">إظهار الإجمالي فقط (ملخص بدون أسماء)</option>
-                                    <option value="single">تخصيص التقرير لمستثمر محدد</option>
+                            {printMode === 'single' && (
+                                <select value={selectedInvestorIndex} onChange={e=>setSelectedInvestorIndex(e.target.value)} className="w-full p-3 border border-[#c5a059] rounded-xl mb-2 text-sm font-black bg-orange-50 text-orange-800 outline-none">
+                                    {investors.map((inv, i) => <option key={i} value={i}>{inv.name || `مستثمر ${i+1}`}</option>)}
                                 </select>
-                                
-                                {printMode === 'single' && (
-                                    <select value={selectedInvestorIndex} onChange={e=>setSelectedInvestorIndex(e.target.value)} className="w-full p-3 border border-[#c5a059] rounded-xl mb-2 text-sm font-black bg-orange-50 text-orange-800 outline-none">
-                                        {investors.map((inv, i) => <option key={i} value={i}>{inv.name || `مستثمر ${i+1}`}</option>)}
-                                    </select>
-                                )}
-                            </div>
+                            )}
+                        </div>
 
-                            <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-6 cursor-pointer">
-                                <input type="checkbox" id="devToggle" checked={showDevInPrint} onChange={e=>setShowDevInPrint(e.target.checked)} className="w-5 h-5 accent-[#c5a059] cursor-pointer rounded" /> 
-                                <label htmlFor="devToggle" className="text-xs font-bold text-[#1a365d] cursor-pointer select-none">إظهار تفاصيل المطور في الملحق</label>
-                            </div>
+                        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-6 cursor-pointer">
+                            <input type="checkbox" id="devToggle" checked={showDevInPrint} onChange={e=>setShowDevInPrint(e.target.checked)} className="w-5 h-5 accent-[#c5a059] cursor-pointer rounded" /> 
+                            <label htmlFor="devToggle" className="text-xs font-bold text-[#1a365d] cursor-pointer select-none">إظهار تفاصيل المطور في الملحق</label>
+                        </div>
 
-                            <div className="flex flex-col gap-3 border-t border-slate-100 pt-5">
-                                <button onClick={handlePrintTeaser} className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-yellow-600 transition shadow-lg text-lg"><Presentation size={20}/> العرض الاستثماري</button>
-                                <button onClick={handlePrintDetailed} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-blue-900 transition shadow-lg text-lg"><FileSpreadsheet size={20}/> الملحق المالي التفصيلي</button>
-                            </div>
+                        <div className="flex flex-col gap-3 border-t border-slate-100 pt-5">
+                            {/* 🔥 الأزرار مربوطة بالدوال الصحيحة هنا */}
+                            <button onClick={handlePrintTeaser} className="w-full bg-[#c5a059] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-yellow-600 transition shadow-lg text-lg"><Presentation size={20}/> العرض الاستثماري</button>
+                            <button onClick={handlePrintDetailed} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-blue-900 transition shadow-lg text-lg"><FileSpreadsheet size={20}/> الملحق المالي التفصيلي</button>
                         </div>
                     </div>
                 </div>
@@ -410,7 +416,7 @@ export default function FeasibilityCalc({ showToast }) {
                             </div>
                         </div>
 
-                        <div className="bg-[#1a365d] text-white p-8 rounded-3xl grid grid-cols-2 text-center mb-8 relative z-10" style={{WebkitPrintColorAdjust:"exact", printColorAdjust:"exact", backgroundColor:"#1a365d", color:"white"}}>
+                        <div className="bg-[#1a365d] text-white p-10 rounded-3xl grid grid-cols-2 text-center mb-8 relative z-10" style={{WebkitPrintColorAdjust:"exact", printColorAdjust:"exact", backgroundColor:"#1a365d", color:"white"}}>
                             <div className="border-l border-white/20">
                                 <p className="text-slate-300 font-bold mb-3 text-base">العائد المتوقع للمستثمر (ROI)</p>
                                 <p className="text-5xl font-black text-[#c5a059]" style={{color:"#c5a059"}}>
@@ -433,8 +439,8 @@ export default function FeasibilityCalc({ showToast }) {
                         </div>
                     </div>
 
-                    <div className="mt-auto border-t border-slate-100 pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
-                        <div className="bg-slate-50 px-6 py-4 rounded-xl w-full flex justify-between items-center" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f8fafc"}}>
+                    <div className="mt-auto px-8 pb-6">
+                        <div className="bg-slate-100 px-6 py-4 rounded-xl flex justify-between items-center text-sm font-bold text-slate-500" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f1f5f9"}}>
                             <div className="flex flex-col"><span className="text-[#1a365d]">إدارة التطوير والاستثمار</span><span className="text-[10px]">وثيقة سرية للمستثمرين</span></div>
                             <div dir="ltr" className="flex flex-col items-end gap-1"><span>info@semak.sa | semak.sa</span><span>920032842</span></div>
                         </div>
@@ -442,10 +448,10 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
 
                 {/* 2. Detailed Print Template */}
-                <div ref={detailedPrintRef} className="a4-page font-cairo bg-white p-10 flex flex-col justify-between" style={{ height: "297mm", width: "210mm" }}>
+                <div ref={detailedPrintRef} className="font-cairo bg-white p-10 flex flex-col justify-between" style={{ height: "297mm", width: "210mm" }}>
                     <div>
                         <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
-                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-14" alt="Logo" />
+                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-14 object-contain" alt="Logo" />
                             <div className="text-left border-l-4 border-[#c5a059] pl-4"><h1 className="text-xl font-black text-[#1a365d]">الملحق المالي التفصيلي</h1><p className="text-[#c5a059] font-bold text-[10px] mt-1">{projectName || "مشروع سماك الصفوة 2"}</p></div>
                         </div>
                         
@@ -555,12 +561,11 @@ export default function FeasibilityCalc({ showToast }) {
                     <div className="mt-auto border-t border-slate-100 pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
                         <div className="bg-slate-50 px-6 py-4 rounded-xl w-full flex justify-between items-center" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f8fafc"}}>
                             <div className="flex flex-col"><span className="text-[#1a365d]">إدارة التطوير والاستثمار</span><span className="text-[9px]">وثيقة سرية للمستثمرين</span></div>
-                            <div dir="ltr" className="flex flex-col items-end gap-1"><span>info@semak.sa | semak.sa</span><span>920032842</span></div>
+                            <div dir="ltr" className="flex flex-col items-end gap-1"><span>info@semak.sa | semak.sa | 920032842</span></div>
                         </div>
                     </div>
                 </div>
             </div>
-            
         </div>
     );
 }
