@@ -111,7 +111,6 @@ export default function FeasibilityCalc({ showToast }) {
     const testCost = buildCost * ((inputs.sTestingPct || 0) / 100);
     const softCosts = (inputs.sWafi || 0) + (inputs.sEng || 0) + (inputs.sMunicipality || 0) + (inputs.sSupervision || 0) + (inputs.sAcc || 0) + (inputs.sOther || 0) + insCost + testCost;
 
-    // 🔥 تم إعادة التسويق للتكاليف بناءً على طلبك 🔥
     const totalProjectCosts = finLandPrice + buildCost + softCosts + marketingCost;
     const netProfit = totalSales - totalProjectCosts;
 
@@ -193,7 +192,7 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 التصدير للـ PDF (بالتصميم الخرافي وبدون مشاكل صفحات)
+    // 🔥 التصدير للـ PDF
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -358,8 +357,8 @@ export default function FeasibilityCalc({ showToast }) {
                                 <td style="padding: 12px; background-color: white; color: #475569;">تكلفة البناء والخدمات الإجمالية</td>
                                 <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(buildCost)}</td>
                             </tr>
-                            <tr style="border-bottom: 1px solid #e2e8f0;">
-                                <td style="padding: 12px; background-color: #f8fafc; color: #475569;">ميزانية التسويق والسعي</td>
+                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: #f8fafc;">
+                                <td style="padding: 12px; color: #475569;">ميزانية التسويق والسعي</td>
                                 <td style="padding: 12px; color: #1a365d; font-weight: 900; font-size: 15px;">${formatMoney(marketingCost)}</td>
                             </tr>
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fef2f2;">
@@ -440,7 +439,7 @@ export default function FeasibilityCalc({ showToast }) {
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
                     
-                    /* 🔥 إزالة الصفحة البيضاء بضبط الارتفاع 100% للغلاف 🔥 */
+                    /* 🔥 إزالة الصفحة البيضاء بضبط الارتفاع للغلاف وإلغاء فواصل الصفحة المزدوجة 🔥 */
                     .print-cover { position: relative; width: 100%; height: 100vh; background-color: #1a365d; display: flex; flex-direction: column; overflow: hidden; -webkit-print-color-adjust: exact; color-adjust: exact; box-sizing: border-box; margin: 0; padding: 0;}
 
                     .cover-bg { position: absolute; inset: 0; background-image: url('${getImg("1P0nERTU6SQiWHLf-53bpp1Jsjf120Kq4")}'); background-size: cover; background-position: center; z-index: 1; opacity: 0.25; mix-blend-mode: luminosity; }
@@ -462,8 +461,11 @@ export default function FeasibilityCalc({ showToast }) {
                     .title-box p { margin: 0; color: #1a365d; font-weight: 900; font-size: 16px; }
 
                     .report-footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; height: 50px; }
-                    .footer-content { padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; height: 42px;}
+                    .footer-content { padding: 10px 40px; display: flex; justify-content: space-between; align-items: center; height: 42px; position: relative;}
                     
+                    /* 🔥 ختم الوثيقة السرية 🔥 */
+                    .confidential-stamp { position: absolute; left: 30px; bottom: 5px; height: 80px; opacity: 0.2; transform: rotate(-15deg); mix-blend-mode: multiply; pointer-events: none; z-index: 0; }
+
                     .main-container { padding: 20px 40px; position: relative; z-index: 10;}
 
                     .watermark-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; overflow: hidden; display: flex; align-items: center; justify-content: center;}
@@ -471,6 +473,14 @@ export default function FeasibilityCalc({ showToast }) {
 
                     .page-break { page-break-before: always; padding-top: 15px; }
                     .page-break-avoid { page-break-inside: avoid; }
+                    
+                    @media print {
+                        .print-cover { display: flex !important; }
+                        .print-cover ~ .report-wrapper .fixed-header,
+                        .print-cover ~ .report-wrapper .fixed-footer { display: none !important; }
+                        .report-wrapper > thead .fixed-header,
+                        .report-wrapper > tfoot .fixed-footer { display: block !important; }
+                    }
                 </style>
             </head>
             <body>
@@ -489,9 +499,10 @@ export default function FeasibilityCalc({ showToast }) {
                             <p style="font-size: 16px; color: #94a3b8; font-weight: bold; margin: 10px 0 0 0;">إجمالي وحدات المشروع: <span style="color:white; font-weight:900;">${totalUnits} وحدة</span></p>
                         </div>
 
-                        <div style="padding: 30px 60px; text-align: center; background: linear-gradient(to top, rgba(15, 23, 42, 0.9), transparent);">
-                            <p style="color: #c5a059; font-size: 16px; font-weight: bold; margin: 0;">إدارة التطوير والاستثمار | وثيقة سرية للمستثمرين</p>
-                            <p style="color: #cbd5e1; font-size: 12px; font-weight: bold; margin: 5px 0 0 0;" dir="ltr">info@semak.sa | semak.sa | 920032842</p>
+                        <div style="padding: 30px 60px; text-align: center; background: linear-gradient(to top, rgba(15, 23, 42, 0.9), transparent); position: relative;">
+                            <img src="${getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")}" style="position: absolute; left: 40px; bottom: 20px; height: 100px; opacity: 0.15; transform: rotate(-15deg); pointer-events: none;" />
+                            <p style="color: #c5a059; font-size: 16px; font-weight: bold; margin: 0; position: relative; z-index: 10;">إدارة التطوير والاستثمار | وثيقة سرية للمستثمرين</p>
+                            <p style="color: #cbd5e1; font-size: 12px; font-weight: bold; margin: 5px 0 0 0; position: relative; z-index: 10;" dir="ltr">info@semak.sa | semak.sa | 920032842</p>
                         </div>
                     </div>
                 </div>
@@ -533,11 +544,12 @@ export default function FeasibilityCalc({ showToast }) {
                             <td>
                                 <div class="report-footer">
                                     <div class="footer-content">
-                                        <div style="color: #64748b; font-size: 10px; font-weight: bold;" dir="ltr">info@semak.sa | semak.sa | 920032842</div>
-                                        <div style="text-align: left;">
+                                        <div style="color: #64748b; font-size: 10px; font-weight: bold; z-index: 10; position: relative;" dir="ltr">info@semak.sa | semak.sa | 920032842</div>
+                                        <div style="text-align: left; z-index: 10; position: relative;">
                                             <h4 style="margin: 0; color: #1a365d; font-weight: 900; font-size: 12px;">إدارة التطوير والاستثمار</h4>
                                             <p style="margin: 0; color: #94a3b8; font-size: 9px;">وثيقة سرية للمستثمرين</p>
                                         </div>
+                                        <img src="${getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")}" class="confidential-stamp" />
                                     </div>
                                     <div class="top-bar"><div class="bar-navy"></div><div class="bar-gold"></div></div>
                                 </div>
