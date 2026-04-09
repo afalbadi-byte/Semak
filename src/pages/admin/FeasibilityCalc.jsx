@@ -111,6 +111,7 @@ export default function FeasibilityCalc({ showToast }) {
     const testCost = buildCost * ((inputs.sTestingPct || 0) / 100);
     const softCosts = (inputs.sWafi || 0) + (inputs.sEng || 0) + (inputs.sMunicipality || 0) + (inputs.sSupervision || 0) + (inputs.sAcc || 0) + (inputs.sOther || 0) + insCost + testCost;
 
+    // 🔥 تم إعادة التسويق للتكاليف بناءً على طلبك 🔥
     const totalProjectCosts = finLandPrice + buildCost + softCosts + marketingCost;
     const netProfit = totalSales - totalProjectCosts;
 
@@ -192,7 +193,7 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 التصدير للـ PDF
+    // 🔥 التصدير للـ PDF (بالتصميم الخرافي وبدون مشاكل صفحات)
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
@@ -396,7 +397,7 @@ export default function FeasibilityCalc({ showToast }) {
                     ${archDetailsHTML}
                 </div>
 
-                <div class="page-break">
+                <div class="page-break-avoid" style="margin-top: 20px;">
                     <h3 style="font-size: 18px; font-weight: 900; color: #1a365d; margin: 0 0 15px 0;">توزيع حصص التمويل والأرباح</h3>
                     <div style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 20px;">
                         <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 11px;">
@@ -439,7 +440,8 @@ export default function FeasibilityCalc({ showToast }) {
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
                     
-                    .print-cover { position: relative; width: 100%; height: 100vh; max-height: 295mm; background-color: #1a365d; display: flex; flex-direction: column; overflow: hidden; -webkit-print-color-adjust: exact; color-adjust: exact; box-sizing: border-box; margin: 0; padding: 0;}
+                    /* 🔥 إزالة الصفحة البيضاء بضبط الارتفاع 100% للغلاف 🔥 */
+                    .print-cover { position: relative; width: 100%; height: 100vh; background-color: #1a365d; display: flex; flex-direction: column; overflow: hidden; -webkit-print-color-adjust: exact; color-adjust: exact; box-sizing: border-box; margin: 0; padding: 0;}
 
                     .cover-bg { position: absolute; inset: 0; background-image: url('${getImg("1P0nERTU6SQiWHLf-53bpp1Jsjf120Kq4")}'); background-size: cover; background-position: center; z-index: 1; opacity: 0.25; mix-blend-mode: luminosity; }
                     .cover-content { position: relative; z-index: 10; display: flex; flex-direction: column; height: 100%; justify-content: space-between; }
@@ -452,9 +454,11 @@ export default function FeasibilityCalc({ showToast }) {
                     table.report-wrapper { width: 100%; border-collapse: collapse; position: relative; z-index: 10; margin: 0; padding: 0; page-break-before: always; }
                     
                     .report-header { background: white; border-bottom: 1px solid #f1f5f9; }
-                    .header-content { padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+                    .header-content { padding: 20px 40px; display: flex; justify-content: flex-start; align-items: center; }
+                    /* 🔥 الشعار يمين والسلوقان يسار 🔥 */
+                    .logo-box { border-left: 3px solid #c5a059; padding-left: 20px; }
                     .logo-box img { height: 90px; object-fit: contain; }
-                    .title-box { text-align: right; border-right: 5px solid #c5a059; padding-right: 20px; display: flex; align-items: center;}
+                    .title-box { padding-right: 20px; }
                     .title-box p { margin: 0; color: #1a365d; font-weight: 900; font-size: 16px; }
 
                     .report-footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; height: 50px; }
@@ -478,7 +482,7 @@ export default function FeasibilityCalc({ showToast }) {
                         <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; padding: 0 40px;">
                             <img src="${getImg("1HEFY56KLYGJNmc-tufIXmYDUbGyOIdDX")}" alt="Semak Logo" style="height: 180px; object-fit: contain; margin-bottom: 20px; drop-shadow: 0 10px 20px rgba(0,0,0,0.5);" />
                             <p style="font-size: 18px; color: #c5a059; font-weight: bold; margin: 0 0 30px 0;">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-                            <h2 style="font-size: 64px; font-weight: 900; color: white; margin: 0 0 20px 0; line-height: 1.1;">${projectName || "سماك الصفوة 2"}</h2>
+                            <h2 style="font-size: 64px; font-weight: 900; color: white; margin: 0 0 20px 0; line-height: 1.1;">${projectName || "مشروع سماك الصفوة 2"}</h2>
                             <div style="width: 100px; height: 5px; background-color: #c5a059; margin: 25px auto;"></div>
                             <p style="font-size: 26px; color: #cbd5e1; font-weight: 900; margin: 0 0 20px 0;">دراسة جدوى فرصة استثمارية للتطوير العقاري</p>
                             <p style="font-size: 16px; color: #94a3b8; font-weight: bold; margin: 0;">تطوير مجمع سكني فاخر بنظام البيع على الخارطة (وافي)</p>
@@ -499,11 +503,11 @@ export default function FeasibilityCalc({ showToast }) {
                                 <div class="report-header">
                                     <div class="top-bar"><div class="bar-gold"></div><div class="bar-navy"></div></div>
                                     <div class="header-content">
-                                        <div class="title-box">
-                                            <p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-                                        </div>
                                         <div class="logo-box">
                                             <img src="${getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")}" alt="Semak Logo" />
+                                        </div>
+                                        <div class="title-box">
+                                            <p>سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
                                         </div>
                                     </div>
                                 </div>
