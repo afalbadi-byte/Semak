@@ -111,25 +111,26 @@ export default function FeasibilityCalc({ showToast }) {
     const testCost = buildCost * ((inputs.sTestingPct || 0) / 100);
     const softCosts = (inputs.sWafi || 0) + (inputs.sEng || 0) + (inputs.sMunicipality || 0) + (inputs.sSupervision || 0) + (inputs.sAcc || 0) + (inputs.sOther || 0) + insCost + testCost;
 
+    // إجمالي التكاليف
     const totalProjectCosts = finLandPrice + buildCost + softCosts + marketingCost;
     const netProfit = totalSales - totalProjectCosts;
 
-    const investorCapitalPool = finLandPrice + softCosts;
-    const baseInvPct = totalProjectCosts > 0 ? (investorCapitalPool / totalProjectCosts) * 100 : 0;
+    // 🔥 التحديث الجوهري: فصل السيولة المستهدفة (معلومة) عن رأس المال المستثمر الفعلي (لحساب المحاصة) 🔥
+    const targetLiquidity = finLandPrice + softCosts;
+    const totalInvestedVal = investors.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+
+    // نسبة المحاصة تعتمد على (إجمالي ما تم ضخه فعلياً / إجمالي تكاليف المشروع)
+    const baseInvPct = totalProjectCosts > 0 ? (totalInvestedVal / totalProjectCosts) * 100 : 0;
     const finalInvPct = Math.min(100, Math.max(0, baseInvPct + (inputs.inInvBonusPct || 0)));
     
     const invProfitPool = netProfit * (finalInvPct / 100);
     const devProfit = netProfit * ( (100 - finalInvPct) / 100 );
 
-    const overAllROI = investorCapitalPool > 0 ? (invProfitPool / investorCapitalPool) * 100 : 0;
+    const overAllROI = totalInvestedVal > 0 ? (invProfitPool / totalInvestedVal) * 100 : 0;
     const sDuration = inputs.sDuration || 0;
     const annualROI = sDuration > 0 ? overAllROI / (sDuration / 12) : 0;
 
     const totalCostPerSqm = totalNet > 0 ? (totalProjectCosts / totalNet) : 0;
-
-    const totalInvestedVal = investors.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
-    const totalInvestedPct = investorCapitalPool > 0 ? (totalInvestedVal / investorCapitalPool) * 100 : 0;
-    const totalInvestedProfit = invProfitPool * (totalInvestedPct / 100);
 
     useEffect(() => { loadProjectsList(); }, []);
 
@@ -192,13 +193,13 @@ export default function FeasibilityCalc({ showToast }) {
     };
 
     // =======================================================
-    // 🔥 التصدير للـ PDF
+    // 🔥 التصدير للـ PDF (بدون صفحة بيضاء وغلاف احترافي)
     // =======================================================
     const exportToPDF = (type) => {
         const invName = printMode === 'single' ? investors[selectedInvestorIndex]?.name : 'إجمالي المستثمرين';
-        const invAmount = printMode === 'single' ? formatMoney(investors[selectedInvestorIndex]?.amount) : formatMoney(investorCapitalPool);
+        const invAmount = printMode === 'single' ? formatMoney(investors[selectedInvestorIndex]?.amount) : formatMoney(targetLiquidity);
         const invRoi = printMode === 'single' ? 
-            (investors[selectedInvestorIndex]?.amount > 0 ? ((invProfitPool * (investors[selectedInvestorIndex].amount / investorCapitalPool)) / investors[selectedInvestorIndex].amount * 100).toFixed(1) : 0) 
+            (investors[selectedInvestorIndex]?.amount > 0 ? ((invProfitPool * (investors[selectedInvestorIndex].amount / totalInvestedVal)) / investors[selectedInvestorIndex].amount * 100).toFixed(1) : 0) 
             : overAllROI.toFixed(1);
 
         let investorsTableRows = '';
@@ -208,9 +209,9 @@ export default function FeasibilityCalc({ showToast }) {
                 <tr style="border-bottom: 1px solid #f1f5f9;">
                     <td style="padding: 12px; font-weight: bold; color: #1a365d;">${inv?.name}</td>
                     <td style="padding: 12px; text-align: center; font-weight: 900;">${formatMoney(inv?.amount)}</td>
-                    <td style="padding: 12px; text-align: center; color: #64748b;">${investorCapitalPool > 0 ? ((inv?.amount||0)/investorCapitalPool*100).toFixed(1) : 0}%</td>
-                    <td style="padding: 12px; text-align: center; color: #059669; font-weight: 900;">${formatMoney(invProfitPool * ((inv?.amount||0)/investorCapitalPool))}</td>
-                    <td style="padding: 12px; text-align: center; color: #c5a059; font-weight: 900;">${formatMoney((inv?.amount||0) + invProfitPool * ((inv?.amount||0)/investorCapitalPool))}</td>
+                    <td style="padding: 12px; text-align: center; color: #64748b;">${totalInvestedVal > 0 ? ((inv?.amount||0)/totalInvestedVal*100).toFixed(1) : 0}%</td>
+                    <td style="padding: 12px; text-align: center; color: #059669; font-weight: 900;">${formatMoney(invProfitPool * ((inv?.amount||0)/totalInvestedVal))}</td>
+                    <td style="padding: 12px; text-align: center; color: #c5a059; font-weight: 900;">${formatMoney((inv?.amount||0) + invProfitPool * ((inv?.amount||0)/totalInvestedVal))}</td>
                     <td style="padding: 12px; text-align: center; font-weight: bold;">${invRoi}%</td>
                 </tr>
             `;
@@ -219,16 +220,16 @@ export default function FeasibilityCalc({ showToast }) {
                 <tr style="border-bottom: 1px solid #f1f5f9;">
                     <td style="padding: 12px; font-weight: bold; color: #1a365d;">إجمالي المستثمرين</td>
                     <td style="padding: 12px; text-align: center; font-weight: 900;">${formatMoney(totalInvestedVal)}</td>
-                    <td style="padding: 12px; text-align: center; color: #64748b;">${totalInvestedPct.toFixed(1)}%</td>
-                    <td style="padding: 12px; text-align: center; color: #059669; font-weight: 900;">${formatMoney(totalInvestedProfit)}</td>
-                    <td style="padding: 12px; text-align: center; color: #c5a059; font-weight: 900;">${formatMoney(totalInvestedVal + totalInvestedProfit)}</td>
+                    <td style="padding: 12px; text-align: center; color: #64748b;">100%</td>
+                    <td style="padding: 12px; text-align: center; color: #059669; font-weight: 900;">${formatMoney(invProfitPool)}</td>
+                    <td style="padding: 12px; text-align: center; color: #c5a059; font-weight: 900;">${formatMoney(totalInvestedVal + invProfitPool)}</td>
                     <td style="padding: 12px; text-align: center; font-weight: bold;">${overAllROI.toFixed(1)}%</td>
                 </tr>
             `;
         } else {
             investors.forEach(inv => {
                 const amount = Number(inv.amount) || 0;
-                const pct = investorCapitalPool > 0 ? (amount / investorCapitalPool) * 100 : 0;
+                const pct = totalInvestedVal > 0 ? (amount / totalInvestedVal) * 100 : 0;
                 const prof = invProfitPool * (pct / 100);
                 const r = amount > 0 ? (prof / amount * 100) : 0;
                 investorsTableRows += `
@@ -350,7 +351,11 @@ export default function FeasibilityCalc({ showToast }) {
 
                             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fffbeb;">
                                 <td style="padding: 12px; color: #c5a059; font-weight: 900;">السيولة الاستثمارية المستهدفة</td>
-                                <td style="padding: 12px; color: #c5a059; font-weight: 900; font-size: 15px;">${formatMoney(investorCapitalPool)}</td>
+                                <td style="padding: 12px; color: #c5a059; font-weight: 900; font-size: 15px;">${formatMoney(targetLiquidity)}</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #e2e8f0; background-color: #f0fdf4;">
+                                <td style="padding: 12px; color: #166534; font-weight: 900;">إجمالي رأس المال المُستثمر (المُجمّع)</td>
+                                <td style="padding: 12px; color: #166534; font-weight: 900; font-size: 15px;">${formatMoney(totalInvestedVal)}</td>
                             </tr>
 
                             <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -396,7 +401,7 @@ export default function FeasibilityCalc({ showToast }) {
                     ${archDetailsHTML}
                 </div>
 
-                <div class="page-break-avoid" style="margin-top: 20px;">
+                <div class="page-break">
                     <h3 style="font-size: 18px; font-weight: 900; color: #1a365d; margin: 0 0 15px 0;">توزيع حصص التمويل والأرباح</h3>
                     <div style="border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 20px;">
                         <table style="width: 100%; text-align: right; border-collapse: collapse; font-size: 11px;">
@@ -439,7 +444,7 @@ export default function FeasibilityCalc({ showToast }) {
                     body { font-family: 'Cairo', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; color-adjust: exact; }
                     @page { size: A4 portrait; margin: 0; }
                     
-                    /* 🔥 إزالة الصفحة البيضاء بضبط الارتفاع للغلاف وإلغاء فواصل الصفحة المزدوجة 🔥 */
+                    /* 🔥 إزالة الصفحة البيضاء بضبط الارتفاع 100% للغلاف 🔥 */
                     .print-cover { position: relative; width: 100%; height: 100vh; background-color: #1a365d; display: flex; flex-direction: column; overflow: hidden; -webkit-print-color-adjust: exact; color-adjust: exact; box-sizing: border-box; margin: 0; padding: 0;}
 
                     .cover-bg { position: absolute; inset: 0; background-image: url('${getImg("1P0nERTU6SQiWHLf-53bpp1Jsjf120Kq4")}'); background-size: cover; background-position: center; z-index: 1; opacity: 0.25; mix-blend-mode: luminosity; }
@@ -630,7 +635,7 @@ export default function FeasibilityCalc({ showToast }) {
 
                     <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                         <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center gap-4"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0"><Users size={24} /></div><div><h2 className="text-xl font-black text-[#1a365d]">3. قائمة المستثمرين</h2><p className="text-xs font-bold text-slate-400 mt-1">إضافة الشركاء وتوزيع الحصص المالية</p></div></div><button onClick={addInvestorRow} className="bg-[#1a365d] text-white px-5 py-3 rounded-xl text-sm font-black hover:bg-blue-900 transition-all flex items-center gap-2 shadow-md"><Plus size={18}/> إضافة شريك</button></div>
-                        <div className="overflow-x-auto p-6 md:p-8 bg-white"><table className="w-full text-right text-sm border-separate border-spacing-y-3"><thead><tr className="text-slate-400 font-black text-[11px] uppercase tracking-wider"><th className="px-4 pb-2">اسم المستثمر</th><th className="px-4 pb-2">المبلغ المستثمر (SAR)</th><th className="px-4 pb-2 text-center">نسبة الإسهام</th><th className="px-4 pb-2 text-center">الربح المتوقع</th><th className="px-4 pb-2 text-center">إجراء</th></tr></thead><tbody>{investors.map((inv, i) => {const amount = Number(inv.amount) || 0; const pct = investorCapitalPool > 0 ? (amount / investorCapitalPool) * 100 : 0; const prof = invProfitPool * (pct / 100); return (<tr key={i} className="bg-slate-50 transition-all rounded-2xl group"><td className="p-2 rounded-r-2xl"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" placeholder="اسم المستثمر..." /></td><td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-black text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" /></td><td className="p-2 text-center font-black text-slate-500">{pct.toFixed(1)}%</td><td className="p-2 text-center font-black text-emerald-600">{formatMoney(prof)}</td><td className="p-2 text-center rounded-l-2xl"><button onClick={() => removeInvestor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-red-100"><Trash2 size={18}/></button></td></tr>)})}</tbody><tfoot><tr><td className="p-4 font-black text-[#1a365d]">الإجمالي المجمع</td><td className="p-4 font-black text-[#1a365d] text-lg">{formatMoney(totalInvestedVal)}</td><td className="p-4 text-center font-black text-slate-400">{totalInvestedPct.toFixed(1)}%</td><td className="p-4 text-center font-black text-emerald-600 text-lg">{formatMoney(totalInvestedProfit)}</td><td className="p-4 text-center text-[10px] font-bold text-slate-400">تأكد من المطابقة</td></tr></tfoot></table></div>
+                        <div className="overflow-x-auto p-6 md:p-8 bg-white"><table className="w-full text-right text-sm border-separate border-spacing-y-3"><thead><tr className="text-slate-400 font-black text-[11px] uppercase tracking-wider"><th className="px-4 pb-2">اسم المستثمر</th><th className="px-4 pb-2">المبلغ المستثمر (SAR)</th><th className="px-4 pb-2 text-center">نسبة الإسهام</th><th className="px-4 pb-2 text-center">الربح المتوقع</th><th className="px-4 pb-2 text-center">إجراء</th></tr></thead><tbody>{investors.map((inv, i) => {const amount = Number(inv.amount) || 0; const pct = totalInvestedVal > 0 ? (amount / totalInvestedVal) * 100 : 0; const prof = invProfitPool * (pct / 100); return (<tr key={i} className="bg-slate-50 transition-all rounded-2xl group"><td className="p-2 rounded-r-2xl"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" placeholder="اسم المستثمر..." /></td><td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="w-full bg-white border border-slate-200 px-4 py-3 rounded-xl font-black text-[#1a365d] outline-none focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20" /></td><td className="p-2 text-center font-black text-slate-500">{pct.toFixed(1)}%</td><td className="p-2 text-center font-black text-emerald-600">{formatMoney(prof)}</td><td className="p-2 text-center rounded-l-2xl"><button onClick={() => removeInvestor(i)} className="text-slate-400 hover:text-red-500 transition-colors p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:border-red-100"><Trash2 size={18}/></button></td></tr>)})}</tbody><tfoot><tr><td className="p-4 font-black text-[#1a365d]">الإجمالي المجمع</td><td className="p-4 font-black text-[#1a365d] text-lg">{formatMoney(totalInvestedVal)}</td><td className="p-4 text-center font-black text-slate-400">100%</td><td className="p-4 text-center font-black text-emerald-600 text-lg">{formatMoney(invProfitPool)}</td><td className="p-4 text-center text-[10px] font-bold text-slate-400">تأكد من المطابقة</td></tr></tfoot></table></div>
                     </div>
                 </div>
 
@@ -644,13 +649,14 @@ export default function FeasibilityCalc({ showToast }) {
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">التأسيس والرخص</span> <span className="text-red-300 font-black">{formatMoney(softCosts)}</span></div>
                              <div className="flex justify-between items-center border-b border-white/10 pb-3"><span className="font-bold text-slate-300">السعي والتسويق</span> <span className="text-orange-400 font-black">{formatMoney(marketingCost)}</span></div>
-                             <div className="flex justify-between items-center pt-2"><span className="font-bold text-white">السيولة الاستثمارية</span> <span className="text-white font-black text-lg">{formatMoney(investorCapitalPool)}</span></div>
+                             <div className="flex justify-between items-center pt-2 border-b border-white/10 pb-3"><span className="font-bold text-white">السيولة الاستثمارية المستهدفة</span> <span className="text-white font-black text-lg">{formatMoney(targetLiquidity)}</span></div>
+                             <div className="flex justify-between items-center pt-2"><span className="font-bold text-[#c5a059]">إجمالي المبالغ المستثمرة</span> <span className="text-[#c5a059] font-black text-lg">{formatMoney(totalInvestedVal)}</span></div>
                              <div className="flex justify-between items-center pt-6 mt-4 border-t border-white/20"><span className="font-black text-white text-base">صافي الربح الكلي</span> <span className="text-emerald-400 font-black text-2xl">{formatMoney(netProfit)}</span></div>
                          </div>
                          <div className="grid grid-cols-2 gap-4 mt-8 relative z-10"><div className="bg-[#c5a059]/10 p-4 rounded-2xl text-center border border-[#c5a059]/30"><span className="block text-[10px] font-bold text-[#c5a059] mb-1">إجمالي ربح المستثمرين</span><span className="text-xl font-black text-white">{formatMoney(invProfitPool)}</span></div><div className="bg-white/10 p-4 rounded-2xl text-center border border-white/20"><span className="block text-[10px] font-bold text-slate-300 mb-1">صافي ربح المطور</span><span className="text-xl font-black text-white">{formatMoney(devProfit)}</span></div></div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-6"><div className="flex justify-between items-start"><div><span className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">العائد الإجمالي (ROI)</span><span className="text-5xl font-black text-[#1a365d]">{overAllROI.toFixed(1)}%</span></div><div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center font-black text-2xl border border-emerald-100">%</div></div><div className="space-y-4 border-t border-slate-100 pt-6"><div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl"><span className="text-xs font-bold text-slate-500">العائد السنوي المتوقع</span><span className="text-base font-black text-emerald-600">{annualROI.toFixed(1)}%</span></div><div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl"><span className="text-xs font-bold text-slate-500">إجمالي الاسترداد المستهدف</span><span className="text-base font-black text-[#1a365d]">SAR {formatMoney(investorCapitalPool + invProfitPool)}</span></div></div></div>
+                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-6"><div className="flex justify-between items-start"><div><span className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">العائد الإجمالي (ROI)</span><span className="text-5xl font-black text-[#1a365d]">{overAllROI.toFixed(1)}%</span></div><div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center font-black text-2xl border border-emerald-100">%</div></div><div className="space-y-4 border-t border-slate-100 pt-6"><div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl"><span className="text-xs font-bold text-slate-500">العائد السنوي المتوقع</span><span className="text-base font-black text-emerald-600">{annualROI.toFixed(1)}%</span></div><div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl"><span className="text-xs font-bold text-slate-500">إجمالي الاسترداد المستهدف</span><span className="text-base font-black text-[#1a365d]">SAR {formatMoney(totalInvestedVal + invProfitPool)}</span></div></div></div>
 
                     <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
                         <h3 className="text-base font-black text-[#1a365d] mb-6 flex items-center gap-2"><Presentation size={20} className="text-[#c5a059]" /> خيارات العروض والتصدير</h3>
