@@ -62,6 +62,8 @@ export default function Navbar() {
         <div className="hidden md:flex items-center space-x-8 space-x-reverse">
           <button onClick={() => handleNav("/")} className={`font-semibold transition ${currentPage === "home" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>الرئيسية</button>
           <button onClick={() => handleNav("/about")} className={`font-semibold transition ${currentPage === "about" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>من نحن</button>
+          <button onClick={() => handleNav("/about")} className={`font-semibold transition ${currentPage === "about" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>من نحن</button>
+          <button onClick={() => handleNav("/services")} className={`font-semibold transition ${currentPage === "services" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>خدماتنا</button> {/* 🔥 إضافة */}
           <button onClick={() => handleNav("/projects")} className={`font-semibold transition ${currentPage === "projects" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>مشاريعنا</button>
           <button onClick={handleScrollToPartners} className="font-semibold transition text-slate-600 hover:text-[#c5a059]">شركاؤنا</button>
           <button onClick={() => handleNav("/customer-login")} className={`font-semibold transition ${currentPage === "customer-login" || currentPage === "maintenance" ? "text-[#c5a059]" : "text-slate-600 hover:text-[#c5a059]"}`}>طلب صيانة</button>
@@ -80,6 +82,7 @@ export default function Navbar() {
           <button onClick={() => handleNav("/about")} className={`text-xl font-bold text-right transition ${currentPage === "about" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>من نحن</button>
           <button onClick={() => handleNav("/projects")} className={`text-xl font-bold text-right transition ${currentPage === "projects" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>مشاريعنا</button>
           <button onClick={handleScrollToPartners} className="text-xl font-bold text-right transition text-[#1a365d] hover:text-[#c5a059]">شركاؤنا</button>
+          <button onClick={() => handleNav("/services")} className={`text-xl font-bold text-right transition ${currentPage === "services" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>خدماتنا</button>
           <button onClick={() => handleNav("/customer-login")} className={`text-xl font-bold text-right transition ${currentPage === "customer-login" || currentPage === "maintenance" ? "text-[#c5a059]" : "text-[#1a365d] hover:text-[#c5a059]"}`}>طلب صيانة</button>
           <button onClick={() => handleNav("/contact")} className="bg-[#c5a059] text-white py-4 rounded-xl text-center font-bold hover:bg-yellow-600 transition shadow-md">احجز الآن</button>
         </div>

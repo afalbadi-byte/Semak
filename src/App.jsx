@@ -2,6 +2,7 @@ import React, { useContext, useEffect } from 'react'; // 🔥 تأكد من اس
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { CircleCheckBig } from 'lucide-react';
+import Services from './pages/Services'; // 🔥 إضافة
 import { getImg } from './utils/helpers'; // 🔥 استدعاء دالة جلب الصور لتعيين الشعار
 
 import UnitHandover from './pages/admin/UnitHandover';
@@ -77,6 +78,7 @@ const MainApp = () => {
             <Route path="/privacy" element={<LegalPage title="سياسة الخصوصية" />} />
             <Route path="/terms" element={<LegalPage title="الشروط والأحكام" />} />
             <Route path="/inspection" element={<UnitInspection />} />
+            <Route path="/services" element={<Services />} /> {/* 🔥 إضافة */}
             
             {/* بوابة العملاء */}
             <Route path="/customer-login" element={<CustomerLogin />} />
