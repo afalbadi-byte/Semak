@@ -21,7 +21,7 @@ const APP_MODULES = [
   { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
 ];
 
-export default function Dashboard(props) {
+export default function TechDashboard(props) {
   const navigate = useNavigate();
   const context = useContext(AppContext) || {};
   
