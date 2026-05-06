@@ -116,7 +116,6 @@ export default function Dashboard({ onLogout }) {
 
     const handleForceLogout = () => {
         localStorage.removeItem('semak_admin_email');
-        localStorage.removeItem('semak_admin_password');
         localStorage.removeItem('semak_current_user');
         if (typeof onLogout === 'function') onLogout();
         window.location.replace('/');

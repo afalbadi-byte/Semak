@@ -28,7 +28,7 @@ export default function TechDashboard(props) {
   // 🔥 دالة ذكية تجيب بياناتك حتى لو سويت تحديث للصفحة
   const getActiveUser = () => {
     if (props.user) return props.user;
-    if (context.user) return context.user;
+    if (context.adminUser) return context.adminUser;
     const localUser = localStorage.getItem("semak_current_user");
     if (localUser) return JSON.parse(localUser);
     return null;
