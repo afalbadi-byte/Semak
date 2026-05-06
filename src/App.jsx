@@ -46,8 +46,8 @@ const ToastNotification = () => {
 };
 
 const ProtectedRoute = ({ children }) => {
-  const { user } = useContext(AppContext);
-  if (!user) return <Navigate to="/login" replace />;
+  const { adminUser } = useContext(AppContext);
+  if (!adminUser) return <Navigate to="/login" replace />;
   return children;
 };
 
