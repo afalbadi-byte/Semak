@@ -21,14 +21,14 @@ const APP_MODULES = [
   { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
 ];
 
-export default function Dashboard(props) {
+export default function TechDashboard(props) {
   const navigate = useNavigate();
   const context = useContext(AppContext) || {};
   
   // 🔥 دالة ذكية تجيب بياناتك حتى لو سويت تحديث للصفحة
   const getActiveUser = () => {
     if (props.user) return props.user;
-    if (context.user) return context.user;
+    if (context.adminUser) return context.adminUser;
     const localUser = localStorage.getItem("semak_current_user");
     if (localUser) return JSON.parse(localUser);
     return null;

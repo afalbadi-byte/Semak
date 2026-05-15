@@ -51,7 +51,7 @@ export default function Maintenance() {
       if (!customer) navigate("/customer-login");
     }
     // 🔥 لاحظ هنا: أزلنا customer من القائمة حتى لا يعيد تشغيل نفسه
-  }, [location.search]); 
+  }, [location.search, customer?.unit]);
 
   const handleLogout = () => {
     setCustomer(null);

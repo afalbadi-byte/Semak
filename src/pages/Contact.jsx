@@ -20,7 +20,7 @@ export default function Contact() {
     const payload = {
       name: e.target.name.value,
       phone: e.target.phone.value,
-      interest: e.target.unit.value,
+      unit: e.target.unit.value,
       source: "الموقع الإلكتروني" 
     };
 

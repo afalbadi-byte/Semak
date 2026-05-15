@@ -1,5 +1,5 @@
 import React, { useContext, useEffect } from 'react'; // 🔥 تأكد من استدعاء useEffect
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { CircleCheckBig } from 'lucide-react';
 import Services from './pages/Services'; // 🔥 إضافة
@@ -45,6 +45,12 @@ const ToastNotification = () => {
   );
 };
 
+const ProtectedRoute = ({ children }) => {
+  const { adminUser } = useContext(AppContext);
+  if (!adminUser) return <Navigate to="/login" replace />;
+  return children;
+};
+
 const MainApp = () => {
   // 🔥 التعديل هنا: تعيين اسم الموقع والشعار في تبويب المتصفح
   useEffect(() => {
@@ -74,7 +80,7 @@ const MainApp = () => {
             <Route path="/about" element={<About />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/contact" element={<Contact />} />
-            <Route path="/handover" element={<UnitHandover />} />
+            <Route path="/handover" element={<ProtectedRoute><UnitHandover /></ProtectedRoute>} />
             <Route path="/privacy" element={<LegalPage title="سياسة الخصوصية" />} />
             <Route path="/terms" element={<LegalPage title="الشروط والأحكام" />} />
             <Route path="/inspection" element={<UnitInspection />} />

@@ -12,10 +12,8 @@ export default function AdminLogin({ setUser, showToast }) {
 
   useEffect(() => {
     const savedEmail = localStorage.getItem("semak_admin_email");
-    const savedPassword = localStorage.getItem("semak_admin_password");
-    if (savedEmail && savedPassword) {
+    if (savedEmail) {
       setEmail(savedEmail);
-      setPassword(savedPassword);
       setRememberMe(true);
     }
   }, []);
@@ -38,10 +36,8 @@ export default function AdminLogin({ setUser, showToast }) {
 
         if (rememberMe) {
           localStorage.setItem("semak_admin_email", email);
-          localStorage.setItem("semak_admin_password", password);
         } else {
           localStorage.removeItem("semak_admin_email");
-          localStorage.removeItem("semak_admin_password");
         }
         
         // حفظ الجلسة

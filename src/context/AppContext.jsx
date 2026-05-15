@@ -22,7 +22,6 @@ export const AppProvider = ({ children }) => {
     setAdminUser(null);
     setCustomer(null);
     localStorage.removeItem("semak_admin_email");
-    localStorage.removeItem("semak_admin_password");
   };
 
   return (

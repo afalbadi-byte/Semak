@@ -7,7 +7,7 @@ import { AppContext } from '../../context/AppContext';
 import { API_URL, getImg } from '../../utils/helpers';
 import { useReactToPrint } from 'react-to-print'; // 🔥 المكتبة السحرية للطباعة
 
-export default function LetterGenerator() {
+export default function FeasibilityCalc() {
   const { user: contextUser, showToast } = useContext(AppContext);
   const navigate = useNavigate();
 
