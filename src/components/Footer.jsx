@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Lock, ChevronLeft, MapPin, Phone, Mail } from 'lucide-react';
-import { getImg } from '../utils/helpers';
+
 
 export default function Footer() {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ export default function Footer() {
           
           {/* العمود الأول: الشعار ونبذة */}
           <div className="flex flex-col items-center md:items-start">
-            <img src={getImg("1HEFY56KLYGJNmc-tufIXmYDUbGyOIdDX")} alt="شعار سماك" className="max-h-24 w-auto object-contain logo-footer-gold mb-6" />
+            <img src="/images/logo-footer.png" alt="شعار سماك" className="max-h-24 w-auto object-contain logo-footer-gold mb-6" />
             <p className="text-slate-400 font-bold text-lg uppercase tracking-widest leading-relaxed">
               سقف يعلو برؤيتك،<br/> ومسكن يحكي قصتك
             </p>

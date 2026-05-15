@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { getImg } from '../utils/helpers';
+
 
 export default function Partners() {
   const location = useLocation();
@@ -13,10 +13,10 @@ export default function Partners() {
   if (shouldHide) return null;
 
   const partners = [
-    "18kk3r0kSgBdkQvCj7KC3fe29SQt4s_Y_", "1CFm4oTf091j04ndhYBhN4-LiirPgsywc", "1Ho4XCxeEQHTt4QRHJQnGbhSNCybY9Kli",
-    "1T_LJDA_3XAAHSHl3DLib9foDVsQHjrCE", "10BuljftpVn9MsU2XbFJQ6zkRnM4djnGs", "1DwooJvRW8QrG-pDa1am0JDjbiVNp3AKP",
-    "1Tcfv84RKa5YJ7ao-ktt9HLAk9TKQLy4F", "144wMG57xjPdnX1SYoBTzlQu0XEbIWiO3", "1NG-fNtmh8Nm2qxZdTPZs3IYlYgQGxOr8",
-    "1H1f5ByalQMYeNi91qq5eEzXIwY1GCpPZ"
+    "/images/partner-1.png", "/images/partner-2.png", "/images/partner-3.png",
+    "/images/partner-4.png", "/images/partner-5.png", "/images/partner-6.png",
+    "/images/partner-7.png", "/images/partner-8.png", "/images/partner-9.png",
+    "/images/partner-10.png"
   ];
   
   return (
@@ -32,7 +32,7 @@ export default function Partners() {
           <div key={i} className="marquee-content gap-8 pr-8" aria-hidden={i !== 1}>
             {partners.map((p, j) => (
               <div key={j} className="w-32 h-20 flex items-center justify-center shrink-0">
-                <img src={getImg(p, "w500")} className="max-w-full max-h-full object-contain transition duration-300 hover:scale-110" alt="شريك" />
+                <img src={p} className="max-w-full max-h-full object-contain transition duration-300 hover:scale-110" alt="شريك" />
               </div>
             ))}
           </div>

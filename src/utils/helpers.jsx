@@ -12,7 +12,7 @@ export const getImg = (pathOrId, sz = "w1500") => {
 };
 
 // الثوابت الأخرى تبقى كما هي
-export const API_URL = "https://semak.sa/api.php";
+export const API_URL = import.meta.env.VITE_API_URL || "https://semak.sa/api.php";
 export const TIME_SLOTS = [
   "08:00 ص - 10:00 ص",
   "10:00 ص - 12:00 م",

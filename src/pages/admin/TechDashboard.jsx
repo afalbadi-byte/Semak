@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, RefreshCw, LogOut, Lock, Shield, FilePenLine, Wrench, ClipboardCheck, Calculator, ExternalLink, QrCode, Users, UserCog, CalendarDays, LayoutGrid, GanttChartSquare, CheckSquare, MessageCircle, Printer } from 'lucide-react';
+import { Search, RefreshCw, LogOut, Lock, Shield, FilePenLine, Wrench, ClipboardCheck, Calculator, ExternalLink, QrCode, Users, UserCog, CalendarDays, LayoutGrid, GanttChartSquare, CheckSquare, Printer } from 'lucide-react';
 import { API_URL } from '../../utils/helpers';
+import { notifyClientStatusUpdate } from '../../services/whatsappService';
 import { AppContext } from '../../context/AppContext';
 
 const TIME_SLOTS = [
@@ -251,24 +252,19 @@ export default function TechDashboard(props) {
       const data = await res.json();
       if (data.success) {
         showToast("تم التحديث", "تم حفظ التغييرات في قاعدة البيانات");
+        // إرسال واتساب تلقائي للعميل عند تغيير الحالة فقط
+        if (field === "status") {
+          const updatedTicket = {
+            ...currentTicket,
+            status: value,
+            ...(newOtp && { otp: newOtp }),
+          };
+          notifyClientStatusUpdate(updatedTicket);
+        }
       }
     } catch (error) {
       showToast("خطأ اتصال", "تعذر الوصول للسيرفر", "error");
     }
-  };
-
-  const notifyWhatsApp = (ticket) => {
-    if (!ticket.phone || ticket.phone === "---") {
-      showToast("خطأ", "رقم جوال العميل غير صالح", "error");
-      return;
-    }
-    let phone = ticket.phone.toString().replace(/^0/, "966").replace(/\D/g, "");
-    let techText = ticket.technician && ticket.technician !== "لم يتم التعيين" ? `👨‍🔧 الفني المختص: *${ticket.technician}*` : "سيتم إعلامكم باسم الفني لاحقاً.";
-    let dateText = ticket.scheduleDate ? `📅 التاريخ: *${ticket.scheduleDate}*\n⏰ الوقت: *${ticket.scheduleTime}*` : "لم يتم تحديد موعد الزيارة بعد.";
-    let otpText = ticket.otp ? `\n\n🔑 *رمز إغلاق الطلب (OTP):* ${ticket.otp}\n_(يرجى تزويد الفني بهذا الرمز عند **الانتهاء من العمل** لتأكيد إغلاق الطلب بنجاح)_` : "";
-    
-    let msg = `مرحباً بك عميلنا العزيز من شركة *سماك العقارية* 🏢\n\nبخصوص طلب الصيانة رقم: *${ticket.id}*\nالخاص بوحدة: *${ticket.unit}*\nنوع الطلب: *${ticket.type}*\n\nنفيدكم بأنه تمت مراجعة طلبكم، وحالة الطلب الآن: *${ticket.status}*.\n\n${techText}\n\n*موعد الزيارة (المعتمد / المقترح):*\n${dateText}${otpText}\n\n💡 *(في حال عدم مناسبة الموعد أعلاه، يرجى الرد على هذه الرسالة وسنقوم بتنسيق موعد بديل يناسبكم)*\n\nنسعد بخدمتكم، ونتمنى لكم يوماً سعيداً!`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
   };
 
   const columns = [
@@ -280,7 +276,10 @@ export default function TechDashboard(props) {
   const renderTicketCard = (ticket) => (
     <div key={ticket.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 hover:shadow-md transition group">
       <div className="flex justify-between items-start mb-3">
-        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
+        <div className="flex items-center gap-1">
+          <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
+          <span title={ticket.wa_sent == 1 ? "تم إرسال الواتساب" : "لم يُرسل بعد"} className="text-sm">{ticket.wa_sent == 1 ? "✅" : "⬜"}</span>
+        </div>
         <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
       </div>
       <p className="text-xs text-slate-500 mb-3 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100">{ticket.desc}</p>
@@ -317,9 +316,6 @@ export default function TechDashboard(props) {
               <option value="جاري العمل">جاري العمل</option>
               <option value="مكتمل" disabled={ticket.status === "جاري العمل" && ticket.otp}>مكتمل (يتطلب رمز العميل)</option>
             </select>
-            <button onClick={() => notifyWhatsApp(ticket)} className="w-10 flex-shrink-0 bg-green-500 text-white rounded-lg flex items-center justify-center hover:bg-green-600 transition shadow-md shadow-green-200" title="إرسال الموعد للعميل بالواتساب">
-              <MessageCircle size={16} />
-            </button>
           </div>
           {activeUser?.role === "admin" && ticket.otp && (ticket.status === "تم اعتماد الموعد" || ticket.status === "جاري العمل") && (
              <div className="text-[9px] text-slate-400 text-center mt-1">(للمدير فقط: رمز الإغلاق هو {ticket.otp})</div>
@@ -471,7 +467,7 @@ export default function TechDashboard(props) {
                       <option value="technician">فني صيانة (بوابة الفنيين)</option>
                     </select>
                   </div>
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">كلمة المرور الافتراضية</label><input required name="password" type="text" defaultValue="123456" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">كلمة المرور</label><input required name="password" type="password" minLength={8} placeholder="8 أحرف على الأقل" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400" /></div>
                   <div className="flex items-end"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-md">حفظ الموظف</button></div>
                 </form>
               </div>
@@ -566,16 +562,21 @@ export default function TechDashboard(props) {
             <div className="overflow-x-auto">
               <table className="w-full text-right">
                 <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
-                  <tr><th className="px-6 py-4 border-b">#</th><th className="px-6 py-4 border-b">الاسم الكريم</th><th className="px-6 py-4 border-b">رقم الجوال</th><th className="px-6 py-4 border-b">الوحدة المهتم بها</th><th className="px-6 py-4 border-b">تاريخ التسجيل</th></tr>
+                  <tr><th className="px-6 py-4 border-b">#</th><th className="px-6 py-4 border-b">الاسم الكريم</th><th className="px-6 py-4 border-b">رقم الجوال</th><th className="px-6 py-4 border-b">الوحدة المهتم بها</th><th className="px-6 py-4 border-b">تاريخ التسجيل</th><th className="px-6 py-4 border-b text-center">واتساب</th></tr>
                 </thead>
                 <tbody className="text-slate-700 divide-y divide-slate-50">
-                  {loading ? <tr><td colSpan="5" className="text-center py-12 text-teal-500"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr> : leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).map((lead, i) => (
+                  {loading ? <tr><td colSpan="6" className="text-center py-12 text-teal-500"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr> : leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).map((lead, i) => (
                     <tr key={i} className="hover:bg-teal-50/30 transition-colors">
                       <td className="px-6 py-4 text-slate-400 text-xs font-mono">{leads.length - i}</td>
                       <td className="px-6 py-4 font-bold text-[#1a365d]">{lead.name}</td>
                       <td className="px-6 py-4 font-sans text-slate-600 font-medium" dir="ltr">{lead.phone}</td>
                       <td className="px-6 py-4"><span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-xs font-bold border border-teal-200">{lead.unit}</span></td>
                       <td className="px-6 py-4 text-sm text-slate-400 font-sans" dir="ltr">{String(lead.date).substring(0, 16)}</td>
+                      <td className="px-6 py-4 text-center">
+                        {lead.wa_sent == 1
+                          ? <span className="text-green-500 text-lg" title="تم إرسال الواتساب">✅</span>
+                          : <span className="text-slate-300 text-lg" title="لم يُرسل بعد">⬜</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

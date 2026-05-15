@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, RefreshCw, Send, ListChecks, CalendarDays, HardHat, CircleCheck, Clock, Loader2 } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, TIME_SLOTS } from '../../utils/helpers';
+import { notifyMaintenanceAdmin } from '../../services/whatsappService';
 
 export default function Maintenance() {
   const { customer, setCustomer, showToast } = useContext(AppContext);
@@ -16,6 +17,8 @@ export default function Maintenance() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [ticket, setTicket] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // 🔥 السحر المُعدّل: قراءة رابط الـ QR لمرة واحدة فقط وبدون تكرار الرسائل
   useEffect(() => {
@@ -53,6 +56,17 @@ export default function Maintenance() {
     // 🔥 لاحظ هنا: أزلنا customer من القائمة حتى لا يعيد تشغيل نفسه
   }, [location.search, customer?.unit]);
 
+  const loadHistory = async (unit) => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=get_customer_tickets&unit=${encodeURIComponent(unit)}`);
+      const data = await res.json();
+      if (data.success) setHistory(data.data);
+    } catch { /* silent */ } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     setCustomer(null);
     showToast("تم الخروج", "نتمنى لك يوماً سعيداً");
@@ -87,6 +101,7 @@ export default function Maintenance() {
       
       if(result.success) {
           showToast("نجاح", "تم استلام طلبك وبانتظار اعتماده من الإدارة.");
+          notifyMaintenanceAdmin({ id: result.id, name: payload.name, phone: payload.phone, unit: payload.unit, type: payload.type, date, time }); // id يُسجَّل في DB عند نجاح الإرسال
           e.target.reset();
           setDate("");
           setTime("");
@@ -163,7 +178,7 @@ export default function Maintenance() {
   if (!customer) return null;
 
   return (
-    <div className="pt-32 pb-20 bg-slate-50 min-h-screen relative flex items-center justify-center bg-cover bg-center font-cairo" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=2070&auto=format&fit=crop')" }}>
+    <div className="pt-32 pb-20 bg-slate-50 min-h-screen relative flex items-center justify-center bg-cover bg-center font-cairo" style={{ backgroundImage: "url('/images/maintenance-bg.jpg')" }}>
       <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
       <div className="w-full max-w-3xl px-6 relative z-10">
         <div className="text-center mb-10 text-white relative">
@@ -172,12 +187,46 @@ export default function Maintenance() {
           </button>
           <h2 className="text-[#c5a059] font-black tracking-[0.1em] uppercase text-sm mb-2">بوابة الملاك</h2>
           <h3 className="text-3xl md:text-4xl font-black mb-6">طلب صيانة سريع</h3>
-          <div className="flex justify-center gap-4 bg-white/10 p-2 rounded-full backdrop-blur-md w-fit mx-auto border border-white/10">
-            <button onClick={() => setTab("new")} className={`px-6 py-2 rounded-full font-bold text-sm transition ${tab === "new" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>رفع طلب</button>
-            <button onClick={() => setTab("track")} className={`px-6 py-2 rounded-full font-bold text-sm transition ${tab === "track" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>متابعة طلباتي</button>
+          <div className="flex justify-center gap-2 bg-white/10 p-2 rounded-full backdrop-blur-md w-fit mx-auto border border-white/10">
+            <button onClick={() => setTab("new")} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "new" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>رفع طلب</button>
+            <button onClick={() => setTab("track")} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "track" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>آخر طلب</button>
+            <button onClick={() => { setTab("history"); loadHistory(customer.unit); }} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "history" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>سجل طلباتي</button>
           </div>
         </div>
-        {tab === "new" ? (
+        {tab === "history" ? (
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 animate-fade-in-up">
+            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-[#1a365d] to-[#c5a059]" />
+            <h4 className="text-xl font-black text-[#1a365d] mb-6 flex items-center gap-2">
+              <ListChecks size={22} className="text-[#c5a059]" /> سجل جميع طلبات الصيانة
+            </h4>
+            {historyLoading ? (
+              <div className="text-center py-10"><Loader2 className="animate-spin text-[#c5a059] mx-auto" size={36} /></div>
+            ) : history.length === 0 ? (
+              <p className="text-center text-slate-400 font-bold py-10">لا توجد طلبات سابقة لهذه الوحدة.</p>
+            ) : (
+              <div className="space-y-4">
+                {history.map(t => {
+                  const statusColors = {
+                    "مكتمل": "bg-green-100 text-green-700",
+                    "جاري العمل": "bg-blue-100 text-blue-700",
+                    "قيد الانتظار": "bg-orange-100 text-orange-700",
+                  };
+                  const color = statusColors[t.status] || "bg-slate-100 text-slate-600";
+                  return (
+                    <div key={t.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <div>
+                        <span className="text-xs text-slate-400 font-bold">#{t.id}</span>
+                        <p className="font-black text-[#1a365d] mt-0.5">{t.type}</p>
+                        <p className="text-xs text-slate-500 mt-1">{t.date ? t.date.split(" ")[0] : ""}</p>
+                      </div>
+                      <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${color}`}>{t.status || "قيد الانتظار"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : tab === "new" ? (
           <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
             <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-[#c5a059] to-yellow-600" />
             

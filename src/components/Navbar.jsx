@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
-import { getImg } from '../utils/helpers';
+
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -51,7 +51,7 @@ export default function Navbar() {
       <div className="container mx-auto px-4 md:px-8 py-3 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <div className="flex items-center cursor-pointer" onClick={() => handleNav("/")}>
-            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="سماك العقارية" className="h-20 md:h-28 w-auto object-contain logo-blend-light" />
+            <img src="/images/logo-main.png" alt="سماك العقارية" className="h-20 md:h-28 w-auto object-contain logo-blend-light" />
           </div>
           <div className="h-10 w-[2px] bg-[#c5a059]/30 hidden md:block" />
           <p className="hidden md:block text-xs text-slate-400 font-medium">سقف يعلو برؤيتك، ومسكن يحكي قصتك</p>
