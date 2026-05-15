@@ -269,7 +269,7 @@ export default function Dashboard({ onLogout }) {
                     )}
 
                     {activeTab === 'units' && hasPermission('admin') && (
-                        <UnitsOverview showToast={showToast} />
+                        <UnitsOverview showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                     )}
 
                     {activeTab === 'feasibility' && hasPermission('admin') && (
