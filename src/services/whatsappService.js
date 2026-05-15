@@ -96,19 +96,21 @@ export async function notifyMaintenanceAdmin({ id, name, phone, unit, type, date
 export async function notifyClientStatusUpdate(ticket) {
   if (!API_KEY || !ticket.phone) return;
 
-  // إذا في قالب صيانة معتمد — استخدمه
+  // القالب المعتمد maintenance_update — 7 متغيرات
   if (MAINT_TEMPLATE_ID) {
     const tech = ticket.technician && ticket.technician !== "لم يتم التعيين" ? ticket.technician : "سيتم التحديد";
-    const otp  = ticket.otp ? `رمز الإغلاق: ${ticket.otp}` : "";
+    const date = ticket.scheduleDate
+      ? `${ticket.scheduleDate} — ${ticket.scheduleTime || ""}`
+      : "سيتم التأكيد";
+    const otp = ticket.otp || "—";
     return sendTemplate(normalizePhone(ticket.phone), MAINT_TEMPLATE_ID, TEMPLATE_LANG, [
-      String(ticket.id),
-      ticket.unit,
-      ticket.type,
-      ticket.status,
-      tech,
-      ticket.scheduleDate || "سيتم التأكيد",
-      ticket.scheduleTime || "",
-      otp,
+      String(ticket.id),   // {{1}} رقم الطلب
+      ticket.unit,         // {{2}} الوحدة
+      ticket.type,         // {{3}} نوع الطلب
+      ticket.status,       // {{4}} الحالة
+      tech,                // {{5}} الفني
+      date,                // {{6}} الموعد
+      otp,                 // {{7}} رمز الإغلاق
     ]);
   }
 

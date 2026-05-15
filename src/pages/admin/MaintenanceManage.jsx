@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wrench, RefreshCw, MessageCircle, Search } from 'lucide-react';
+import { notifyClientStatusUpdate } from '../../services/whatsappService';
 
 const API_URL = "https://semak.sa/api.php";
 const TIME_SLOTS = ["08:00 ص - 10:00 ص", "10:00 ص - 12:00 م", "01:00 م - 03:00 م", "04:00 م - 06:00 م"];
@@ -93,8 +94,13 @@ export default function MaintenanceManage({ showToast, activeUser }) {
             if (newOtp) payload.otp = newOtp; 
             const res = await fetch(`${API_URL}?action=update_maintenance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); 
             const data = await res.json();
-            if(data.success && showToast && field === "status") {
-                showToast("تم التحديث", "تم تحديث حالة الطلب بنجاح");
+            if(data.success && field === "status") {
+                if(showToast) showToast("تم التحديث", "تم تحديث حالة الطلب بنجاح");
+                // إرسال إشعار واتساب للعميل تلقائياً عند تغيير الحالة
+                const updatedTicket = tickets.find(t => t.id === id);
+                if (updatedTicket) {
+                    notifyClientStatusUpdate({ ...updatedTicket, status: value, otp: newOtp || updatedTicket.otp });
+                }
             }
         } catch(e) {
             if(showToast) showToast("خطأ", "فشل الاتصال", "error");

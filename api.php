@@ -383,7 +383,23 @@ switch ($action) {
         $status  = "قيد الانتظار";
         $sql     = "INSERT INTO maintenance (name, phone, unit, type, descrip, status, date) VALUES ('$name', '$phone', '$unit', '$type', '$descrip', '$status', '$date')";
         if ($conn->query($sql)) {
-            echo json_encode(["success" => true, "id" => $conn->insert_id]);
+            $new_id = $conn->insert_id;
+            // إرسال إشعار واتساب للإدارة تلقائياً
+            $wa_token  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
+            $admin_phone = "966550163121";
+            $wa_msg = "🔧 *طلب صيانة جديد #$new_id - سماك*\n\n👤 المالك: $name\n📞 الجوال: $phone\n🏠 الوحدة: $unit\n⚠️ نوع العطل: $type\n\n⏰ " . date('Y-m-d H:i', strtotime('+3 hours'));
+            $wa_payload = json_encode(["to" => $admin_phone, "type" => "text", "text" => ["body" => $wa_msg]]);
+            $ch = curl_init("https://api.mottasl.ai/v1/message/send");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $wa_payload,
+                CURLOPT_HTTPHEADER     => ["Content-Type: application/json", "Authorization: Bearer $wa_token"],
+                CURLOPT_TIMEOUT        => 5,
+            ]);
+            curl_exec($ch);
+            curl_close($ch);
+            echo json_encode(["success" => true, "id" => $new_id]);
         } else {
             echo json_encode(["success" => false, "message" => $conn->error]);
         }
@@ -432,7 +448,23 @@ switch ($action) {
         $status   = "جديد";
         $sql = "INSERT INTO leads (name, phone, interest, source, unit, status) VALUES ('$name', '$phone', '$interest', '$source', '$interest', '$status')";
         if ($conn->query($sql)) {
-            echo json_encode(["success" => true, "id" => $conn->insert_id]);
+            $new_id = $conn->insert_id;
+            // إرسال إشعار واتساب للإدارة تلقائياً
+            $wa_token  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
+            $admin_phone = "966550163121";
+            $wa_msg = "🔔 *عميل جديد - سماك العقارية*\n\n👤 الاسم: $name\n📞 الجوال: $phone\n🏠 الاهتمام: $interest\n\n⏰ " . date('Y-m-d H:i', strtotime('+3 hours'));
+            $wa_payload = json_encode(["to" => $admin_phone, "type" => "text", "text" => ["body" => $wa_msg]]);
+            $ch = curl_init("https://api.mottasl.ai/v1/message/send");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $wa_payload,
+                CURLOPT_HTTPHEADER     => ["Content-Type: application/json", "Authorization: Bearer $wa_token"],
+                CURLOPT_TIMEOUT        => 5,
+            ]);
+            curl_exec($ch);
+            curl_close($ch);
+            echo json_encode(["success" => true, "id" => $new_id]);
         } else {
             $notes = $conn->real_escape_string("الوحدة: $interest | المصدر: $source");
             $sql2  = "INSERT INTO leads (name, phone, status, notes) VALUES ('$name', '$phone', '$status', '$notes')";
