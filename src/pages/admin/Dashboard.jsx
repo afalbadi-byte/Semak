@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building, 
-    UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator, 
-    ExternalLink, Search, Printer, RefreshCw, TrendingUp 
+import {
+    LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building,
+    UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
+    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2
 } from 'lucide-react';
 
 // استدعاء الأدوات والمكونات الخارجية
-import UnitInspection from './UnitInspection'; 
-import SnagList from './SnagList'; 
+import UnitInspection from './UnitInspection';
+import SnagList from './SnagList';
 import UsersManage from './UsersManage';
 import MaintenanceManage from './MaintenanceManage';
 import LeadsManage from './LeadsManage';
-import FeasibilityCalc from './FeasibilityCalc'; // 🔥 استدعاء الحاسبة الجديدة
+import FeasibilityCalc from './FeasibilityCalc';
+import UnitsOverview from './UnitsOverview';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -88,8 +89,9 @@ export default function Dashboard({ onLogout }) {
 
     // القائمة الجانبية الشاملة لجميع أدوات النظام (تم إضافة الحاسبة هنا 🔥)
     const ALL_MENU_ITEMS = [
-        { id: 'overview', title: 'الرئيسية والإحصائيات', icon: LayoutDashboard, permKey: 'all' },
-        { id: 'feasibility', title: 'حاسبة الجدوى والعروض', icon: TrendingUp, permKey: 'admin' }, // 🔥 الزر الجديد
+        { id: 'overview',   title: 'الرئيسية والإحصائيات',  icon: LayoutDashboard, permKey: 'all' },
+        { id: 'units',      title: 'بيانات الوحدات',         icon: Building2,       permKey: 'admin' },
+        { id: 'feasibility',title: 'حاسبة الجدوى والعروض',  icon: TrendingUp,      permKey: 'admin' },
         { id: 'inspection', title: 'فحص وتسليم الوحدات', icon: ClipboardCheck, permKey: 'inspection' },
         { id: 'snaglist', title: 'تقارير الملاحظات', icon: FileWarning, permKey: 'inspection' }, 
         { id: 'maintenance', title: 'إدارة الصيانة', icon: Wrench, permKey: 'maintenance' },
@@ -260,9 +262,12 @@ export default function Dashboard({ onLogout }) {
                         </div>
                     )}
 
-                    {/* 🔥 قسم الحاسبة الجديد */}
+                    {activeTab === 'units' && hasPermission('admin') && (
+                        <UnitsOverview showToast={showToast} />
+                    )}
+
                     {activeTab === 'feasibility' && hasPermission('admin') && (
-                        <div className="animate-fadeIn"> 
+                        <div className="animate-fadeIn">
                             <FeasibilityCalc showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                         </div>
                     )}
