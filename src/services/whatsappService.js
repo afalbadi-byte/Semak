@@ -1,0 +1,132 @@
+import { API_URL } from '../utils/helpers';
+
+const API_KEY            = import.meta.env.VITE_MOTTASL_API_KEY;
+const ADMIN_PHONE        = import.meta.env.VITE_WA_ADMIN_PHONE;
+const TEMPLATE_ID        = import.meta.env.VITE_WA_CLIENT_TEMPLATE_ID;
+const TEMPLATE_LANG      = import.meta.env.VITE_WA_CLIENT_TEMPLATE_LANG || "ar";
+const MAINT_TEMPLATE_ID  = import.meta.env.VITE_WA_MAINT_TEMPLATE_ID;
+
+const BASE_URL = "https://api.mottasl.ai/v1";
+
+const headers = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${API_KEY}`,
+});
+
+// تنظيف رقم الهاتف وإضافة مفتاح السعودية
+function normalizePhone(phone) {
+  const clean = String(phone).replace(/\D/g, "");
+  return clean.startsWith("966") ? clean : `966${clean.replace(/^0/, "")}`;
+}
+
+// تسجيل حالة إرسال الواتساب في قاعدة البيانات
+async function logWaSent(id, type) {
+  if (!id) return;
+  fetch(`${API_URL}?action=update_wa_status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, type }),
+  });
+}
+
+async function sendText(to, body) {
+  if (!API_KEY) return;
+  return fetch(`${BASE_URL}/message/send`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ to, type: "text", text: { body } }),
+  });
+}
+
+async function sendTemplate(to, templateId, lang, bodyVars = []) {
+  if (!API_KEY || !templateId) return;
+  return fetch(`${BASE_URL}/message/send?create=true`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({
+      to,
+      type: "template",
+      template: {
+        template_id: templateId,
+        language: lang,
+        ...(bodyVars.length > 0 && { argument: { BODY: bodyVars } }),
+      },
+    }),
+  });
+}
+
+// ─── صفحة التواصل ───────────────────────────────────────────
+
+// إشعار الإدارة بعميل جديد مهتم + تسجيل الحالة
+export async function notifyAdmin({ id, name, phone, interest }) {
+  const body =
+    `🔔 *عميل جديد - سماك العقارية*\n\n` +
+    `👤 الاسم: ${name}\n` +
+    `📞 الجوال: ${phone}\n` +
+    `🏠 الاهتمام: ${interest}\n\n` +
+    `⏰ ${new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}`;
+  const res = await sendText(ADMIN_PHONE, body);
+  if (res?.ok) logWaSent(id, "lead");
+  return res;
+}
+
+// رد ترحيبي للعميل (يتطلب قالب معتمد)
+export async function replyToClient(clientPhone, clientName) {
+  return sendTemplate(normalizePhone(clientPhone), TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
+}
+
+// ─── صفحة الصيانة ───────────────────────────────────────────
+
+// إشعار الإدارة بطلب صيانة جديد + تسجيل الحالة
+export async function notifyMaintenanceAdmin({ id, name, phone, unit, type, date, time }) {
+  const body =
+    `🔧 *طلب صيانة جديد #${id || "جديد"} - سماك*\n\n` +
+    `👤 المالك: ${name}\n` +
+    `📞 الجوال: ${phone}\n` +
+    `🏠 الوحدة: ${unit}\n` +
+    `⚠️ نوع العطل: ${type}\n` +
+    `📅 الموعد المفضل: ${date} — ${time}\n\n` +
+    `⏰ ${new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}`;
+  const res = await sendText(ADMIN_PHONE, body);
+  if (res?.ok) logWaSent(id, "maintenance");
+  return res;
+}
+
+// إشعار العميل تلقائياً عند كل تغيير في حالة طلبه
+export async function notifyClientStatusUpdate(ticket) {
+  if (!API_KEY || !ticket.phone) return;
+
+  // إذا في قالب صيانة معتمد — استخدمه
+  if (MAINT_TEMPLATE_ID) {
+    const tech = ticket.technician && ticket.technician !== "لم يتم التعيين" ? ticket.technician : "سيتم التحديد";
+    const otp  = ticket.otp ? `رمز الإغلاق: ${ticket.otp}` : "";
+    return sendTemplate(normalizePhone(ticket.phone), MAINT_TEMPLATE_ID, TEMPLATE_LANG, [
+      String(ticket.id),
+      ticket.unit,
+      ticket.type,
+      ticket.status,
+      tech,
+      ticket.scheduleDate || "سيتم التأكيد",
+      ticket.scheduleTime || "",
+      otp,
+    ]);
+  }
+
+  // fallback: رسالة نصية (تشتغل إذا العميل راسل البيزنس خلال 24 ساعة)
+  const tech = ticket.technician && ticket.technician !== "لم يتم التعيين"
+    ? `👨‍🔧 الفني: ${ticket.technician}\n` : "";
+  const date = ticket.scheduleDate
+    ? `📅 الموعد: ${ticket.scheduleDate} — ${ticket.scheduleTime || ""}\n` : "";
+  const otp = ticket.otp
+    ? `\n🔑 رمز الإغلاق (أعطه للفني عند الانتهاء): *${ticket.otp}*\n` : "";
+
+  const body =
+    `🔧 *تحديث طلب الصيانة - سماك العقارية*\n\n` +
+    `طلب رقم: #${ticket.id} | وحدة: ${ticket.unit}\n` +
+    `نوع العطل: ${ticket.type}\n\n` +
+    `الحالة الآن: *${ticket.status}*\n` +
+    `${tech}${date}${otp}\n` +
+    `للاستفسار ردّ على هذه الرسالة 💬`;
+
+  return sendText(normalizePhone(ticket.phone), body);
+}

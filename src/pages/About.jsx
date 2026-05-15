@@ -1,6 +1,7 @@
 import React from 'react';
 import { HousePlus, ShieldCheck, Award, Leaf, Wifi, Users, Building, Eye, Target } from 'lucide-react';
-import { getImg } from '../utils/helpers';
+import PageMeta from '../components/PageMeta';
+
 
 export default function About() {
   const values = [
@@ -17,8 +18,10 @@ export default function About() {
   ];
 
   return (
+    <>
+    <PageMeta title="من نحن" description="تعرف على سماك العقارية — رؤيتنا وقيمنا في بناء مجتمعات سكنية ذكية ومستدامة في مكة المكرمة." />
     <div className="bg-white min-h-screen animate-fadeIn">
-      <div className="relative h-[60vh] flex items-center justify-center bg-fixed bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')" }}>
+      <div className="relative h-[60vh] flex items-center justify-center bg-fixed bg-cover bg-center" style={{ backgroundImage: "url('/images/about-hero.jpg')" }}>
         <div className="absolute inset-0 bg-[#1a365d]/80 mix-blend-multiply" />
         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
         <div className="relative z-10 text-center text-white p-6 max-w-4xl">
@@ -99,12 +102,12 @@ export default function About() {
         </div>
       </div>
 
-      <div className="py-24 bg-slate-900 text-white relative overflow-hidden" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1565552629477-ff14d7acd490?q=80&w=2070&auto=format&fit=crop')", backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed" }}>
+      <div className="py-24 bg-slate-900 text-white relative overflow-hidden" style={{ backgroundImage: "url('/images/about-section.jpg')", backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed" }}>
         <div className="absolute inset-0 bg-[#1a365d]/80" />
         <div className="container mx-auto px-6 relative z-10">
           <div className="text-center mb-16 flex flex-col md:flex-row items-center justify-center gap-6">
             <h3 className="text-3xl md:text-4xl font-bold">ركائزنا المتوافقة مع</h3>
-            <img src={getImg("1ZyQiajC0S8NhwqOczZ8jtpaKLMUz2weR")} alt="رؤية 2030" className="h-16 md:h-20 w-auto opacity-90 hover:opacity-100 transition-opacity duration-300 mix-blend-screen" />
+            <img src="/images/vision-2030.png" alt="رؤية 2030" className="h-16 md:h-20 w-auto opacity-90 hover:opacity-100 transition-opacity duration-300 mix-blend-screen" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             {pillars.map((pillar, idx) => {
@@ -123,5 +126,6 @@ export default function About() {
         </div>
       </div>
     </div>
+    </>
   );
 }

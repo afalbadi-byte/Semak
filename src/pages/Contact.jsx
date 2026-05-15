@@ -1,11 +1,23 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Phone, MapPin, Send, RefreshCw, MessageCircle, Mail, Clock } from 'lucide-react';
-import { getImg, API_URL } from '../utils/helpers';
+import { API_URL } from '../utils/helpers';
+import PageMeta from '../components/PageMeta';
 import { AppContext } from '../context/AppContext';
+import { notifyAdmin, replyToClient } from '../services/whatsappService';
+
+const ALL_UNITS = ["SM-A01","SM-A02","SM-A03","SM-A04","SM-A05","SM-A06","SM-A07"];
 
 export default function Contact() {
   const { showToast } = useContext(AppContext);
   const [loading, setLoading] = useState(false);
+  const [soldUnits, setSoldUnits] = useState({});
+
+  useEffect(() => {
+    fetch(`${API_URL}?action=get_units_status`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setSoldUnits(d.data); })
+      .catch(() => {});
+  }, []);
 
   // رقم خدمة العملاء الموحد
   const supportPhone = "920032842";
@@ -16,22 +28,34 @@ export default function Contact() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
+    const rawPhone = e.target.phone.value.trim();
+    if (!/^[0-9+\-\s()]{7,15}$/.test(rawPhone)) {
+      showToast("تنبيه", "رقم الجوال غير صحيح", "error");
+      setLoading(false);
+      return;
+    }
+
     const payload = {
-      name: e.target.name.value,
-      phone: e.target.phone.value,
-      unit: e.target.unit.value,
-      source: "الموقع الإلكتروني" 
+      name: e.target.name.value.trim(),
+      phone: rawPhone,
+      interest: e.target.unit.value,
+      source: "الموقع الإلكتروني"
     };
 
     try {
       const response = await fetch(`${API_URL}?action=add_lead`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
       });
-      const data = await response.json(); 
+      const data = await response.json();
       if (data.success) {
         showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.", "success");
-        e.target.reset(); 
+        // إرسال إشعار واتساب للإدارة + رد ترحيبي للعميل
+        await Promise.allSettled([
+          notifyAdmin({ id: data.id, name: payload.name, phone: payload.phone, interest: payload.interest }),
+          replyToClient(payload.phone, payload.name),
+        ]);
+        e.target.reset();
       } else { throw new Error("فشل"); }
     } catch (error) {
       showToast("تنبيه", "حدث خطأ في الاتصال، يرجى المحاولة لاحقاً.", "error");
@@ -39,7 +63,9 @@ export default function Contact() {
   };
 
   return (
-    <div className="pt-32 pb-20 min-h-screen relative flex items-center bg-cover bg-center animate-fadeIn" style={{ backgroundImage: `url('${getImg("18fCsrolSEvo8q9wt2_z4BXlB88BZ-62-")}')` }}>
+    <>
+    <PageMeta title="تواصل معنا" description="تواصل مع سماك العقارية لحجز وحدتك أو الاستفسار — الرقم الموحد 920032842، أو راسلنا على واتساب." />
+    <div className="pt-32 pb-20 min-h-screen relative flex items-center bg-cover bg-center animate-fadeIn" style={{ backgroundImage: `url('/images/contact-bg.jpg')` }}>
       <div className="absolute inset-0 hero-gradient" />
       <div className="container mx-auto px-6 relative z-10 max-w-6xl">
         
@@ -96,13 +122,14 @@ export default function Contact() {
                 <select name="unit" required className="w-full bg-white/10 border border-white/20 px-6 py-4 rounded-2xl outline-none focus:border-[#c5a059] text-white transition [&>option]:text-slate-900" defaultValue="">
                   <option value="" disabled>اختر الوحدة</option>
                   <option value="استفسار عام">استفسار عام</option>
-                  <option value="SM-A01">SM-A01</option>
-                  <option value="SM-A02">SM-A02</option>
-                  <option value="SM-A03">SM-A03</option>
-                  <option value="SM-A04">SM-A04</option>
-                  <option value="SM-A05" disabled className="text-red-500 bg-red-100">SM-A05 (محجوزة)</option>
-                  <option value="SM-A06">SM-A06</option>
-                  <option value="SM-A07" disabled className="text-red-500 bg-red-100">SM-A07 (تم البيع)</option>
+                  {ALL_UNITS.map(u => {
+                    const sold = !!soldUnits[u];
+                    return (
+                      <option key={u} value={u} disabled={sold} className={sold ? "text-red-500 bg-red-100" : ""}>
+                        {u}{sold ? " (مباعة / محجوزة)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <button type="submit" disabled={loading} className="w-full bg-[#c5a059] text-white py-5 rounded-2xl font-black text-xl hover:bg-yellow-600 transition flex justify-center items-center gap-2 shadow-xl">
@@ -114,5 +141,6 @@ export default function Contact() {
         </div>
       </div>
     </div>
+    </>
   );
 }

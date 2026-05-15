@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Key, Lightbulb, LineChart, ShieldCheck, Wrench, ArrowLeft } from 'lucide-react';
-import { getImg } from '../utils/helpers';
+import PageMeta from '../components/PageMeta';
+
 
 export default function Services() {
   const navigate = useNavigate();
@@ -40,6 +41,8 @@ export default function Services() {
   ];
 
   return (
+    <>
+    <PageMeta title="خدماتنا" description="خدمات سماك العقارية — تطوير عقاري، إدارة أملاك، تشطيبات فاخرة، ومنازل ذكية في مكة المكرمة." />
     <div className="bg-slate-50 min-h-screen animate-fadeIn pb-20 pt-32">
       {/* رأس الصفحة */}
       <div className="container mx-auto px-6 mb-16 text-center">
@@ -78,5 +81,6 @@ export default function Services() {
         </div>
       </div>
     </div>
+    </>
   );
 }

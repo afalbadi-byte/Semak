@@ -1,15 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageMeta from '../components/PageMeta';
+import { API_URL } from '../utils/helpers';
 import { X, HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ZoomIn, ChevronDown, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
-import { getImg } from '../utils/helpers';
+
 
 export default function Projects() {
   const navigate = useNavigate();
   const [selectedFloor, setSelectedFloor] = useState("first");
   const [expandedUnit, setExpandedUnit] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
+  const [soldUnits, setSoldUnits] = useState({});
+
+  useEffect(() => {
+    fetch(`${API_URL}?action=get_units_status`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setSoldUnits(d.data); })
+      .catch(() => {});
+  }, []);
 
   const toggleUnit = (id) => setExpandedUnit(expandedUnit === id ? null : id);
+
+  const isSoldUnit = (unitId) => !!soldUnits[unitId.toUpperCase()];
 
   const floors = [
     { id: "ground", label: "الدور الأرضي" },
@@ -19,7 +31,7 @@ export default function Projects() {
     { id: "fourth", label: "الدور الرابع" }
   ];
 
-  const unitsData = {
+  const unitsBase = {
     first: [
       { id: "sm-a01", title: "وحدة SM-A01", price: "720,000 ريال", badge: "واجهتين", isSpecial: true },
       { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
@@ -29,23 +41,32 @@ export default function Projects() {
       { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
     ],
     third: [
-      { id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين", isSpecial: true, isSold: true },
+      { id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين", isSpecial: true },
       { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
     ],
     fourth: [
-      { id: "sm-a07", title: "وحدة SM-A07", price: "1,100,000 ريال", badge: "فيلا روف فاخرة", isSpecial: true, isSold: true, roof: true }
+      { id: "sm-a07", title: "وحدة SM-A07", price: "1,100,000 ريال", badge: "فيلا روف فاخرة", isSpecial: true, roof: true }
     ]
   };
 
+  const unitsData = Object.fromEntries(
+    Object.entries(unitsBase).map(([floor, units]) => [
+      floor,
+      units.map(u => ({ ...u, isSold: isSoldUnit(u.id) }))
+    ])
+  );
+
   const images = {
-    ground: getImg("1WCjS9UTiXUV8oSWjbsZgbHQuWFhU-F31"),
-    first: getImg("1_SOkisFdEjokohC6DwFjJAakT0DxJild"),
-    second: getImg("1o0NXJ_iC-LhrvDIC4i_uOy0WSfJfsAG1"),
-    third: getImg("1MZuAEed1Vdn70eknds87xSInFEPINogE"),
-    fourth: getImg("1dMNgoNkLMjmjOeHA1R98ApKOX8yFK1y1")
+    ground: "/images/floor-ground.jpg",
+    first: "/images/floor-1.jpg",
+    second: "/images/floor-2.jpg",
+    third: "/images/floor-3.jpg",
+    fourth: "/images/floor-4.jpg"
   };
 
   return (
+    <>
+    <PageMeta title="مشاريعنا" description="استكشف مشروع سماك البوابة 1 — 7 وحدات سكنية حصرية بمواصفات فاخرة في حي البوابة بمكة المكرمة." />
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen animate-fadeIn">
       {previewImg && (
         <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4 cursor-pointer" onClick={() => setPreviewImg(null)}>
@@ -86,7 +107,7 @@ export default function Projects() {
         </div>
       </div>
 
-      <div className="relative overflow-hidden bg-cover bg-center py-20 mb-24" style={{ backgroundImage: `url('${getImg("1ahnVUVfBEL8KIY2y1YYJAoupt2WvHRV6")}')` }}>
+      <div className="relative overflow-hidden bg-cover bg-center py-20 mb-24" style={{ backgroundImage: `url('/images/project-aerial.jpg')` }}>
         <div className="absolute inset-0 bg-[#1a365d]/90" />
         <div className="container mx-auto px-6 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-2 items-center gap-16">
@@ -247,7 +268,7 @@ export default function Projects() {
           <div className="order-1 lg:order-2 h-full min-h-[400px]">
             <div className="relative group cursor-pointer overflow-hidden rounded-3xl shadow-lg border-4 border-white h-full bg-slate-200 flex items-center justify-center" onClick={() => setPreviewImg(images[selectedFloor])}>
               <div className="absolute top-4 left-4 z-20 w-16 h-16 md:w-24 md:h-24 opacity-50 pointer-events-none mix-blend-multiply">
-                <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="w-full h-full object-contain" alt="Logo" />
+                <img src="/images/logo-main.png" className="w-full h-full object-contain" alt="Logo" />
               </div>
               <img src={images[selectedFloor]} className="w-full h-full object-cover transform group-hover:scale-105 transition duration-700" alt="مخطط" />
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-3 rounded-full text-sm font-bold text-[#1a365d] shadow-lg flex items-center gap-2 transition-transform hover:scale-105">
@@ -258,5 +279,6 @@ export default function Projects() {
         </div>
       </div>
     </div>
+    </>
   );
 }

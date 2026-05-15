@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { User, Lock, RefreshCw, ArrowRight } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
-const getImg = (id, sz = "w1500") => `https://drive.google.com/thumbnail?id=${id}&sz=${sz}`;
 
 export default function AdminLogin({ setUser, showToast }) {
   const [email, setEmail] = useState("");
@@ -36,6 +35,7 @@ export default function AdminLogin({ setUser, showToast }) {
 
         if (rememberMe) {
           localStorage.setItem("semak_admin_email", email);
+          // لا نخزن كلمة السر أبداً — نكتفي بالإيميل
         } else {
           localStorage.removeItem("semak_admin_email");
         }
@@ -65,10 +65,10 @@ export default function AdminLogin({ setUser, showToast }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2069&auto=format&fit=crop')" }}>
+    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('/images/admin-login-bg.jpg')" }}>
       <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
       <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10 border border-white/20">
-        <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="سماك العقارية" className="h-16 mx-auto mb-4 object-contain" />
+        <img src="/images/logo-main.png" alt="سماك العقارية" className="h-16 mx-auto mb-4 object-contain" />
         <h2 className="text-2xl font-black text-[#1a365d]">بوابة الموظفين</h2>
         <p className="text-slate-500 text-sm mt-2 mb-8">تسجيل الدخول للوصول للأدوات الإدارية والفنية</p>
         <form onSubmit={handleLogin} className="space-y-6 text-right">

@@ -1,15 +1,18 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getImg } from '../utils/helpers';
+import PageMeta from '../components/PageMeta';
+
 
 export default function Home() {
   const navigate = useNavigate();
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-cover bg-center py-32 animate-fadeIn" style={{ backgroundImage: `url('${getImg("1P0nERTU6SQiWHLf-53bpp1Jsjf120Kq4")}')` }}>
+    <>
+    <PageMeta title="الرئيسية" description="سماك العقارية — وحدات سكنية راقية في قلب مكة المكرمة. 7 وحدات حصرية، تصميم ذكي، تملك حر." />
+    <div className="relative min-h-screen flex items-center justify-center bg-cover bg-center py-32 animate-fadeIn" style={{ backgroundImage: `url('/images/hero-bg.jpg')` }}>
       <div className="absolute inset-0 hero-gradient" />
       <div className="container mx-auto px-4 md:px-6 relative z-10 flex flex-col items-center justify-center mt-10">
-        <img src={getImg("1-d_n0rD8H8CZf_y6l1suQlcWThhmkBmb")} alt="شعار" className="h-20 md:h-32 mb-8 object-contain brightness-0 invert drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] opacity-95 hover:opacity-100 transition duration-500 hover:scale-105 transform" />
+        <img src="/images/logo-light.png" alt="شعار" className="h-20 md:h-32 mb-8 object-contain brightness-0 invert drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] opacity-95 hover:opacity-100 transition duration-500 hover:scale-105 transform" />
         
         <div className="bg-slate-900/80 backdrop-blur-xl rounded-[3rem] border border-white/10 shadow-2xl p-8 md:p-12 max-w-4xl w-full text-center relative overflow-hidden">
           <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-[#c5a059]/20 rounded-full blur-3xl pointer-events-none" />
@@ -58,5 +61,6 @@ export default function Home() {
         </div>
       </div>
     </div>
+    </>
   );
 }

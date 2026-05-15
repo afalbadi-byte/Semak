@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { FilePenLine, Printer, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
-import { API_URL, getImg } from '../../utils/helpers';
+import { API_URL } from '../../utils/helpers';
 import { useReactToPrint } from 'react-to-print'; // 🔥 المكتبة السحرية للطباعة
 
 export default function LetterGenerator() {
@@ -303,7 +304,7 @@ export default function LetterGenerator() {
               <div className="h-full bg-[#c5a059] w-1/4"></div>
             </div>
             <div className="px-12 pt-10 pb-6 flex justify-between items-center relative border-b border-slate-100">
-              <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="شعار" className="h-28 object-contain drop-shadow-sm z-10" />
+              <img src={"/images/logo-main.png"} alt="شعار" className="h-28 object-contain drop-shadow-sm z-10" />
               <div className="text-left border-l-4 border-[#c5a059] pl-6 z-10">
                 <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
                 <p className="text-[#c5a059] font-bold text-sm mt-2 tracking-wider">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
@@ -313,7 +314,7 @@ export default function LetterGenerator() {
             </div>
             
             <div className="font-amiri text-lg relative z-10 flex-grow pt-8 px-12 pb-12 w-full break-words overflow-hidden">
-              <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
+              <img src={"/images/logo-main.png"} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
               
               <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
                 <div className="flex items-center gap-2 text-sm font-cairo">
@@ -339,13 +340,13 @@ export default function LetterGenerator() {
                 </div>
               )}
               
-              <div className="text-justify leading-[2.4] flex-grow quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: data.body }}></div>
+              <div className="text-justify leading-[2.4] flex-grow quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.body) }}></div>
               
               <div className="mt-24 mb-4 flex justify-between items-end px-8 relative min-h-[160px]">
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent rounded-b-3xl -z-10"></div>
                 <div className="relative w-48 flex justify-center">
                   {data.showStamp && dbUser?.role === "admin" && (
-                    <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0 drop-shadow-md" alt="ختم" />
+                    <img src={"/images/stamp.png"} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0 drop-shadow-md" alt="ختم" />
                   )}
                 </div>
                 <div className="text-center font-cairo relative z-10 pb-2">
@@ -389,7 +390,7 @@ export default function LetterGenerator() {
                     <div className="h-full bg-[#c5a059] w-1/4"></div>
                   </div>
                   <div className="px-12 pt-8 pb-6 flex justify-between items-center relative border-b border-slate-100 bg-white">
-                    <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} alt="شعار" className="h-28 object-contain" />
+                    <img src={"/images/logo-main.png"} alt="شعار" className="h-28 object-contain" />
                     <div className="text-left border-l-4 border-[#c5a059] pl-6 z-10">
                       <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
                       <p className="text-[#c5a059] font-bold text-sm mt-2 tracking-wider">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
@@ -404,7 +405,7 @@ export default function LetterGenerator() {
               <tr>
                 <td>
                   <div className="font-amiri text-lg relative z-10 px-12 pb-4 w-full break-words overflow-hidden">
-                    <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
+                    <img src={"/images/logo-main.png"} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
                     
                     <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
                       <div className="flex items-center gap-2 text-sm font-cairo">
@@ -429,12 +430,12 @@ export default function LetterGenerator() {
                       </div>
                     )}
                     
-                    <div className="text-justify leading-[2.4] quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: data.body }}></div>
+                    <div className="text-justify leading-[2.4] quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.body) }}></div>
                     
                     <div className="mt-24 mb-4 flex justify-between items-end px-8 relative min-h-[160px]" style={{ pageBreakInside: 'avoid' }}>
                       <div className="relative w-48 flex justify-center">
                         {data.showStamp && dbUser?.role === "admin" && (
-                          <img src={getImg("1lCYGae5VrEMVh8OEKHHBWTxLPJH7t0u5")} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0" alt="ختم" />
+                          <img src={"/images/stamp.png"} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0" alt="ختم" />
                         )}
                       </div>
                       <div className="text-center font-cairo relative z-10 pb-2">

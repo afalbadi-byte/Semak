@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wrench, RefreshCw, MessageCircle } from 'lucide-react';
+import { Wrench, RefreshCw, MessageCircle, Search } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 const TIME_SLOTS = ["08:00 ص - 10:00 ص", "10:00 ص - 12:00 م", "01:00 م - 03:00 م", "04:00 م - 06:00 م"];
@@ -8,6 +8,7 @@ export default function MaintenanceManage({ showToast, activeUser }) {
     const [tickets, setTickets] = useState([]);
     const [techList, setTechList] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const columns = [ 
         { id: "pending", title: "طلبات ومواعيد جديدة", color: "border-slate-300", bg: "bg-slate-100", text: "text-slate-700", statuses: ["قيد الانتظار", undefined] }, 
@@ -160,15 +161,37 @@ export default function MaintenanceManage({ showToast, activeUser }) {
         </div> 
     );
 
+    const q = searchQuery.trim().toLowerCase();
+    const filteredTickets = q
+        ? tickets.filter(t =>
+            t.name?.toLowerCase().includes(q) ||
+            t.unit?.toLowerCase().includes(q) ||
+            t.phone?.includes(q) ||
+            t.type?.includes(searchQuery)
+          )
+        : tickets;
+
     return (
         <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 p-6 md:p-8 animate-fadeIn">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-100 pb-6 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-slate-100 pb-6 gap-4">
                 <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3">
                     <Wrench className="text-purple-600" size={28}/> إدارة طلبات الصيانة
                 </h3>
-                <button onClick={loadMaintenance} className="bg-slate-50 text-slate-500 px-4 py-2 rounded-xl font-bold hover:bg-purple-50 hover:text-purple-600 transition flex items-center gap-2 border border-slate-200">
-                    <RefreshCw size={18} className={loading ? "animate-spin" : ""} /> تحديث الطلبات
-                </button>
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="text"
+                            placeholder="بحث بالاسم أو الوحدة..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl py-2 pr-9 pl-4 text-sm font-bold outline-none focus:border-purple-400 transition w-56"
+                        />
+                    </div>
+                    <button onClick={loadMaintenance} className="bg-slate-50 text-slate-500 px-4 py-2 rounded-xl font-bold hover:bg-purple-50 hover:text-purple-600 transition flex items-center gap-2 border border-slate-200">
+                        <RefreshCw size={18} className={loading ? "animate-spin" : ""} /> تحديث
+                    </button>
+                </div>
             </div>
 
             {loading ? (
@@ -178,13 +201,13 @@ export default function MaintenanceManage({ showToast, activeUser }) {
                     {columns.map(col => (
                         <div key={col.id} className={`bg-slate-50 p-4 md:p-5 rounded-3xl border-2 ${col.color} flex flex-col h-full shadow-inner`}>
                             <h4 className={`font-black text-center mb-5 text-sm md:text-base ${col.text}`}>
-                                {col.title} ({tickets.filter(t => col.statuses.includes(t.status)).length})
+                                {col.title} ({filteredTickets.filter(t => col.statuses.includes(t.status)).length})
                             </h4>
                             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar min-h-[300px]">
-                                {tickets.filter(t => col.statuses.includes(t.status)).length === 0 ? (
+                                {filteredTickets.filter(t => col.statuses.includes(t.status)).length === 0 ? (
                                     <div className="text-center text-slate-400 text-xs font-bold py-16 bg-white rounded-2xl border border-slate-100 border-dashed">لا توجد طلبات هنا</div> 
                                 ) : (
-                                    tickets.filter(t => col.statuses.includes(t.status)).map(renderTicketCard)
+                                    filteredTickets.filter(t => col.statuses.includes(t.status)).map(renderTicketCard)
                                 )}
                             </div>
                         </div>

@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AppProvider, AppContext } from './context/AppContext';
 import { CircleCheckBig } from 'lucide-react';
 import Services from './pages/Services'; // 🔥 إضافة
-import { getImg } from './utils/helpers'; // 🔥 استدعاء دالة جلب الصور لتعيين الشعار
+
 
 import UnitHandover from './pages/admin/UnitHandover';
 
@@ -62,7 +62,7 @@ const MainApp = () => {
       document.getElementsByTagName("head")[0].appendChild(icon);
     }
     // وضعنا معرّف الصورة الخاص بالشعار المصغر
-    icon.href = getImg("1CcCFvgasNW1MEZt65AY9ZD7FzdDvuNgJ", "w128");
+    icon.href = "/images/favicon.png";
   }, []);
 
   return (
