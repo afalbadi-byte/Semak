@@ -57,21 +57,21 @@ async function sendTemplate(to, templateId, lang, bodyVars = []) {
 
 // ─── صفحة التواصل ───────────────────────────────────────────
 
-// إشعار الإدارة بعميل جديد مهتم + تسجيل الحالة
+// إشعار الإدارة بعميل جديد — يفتح واتساب مباشرة (لا يحتاج قالب معتمد)
 export async function notifyAdmin({ id, name, phone, interest }) {
-  const body =
+  const msg =
     `🔔 *عميل جديد - سماك العقارية*\n\n` +
     `👤 الاسم: ${name}\n` +
     `📞 الجوال: ${phone}\n` +
     `🏠 الاهتمام: ${interest}\n\n` +
     `⏰ ${new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}`;
-  const res = await sendText(ADMIN_PHONE, body);
-  if (res?.ok) logWaSent(id, "lead");
-  return res;
+  logWaSent(id, "lead");
+  window.open(`https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(msg)}`, "_blank");
 }
 
-// رد ترحيبي للعميل (يتطلب قالب معتمد)
+// رد ترحيبي للعميل — يُفعَّل فقط بعد اعتماد القالب
 export async function replyToClient(clientPhone, clientName) {
+  if (!TEMPLATE_ID || TEMPLATE_ID === "semak_welcome") return; // قالب لم يُعتمد بعد
   return sendTemplate(normalizePhone(clientPhone), TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
 }
 
