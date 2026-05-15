@@ -57,16 +57,26 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name  "github-actions[bot]"
 
-          # احتفظ بالملفات المبنية في مجلد مؤقت
-          mkdir /tmp/deploy
-          cp -r dist/* /tmp/deploy/
+          # احتفظ بالملفات المبنية في مجلد مؤقت خارج مجلد العمل
+          mkdir -p /tmp/deploy
+          cp -r dist/. /tmp/deploy/
           cp api.php   /tmp/deploy/
 
-          # انتقل إلى فرع dist (أو أنشئه من البداية كـ orphan)
+          # أضف .gitignore للفرع يمنع تسرب node_modules أو .env
+          cat > /tmp/deploy/.gitignore << 'GITIGNORE'
+node_modules/
+.env*
+*.local
+GITIGNORE
+
+          # انتقل إلى فرع dist (أو أنشئه orphan إذا لم يكن موجوداً)
           git fetch origin dist 2>/dev/null && git checkout dist || git checkout --orphan dist
 
-          # امسح كل شيء واستبدله بالمخرجات الجديدة
+          # امسح كل شيء: الملفات المتتبعة + غير المتتبعة (node_modules وغيرها)
           git rm -rf . --quiet 2>/dev/null || true
+          git clean -fdx --quiet 2>/dev/null || true
+
+          # انسخ الملفات الجديدة فقط
           cp -r /tmp/deploy/. .
 
           git add -A
