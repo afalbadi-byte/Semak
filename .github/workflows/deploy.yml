@@ -1,37 +1,68 @@
-name: Deploy React App to Hostinger
+name: Build & Deploy to Hostinger
 
 on:
   push:
-    branches:
-      - main # تأكد إن هذا اسم الفرع حقك (أحياناً يكون master)
+    branches: [main]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🚚 Get latest code
+      # ── 1. سحب الكود ──────────────────────────────────────────
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js
+      # ── 2. Node ───────────────────────────────────────────────
+      - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - name: 📦 Install Dependencies
-        run: npm install
+      # ── 3. تثبيت الحزم ───────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
 
-      - name: 🏗️ Build Project
+      # ── 4. متغيرات البيئة من GitHub Secrets ──────────────────
+      #   (بدون هذه الخطوة الـ Mottasl token ما يدخل في البيلد)
+      - name: Create .env.local
+        run: |
+          echo "VITE_MOTTASL_API_KEY=${{ secrets.VITE_MOTTASL_API_KEY }}"       >> .env.local
+          echo "VITE_WA_ADMIN_PHONE=${{ secrets.VITE_WA_ADMIN_PHONE }}"         >> .env.local
+          echo "VITE_WA_CLIENT_TEMPLATE_ID=${{ secrets.VITE_WA_CLIENT_TEMPLATE_ID }}" >> .env.local
+          echo "VITE_WA_CLIENT_TEMPLATE_LANG=${{ secrets.VITE_WA_CLIENT_TEMPLATE_LANG }}" >> .env.local
+          echo "VITE_WA_MAINT_TEMPLATE_ID=${{ secrets.VITE_WA_MAINT_TEMPLATE_ID }}"   >> .env.local
+          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}"                       >> .env.local
+
+      # ── 5. البناء ─────────────────────────────────────────────
+      - name: Build
         run: npm run build
 
-      - name: 🚀 Deploy to Hostinger
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      # ── 6. رفع dist/ → public_html/ ──────────────────────────
+      - name: Deploy dist to Hostinger
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }} # 👈 تأكد في الإعدادات أن هذا هو عنوان الـ IP وليس الدومين
+          server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          port: 21 # 👈 تحديد المنفذ بشكل صريح
-          protocol: ftp # 👈 إجبار الأداة على استخدام FTP العادي لتجاوز تعليق التشفير في Hostinger
-          local-dir: dist/
-          server-dir: ./ # 👈 ملاحظة: إذا كان حساب الـ FTP يفتح على الجذر الرئيسي للاستضافة وليس داخل الموقع، قد تحتاج لتغييرها إلى public_html/
-          dangerous-clean-slate: false # هذي تمنعه يحذف ملف api.php حقك
+          port: 21
+          protocol: ftp
+          local-dir: ./dist/
+          server-dir: /public_html/
+          dangerous-clean-slate: false
+
+      # ── 7. رفع api.php وحده ───────────────────────────────────
+      - name: Deploy api.php to Hostinger
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          protocol: ftp
+          local-dir: ./
+          server-dir: /public_html/
+          include: |
+            api.php
+          dangerous-clean-slate: false
