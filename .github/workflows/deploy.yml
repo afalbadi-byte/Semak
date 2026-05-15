@@ -3,6 +3,7 @@ name: Build & Deploy to Hostinger
 on:
   push:
     branches: [main]
+  workflow_dispatch:   # يسمح بالتشغيل اليدوي من GitHub
 
 # منع حلقة لا نهاية لها — الـ workflow لا يشتغل على كوميتات [skip ci]
 concurrency:
