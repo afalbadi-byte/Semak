@@ -63,11 +63,7 @@ jobs:
           cp api.php   /tmp/deploy/
 
           # أضف .gitignore للفرع يمنع تسرب node_modules أو .env
-          cat > /tmp/deploy/.gitignore << 'GITIGNORE'
-node_modules/
-.env*
-*.local
-GITIGNORE
+          printf 'node_modules/\n.env*\n*.local\n' > /tmp/deploy/.gitignore
 
           # انتقل إلى فرع dist (أو أنشئه orphan إذا لم يكن موجوداً)
           git fetch origin dist 2>/dev/null && git checkout dist || git checkout --orphan dist
