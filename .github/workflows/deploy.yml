@@ -4,14 +4,23 @@ on:
   push:
     branches: [main]
 
+# منع حلقة لا نهاية لها — الـ workflow لا يشتغل على كوميتات [skip ci]
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # لازم عشان نقدر نكتب للـ dist branch
 
     steps:
       # ── 1. سحب الكود ──────────────────────────────────────────
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # نحتاج كل التاريخ عشان ننشئ dist branch
 
       # ── 2. Node ───────────────────────────────────────────────
       - name: Setup Node 20
@@ -25,44 +34,42 @@ jobs:
         run: npm ci
 
       # ── 4. متغيرات البيئة من GitHub Secrets ──────────────────
-      #   (بدون هذه الخطوة الـ Mottasl token ما يدخل في البيلد)
       - name: Create .env.local
         run: |
-          echo "VITE_MOTTASL_API_KEY=${{ secrets.VITE_MOTTASL_API_KEY }}"       >> .env.local
-          echo "VITE_WA_ADMIN_PHONE=${{ secrets.VITE_WA_ADMIN_PHONE }}"         >> .env.local
+          echo "VITE_MOTTASL_API_KEY=${{ secrets.VITE_MOTTASL_API_KEY }}"             >> .env.local
+          echo "VITE_WA_ADMIN_PHONE=${{ secrets.VITE_WA_ADMIN_PHONE }}"               >> .env.local
           echo "VITE_WA_CLIENT_TEMPLATE_ID=${{ secrets.VITE_WA_CLIENT_TEMPLATE_ID }}" >> .env.local
           echo "VITE_WA_CLIENT_TEMPLATE_LANG=${{ secrets.VITE_WA_CLIENT_TEMPLATE_LANG }}" >> .env.local
           echo "VITE_WA_MAINT_TEMPLATE_ID=${{ secrets.VITE_WA_MAINT_TEMPLATE_ID }}"   >> .env.local
-          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}"                       >> .env.local
+          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}"                             >> .env.local
 
       # ── 5. البناء ─────────────────────────────────────────────
       - name: Build
         run: npm run build
 
-      # ── 6. رفع dist/ → public_html/ ──────────────────────────
-      - name: Deploy dist to Hostinger
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 21
-          protocol: ftp
-          local-dir: ./dist/
-          server-dir: /public_html/
-          dangerous-clean-slate: false
+      # ── 6. نشر المخرجات إلى فرع dist ─────────────────────────
+      #   الفرع dist يحتوي فقط على: مخرجات dist/ + api.php
+      #   هوستنجر يسحب هذا الفرع مباشرة إلى public_html/
+      - name: Push built files to dist branch
+        run: |
+          # إعداد git
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
 
-      # ── 7. رفع api.php وحده ───────────────────────────────────
-      - name: Deploy api.php to Hostinger
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 21
-          protocol: ftp
-          local-dir: ./
-          server-dir: /public_html/
-          include: |
-            api.php
-          dangerous-clean-slate: false
+          # احتفظ بالملفات المبنية في مجلد مؤقت
+          mkdir /tmp/deploy
+          cp -r dist/* /tmp/deploy/
+          cp api.php   /tmp/deploy/
+
+          # انتقل إلى فرع dist (أو أنشئه من البداية كـ orphan)
+          git fetch origin dist 2>/dev/null && git checkout dist || git checkout --orphan dist
+
+          # امسح كل شيء واستبدله بالمخرجات الجديدة
+          git rm -rf . --quiet 2>/dev/null || true
+          cp -r /tmp/deploy/. .
+
+          git add -A
+          git diff --cached --quiet && echo "Nothing changed, skip push." && exit 0
+
+          git commit -m "deploy: $(date -u '+%Y-%m-%d %H:%M UTC') [skip ci]"
+          git push origin dist --force
