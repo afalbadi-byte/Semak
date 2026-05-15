@@ -13,6 +13,7 @@ import MaintenanceManage from './MaintenanceManage';
 import LeadsManage from './LeadsManage';
 import FeasibilityCalc from './FeasibilityCalc';
 import UnitsOverview from './UnitsOverview';
+import ProjectsManage from './ProjectsManage';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -90,6 +91,7 @@ export default function Dashboard({ onLogout }) {
     // القائمة الجانبية الشاملة لجميع أدوات النظام (تم إضافة الحاسبة هنا 🔥)
     const ALL_MENU_ITEMS = [
         { id: 'overview',   title: 'الرئيسية والإحصائيات',  icon: LayoutDashboard, permKey: 'all' },
+        { id: 'projects',   title: 'إدارة المشاريع والوحدات', icon: Building,        permKey: 'admin' },
         { id: 'units',      title: 'بيانات الوحدات',         icon: Building2,       permKey: 'admin' },
         { id: 'feasibility',title: 'حاسبة الجدوى والعروض',  icon: TrendingUp,      permKey: 'admin' },
         { id: 'inspection', title: 'فحص وتسليم الوحدات', icon: ClipboardCheck, permKey: 'inspection' },
@@ -260,6 +262,10 @@ export default function Dashboard({ onLogout }) {
 
                             </div>
                         </div>
+                    )}
+
+                    {activeTab === 'projects' && hasPermission('admin') && (
+                        <ProjectsManage />
                     )}
 
                     {activeTab === 'units' && hasPermission('admin') && (
