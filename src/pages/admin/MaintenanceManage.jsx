@@ -121,8 +121,20 @@ export default function MaintenanceManage({ showToast, activeUser }) {
             <div className="flex justify-between items-start mb-3">
                 <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
                 <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
-            </div> 
-            
+            </div>
+
+            <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-xs font-black shrink-0">
+                    {ticket.name ? ticket.name.charAt(0) : "؟"}
+                </div>
+                <div>
+                    <p className="text-xs font-black text-slate-700">{ticket.name || "غير مسجل"}</p>
+                    {ticket.phone && (
+                        <a href={`tel:${ticket.phone}`} className="text-[10px] text-blue-500 font-bold" dir="ltr">{ticket.phone}</a>
+                    )}
+                </div>
+            </div>
+
             <p className="text-xs text-slate-500 mb-3 line-clamp-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100 font-medium leading-relaxed">{ticket.desc}</p> 
             
             <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-3 mt-auto"> 

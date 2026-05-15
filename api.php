@@ -408,9 +408,8 @@ switch ($action) {
     case 'update_maintenance':
         $ticket_id = (int)$input_data['ticket_id'];
         $value     = $conn->real_escape_string($input_data['new_value']);
-        // whitelist للحقول المسموح بتحديثها
-        $allowed = ['status', 'technician', 'descrip', 'otp'];
-        $field   = in_array($input_data['field_name'] ?? '', $allowed) ? $input_data['field_name'] : '';
+        $allowed   = ['status', 'technician', 'descrip', 'otp'];
+        $field     = in_array($input_data['field_name'] ?? '', $allowed) ? $input_data['field_name'] : '';
         if (!$field) { echo json_encode(["success" => false, "message" => "حقل غير مسموح"]); break; }
         $sql = "UPDATE maintenance SET `$field`='$value'";
         if (isset($input_data['otp'])) {
@@ -419,6 +418,48 @@ switch ($action) {
         }
         $sql .= " WHERE id=$ticket_id";
         $conn->query($sql);
+
+        // إرسال إشعار واتساب للعميل عند تغيير الحالة فقط
+        if ($field === 'status') {
+            $t = $conn->query("SELECT * FROM maintenance WHERE id=$ticket_id");
+            if ($t && $row = $t->fetch_assoc()) {
+                $client_phone = preg_replace('/\D/', '', $row['phone']);
+                $client_phone = ltrim($client_phone, '0');
+                if (substr($client_phone, 0, 3) !== '966') $client_phone = '966' . $client_phone;
+                if (strlen($client_phone) < 12) break; // رقم غير صالح
+                $tech  = (!empty($row['technician']) && $row['technician'] !== 'لم يتم التعيين') ? $row['technician'] : 'سيتم التحديد';
+                $sched = !empty($row['date']) ? $row['date'] : 'سيتم التأكيد';
+                $otp_val = !empty($row['otp']) ? $row['otp'] : '—';
+                $wa_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
+                $wa_payload = json_encode([
+                    "to"       => $client_phone,
+                    "type"     => "template",
+                    "template" => [
+                        "template_id" => "maintenance_update",
+                        "language"    => "ar",
+                        "argument"    => ["BODY" => [
+                            (string)$row['id'],
+                            $row['unit'],
+                            $row['type'],
+                            $value,
+                            $tech,
+                            $sched,
+                            $otp_val
+                        ]]
+                    ]
+                ]);
+                $ch = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_POST           => true,
+                    CURLOPT_POSTFIELDS     => $wa_payload,
+                    CURLOPT_HTTPHEADER     => ["Content-Type: application/json", "Authorization: Bearer $wa_token"],
+                    CURLOPT_TIMEOUT        => 5,
+                ]);
+                curl_exec($ch);
+                curl_close($ch);
+            }
+        }
         echo json_encode(["success" => true]);
         break;
 
