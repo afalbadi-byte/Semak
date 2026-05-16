@@ -414,16 +414,21 @@ switch ($action) {
                         "to" => $client_phone, "type" => "template",
                         "template" => [
                             "template_id" => "semak_maintenance", "language" => "ar",
-                            "components"  => [["type" => "body", "parameters" => [
-                                ["type" => "text", "text" => $name],           // {{1}} الاسم
-                                ["type" => "text", "text" => (string)$new_id], // {{2}} رقم الطلب
-                                ["type" => "text", "text" => $unit],           // {{3}} الوحدة
-                                ["type" => "text", "text" => $type],           // {{4}} نوع العطل
-                                ["type" => "text", "text" => "قيد الانتظار"], // {{5}} الحالة
-                                ["type" => "text", "text" => "سيتم التحديد"], // {{6}} الفني
-                                ["type" => "text", "text" => "سيتم التأكيد"], // {{7}} الموعد
-                                ["type" => "text", "text" => "—"],             // {{8}} رمز الإغلاق
-                            ]]]
+                            "components"  => [
+                                ["type" => "header", "parameters" => [
+                                    ["type" => "image", "image" => ["link" => "https://semak.sa/images/wa-maintenance-cover.png"]]
+                                ]],
+                                ["type" => "body", "parameters" => [
+                                    ["type" => "text", "text" => $name],           // {{1}} الاسم
+                                    ["type" => "text", "text" => (string)$new_id], // {{2}} رقم الطلب
+                                    ["type" => "text", "text" => $unit],           // {{3}} الوحدة
+                                    ["type" => "text", "text" => $type],           // {{4}} نوع العطل
+                                    ["type" => "text", "text" => "قيد الانتظار"], // {{5}} الحالة
+                                    ["type" => "text", "text" => "سيتم التحديد"], // {{6}} الفني
+                                    ["type" => "text", "text" => "سيتم التأكيد"], // {{7}} الموعد
+                                    ["type" => "text", "text" => "—"],             // {{8}} رمز الإغلاق
+                                ]]
+                            ]
                         ]
                     ]);
                     $ch2 = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
@@ -469,16 +474,21 @@ switch ($action) {
                     "template" => [
                         "template_id" => "semak_maintenance",
                         "language"    => "ar",
-                        "components"  => [["type" => "body", "parameters" => [
-                            ["type" => "text", "text" => $row['name']],        // {{1}} الاسم
-                            ["type" => "text", "text" => (string)$row['id']],  // {{2}} رقم الطلب
-                            ["type" => "text", "text" => $row['unit']],        // {{3}} الوحدة
-                            ["type" => "text", "text" => $row['type']],        // {{4}} نوع العطل
-                            ["type" => "text", "text" => $value],              // {{5}} الحالة
-                            ["type" => "text", "text" => $tech],               // {{6}} الفني
-                            ["type" => "text", "text" => $sched],              // {{7}} الموعد
-                            ["type" => "text", "text" => $otp_val],            // {{8}} رمز الإغلاق
-                        ]]]
+                        "components"  => [
+                            ["type" => "header", "parameters" => [
+                                ["type" => "image", "image" => ["link" => "https://semak.sa/images/wa-maintenance-cover.png"]]
+                            ]],
+                            ["type" => "body", "parameters" => [
+                                ["type" => "text", "text" => $row['name']],        // {{1}} الاسم
+                                ["type" => "text", "text" => (string)$row['id']],  // {{2}} رقم الطلب
+                                ["type" => "text", "text" => $row['unit']],        // {{3}} الوحدة
+                                ["type" => "text", "text" => $row['type']],        // {{4}} نوع العطل
+                                ["type" => "text", "text" => $value],              // {{5}} الحالة
+                                ["type" => "text", "text" => $tech],               // {{6}} الفني
+                                ["type" => "text", "text" => $sched],              // {{7}} الموعد
+                                ["type" => "text", "text" => $otp_val],            // {{8}} رمز الإغلاق
+                            ]]
+                        ]
                     ]
                 ]);
                 $ch = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
