@@ -49,7 +49,12 @@ async function sendTemplate(to, templateId, lang, bodyVars = []) {
       template: {
         template_id: templateId,
         language: lang,
-        ...(bodyVars.length > 0 && { argument: { BODY: bodyVars } }),
+        ...(bodyVars.length > 0 && {
+          components: [{
+            type: "body",
+            parameters: bodyVars.map(v => ({ type: "text", text: String(v) })),
+          }],
+        }),
       },
     }),
   });
