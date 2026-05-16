@@ -32,6 +32,16 @@
       <feGaussianBlur stdDeviation="10" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
+    <filter id="logoFilter" color-interpolation-filters="sRGB">
+      <!-- رفع السطوع وإضافة ظل ذهبي -->
+      <feComponentTransfer>
+        <feFuncR type="linear" slope="1.4" intercept="0.05"/>
+        <feFuncG type="linear" slope="1.2" intercept="0.04"/>
+        <feFuncB type="linear" slope="0.7" intercept="0"/>
+      </feComponentTransfer>
+      <feGaussianBlur stdDeviation="1.5" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
     <filter id="textShadow">
       <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
     </filter>
@@ -75,16 +85,17 @@
   <circle cx="188" cy="209" r="130" fill="none" stroke="url(#goldH)" stroke-width="1.8" opacity="0.45"/>
   <!-- Gold ring inner -->
   <circle cx="188" cy="209" r="118" fill="none" stroke="#c5a059" stroke-width="0.8" opacity="0.25"/>
-  <!-- Logo background circle -->
-  <circle cx="188" cy="209" r="114" fill="#1a365d" opacity="0.6"/>
+  <!-- Logo background circle — فاتح قليلاً يساعد على إظهار الشعار -->
+  <circle cx="188" cy="209" r="114" fill="#ffffff" opacity="0.06"/>
 
-  <!-- LOGO IMAGE — big and centred -->
+  <!-- LOGO IMAGE — light version with golden filter -->
   <image
-    href="https://semak.sa/images/logo-main.png"
-    x="68" y="89"
-    width="240" height="240"
+    href="https://semak.sa/images/logo-light.png"
+    x="63" y="84"
+    width="250" height="250"
     preserveAspectRatio="xMidYMid meet"
-    filter="url(#softGlow)"
+    filter="url(#logoFilter)"
+    opacity="0.95"
   />
 
   <!-- ══ RIGHT: TEXT ══ -->
