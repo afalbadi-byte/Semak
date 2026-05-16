@@ -1,105 +1,156 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 800 418" width="800" height="418" font-family="'Segoe UI', Tahoma, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 800 418" width="800" height="418">
   <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&amp;display=swap');
+      text { font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; }
+    </style>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0f2340;stop-opacity:1" />
-      <stop offset="60%" style="stop-color:#1a365d;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1e3a6e;stop-opacity:1" />
+      <stop offset="0%"   style="stop-color:#0d1f3c"/>
+      <stop offset="55%"  style="stop-color:#1a365d"/>
+      <stop offset="100%" style="stop-color:#1c3461"/>
     </linearGradient>
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#c5a059;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#e8c97a;stop-opacity:1" />
+    <linearGradient id="goldH" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   style="stop-color:#b8922a"/>
+      <stop offset="50%"  style="stop-color:#e8c97a"/>
+      <stop offset="100%" style="stop-color:#c5a059"/>
     </linearGradient>
-    <linearGradient id="goldGradV" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#e8c97a;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#c5a059;stop-opacity:1" />
+    <linearGradient id="goldV" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   style="stop-color:#e8c97a"/>
+      <stop offset="100%" style="stop-color:#c5a059"/>
     </linearGradient>
-    <linearGradient id="circleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#c5a059;stop-opacity:0.18" />
-      <stop offset="100%" style="stop-color:#c5a059;stop-opacity:0.03" />
+    <linearGradient id="dividerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   style="stop-color:#c5a059;stop-opacity:0"/>
+      <stop offset="30%"  style="stop-color:#c5a059;stop-opacity:0.6"/>
+      <stop offset="70%"  style="stop-color:#c5a059;stop-opacity:0.6"/>
+      <stop offset="100%" style="stop-color:#c5a059;stop-opacity:0"/>
     </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.35"/>
-    </filter>
-    <filter id="logoGlow">
-      <feGaussianBlur stdDeviation="12" result="blur"/>
+    <radialGradient id="logoHalo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   style="stop-color:#c5a059;stop-opacity:0.12"/>
+      <stop offset="100%" style="stop-color:#c5a059;stop-opacity:0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <clipPath id="logoCircle">
-      <circle cx="200" cy="209" r="105"/>
+    <filter id="textShadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <clipPath id="logoClip">
+      <circle cx="188" cy="209" r="120"/>
     </clipPath>
   </defs>
 
-  <!-- Background -->
+  <!-- BG -->
   <rect width="800" height="418" fill="url(#bgGrad)"/>
 
-  <!-- Grid pattern -->
-  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" stroke-width="0.15" opacity="0.07"/>
+  <!-- Subtle grid -->
+  <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
+    <path d="M44 0L0 0 0 44" fill="none" stroke="#fff" stroke-width="0.12" opacity="0.06"/>
   </pattern>
   <rect width="800" height="418" fill="url(#grid)"/>
 
-  <!-- Decorative background circles (top right) -->
-  <circle cx="690" cy="-20" r="190" fill="url(#circleGrad)"/>
-  <circle cx="710" cy="10"  r="130" fill="none" stroke="#c5a059" stroke-width="0.6" opacity="0.18"/>
-  <circle cx="670" cy="-10" r="80"  fill="none" stroke="#c5a059" stroke-width="0.4" opacity="0.12"/>
+  <!-- Decorative arc top-right -->
+  <circle cx="700" cy="-10" r="200" fill="none" stroke="#c5a059" stroke-width="0.7" opacity="0.15"/>
+  <circle cx="700" cy="-10" r="150" fill="none" stroke="#c5a059" stroke-width="0.4" opacity="0.10"/>
+  <circle cx="700" cy="-10" r="240" fill="#c5a059" opacity="0.04"/>
 
-  <!-- Decorative background circles (bottom left) -->
-  <circle cx="110" cy="460" r="210" fill="url(#circleGrad)"/>
-  <circle cx="90"  cy="470" r="140" fill="none" stroke="#c5a059" stroke-width="0.6" opacity="0.18"/>
+  <!-- Decorative arc bottom-left -->
+  <circle cx="80"  cy="440" r="210" fill="none" stroke="#c5a059" stroke-width="0.7" opacity="0.12"/>
+  <circle cx="80"  cy="440" r="260" fill="#c5a059" opacity="0.03"/>
 
-  <!-- Gold top bar -->
-  <rect x="0" y="0" width="800" height="4" fill="url(#goldGrad)"/>
-  <!-- Gold bottom bar -->
-  <rect x="0" y="414" width="800" height="4" fill="url(#goldGrad)"/>
-  <!-- Left gold vertical bar -->
-  <rect x="58" y="36" width="3" height="346" fill="url(#goldGradV)" rx="2" opacity="0.55"/>
+  <!-- Gold top border -->
+  <rect x="0" y="0" width="800" height="5" fill="url(#goldH)"/>
+  <!-- Gold bottom border -->
+  <rect x="0" y="413" width="800" height="5" fill="url(#goldH)"/>
+  <!-- Left gold accent -->
+  <rect x="54" y="30" width="2.5" height="358" fill="url(#goldV)" rx="1.5" opacity="0.5"/>
 
-  <!-- Divider between logo and text -->
-  <line x1="350" y1="60" x2="350" y2="358" stroke="#c5a059" stroke-width="0.8" opacity="0.25"/>
+  <!-- Vertical divider (fades top/bottom) -->
+  <rect x="358" y="0" width="1" height="418" fill="url(#dividerGrad)"/>
 
-  <!-- ═══ LOGO SECTION (left) ═══ -->
-  <!-- Outer glow ring -->
-  <circle cx="200" cy="209" r="118" fill="#c5a059" opacity="0.06" filter="url(#logoGlow)"/>
-  <!-- Gold ring -->
-  <circle cx="200" cy="209" r="112" fill="none" stroke="url(#goldGrad)" stroke-width="2" opacity="0.5"/>
-  <!-- Inner subtle ring -->
-  <circle cx="200" cy="209" r="105" fill="#c5a059" opacity="0.05"/>
-  <!-- Second ring -->
-  <circle cx="200" cy="209" r="95" fill="none" stroke="#c5a059" stroke-width="0.8" opacity="0.2"/>
+  <!-- ══ LEFT: LOGO ══ -->
+  <!-- Halo behind logo -->
+  <circle cx="188" cy="209" r="148" fill="url(#logoHalo)"/>
+  <!-- Gold ring outer -->
+  <circle cx="188" cy="209" r="130" fill="none" stroke="url(#goldH)" stroke-width="1.8" opacity="0.45"/>
+  <!-- Gold ring inner -->
+  <circle cx="188" cy="209" r="118" fill="none" stroke="#c5a059" stroke-width="0.8" opacity="0.25"/>
+  <!-- Logo background circle -->
+  <circle cx="188" cy="209" r="114" fill="#1a365d" opacity="0.6"/>
 
-  <!-- Logo image — centered in circle -->
+  <!-- LOGO IMAGE — big and centred -->
   <image
     href="https://semak.sa/images/logo-main.png"
-    x="95" y="104"
-    width="210" height="210"
+    x="68" y="89"
+    width="240" height="240"
     preserveAspectRatio="xMidYMid meet"
-    filter="url(#logoGlow)"
+    filter="url(#softGlow)"
   />
 
-  <!-- ═══ TEXT SECTION (right) ═══ -->
+  <!-- ══ RIGHT: TEXT ══ -->
 
-  <!-- Company name -->
-  <text x="565" y="148" font-size="40" font-weight="bold" fill="url(#goldGrad)" text-anchor="middle" direction="rtl" filter="url(#shadow)">سماك العقارية</text>
+  <!-- "سماك العقارية" -->
+  <text
+    x="583" y="152"
+    font-size="46" font-weight="900"
+    fill="url(#goldH)"
+    text-anchor="middle"
+    direction="rtl"
+    filter="url(#textShadow)"
+  >سماك العقارية</text>
 
-  <!-- Gold divider with dots -->
-  <line x1="395" y1="168" x2="735" y2="168" stroke="url(#goldGrad)" stroke-width="1.2" opacity="0.5"/>
-  <circle cx="565" cy="168" r="3.5" fill="#c5a059"/>
-  <circle cx="395" cy="168" r="2" fill="#c5a059" opacity="0.5"/>
-  <circle cx="735" cy="168" r="2" fill="#c5a059" opacity="0.5"/>
+  <!-- Ornament line -->
+  <line x1="400" y1="172" x2="766" y2="172" stroke="url(#goldH)" stroke-width="1.2" opacity="0.45"/>
+  <circle cx="583" cy="172" r="3.5" fill="url(#goldH)"/>
+  <circle cx="400" cy="172" r="2"   fill="#c5a059" opacity="0.5"/>
+  <circle cx="766" cy="172" r="2"   fill="#c5a059" opacity="0.5"/>
 
-  <!-- Main service title -->
-  <text x="565" y="220" font-size="27" font-weight="bold" fill="#ffffff" text-anchor="middle" direction="rtl" opacity="0.95">خدمة الصيانة المنزلية</text>
+  <!-- "خدمة الصيانة المنزلية" -->
+  <text
+    x="583" y="222"
+    font-size="26" font-weight="700"
+    fill="#ffffff"
+    text-anchor="middle"
+    direction="rtl"
+    opacity="0.95"
+  >خدمة الصيانة المنزلية</text>
 
-  <!-- Subtitle -->
-  <text x="565" y="257" font-size="15" fill="#c5a059" text-anchor="middle" direction="rtl" opacity="0.85" font-weight="500">نحن هنا لحل مشاكلك بسرعة واحترافية</text>
+  <!-- "نحن هنا لحل مشاكلك بسرعة واحترافية" -->
+  <text
+    x="583" y="258"
+    font-size="14.5" font-weight="400"
+    fill="#c5a059"
+    text-anchor="middle"
+    direction="rtl"
+    opacity="0.80"
+  >نحن هنا لحل مشاكلك بسرعة واحترافية</text>
 
-  <!-- Tagline pill -->
-  <rect x="415" y="283" width="300" height="38" rx="19" fill="#c5a059" opacity="0.1"/>
-  <rect x="415" y="283" width="300" height="38" rx="19" fill="none" stroke="#c5a059" stroke-width="1" opacity="0.35"/>
-  <text x="565" y="308" font-size="14" fill="#e8c97a" text-anchor="middle" direction="rtl" font-weight="600">سقف يعلو برؤيتك ✨</text>
+  <!-- Full slogan pill -->
+  <rect x="398" y="282" width="370" height="42" rx="21" fill="#c5a059" opacity="0.09"/>
+  <rect x="398" y="282" width="370" height="42" rx="21" fill="none" stroke="url(#goldH)" stroke-width="1" opacity="0.4"/>
 
-  <!-- Gear decorative (subtle background right) -->
-  <g transform="translate(710, 340)" opacity="0.06" fill="#c5a059">
-    <path d="M 40 -7 L 35 -7 C 33 -12 31 -17 27 -22 L 31 -26 C 33 -28 33 -31 31 -33 L 26 -38 C 24 -40 21 -40 19 -38 L 15 -34 C 10 -37 5 -40 0 -41 L 0 -47 C 0 -49 -3 -52 -5 -52 L -12 -52 C -14 -52 -17 -49 -17 -47 L -17 -41 C -22 -40 -27 -37 -32 -34 L -36 -38 C -38 -40 -41 -40 -43 -38 L -48 -33 C -50 -31 -50 -28 -48 -26 L -44 -22 C -47 -17 -49 -12 -51 -7 L -57 -7 C -59 -7 -62 -4 -62 -2 L -62 5 C -62 7 -59 10 -57 10 L -51 10 C -49 15 -47 20 -44 25 L -48 29 C -50 31 -50 34 -48 36 L -43 41 C -41 43 -38 43 -36 41 L -32 37 C -27 40 -22 43 -17 44 L -17 50 C -17 52 -14 55 -12 55 L -5 55 C -3 55 0 52 0 50 L 0 44 C 5 43 10 40 15 37 L 19 41 C 21 43 24 43 26 41 L 31 36 C 33 34 33 31 31 29 L 27 25 C 31 20 33 15 35 10 L 40 10 C 42 10 45 7 45 5 L 45 -2 C 45 -4 42 -7 40 -7 Z M -9 20 C -21 20 -31 10 -31 -2 C -31 -14 -21 -24 -9 -24 C 3 -24 13 -14 13 -2 C 13 10 3 20 -9 20 Z"/>
+  <!-- Slogan line 1 -->
+  <text
+    x="583" y="301"
+    font-size="13" font-weight="600"
+    fill="#e8c97a"
+    text-anchor="middle"
+    direction="rtl"
+    opacity="0.9"
+  >سقف يعلو برؤيتك،</text>
+
+  <!-- Slogan line 2 -->
+  <text
+    x="583" y="318"
+    font-size="13" font-weight="600"
+    fill="#e8c97a"
+    text-anchor="middle"
+    direction="rtl"
+    opacity="0.9"
+  >ومسكن يحكي قصتك ✨</text>
+
+  <!-- Subtle gear decoration bottom-right -->
+  <g transform="translate(740,380)" opacity="0.05" fill="#c5a059">
+    <path d="M30-5L26-5C25-9 23-13 20-16L23-19C25-21 25-24 23-26L19-30C17-32 14-32 12-30L9-27C6-29 3-31 0-32L0-36C0-38-2-40-4-40L-9-40C-11-40-13-38-13-36L-13-32C-16-31-19-29-22-27L-25-30C-27-32-30-32-32-30L-36-26C-38-24-38-21-36-19L-33-16C-36-13-38-9-39-5L-43-5C-45-5-47-3-47-1L-47 4C-47 6-45 8-43 8L-39 8C-38 12-36 16-33 19L-36 22C-38 24-38 27-36 29L-32 33C-30 35-27 35-25 33L-22 30C-19 32-16 34-13 35L-13 39C-13 41-11 43-9 43L-4 43C-2 43 0 41 0 39L0 35C3 34 6 32 9 30L12 33C14 35 17 35 19 33L23 29C25 27 25 24 23 22L20 19C23 16 25 12 26 8L30 8C32 8 34 6 34 4L34-1C34-3 32-5 30-5ZM-7 14C-14 14-20 8-20 1C-20-6-14-12-7-12C0-12 6-6 6 1C6 8 0 14-7 14Z"/>
   </g>
 </svg>
