@@ -22,41 +22,47 @@ export default function Maintenance() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // 🔥 السحر المُعدّل: قراءة رابط الـ QR لمرة واحدة فقط وبدون تكرار الرسائل
+  // قراءة رابط الـ QR مرة واحدة فقط عند تغيّر الـ URL
   useEffect(() => {
     const query = new URLSearchParams(location.search);
     const unitFromQR = query.get('unit');
 
-    // 1. إذا كان العميل مسجل دخوله مسبقاً بنفس الوحدة، أوقف الكود فوراً لتجنب التكرار
-    if (customer && customer.unit === unitFromQR) {
+    if (!unitFromQR) {
+      // دخل الصفحة بدون QR — وجّهه لتسجيل الدخول إذا ما عنده جلسة
+      setQrLoading(false);
+      if (!customer) navigate("/customer-login");
+      return;
+    }
+
+    // إذا الوحدة نفسها محمّلة مسبقاً، لا تعيد الجلب
+    if (customer?.unit === unitFromQR) {
       setQrLoading(false);
       return;
     }
 
-    if (unitFromQR) {
-      // 2. إذا جاء العميل من مسح الـ QR ولم يسجل الدخول بعد
-      fetch(`${API_URL}?action=get_unit_owner&unit_code=${encodeURIComponent(unitFromQR.trim())}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            setCustomer(data.data);
-            // الرسالة ستظهر مرة واحدة فقط الآن
-            showToast("أهلاً بك", `مرحباً بك، تم التعرف على وحدتك (${unitFromQR})`, "success");
-          } else {
-            setCustomer(data.data);
-          }
-          setQrLoading(false);
-        })
-        .catch(() => {
-          setQrLoading(false);
-        });
-    } else {
-      // 3. إذا دخل الصفحة بشكل عادي بدون QR
-      setQrLoading(false);
-      if (!customer) navigate("/customer-login");
-    }
-    // 🔥 لاحظ هنا: أزلنا customer من القائمة حتى لا يعيد تشغيل نفسه
-  }, [location.search, customer?.unit]);
+    // جلب بيانات المالك من الـ QR
+    fetch(`${API_URL}?action=get_unit_owner&unit_code=${encodeURIComponent(unitFromQR.trim())}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setCustomer(data.data);
+          showToast("أهلاً بك", `مرحباً بك، تم التعرف على وحدتك (${unitFromQR})`, "success");
+        } else {
+          // وحدة بدون مالك — نضع بيانات أساسية حتى يقدر يرسل طلب
+          setCustomer(
+            data.data || { name: "زائر", phone: "", unit: unitFromQR }
+          );
+        }
+      })
+      .catch(() => {
+        // فشل الاتصال — نعرض الصفحة بدون بيانات مالك بدل ما نخفيها
+        setCustomer({ name: "زائر", phone: "", unit: unitFromQR });
+      })
+      .finally(() => {
+        setQrLoading(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   const loadHistory = async (unit) => {
     setHistoryLoading(true);
