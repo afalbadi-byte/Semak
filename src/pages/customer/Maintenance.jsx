@@ -17,6 +17,7 @@ export default function Maintenance() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [guestPhone, setGuestPhone] = useState(""); // جوال العميل غير المسجل
+  const [guestName,  setGuestName]  = useState(""); // اسم العميل غير المسجل
   const [ticket, setTicket] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -84,11 +85,13 @@ export default function Maintenance() {
     
     const desc = `الوقت المفضل: ${time}\nالتاريخ المفضل: ${date}\n\nالوصف:\n${e.target.desc.value}`;
     
-    // استخدام جوال المالك المسجل أو الجوال اللي أدخله العميل يدوياً
+    // استخدام بيانات المالك المسجل أو البيانات اللي أدخلها العميل يدوياً
+    const isRegistered = !!(customer.phone);
     const finalPhone = customer.phone || guestPhone;
+    const finalName  = isRegistered ? customer.name : (guestName || "غير مسجل");
 
     const payload = {
-      name: e.target.name.value,
+      name: finalName,
       phone: finalPhone,
       unit: e.target.unit.value,
       type: e.target.type.value,
@@ -106,13 +109,14 @@ export default function Maintenance() {
       if(result.success) {
           showToast("نجاح", "تم استلام طلبك وبانتظار اعتماده من الإدارة.");
           // إشعار الإدارة
-          notifyMaintenanceAdmin({ id: result.id, name: payload.name, phone: finalPhone, unit: payload.unit, type: payload.type, date, time });
+          notifyMaintenanceAdmin({ id: result.id, name: finalName, phone: finalPhone, unit: payload.unit, type: payload.type, date, time });
           // تأكيد للعميل مباشرة
-          notifyClientTicketReceived({ id: result.id, name: payload.name, unit: payload.unit, type: payload.type, date, time, phone: finalPhone });
+          notifyClientTicketReceived({ id: result.id, name: finalName, unit: payload.unit, type: payload.type, date, time, phone: finalPhone });
           e.target.reset();
           setDate("");
           setTime("");
           setGuestPhone("");
+          setGuestName("");
           setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: "لم يتم التعيين", scheduleDate: date, scheduleTime: time});
           setTab("track");
       } else {
@@ -238,11 +242,16 @@ export default function Maintenance() {
           <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
             <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-[#c5a059] to-yellow-600" />
             
-            {/* رسالة ترحيبية للمالك لتأكيد هويته */}
-            <div className="bg-slate-50 p-4 rounded-2xl mb-6 border border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
+            {/* معلومات الوحدة */}
+            <div className={`p-4 rounded-2xl mb-6 border flex flex-col md:flex-row gap-4 items-center justify-between ${customer.phone ? 'bg-slate-50 border-slate-200' : 'bg-amber-50 border-amber-200'}`}>
                 <div>
-                    <p className="text-xs text-slate-500 font-bold">المالك المسجل:</p>
-                    <p className="text-[#1a365d] font-black text-lg">{customer.name}</p>
+                    <p className="text-xs text-slate-500 font-bold">{customer.phone ? 'المالك المسجل:' : 'الوحدة:'}</p>
+                    <p className="text-[#1a365d] font-black text-lg">
+                        {customer.phone ? customer.name : `وحدة ${customer.unit}`}
+                    </p>
+                    {customer.phone && (
+                        <p className="text-xs text-slate-400 font-bold" dir="ltr">{customer.phone}</p>
+                    )}
                 </div>
                 <div className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-center">
                     <p className="text-[10px] text-slate-300 font-bold">رقم الوحدة</p>
@@ -252,26 +261,39 @@ export default function Maintenance() {
 
             <form onSubmit={submitTicket} className="space-y-6">
               {/* الخانات المخفية */}
-              <input type="hidden" name="name" value={customer.name} />
               <input type="hidden" name="unit" value={customer.unit} />
 
-              {/* حقل الجوال — يظهر فقط إذا العميل غير مسجل */}
+              {/* حقول الاسم والجوال — تظهر فقط إذا الوحدة ما عندها مالك مسجل */}
               {!customer.phone && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                  <label className="block text-sm font-bold mb-2 text-amber-800">
-                    📱 رقم جوالك (لاستلام إشعارات الطلب)
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={guestPhone}
-                    onChange={e => setGuestPhone(e.target.value)}
-                    placeholder="05XXXXXXXX"
-                    dir="ltr"
-                    className="w-full bg-white border border-amber-300 px-4 py-3 rounded-xl outline-none focus:border-amber-500 transition font-bold text-slate-700 text-left"
-                  />
-                  <p className="text-xs text-amber-600 font-bold mt-1.5">
-                    ستصلك رسالة واتساب بتحديثات طلبك
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
+                  <p className="text-sm font-black text-amber-800 flex items-center gap-2">
+                    ⚠️ هذه الوحدة غير مسجلة — يرجى إدخال بياناتك
+                  </p>
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5 text-amber-700">الاسم الكامل</label>
+                    <input
+                      type="text"
+                      required
+                      value={guestName}
+                      onChange={e => setGuestName(e.target.value)}
+                      placeholder="أدخل اسمك الكامل"
+                      className="w-full bg-white border border-amber-300 px-4 py-3 rounded-xl outline-none focus:border-amber-500 transition font-bold text-slate-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5 text-amber-700">رقم الجوال (واتساب)</label>
+                    <input
+                      type="tel"
+                      required
+                      value={guestPhone}
+                      onChange={e => setGuestPhone(e.target.value)}
+                      placeholder="05XXXXXXXX"
+                      dir="ltr"
+                      className="w-full bg-white border border-amber-300 px-4 py-3 rounded-xl outline-none focus:border-amber-500 transition font-bold text-slate-700 text-left"
+                    />
+                  </div>
+                  <p className="text-xs text-amber-600 font-bold">
+                    ستصلك رسالة واتساب بتحديثات طلبك على هذا الرقم
                   </p>
                 </div>
               )}
