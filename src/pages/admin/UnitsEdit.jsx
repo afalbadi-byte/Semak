@@ -152,13 +152,16 @@ function OwnerModal({ unit, projects, onClose, onSaved, showToast }) {
     );
 }
 
+// ─── تحويل المساحات من أي تنسيق إلى [{label, value}] ─────────
+function normalizeSpaces(raw) {
+    if (!Array.isArray(raw) || raw.length === 0) return [{ label: '', value: '' }];
+    if (typeof raw[0] === 'string') return raw.map(s => ({ label: s, value: '' }));
+    return raw.map(s => ({ label: s.label || '', value: s.value ?? '' }));
+}
+
 // ─── مودال تعديل المساحات ──────────────────────────────────────
 function SpacesModal({ unit, onClose, onSaved, showToast }) {
-    const [spaces, setSpaces] = useState(
-        Array.isArray(unit.spaces) && unit.spaces.length > 0
-            ? unit.spaces.map(s => ({ label: s.label, value: s.value }))
-            : [{ label: '', value: '' }]
-    );
+    const [spaces, setSpaces] = useState(normalizeSpaces(unit.spaces));
     const [saving, setSaving] = useState(false);
 
     const addRow    = () => setSpaces([...spaces, { label: '', value: '' }]);
@@ -429,13 +432,17 @@ export default function UnitsEdit({ showToast }) {
                                                         <td className="px-5 py-3.5">
                                                             {Array.isArray(unit.spaces) && unit.spaces.length > 0 ? (
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {unit.spaces.slice(0, 2).map((sp, i) => (
-                                                                        <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                                                            {sp.label}: {sp.value}م²
-                                                                        </span>
-                                                                    ))}
-                                                                    {unit.spaces.length > 2 && (
-                                                                        <span className="text-slate-400 text-[10px] font-bold">+{unit.spaces.length - 2}</span>
+                                                                    {unit.spaces.slice(0, 3).map((sp, i) => {
+                                                                        const label = typeof sp === 'string' ? sp : sp.label;
+                                                                        const val   = typeof sp === 'string' ? null : sp.value;
+                                                                        return (
+                                                                            <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap">
+                                                                                {label}{val ? `: ${val}م²` : ''}
+                                                                            </span>
+                                                                        );
+                                                                    })}
+                                                                    {unit.spaces.length > 3 && (
+                                                                        <span className="text-slate-400 text-[10px] font-bold">+{unit.spaces.length - 3}</span>
                                                                     )}
                                                                 </div>
                                                             ) : (

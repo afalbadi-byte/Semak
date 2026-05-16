@@ -82,7 +82,7 @@ switch ($action) {
         if ($p_query) {
             while ($p_row = $p_query->fetch_assoc()) {
                 $proj_id = $p_row['id'];
-                $u_query = $conn->query("SELECT u.id, u.unit_code, u.spaces, u.status, o.owner_name, o.owner_phone FROM units u LEFT JOIN owners o ON u.unit_code = o.unit_code WHERE u.project_id = $proj_id ORDER BY u.id ASC");
+                $u_query = $conn->query("SELECT u.id, u.unit_code, u.spaces, u.status, o.id as owner_id, o.owner_name, o.owner_phone, o.owner_email FROM units u LEFT JOIN owners o ON u.unit_code = o.unit_code WHERE u.project_id = $proj_id ORDER BY u.id ASC");
                 $units_details = [];
                 $units_basic   = [];
                 if ($u_query) {
