@@ -99,26 +99,25 @@
 
   <!-- ══ RIGHT: TEXT ══ -->
 
-  <!-- "سماك العقارية" -->
-  <text
-    x="583" y="152"
-    font-size="46" font-weight="900"
-    fill="url(#goldH)"
-    text-anchor="middle"
-    direction="rtl"
+  <!-- الشعار مكان النص -->
+  <image
+    href="https://semak.sa/images/logo-footer.png"
+    x="463" y="80"
+    width="240" height="110"
+    preserveAspectRatio="xMidYMid meet"
     filter="url(#textShadow)"
-  >سماك العقارية</text>
+  />
 
   <!-- Ornament line -->
-  <line x1="400" y1="172" x2="766" y2="172" stroke="url(#goldH)" stroke-width="1.2" opacity="0.45"/>
-  <circle cx="583" cy="172" r="3.5" fill="url(#goldH)"/>
-  <circle cx="400" cy="172" r="2"   fill="#c5a059" opacity="0.5"/>
-  <circle cx="766" cy="172" r="2"   fill="#c5a059" opacity="0.5"/>
+  <line x1="400" y1="205" x2="766" y2="205" stroke="url(#goldH)" stroke-width="1.2" opacity="0.45"/>
+  <circle cx="583" cy="205" r="3.5" fill="url(#goldH)"/>
+  <circle cx="400" cy="205" r="2"   fill="#c5a059" opacity="0.5"/>
+  <circle cx="766" cy="205" r="2"   fill="#c5a059" opacity="0.5"/>
 
   <!-- "خدمة الصيانة المنزلية" -->
   <text
-    x="583" y="222"
-    font-size="26" font-weight="700"
+    x="583" y="252"
+    font-size="28" font-weight="700"
     fill="#ffffff"
     text-anchor="middle"
     direction="rtl"
@@ -127,37 +126,23 @@
 
   <!-- "نحن هنا لحل مشاكلك بسرعة واحترافية" -->
   <text
-    x="583" y="258"
-    font-size="14.5" font-weight="400"
+    x="583" y="288"
+    font-size="15" font-weight="400"
     fill="#c5a059"
     text-anchor="middle"
     direction="rtl"
     opacity="0.80"
   >نحن هنا لحل مشاكلك بسرعة واحترافية</text>
 
-  <!-- Full slogan pill -->
-  <rect x="398" y="282" width="370" height="42" rx="21" fill="#c5a059" opacity="0.09"/>
-  <rect x="398" y="282" width="370" height="42" rx="21" fill="none" stroke="url(#goldH)" stroke-width="1" opacity="0.4"/>
-
-  <!-- Slogan line 1 -->
+  <!-- السلوقان على سطر واحد بدون إطار -->
   <text
-    x="583" y="301"
-    font-size="13" font-weight="600"
+    x="583" y="335"
+    font-size="15" font-weight="600"
     fill="#e8c97a"
     text-anchor="middle"
     direction="rtl"
     opacity="0.9"
-  >سقف يعلو برؤيتك،</text>
-
-  <!-- Slogan line 2 -->
-  <text
-    x="583" y="318"
-    font-size="13" font-weight="600"
-    fill="#e8c97a"
-    text-anchor="middle"
-    direction="rtl"
-    opacity="0.9"
-  >ومسكن يحكي قصتك ✨</text>
+  >سقف يعلو برؤيتك، ومسكن يحكي قصتك ✨</text>
 
   <!-- Subtle gear decoration bottom-right -->
   <g transform="translate(740,380)" opacity="0.05" fill="#c5a059">
