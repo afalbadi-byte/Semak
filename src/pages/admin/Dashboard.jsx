@@ -28,7 +28,10 @@ function QrSection() {
             .then(r => r.json())
             .then(d => {
                 if (d.success) {
-                    const all = d.data.flatMap(p => (p.units_details || []).map(u => u.unit_code));
+                    // فقط الوحدات التي لها مالك مسجل
+                    const all = d.data.flatMap(p =>
+                        (p.units_details || []).filter(u => u.owner_id).map(u => u.unit_code)
+                    );
                     setUnits(all);
                 }
             })
