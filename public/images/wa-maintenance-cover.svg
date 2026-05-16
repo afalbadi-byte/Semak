@@ -106,28 +106,6 @@
       stroke="#c5a059" stroke-width="0.7"
       stroke-dasharray="5,7" opacity="0.2"/>
 
-    <!-- ═══════════════════════════════
-         COMPANY BADGE ON UNIFORM
-         (chest position on the photo)
-    ═══════════════════════════════ -->
-    <g transform="translate(455, 215)" filter="url(#badgeShadow)">
-      <!-- Outer badge frame -->
-      <rect x="-38" y="-30" width="76" height="60" rx="8"
-        fill="url(#badgeGrad)" opacity="0.97"/>
-      <!-- Inner dark inset -->
-      <rect x="-34" y="-26" width="68" height="52" rx="5"
-        fill="#07111f" opacity="0.75"/>
-      <!-- Logo inside badge -->
-      <image
-        href="https://semak.sa/images/logo-footer.png"
-        x="-30" y="-22"
-        width="60" height="44"
-        preserveAspectRatio="xMidYMid meet"
-      />
-      <!-- Badge pin top -->
-      <circle cx="0" cy="-33" r="4.5" fill="url(#goldV)"/>
-      <circle cx="0" cy="-33" r="2"   fill="#f5d878"/>
-    </g>
 
     <!-- ═══════════════════════════════
          LEFT TEXT CONTENT
@@ -214,7 +192,7 @@
       font-size="12" font-weight="600"
       fill="#ffffff" text-anchor="middle"
       opacity="0.55"
-    >📞 920000000</text>
+    >📞 0550163121</text>
 
   </g>
 </svg>
