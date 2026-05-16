@@ -28,7 +28,7 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
-        globPatterns: ['**/*.{js,css,html,svg,woff2}', 'images/logo-*.{png,jpg}', 'images/favicon.png'],
+        globPatterns: ['**/*.{js,css,html,woff2}', 'images/logo-*.{png,jpg}', 'images/favicon.png'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           {
