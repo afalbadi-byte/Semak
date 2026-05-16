@@ -93,42 +93,59 @@ export async function notifyMaintenanceAdmin({ id, name, phone, unit, type, date
 }
 
 // إشعار العميل تلقائياً عند كل تغيير في حالة طلبه
+// يُرجع { ok: true } عند النجاح، أو { ok: false, error } عند الفشل
 export async function notifyClientStatusUpdate(ticket) {
-  if (!API_KEY || !ticket.phone) return;
+  if (!API_KEY)        return { ok: false, error: "API key غير مضبوط" };
+  if (!ticket.phone)   return { ok: false, error: "رقم جوال العميل غير موجود" };
 
-  // القالب المعتمد maintenance_update — 7 متغيرات
-  if (MAINT_TEMPLATE_ID) {
-    const tech = ticket.technician && ticket.technician !== "لم يتم التعيين" ? ticket.technician : "سيتم التحديد";
-    const date = ticket.scheduleDate
-      ? `${ticket.scheduleDate} — ${ticket.scheduleTime || ""}`
-      : "سيتم التأكيد";
-    const otp = ticket.otp || "—";
-    return sendTemplate(normalizePhone(ticket.phone), MAINT_TEMPLATE_ID, TEMPLATE_LANG, [
-      String(ticket.id),   // {{1}} رقم الطلب
-      ticket.unit,         // {{2}} الوحدة
-      ticket.type,         // {{3}} نوع الطلب
-      ticket.status,       // {{4}} الحالة
-      tech,                // {{5}} الفني
-      date,                // {{6}} الموعد
-      otp,                 // {{7}} رمز الإغلاق
-    ]);
-  }
-
-  // fallback: رسالة نصية (تشتغل إذا العميل راسل البيزنس خلال 24 ساعة)
   const tech = ticket.technician && ticket.technician !== "لم يتم التعيين"
-    ? `👨‍🔧 الفني: ${ticket.technician}\n` : "";
+    ? ticket.technician : "سيتم التحديد";
   const date = ticket.scheduleDate
-    ? `📅 الموعد: ${ticket.scheduleDate} — ${ticket.scheduleTime || ""}\n` : "";
-  const otp = ticket.otp
-    ? `\n🔑 رمز الإغلاق (أعطه للفني عند الانتهاء): *${ticket.otp}*\n` : "";
+    ? `${ticket.scheduleDate} — ${ticket.scheduleTime || ""}` : "سيتم التأكيد";
+  const otp = ticket.otp || "—";
 
-  const body =
-    `🔧 *تحديث طلب الصيانة - سماك العقارية*\n\n` +
-    `طلب رقم: #${ticket.id} | وحدة: ${ticket.unit}\n` +
-    `نوع العطل: ${ticket.type}\n\n` +
-    `الحالة الآن: *${ticket.status}*\n` +
-    `${tech}${date}${otp}\n` +
-    `للاستفسار ردّ على هذه الرسالة 💬`;
+  try {
+    // ── أولوية: قالب معتمد ──────────────────────────────────
+    if (MAINT_TEMPLATE_ID) {
+      const res = await sendTemplate(
+        normalizePhone(ticket.phone),
+        MAINT_TEMPLATE_ID,
+        TEMPLATE_LANG,
+        [
+          String(ticket.id),  // {{1}} رقم الطلب
+          ticket.unit,        // {{2}} الوحدة
+          ticket.type,        // {{3}} نوع الطلب
+          ticket.status,      // {{4}} الحالة
+          tech,               // {{5}} الفني
+          date,               // {{6}} الموعد
+          otp,                // {{7}} رمز الإغلاق
+        ]
+      );
+      if (res?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
+      // إذا فشل القالب نجرب النص
+    }
 
-  return sendText(normalizePhone(ticket.phone), body);
+    // ── fallback: رسالة نصية ────────────────────────────────
+    const techLine = ticket.technician && ticket.technician !== "لم يتم التعيين"
+      ? `👨‍🔧 الفني: ${ticket.technician}\n` : "";
+    const dateLine = ticket.scheduleDate
+      ? `📅 الموعد: ${ticket.scheduleDate} — ${ticket.scheduleTime || ""}\n` : "";
+    const otpLine  = ticket.otp
+      ? `\n🔑 رمز الإغلاق (أعطه للفني عند الانتهاء): *${ticket.otp}*\n` : "";
+
+    const body =
+      `🔧 *تحديث طلب الصيانة - سماك العقارية*\n\n` +
+      `طلب رقم: #${ticket.id} | وحدة: ${ticket.unit}\n` +
+      `نوع العطل: ${ticket.type}\n\n` +
+      `الحالة الآن: *${ticket.status}*\n` +
+      `${techLine}${dateLine}${otpLine}\n` +
+      `للاستفسار ردّ على هذه الرسالة 💬`;
+
+    const res2 = await sendText(normalizePhone(ticket.phone), body);
+    if (res2?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
+
+    return { ok: false, error: `HTTP ${res2?.status}` };
+  } catch (err) {
+    return { ok: false, error: err.message || "خطأ غير معروف" };
+  }
 }

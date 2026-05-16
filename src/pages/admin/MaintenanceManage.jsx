@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Wrench, RefreshCw, MessageCircle, Search, X, Send,
-    CheckCircle2, Clock, Hammer, User, Phone, Hash,
-    CalendarDays, ChevronDown, AlertCircle, ExternalLink
+    RefreshCw, MessageCircle, Search, X,
+    CheckCircle2, Clock, Hammer,
+    CalendarDays, ChevronDown, Send
 } from 'lucide-react';
 import { notifyClientStatusUpdate } from '../../services/whatsappService';
 
@@ -30,134 +30,9 @@ const COLUMNS = [
     { id: 'completed', title: 'مكتملة',            icon: CheckCircle2, color: 'border-emerald-300',bg: 'bg-emerald-50/60', text: 'text-emerald-700' },
 ];
 
-// ─── بناء رسالة واتساب ─────────────────────────────────────────
-function buildWaMessage(ticket) {
-    const tech = ticket.technician && ticket.technician !== 'لم يتم التعيين'
-        ? `👨‍🔧 الفني المختص: *${ticket.technician}*`
-        : 'سيتم إعلامكم باسم الفني لاحقاً.';
-    const dateText = ticket.scheduleDate
-        ? `📅 التاريخ: *${ticket.scheduleDate}*\n⏰ الوقت: *${ticket.scheduleTime || 'غير محدد'}*`
-        : 'لم يتم تحديد موعد الزيارة بعد.';
-    const otpText = ticket.otp
-        ? `\n\n🔑 *رمز إغلاق الطلب:* ${ticket.otp}\n_(أعطه للفني عند الانتهاء لتأكيد إغلاق الطلب)_`
-        : '';
-    return (
-        `مرحباً عميلنا العزيز 👋\n` +
-        `من شركة *سماك العقارية* 🏢\n\n` +
-        `بخصوص طلب الصيانة رقم: *#${ticket.id}*\n` +
-        `وحدة: *${ticket.unit}*\n` +
-        `نوع العطل: *${ticket.type}*\n\n` +
-        `📌 الحالة الحالية: *${ticket.status}*\n\n` +
-        `${tech}\n\n` +
-        `*موعد الزيارة:*\n${dateText}` +
-        `${otpText}\n\n` +
-        `نسعد بخدمتكم! 🌟`
-    );
-}
-
-// ─── مودال معاينة وإرسال واتساب ────────────────────────────────
-function WaModal({ ticket, onClose, onSent }) {
-    const [message, setMessage] = useState(buildWaMessage(ticket));
-    const [sending, setSending] = useState(false);
-    const [sent, setSent] = useState(false);
-
-    const phone = String(ticket.phone || '').replace(/\D/g, '').replace(/^0/, '966');
-
-    const openWaMe = () => {
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-        setSent(true);
-        setTimeout(() => { onSent?.(); onClose(); }, 800);
-    };
-
-    const sendViaMottasl = async () => {
-        setSending(true);
-        try {
-            await notifyClientStatusUpdate({ ...ticket, _customMessage: message });
-            setSent(true);
-            setTimeout(() => { onSent?.(); onClose(); }, 800);
-        } catch {
-            // fallback
-            openWaMe();
-        } finally {
-            setSending(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-slate-100">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-2xl flex items-center justify-center">
-                            <MessageCircle size={20} className="text-green-600" />
-                        </div>
-                        <div>
-                            <p className="font-black text-[#1a365d] text-base">معاينة رسالة واتساب</p>
-                            <p className="text-xs text-slate-400 font-bold">{ticket.name} — {ticket.unit}</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={20} /></button>
-                </div>
-
-                {/* رقم الجوال */}
-                <div className="px-5 pt-4 pb-2">
-                    <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200">
-                        <Phone size={14} className="text-slate-400" />
-                        <span className="text-xs font-bold text-slate-500">إرسال إلى:</span>
-                        <span className="text-sm font-black text-[#1a365d]" dir="ltr">{ticket.phone}</span>
-                    </div>
-                </div>
-
-                {/* معاينة الرسالة */}
-                <div className="px-5 pb-2 flex-1 overflow-y-auto">
-                    <label className="text-xs font-black text-slate-400 block mb-2">نص الرسالة (قابل للتعديل)</label>
-                    <div className="bg-[#e9fbe5] rounded-2xl rounded-tl-sm p-4 relative">
-                        <textarea
-                            value={message}
-                            onChange={e => setMessage(e.target.value)}
-                            rows={12}
-                            className="w-full bg-transparent text-sm text-slate-700 font-medium leading-relaxed outline-none resize-none"
-                            dir="rtl"
-                        />
-                        <span className="text-[10px] text-slate-400 absolute bottom-2 left-3">{message.length} حرف</span>
-                    </div>
-                </div>
-
-                {/* أزرار الإرسال */}
-                <div className="p-5 border-t border-slate-100 space-y-2">
-                    {sent ? (
-                        <div className="text-center py-3 text-emerald-600 font-black flex items-center justify-center gap-2">
-                            <CheckCircle2 size={20} /> تم الإرسال ✅
-                        </div>
-                    ) : (
-                        <>
-                            <button
-                                onClick={openWaMe}
-                                className="w-full bg-[#25D366] text-white py-3 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-[#20bb5a] transition shadow-md">
-                                <ExternalLink size={16} />
-                                فتح واتساب وإرسال يدوياً
-                            </button>
-                            <button
-                                onClick={sendViaMottasl}
-                                disabled={sending}
-                                className="w-full bg-[#1a365d] text-white py-3 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-[#1a365d]/90 transition disabled:opacity-50">
-                                {sending
-                                    ? <RefreshCw size={16} className="animate-spin" />
-                                    : <Send size={16} />}
-                                إرسال مباشر عبر النظام
-                            </button>
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
 
 // ─── بطاقة التذكرة ─────────────────────────────────────────────
-function TicketCard({ ticket, techList, onUpdate, onWa, adminView }) {
+function TicketCard({ ticket, techList, onUpdate, onWa, adminView, waStatus }) {
     const [expanded, setExpanded] = useState(false);
     const sm = STATUS_META[ticket.status] || STATUS_META['قيد الانتظار'];
 
@@ -266,10 +141,21 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView }) {
 
                             <button
                                 onClick={() => onWa(ticket)}
-                                title="معاينة وإرسال رسالة واتساب للعميل"
-                                className="bg-[#25D366] text-white px-3 py-2 rounded-xl hover:bg-[#20bb5a] transition shadow-sm flex items-center gap-1.5 text-[11px] font-black whitespace-nowrap">
-                                <MessageCircle size={14} />
-                                واتساب
+                                disabled={waStatus === 'sending'}
+                                title="إرسال إشعار واتساب للعميل مباشرة"
+                                className={`px-3 py-2 rounded-xl transition shadow-sm flex items-center gap-1.5 text-[11px] font-black whitespace-nowrap disabled:opacity-60 ${
+                                    waStatus === 'ok'      ? 'bg-emerald-500 text-white' :
+                                    waStatus === 'error'   ? 'bg-red-500 text-white' :
+                                    waStatus === 'sending' ? 'bg-slate-300 text-slate-600' :
+                                    'bg-[#25D366] text-white hover:bg-[#20bb5a]'
+                                }`}>
+                                {waStatus === 'sending' ? <RefreshCw size={14} className="animate-spin" /> :
+                                 waStatus === 'ok'      ? <CheckCircle2 size={14} /> :
+                                 waStatus === 'error'   ? <X size={14} /> :
+                                 <Send size={14} />}
+                                {waStatus === 'sending' ? 'جاري...' :
+                                 waStatus === 'ok'      ? 'أُرسل ✓' :
+                                 waStatus === 'error'   ? 'فشل' : 'إرسال'}
                             </button>
                         </div>
                     </div>
@@ -281,11 +167,11 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView }) {
 
 // ─── الصفحة الرئيسية ───────────────────────────────────────────
 export default function MaintenanceManage({ showToast, activeUser }) {
-    const [tickets, setTickets]       = useState([]);
-    const [techList, setTechList]     = useState([]);
-    const [loading, setLoading]       = useState(true);
+    const [tickets, setTickets]         = useState([]);
+    const [techList, setTechList]       = useState([]);
+    const [loading, setLoading]         = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [waTicket, setWaTicket]     = useState(null);
+    const [sendingWa, setSendingWa]     = useState({}); // { [ticketId]: 'sending'|'ok'|'error' }
 
     const loadMaintenance = async () => {
         setLoading(true);
@@ -332,6 +218,20 @@ export default function MaintenanceManage({ showToast, activeUser }) {
 
     useEffect(() => { loadMaintenance(); }, []);
 
+    // إرسال واتساب مباشرة عبر API مع تتبع الحالة
+    const sendWa = async (ticket) => {
+        setSendingWa(prev => ({ ...prev, [ticket.id]: 'sending' }));
+        const result = await notifyClientStatusUpdate(ticket);
+        setSendingWa(prev => ({ ...prev, [ticket.id]: result.ok ? 'ok' : 'error' }));
+        if (result.ok) {
+            showToast?.('واتساب ✅', `تم إرسال الإشعار لـ ${ticket.name}`);
+        } else {
+            showToast?.('تعذّر الإرسال', result.error || 'خطأ في API', 'error');
+        }
+        // أعد الحالة بعد 4 ثواني
+        setTimeout(() => setSendingWa(prev => ({ ...prev, [ticket.id]: null })), 4000);
+    };
+
     const updateTicketStatus = async (id, field, value) => {
         let newOtp = null;
         setTickets(prev => prev.map(t => {
@@ -364,11 +264,9 @@ export default function MaintenanceManage({ showToast, activeUser }) {
             const data = await res.json();
             if (data.success && field === 'status') {
                 showToast?.('تم التحديث', `الحالة: ${value}`);
-                // عرض مودال واتساب تلقائياً عند تغيير الحالة
+                // إرسال واتساب تلقائياً بدون أي خطوة يدوية
                 const updated = tickets.find(t => t.id === id);
-                if (updated) {
-                    setWaTicket({ ...updated, status: value, otp: newOtp || updated.otp });
-                }
+                if (updated) sendWa({ ...updated, status: value, otp: newOtp || updated.otp });
             }
         } catch {
             showToast?.('خطأ', 'فشل الاتصال', 'error');
@@ -461,8 +359,9 @@ export default function MaintenanceManage({ showToast, activeUser }) {
                                                 ticket={ticket}
                                                 techList={techList}
                                                 onUpdate={updateTicketStatus}
-                                                onWa={setWaTicket}
+                                                onWa={sendWa}
                                                 adminView={activeUser?.role === 'admin'}
+                                                waStatus={sendingWa[ticket.id]}
                                             />
                                         ))
                                     )}
@@ -473,14 +372,6 @@ export default function MaintenanceManage({ showToast, activeUser }) {
                 </div>
             )}
 
-            {/* ── مودال واتساب ─────────────────────────────── */}
-            {waTicket && (
-                <WaModal
-                    ticket={waTicket}
-                    onClose={() => setWaTicket(null)}
-                    onSent={() => setWaTicket(null)}
-                />
-            )}
         </div>
     );
 }
