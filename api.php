@@ -413,7 +413,7 @@ switch ($action) {
                     $client_payload = json_encode([
                         "to" => $client_phone, "type" => "template",
                         "template" => [
-                            "template_id" => "maintenance_update", "language" => "ar",
+                            "template_id" => "semak_maintenance", "language" => "ar",
                             "components"  => [["type" => "body", "parameters" => [
                                 ["type" => "text", "text" => $name],           // {{1}} الاسم
                                 ["type" => "text", "text" => (string)$new_id], // {{2}} رقم الطلب
@@ -467,7 +467,7 @@ switch ($action) {
                     "to"       => $client_phone,
                     "type"     => "template",
                     "template" => [
-                        "template_id" => "maintenance_update",
+                        "template_id" => "semak_maintenance",
                         "language"    => "ar",
                         "components"  => [["type" => "body", "parameters" => [
                             ["type" => "text", "text" => $row['name']],        // {{1}} الاسم
