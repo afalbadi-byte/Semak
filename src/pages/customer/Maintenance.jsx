@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, RefreshCw, Send, ListChecks, CalendarDays, HardHat, CircleCheck, Clock, Loader2 } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, TIME_SLOTS } from '../../utils/helpers';
-import { notifyClientTicketReceived } from '../../services/whatsappService';
+// WhatsApp notifications are handled server-side in api.php
 
 export default function Maintenance() {
   const { customer, setCustomer, showToast } = useContext(AppContext);
@@ -114,8 +114,7 @@ export default function Maintenance() {
 
       if(result.success) {
           showToast("نجاح", "تم استلام طلبك وبانتظار اعتماده من الإدارة.");
-          // تأكيد للعميل مباشرة (إشعار الإدارة يُرسل من الـ API تلقائياً)
-          notifyClientTicketReceived({ id: result.id, name: finalName, unit: payload.unit, type: payload.type, date, time, phone: finalPhone });
+          // الإشعارات (إدارة + عميل) تُرسل من api.php تلقائياً
           e.target.reset();
           setDate("");
           setTime("");

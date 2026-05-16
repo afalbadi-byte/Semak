@@ -394,21 +394,42 @@ switch ($action) {
         $sql     = "INSERT INTO maintenance (name, phone, unit, type, descrip, status, date) VALUES ('$name', '$phone', '$unit', '$type', '$descrip', '$status', '$date')";
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
-            // إرسال إشعار واتساب للإدارة تلقائياً
-            $wa_token  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
+            $wa_token    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
+            $wa_headers  = ["Content-Type: application/json", "Authorization: Bearer $wa_token"];
             $admin_phone = "966550163121";
+
+            // ① إشعار الإدارة (نص)
             $wa_msg = "🔧 *طلب صيانة جديد #$new_id - سماك*\n\n👤 المالك: $name\n📞 الجوال: $phone\n🏠 الوحدة: $unit\n⚠️ نوع العطل: $type\n\n⏰ " . date('Y-m-d H:i', strtotime('+3 hours'));
-            $wa_payload = json_encode(["to" => $admin_phone, "type" => "text", "text" => ["body" => $wa_msg]]);
             $ch = curl_init("https://api.mottasl.ai/v1/message/send");
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => $wa_payload,
-                CURLOPT_HTTPHEADER     => ["Content-Type: application/json", "Authorization: Bearer $wa_token"],
-                CURLOPT_TIMEOUT        => 5,
-            ]);
-            curl_exec($ch);
-            curl_close($ch);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(["to" => $admin_phone, "type" => "text", "text" => ["body" => $wa_msg]]), CURLOPT_HTTPHEADER => $wa_headers, CURLOPT_TIMEOUT => 5]);
+            curl_exec($ch); curl_close($ch);
+
+            // ② تأكيد استلام الطلب للعميل (قالب)
+            if (!empty($phone)) {
+                $client_phone = preg_replace('/\D/', '', $phone);
+                $client_phone = ltrim($client_phone, '0');
+                if (substr($client_phone, 0, 3) !== '966') $client_phone = '966' . $client_phone;
+                if (strlen($client_phone) >= 12) {
+                    $client_payload = json_encode([
+                        "to" => $client_phone, "type" => "template",
+                        "template" => [
+                            "template_id" => "maintenance_update", "language" => "ar",
+                            "components"  => [["type" => "body", "parameters" => [
+                                ["type" => "text", "text" => (string)$new_id],
+                                ["type" => "text", "text" => $unit],
+                                ["type" => "text", "text" => $type],
+                                ["type" => "text", "text" => "قيد الانتظار"],
+                                ["type" => "text", "text" => "سيتم التحديد"],
+                                ["type" => "text", "text" => "سيتم التأكيد"],
+                                ["type" => "text", "text" => "—"],
+                            ]]]
+                        ]
+                    ]);
+                    $ch2 = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
+                    curl_setopt_array($ch2, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $client_payload, CURLOPT_HTTPHEADER => $wa_headers, CURLOPT_TIMEOUT => 5]);
+                    curl_exec($ch2); curl_close($ch2);
+                }
+            }
             echo json_encode(["success" => true, "id" => $new_id]);
         } else {
             echo json_encode(["success" => false, "message" => $conn->error]);
@@ -447,15 +468,15 @@ switch ($action) {
                     "template" => [
                         "template_id" => "maintenance_update",
                         "language"    => "ar",
-                        "argument"    => ["BODY" => [
-                            (string)$row['id'],
-                            $row['unit'],
-                            $row['type'],
-                            $value,
-                            $tech,
-                            $sched,
-                            $otp_val
-                        ]]
+                        "components"  => [["type" => "body", "parameters" => [
+                            ["type" => "text", "text" => (string)$row['id']],
+                            ["type" => "text", "text" => $row['unit']],
+                            ["type" => "text", "text" => $row['type']],
+                            ["type" => "text", "text" => $value],
+                            ["type" => "text", "text" => $tech],
+                            ["type" => "text", "text" => $sched],
+                            ["type" => "text", "text" => $otp_val],
+                        ]]]
                     ]
                 ]);
                 $ch = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
