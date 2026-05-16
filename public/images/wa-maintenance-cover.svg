@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 418" width="800" height="418" font-family="'Segoe UI', Tahoma, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f2340;stop-opacity:1" />
+      <stop offset="60%" style="stop-color:#1a365d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e3a6e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#c5a059;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e8c97a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="circleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#c5a059;stop-opacity:0.15" />
+      <stop offset="100%" style="stop-color:#c5a059;stop-opacity:0.03" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="418" fill="url(#bgGrad)"/>
+
+  <!-- Decorative circles -->
+  <circle cx="680" cy="-30" r="180" fill="url(#circleGrad)" />
+  <circle cx="700" cy="0" r="120" fill="none" stroke="#c5a059" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="120" cy="450" r="200" fill="url(#circleGrad)" />
+  <circle cx="100" cy="460" r="130" fill="none" stroke="#c5a059" stroke-width="0.5" opacity="0.2"/>
+
+  <!-- Grid pattern (subtle) -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" stroke-width="0.15" opacity="0.08"/>
+  </pattern>
+  <rect width="800" height="418" fill="url(#grid)"/>
+
+  <!-- Gold top accent bar -->
+  <rect x="0" y="0" width="800" height="4" fill="url(#goldGrad)"/>
+
+  <!-- Gold bottom accent bar -->
+  <rect x="0" y="414" width="800" height="4" fill="url(#goldGrad)"/>
+
+  <!-- Left vertical gold line -->
+  <rect x="60" y="40" width="3" height="338" fill="url(#goldGrad)" rx="2" opacity="0.6"/>
+
+  <!-- Gear icon (large, background decorative) -->
+  <g transform="translate(580, 209)" opacity="0.07" fill="#c5a059">
+    <path d="M 60 -10 L 52 -10 C 50 -18 46 -26 41 -33 L 46 -38 C 49 -41 49 -46 46 -49 L 39 -56 C 36 -59 31 -59 28 -56 L 23 -51 C 16 -56 8 -60 0 -62 L 0 -70 C 0 -74 -4 -78 -8 -78 L -18 -78 C -22 -78 -26 -74 -26 -70 L -26 -62 C -34 -60 -42 -56 -49 -51 L -54 -56 C -57 -59 -62 -59 -65 -56 L -72 -49 C -75 -46 -75 -41 -72 -38 L -67 -33 C -72 -26 -76 -18 -78 -10 L -86 -10 C -90 -10 -94 -6 -94 -2 L -94 8 C -94 12 -90 16 -86 16 L -78 16 C -76 24 -72 32 -67 39 L -72 44 C -75 47 -75 52 -72 55 L -65 62 C -62 65 -57 65 -54 62 L -49 57 C -42 62 -34 66 -26 68 L -26 76 C -26 80 -22 84 -18 84 L -8 84 C -4 84 0 80 0 76 L 0 68 C 8 66 16 62 23 57 L 28 62 C 31 65 36 65 39 62 L 46 55 C 49 52 49 47 46 44 L 41 39 C 46 32 50 24 52 16 L 60 16 C 64 16 68 12 68 8 L 68 -2 C 68 -6 64 -10 60 -10 Z M -13 30 C -32 30 -47 15 -47 -4 C -47 -23 -32 -38 -13 -38 C 6 -38 21 -23 21 -4 C 21 15 6 30 -13 30 Z"/>
+  </g>
+
+  <!-- Wrench icon (main decorative, right side) -->
+  <g transform="translate(640, 209) rotate(-30)" opacity="0.12" fill="#c5a059">
+    <path d="M 30 -80 C 14 -80 0 -68 -4 -52 L -30 -26 L -40 -36 L -60 -16 L -40 4 L -26 -10 L 40 56 C 44 60 50 60 54 56 L 64 46 C 68 42 68 36 64 32 L -2 -34 L 12 -48 C 16 -46 20 -45 24 -45 C 42 -45 56 -59 56 -77 C 56 -82 55 -87 52 -91 L 34 -73 L 18 -73 L 18 -89 L 36 -107 C 34 -108 32 -108 30 -108 C 14 -108 0 -96 -4 -80 Z"/>
+  </g>
+
+  <!-- Main wrench icon (clean, centered-left) -->
+  <g transform="translate(200, 209)">
+    <!-- Outer glow circle -->
+    <circle cx="0" cy="0" r="90" fill="#c5a059" opacity="0.08"/>
+    <circle cx="0" cy="0" r="75" fill="none" stroke="#c5a059" stroke-width="1" opacity="0.3"/>
+
+    <!-- Wrench SVG path -->
+    <g fill="#c5a059" filter="url(#glow)" opacity="0.9" transform="scale(1.8) translate(-18,-18)">
+      <path d="M26.51 1.37a1 1 0 00-1.06.22l-4.14 4.14-3.03-.51-.51-3.03 4.14-4.14A1 1 0 0021.63.99 9 9 0 009.9 12.48L1.29 21.1a3 3 0 004.24 4.24l8.62-8.62A9 9 0 0026.51 1.37zM5.12 24.29a1 1 0 110-2 1 1 0 010 2z"/>
+    </g>
+  </g>
+
+  <!-- Right side: Text content -->
+  <!-- Company name Arabic -->
+  <text x="440" y="148" font-size="42" font-weight="bold" fill="url(#goldGrad)" text-anchor="middle" direction="rtl" filter="url(#shadow)">سماك العقارية</text>
+
+  <!-- Gold divider line -->
+  <line x1="310" y1="170" x2="570" y2="170" stroke="url(#goldGrad)" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="440" cy="170" r="3" fill="#c5a059"/>
+
+  <!-- Service title -->
+  <text x="440" y="220" font-size="28" font-weight="bold" fill="#ffffff" text-anchor="middle" direction="rtl" opacity="0.95">خدمة الصيانة المنزلية</text>
+
+  <!-- Subtitle -->
+  <text x="440" y="258" font-size="16" fill="#c5a059" text-anchor="middle" direction="rtl" opacity="0.85" font-weight="500">نحن هنا لحل مشاكلك بسرعة واحترافية</text>
+
+  <!-- Bottom tagline -->
+  <rect x="310" y="285" width="260" height="36" rx="18" fill="#c5a059" opacity="0.12"/>
+  <rect x="310" y="285" width="260" height="36" rx="18" fill="none" stroke="#c5a059" stroke-width="1" opacity="0.4"/>
+  <text x="440" y="309" font-size="14" fill="#e8c97a" text-anchor="middle" direction="rtl" font-weight="600">سقف يعلو برؤيتك ✨</text>
+
+  <!-- Small dots decoration -->
+  <circle cx="310" cy="170" r="2" fill="#c5a059" opacity="0.5"/>
+  <circle cx="570" cy="170" r="2" fill="#c5a059" opacity="0.5"/>
+</svg>
