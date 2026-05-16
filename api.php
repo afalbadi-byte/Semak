@@ -623,6 +623,23 @@ switch ($action) {
         }
         break;
 
+    // ─── تنظيف أكواد الوحدات (إزالة أي حرف عربي في البداية) ───────────────
+    case 'fix_unit_codes':
+        $fixed = 0;
+        $res   = $conn->query("SELECT id, unit_code FROM units");
+        while ($row = $res->fetch_assoc()) {
+            // احذف أي رموز unicode أقل من U+0041 (A) من بداية الكود
+            $clean = preg_replace('/^[^\x{0041}-\x{007A}0-9]+/u', '', $row['unit_code']);
+            if ($clean !== $row['unit_code']) {
+                $safe = $conn->real_escape_string($clean);
+                $conn->query("UPDATE units  SET unit_code='$safe' WHERE id={$row['id']}");
+                $conn->query("UPDATE owners SET unit_code='$safe' WHERE unit_code='" . $conn->real_escape_string($row['unit_code']) . "'");
+                $fixed++;
+            }
+        }
+        echo json_encode(["success" => true, "fixed" => $fixed]);
+        break;
+
     // ────────────────────────────────────────────────────────────────────────
 
     default:
