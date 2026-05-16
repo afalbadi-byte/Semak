@@ -141,6 +141,16 @@ switch ($action) {
         echo json_encode(["success" => true]);
         break;
 
+    case 'update_unit_status':
+        $unitId = (int)$input_data['unit_id'];
+        $allowed = ['متاح', 'مباعة', 'محجوز'];
+        $status  = $input_data['status'] ?? '';
+        if (!in_array($status, $allowed)) { echo json_encode(["success" => false, "message" => "حالة غير صالحة"]); break; }
+        $status = $conn->real_escape_string($status);
+        $conn->query("UPDATE units SET status = '$status' WHERE id = $unitId");
+        echo json_encode(["success" => true]);
+        break;
+
     case 'delete_unit_card':
         $unitId = (int)$input_data['unit_id'];
         $conn->query("DELETE FROM units WHERE id = $unitId");

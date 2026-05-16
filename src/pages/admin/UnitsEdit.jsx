@@ -7,11 +7,13 @@ import {
 const API_URL = "https://semak.sa/api.php";
 
 const STATUS_STYLES = {
-    'مباعة':  { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-    'متاح':   { bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-500'    },
-    'محجوز':  { bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500'   },
-    'default':{ bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400'   },
+    'مباعة':  { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', hover: 'hover:bg-emerald-200' },
+    'متاح':   { bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-500',    hover: 'hover:bg-blue-200'    },
+    'محجوز':  { bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500',   hover: 'hover:bg-amber-200'   },
+    'default':{ bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400',   hover: 'hover:bg-slate-200'   },
 };
+
+const ALL_STATUSES = ['متاح', 'مباعة', 'محجوز'];
 
 function StatusBadge({ status }) {
     const s = STATUS_STYLES[status] || STATUS_STYLES.default;
@@ -20,6 +22,72 @@ function StatusBadge({ status }) {
             <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
             {status || 'متاح'}
         </span>
+    );
+}
+
+// ─── مودال تعديل الحالة ────────────────────────────────────────
+function StatusModal({ unit, onClose, onSaved, showToast }) {
+    const [selected, setSelected] = useState(unit.status || 'متاح');
+    const [saving, setSaving] = useState(false);
+
+    const save = async () => {
+        if (selected === unit.status) { onClose(); return; }
+        setSaving(true);
+        try {
+            const res = await fetch(`${API_URL}?action=update_unit_status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ unit_id: unit.id, status: selected }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('تم', `تم تغيير حالة ${unit.unit_code} إلى "${selected}" ✅`);
+                onSaved();
+            } else {
+                showToast('خطأ', data.message || 'فشل الحفظ', 'error');
+            }
+        } catch { showToast('خطأ', 'فشل الاتصال', 'error'); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xs p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-5">
+                    <h3 className="font-black text-[#1a365d] text-lg">
+                        حالة الوحدة — {unit.unit_code}
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={20} /></button>
+                </div>
+
+                <div className="space-y-2 mb-5">
+                    {ALL_STATUSES.map(st => {
+                        const s = STATUS_STYLES[st];
+                        const isSelected = selected === st;
+                        return (
+                            <button
+                                key={st}
+                                onClick={() => setSelected(st)}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition border-2 ${
+                                    isSelected
+                                        ? `${s.bg} ${s.text} border-current`
+                                        : 'bg-slate-50 text-slate-500 border-transparent hover:bg-slate-100'
+                                }`}>
+                                <span className={`w-3 h-3 rounded-full ${isSelected ? s.dot : 'bg-slate-300'}`} />
+                                {st}
+                                {isSelected && <span className="mr-auto text-xs">✓</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <button onClick={save} disabled={saving}
+                    className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-[#1a365d]/90 disabled:opacity-50">
+                    {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                    حفظ الحالة
+                </button>
+            </div>
+        </div>
     );
 }
 
@@ -248,6 +316,7 @@ export default function UnitsEdit({ showToast }) {
     const [expanded, setExpanded]     = useState({});
     const [ownerModal, setOwnerModal] = useState(null);
     const [spacesModal, setSpacesModal] = useState(null);
+    const [statusModal, setStatusModal] = useState(null);
 
     const load = async () => {
         setLoading(true);
@@ -297,6 +366,7 @@ export default function UnitsEdit({ showToast }) {
     const onSaved = () => {
         setOwnerModal(null);
         setSpacesModal(null);
+        setStatusModal(null);
         load();
     };
 
@@ -412,7 +482,13 @@ export default function UnitsEdit({ showToast }) {
                                                             </span>
                                                         </td>
                                                         <td className="px-5 py-3.5">
-                                                            <StatusBadge status={unit.status || 'متاح'} />
+                                                            <button
+                                                                onClick={() => setStatusModal({ ...unit, project_id: project.id })}
+                                                                title="تعديل الحالة"
+                                                                className="group relative">
+                                                                <StatusBadge status={unit.status || 'متاح'} />
+                                                                <span className="absolute -top-5 right-0 text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition whitespace-nowrap">تعديل</span>
+                                                            </button>
                                                         </td>
                                                         <td className="px-5 py-3.5">
                                                             {unit.owner_name ? (
@@ -498,6 +574,14 @@ export default function UnitsEdit({ showToast }) {
                 <SpacesModal
                     unit={spacesModal}
                     onClose={() => setSpacesModal(null)}
+                    onSaved={onSaved}
+                    showToast={showToast}
+                />
+            )}
+            {statusModal && (
+                <StatusModal
+                    unit={statusModal}
+                    onClose={() => setStatusModal(null)}
                     onSaved={onSaved}
                     showToast={showToast}
                 />
