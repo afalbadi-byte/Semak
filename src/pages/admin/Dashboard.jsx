@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building,
     UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
-    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2
+    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2
 } from 'lucide-react';
 
 // استدعاء الأدوات والمكونات الخارجية
@@ -14,6 +14,7 @@ import LeadsManage from './LeadsManage';
 import FeasibilityCalc from './FeasibilityCalc';
 import UnitsOverview from './UnitsOverview';
 import ProjectsManage from './ProjectsManage';
+import UnitsEdit from './UnitsEdit';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -93,6 +94,7 @@ export default function Dashboard({ onLogout }) {
         { id: 'overview',   title: 'الرئيسية والإحصائيات',  icon: LayoutDashboard, permKey: 'all' },
         { id: 'projects',   title: 'إدارة المشاريع والوحدات', icon: Building,        permKey: 'admin' },
         { id: 'units',      title: 'بيانات الوحدات',         icon: Building2,       permKey: 'admin' },
+        { id: 'units_edit', title: 'تعديل الوحدات والملاك',  icon: Edit2,            permKey: 'admin' },
         { id: 'feasibility',title: 'حاسبة الجدوى والعروض',  icon: TrendingUp,      permKey: 'admin' },
         { id: 'inspection', title: 'فحص وتسليم الوحدات', icon: ClipboardCheck, permKey: 'inspection' },
         { id: 'snaglist', title: 'تقارير الملاحظات', icon: FileWarning, permKey: 'inspection' }, 
@@ -270,6 +272,12 @@ export default function Dashboard({ onLogout }) {
 
                     {activeTab === 'units' && hasPermission('admin') && (
                         <UnitsOverview showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
+                    )}
+
+                    {activeTab === 'units_edit' && hasPermission('admin') && (
+                        <div className="animate-fadeIn p-6 md:p-8">
+                            <UnitsEdit showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
+                        </div>
                     )}
 
                     {activeTab === 'feasibility' && hasPermission('admin') && (
