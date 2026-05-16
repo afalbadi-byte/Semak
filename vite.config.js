@@ -21,11 +21,13 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         icons: [
-          { src: '/images/favicon.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: '/images/favicon.png', sizes: 'any', type: 'image/png', purpose: 'any maskable' },
           { src: '/images/logo-main.png', sizes: '512x512', type: 'image/png' }
         ]
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,woff2}', 'images/logo-*.{png,jpg}', 'images/favicon.png'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
