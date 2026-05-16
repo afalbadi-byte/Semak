@@ -18,6 +18,61 @@ import UnitsEdit from './UnitsEdit';
 
 const API_URL = "https://semak.sa/api.php";
 
+// ─── قسم QR — يجيب الوحدات من DB ──────────────────────────────
+function QrSection() {
+    const [units, setUnits] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        fetch(`${API_URL}?action=get_projects_data`)
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    const all = d.data.flatMap(p => (p.units_details || []).map(u => u.unit_code));
+                    setUnits(all);
+                }
+            })
+            .finally(() => setLoading(false));
+    }, []);
+
+    return (
+        <div className="animate-fadeIn p-6 md:p-8 max-w-6xl mx-auto">
+            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden mb-12">
+                <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <div>
+                        <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><QrCode className="text-slate-800" /> رموز الوحدات للعملاء</h3>
+                        <p className="text-slate-500 text-sm mt-1">طباعة هذه الرموز ولصقها داخل كل وحدة لتسهيل طلب الصيانة.</p>
+                    </div>
+                    <button onClick={() => window.print()} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-900 transition flex items-center gap-2 shadow-md">
+                        <Printer size={18} /> طباعة الصفحة
+                    </button>
+                </div>
+                <div className="p-8 bg-slate-50/20">
+                    {loading ? (
+                        <div className="text-center py-12 text-slate-400"><RefreshCw className="animate-spin mx-auto mb-2" size={28} /></div>
+                    ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                            {units.map(unit => {
+                                const url    = `${window.location.origin}/maintenance?unit=${encodeURIComponent(unit)}`;
+                                const qrUrl  = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}&margin=10`;
+                                return (
+                                    <div key={unit} className="bg-white p-6 rounded-3xl border border-slate-200 text-center shadow-sm flex flex-col items-center justify-between">
+                                        <div>
+                                            <h4 className="font-black text-[#1a365d] text-xl mb-1">{unit}</h4>
+                                            <p className="text-xs text-slate-400 mb-4">مسح لطلب الصيانة</p>
+                                        </div>
+                                        <img src={qrUrl} alt={`QR ${unit}`} className="w-full max-w-[150px] mb-4 border-2 border-slate-100 rounded-xl" crossOrigin="anonymous" />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function Dashboard({ onLogout }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -316,36 +371,7 @@ export default function Dashboard({ onLogout }) {
 
                     {/* --- قسم رموز الاستجابة السريعة (QR) --- */}
                     {activeTab === 'qr' && hasPermission('qr') && (
-                        <div className="animate-fadeIn p-6 md:p-8 max-w-6xl mx-auto">
-                            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden mb-12">
-                                <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                                    <div>
-                                        <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><QrCode className="text-slate-800" /> رموز الوحدات للعملاء</h3>
-                                        <p className="text-slate-500 text-sm mt-1">طباعة هذه الرموز ولصقها داخل كل وحدة لتسهيل طلب الصيانة.</p>
-                                    </div>
-                                    <button onClick={() => window.print()} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-900 transition flex items-center gap-2 shadow-md">
-                                        <Printer size={18} /> طباعة الصفحة
-                                    </button>
-                                </div>
-                                <div className="p-8 bg-slate-50/20">
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                                        {["SM-A01", "SM-A02", "SM-A03", "SM-A04", "SM-A05", "SM-A06", "SM-A07"].map(unit => {
-                                            const url = `${window.location.origin}/maintenance?unit=${unit}`;
-                                            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}&margin=10`;
-                                            return (
-                                                <div key={unit} className="bg-white p-6 rounded-3xl border border-slate-200 text-center shadow-sm flex flex-col items-center justify-between">
-                                                    <div>
-                                                        <h4 className="font-black text-[#1a365d] text-xl mb-1">{unit}</h4>
-                                                        <p className="text-xs text-slate-400 mb-4">مسح لطلب الصيانة</p>
-                                                    </div>
-                                                    <img src={qrUrl} alt={`QR Code ${unit}`} className="w-full max-w-[150px] mb-4 border-2 border-slate-100 rounded-xl" crossOrigin="anonymous" />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <QrSection />
                     )}
 
                     {/* --- قسم سجل المهتمين (Leads) --- */}
