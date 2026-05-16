@@ -35,7 +35,7 @@
       href="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&amp;h=418&amp;fit=crop&amp;crop=center"
       x="0" y="0" width="800" height="418"
       preserveAspectRatio="xMidYMid slice"
-      opacity="0.18"
+      opacity="0.25"
     />
 
     <!-- 3. Dark overlay on top of photo -->
@@ -64,7 +64,7 @@
 
     <!-- Gold divider -->
     <line x1="200" y1="136" x2="600" y2="136" stroke="url(#goldH)" stroke-width="1" opacity="0.4"/>
-    <polygon points="400,129 407,136 400,143 393,136" fill="url(#goldH)" filter="url(#glow)"/>
+    <line x1="180" y1="136" x2="620" y2="136" stroke="url(#goldH)" stroke-width="1.5" opacity="0.5"/>
 
     <!-- Main title -->
     <text x="400" y="182"
