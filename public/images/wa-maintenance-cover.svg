@@ -194,5 +194,11 @@
       opacity="0.55"
     >📞 920032842</text>
 
+    <text x="200" y="402"
+      font-size="11.5" font-weight="400"
+      fill="#c5a059" text-anchor="middle"
+      opacity="0.55"
+    >✉ info@semak.sa</text>
+
   </g>
 </svg>
