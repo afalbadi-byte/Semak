@@ -77,6 +77,42 @@ export async function replyToClient(clientPhone, clientName) {
 
 // ─── صفحة الصيانة ───────────────────────────────────────────
 
+// تأكيد استلام الطلب للعميل فور إرسال طلبه
+export async function notifyClientTicketReceived({ id, name, unit, type, date, time, phone }) {
+  if (!API_KEY || !phone) return { ok: false };
+  const tech  = "سيتم التحديد";
+  const dateV = date ? `${date} — ${time || ""}` : "سيتم التأكيد";
+
+  // إذا كان عندنا قالب معتمد نستخدمه
+  if (MAINT_TEMPLATE_ID) {
+    const res = await sendTemplate(normalizePhone(phone), MAINT_TEMPLATE_ID, TEMPLATE_LANG, [
+      String(id),           // {{1}} رقم الطلب
+      unit,                 // {{2}} الوحدة
+      type,                 // {{3}} نوع الطلب
+      "قيد الانتظار",       // {{4}} الحالة
+      tech,                 // {{5}} الفني
+      dateV,                // {{6}} الموعد
+      "—",                  // {{7}} رمز الإغلاق
+    ]);
+    if (res?.ok) { logWaSent(id, "maintenance"); return { ok: true }; }
+  }
+
+  // fallback: نص
+  const body =
+    `✅ *تم استلام طلب الصيانة - سماك العقارية*\n\n` +
+    `مرحباً ${name}،\n` +
+    `تم استلام طلبك رقم *#${id}* بنجاح.\n\n` +
+    `🏠 الوحدة: *${unit}*\n` +
+    `⚠️ نوع العطل: *${type}*\n` +
+    `📅 الموعد المفضل: *${date || "—"}* — *${time || "—"}*\n\n` +
+    `سنتواصل معك قريباً لتأكيد موعد الزيارة.\n` +
+    `للاستفسار ردّ على هذه الرسالة 💬`;
+
+  const res2 = await sendText(normalizePhone(phone), body);
+  if (res2?.ok) { logWaSent(id, "maintenance"); return { ok: true }; }
+  return { ok: false };
+}
+
 // إشعار الإدارة بطلب صيانة جديد + تسجيل الحالة
 export async function notifyMaintenanceAdmin({ id, name, phone, unit, type, date, time }) {
   const body =

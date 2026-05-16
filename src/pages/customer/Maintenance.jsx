@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, RefreshCw, Send, ListChecks, CalendarDays, HardHat, CircleCheck, Clock, Loader2 } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, TIME_SLOTS } from '../../utils/helpers';
-import { notifyMaintenanceAdmin } from '../../services/whatsappService';
+import { notifyMaintenanceAdmin, notifyClientTicketReceived } from '../../services/whatsappService';
 
 export default function Maintenance() {
   const { customer, setCustomer, showToast } = useContext(AppContext);
@@ -16,6 +16,7 @@ export default function Maintenance() {
   const [type, setType] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
+  const [guestPhone, setGuestPhone] = useState(""); // جوال العميل غير المسجل
   const [ticket, setTicket] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -83,9 +84,12 @@ export default function Maintenance() {
     
     const desc = `الوقت المفضل: ${time}\nالتاريخ المفضل: ${date}\n\nالوصف:\n${e.target.desc.value}`;
     
+    // استخدام جوال المالك المسجل أو الجوال اللي أدخله العميل يدوياً
+    const finalPhone = customer.phone || guestPhone;
+
     const payload = {
       name: e.target.name.value,
-      phone: e.target.phone.value,
+      phone: finalPhone,
       unit: e.target.unit.value,
       type: e.target.type.value,
       desc: desc
@@ -98,13 +102,17 @@ export default function Maintenance() {
         body: JSON.stringify(payload)
       });
       const result = await res.json();
-      
+
       if(result.success) {
           showToast("نجاح", "تم استلام طلبك وبانتظار اعتماده من الإدارة.");
-          notifyMaintenanceAdmin({ id: result.id, name: payload.name, phone: payload.phone, unit: payload.unit, type: payload.type, date, time }); // id يُسجَّل في DB عند نجاح الإرسال
+          // إشعار الإدارة
+          notifyMaintenanceAdmin({ id: result.id, name: payload.name, phone: finalPhone, unit: payload.unit, type: payload.type, date, time });
+          // تأكيد للعميل مباشرة
+          notifyClientTicketReceived({ id: result.id, name: payload.name, unit: payload.unit, type: payload.type, date, time, phone: finalPhone });
           e.target.reset();
           setDate("");
           setTime("");
+          setGuestPhone("");
           setTicket({...payload, id: result.id, status: "قيد الانتظار", technician: "لم يتم التعيين", scheduleDate: date, scheduleTime: time});
           setTab("track");
       } else {
@@ -243,10 +251,30 @@ export default function Maintenance() {
             </div>
 
             <form onSubmit={submitTicket} className="space-y-6">
-              {/* الخانات المخفية اللي ترسل الداتا بدون ما يعبيها العميل */}
+              {/* الخانات المخفية */}
               <input type="hidden" name="name" value={customer.name} />
-              <input type="hidden" name="phone" value={customer.phone} />
               <input type="hidden" name="unit" value={customer.unit} />
+
+              {/* حقل الجوال — يظهر فقط إذا العميل غير مسجل */}
+              {!customer.phone && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                  <label className="block text-sm font-bold mb-2 text-amber-800">
+                    📱 رقم جوالك (لاستلام إشعارات الطلب)
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={guestPhone}
+                    onChange={e => setGuestPhone(e.target.value)}
+                    placeholder="05XXXXXXXX"
+                    dir="ltr"
+                    className="w-full bg-white border border-amber-300 px-4 py-3 rounded-xl outline-none focus:border-amber-500 transition font-bold text-slate-700 text-left"
+                  />
+                  <p className="text-xs text-amber-600 font-bold mt-1.5">
+                    ستصلك رسالة واتساب بتحديثات طلبك
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-bold mb-2 text-[#1a365d]">نوع العطل</label>
