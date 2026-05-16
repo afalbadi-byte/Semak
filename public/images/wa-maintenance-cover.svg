@@ -88,13 +88,12 @@
   <!-- Logo background circle — فاتح قليلاً يساعد على إظهار الشعار -->
   <circle cx="188" cy="209" r="114" fill="#ffffff" opacity="0.06"/>
 
-  <!-- LOGO IMAGE — light version with golden filter -->
+  <!-- LOGO IMAGE — footer version -->
   <image
-    href="https://semak.sa/images/logo-light.png"
+    href="https://semak.sa/images/logo-footer.png"
     x="63" y="84"
     width="250" height="250"
     preserveAspectRatio="xMidYMid meet"
-    filter="url(#logoFilter)"
     opacity="0.95"
   />
 
