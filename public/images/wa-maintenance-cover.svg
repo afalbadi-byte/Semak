@@ -1,272 +1,226 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 418" width="800" height="418">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 800 418" width="800" height="418">
   <defs>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&amp;display=swap');
       text { font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; }
     </style>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+
+    <!-- Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#07111f"/>
       <stop offset="100%" style="stop-color:#132744"/>
     </linearGradient>
+
     <linearGradient id="goldH" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%"   style="stop-color:#c5a059"/>
       <stop offset="50%"  style="stop-color:#f0d080"/>
       <stop offset="100%" style="stop-color:#c5a059"/>
     </linearGradient>
+
     <linearGradient id="goldV" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   style="stop-color:#f0d080"/>
-      <stop offset="100%" style="stop-color:#a07830"/>
+      <stop offset="0%"   style="stop-color:#f5d878"/>
+      <stop offset="100%" style="stop-color:#b08828"/>
     </linearGradient>
-    <linearGradient id="uniform" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   style="stop-color:#1a3a6e"/>
-      <stop offset="100%" style="stop-color:#0d2040"/>
+
+    <!-- Fade overlay: dark left → transparent right (blends photo into background) -->
+    <linearGradient id="fadeLeft" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   style="stop-color:#07111f;stop-opacity:1"/>
+      <stop offset="42%"  style="stop-color:#07111f;stop-opacity:0.92"/>
+      <stop offset="62%"  style="stop-color:#07111f;stop-opacity:0.35"/>
+      <stop offset="100%" style="stop-color:#07111f;stop-opacity:0.08"/>
     </linearGradient>
-    <linearGradient id="pants" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   style="stop-color:#0f2340"/>
-      <stop offset="100%" style="stop-color:#071525"/>
+
+    <!-- Dark vignette on top & bottom of photo -->
+    <linearGradient id="vigTop" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   style="stop-color:#07111f;stop-opacity:0.75"/>
+      <stop offset="40%"  style="stop-color:#07111f;stop-opacity:0"/>
     </linearGradient>
-    <linearGradient id="skin" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   style="stop-color:#e8b89a"/>
-      <stop offset="100%" style="stop-color:#c98b65"/>
+    <linearGradient id="vigBot" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="60%"  style="stop-color:#07111f;stop-opacity:0"/>
+      <stop offset="100%" style="stop-color:#07111f;stop-opacity:0.8"/>
     </linearGradient>
-    <linearGradient id="helmetG" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   style="stop-color:#f5d070"/>
-      <stop offset="100%" style="stop-color:#c5a035"/>
+
+    <!-- Badge gradient -->
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   style="stop-color:#f5d878"/>
+      <stop offset="50%"  style="stop-color:#c5a035"/>
+      <stop offset="100%" style="stop-color:#8a6510"/>
     </linearGradient>
-    <radialGradient id="workerGlow" cx="65%" cy="50%" r="40%">
-      <stop offset="0%"   style="stop-color:#1a365d;stop-opacity:0.7"/>
-      <stop offset="100%" style="stop-color:#07111f;stop-opacity:0"/>
-    </radialGradient>
+
+    <!-- Filters -->
     <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feGaussianBlur stdDeviation="6" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
+
     <filter id="shadow">
-      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.55"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="7" flood-color="#000" flood-opacity="0.55"/>
     </filter>
-    <filter id="personShadow">
-      <feDropShadow dx="4" dy="6" stdDeviation="12" flood-color="#000" flood-opacity="0.5"/>
+
+    <filter id="badgeShadow">
+      <feDropShadow dx="2" dy="3" stdDeviation="5" flood-color="#000" flood-opacity="0.6"/>
     </filter>
+
+    <!-- Photo clip (right portion) -->
+    <clipPath id="photoClip">
+      <rect x="310" y="0" width="490" height="418"/>
+    </clipPath>
+
+    <!-- Full clip -->
     <clipPath id="clip"><rect width="800" height="418"/></clipPath>
   </defs>
 
   <g clip-path="url(#clip)">
 
-    <!-- ── BACKGROUND ── -->
-    <rect width="800" height="418" fill="url(#bg)"/>
+    <!-- ── BASE BACKGROUND ── -->
+    <rect width="800" height="418" fill="url(#bgGrad)"/>
 
-    <!-- Subtle dot grid -->
-    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
-      <circle cx="12" cy="12" r="0.9" fill="#c5a059" opacity="0.10"/>
+    <!-- ── REAL PHOTO — maintenance/handyman worker ── -->
+    <image
+      href="https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=520&h=418&fit=crop&crop=top"
+      x="310" y="0"
+      width="490" height="418"
+      preserveAspectRatio="xMidYMid slice"
+      clip-path="url(#photoClip)"
+    />
+
+    <!-- Vignette top on photo -->
+    <rect x="310" y="0" width="490" height="418" fill="url(#vigTop)"/>
+    <!-- Vignette bottom on photo -->
+    <rect x="310" y="0" width="490" height="418" fill="url(#vigBot)"/>
+    <!-- Left fade overlay (blends photo into dark background) -->
+    <rect width="800" height="418" fill="url(#fadeLeft)"/>
+
+    <!-- Subtle dot grid (left zone only) -->
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="11" cy="11" r="0.85" fill="#c5a059" opacity="0.09"/>
     </pattern>
-    <rect width="800" height="418" fill="url(#dots)"/>
+    <rect width="420" height="418" fill="url(#dots)"/>
 
-    <!-- Right section warm glow behind worker -->
-    <ellipse cx="620" cy="209" rx="230" ry="200" fill="url(#workerGlow)"/>
-
-    <!-- Divider line between content and worker -->
-    <line x1="460" y1="20" x2="460" y2="398" stroke="#c5a059" stroke-width="0.6" stroke-dasharray="4,6" opacity="0.18"/>
-
-    <!-- Gold top/bottom bars -->
+    <!-- Gold top / bottom bars -->
     <rect x="0" y="0"   width="800" height="5" fill="url(#goldH)"/>
     <rect x="0" y="413" width="800" height="5" fill="url(#goldH)"/>
 
-    <!-- ═══════════════════════════════════
-         LEFT CONTENT ZONE  (x 0–455)
-    ═══════════════════════════════════ -->
+    <!-- Vertical gold accent line (separator) -->
+    <line x1="410" y1="18" x2="410" y2="400"
+      stroke="#c5a059" stroke-width="0.7"
+      stroke-dasharray="5,7" opacity="0.2"/>
 
-    <!-- Logo -->
+    <!-- ═══════════════════════════════
+         COMPANY BADGE ON UNIFORM
+         (chest position on the photo)
+    ═══════════════════════════════ -->
+    <g transform="translate(455, 215)" filter="url(#badgeShadow)">
+      <!-- Outer badge frame -->
+      <rect x="-38" y="-30" width="76" height="60" rx="8"
+        fill="url(#badgeGrad)" opacity="0.97"/>
+      <!-- Inner dark inset -->
+      <rect x="-34" y="-26" width="68" height="52" rx="5"
+        fill="#07111f" opacity="0.75"/>
+      <!-- Logo inside badge -->
+      <image
+        href="https://semak.sa/images/logo-footer.png"
+        x="-30" y="-22"
+        width="60" height="44"
+        preserveAspectRatio="xMidYMid meet"
+      />
+      <!-- Badge pin top -->
+      <circle cx="0" cy="-33" r="4.5" fill="url(#goldV)"/>
+      <circle cx="0" cy="-33" r="2"   fill="#f5d878"/>
+    </g>
+
+    <!-- ═══════════════════════════════
+         LEFT TEXT CONTENT
+    ═══════════════════════════════ -->
+
+    <!-- Company logo (large) -->
     <image
       href="https://semak.sa/images/logo-footer.png"
-      x="60" y="34"
-      width="220" height="82"
+      x="48" y="30"
+      width="210" height="78"
       preserveAspectRatio="xMidYMid meet"
       filter="url(#shadow)"
     />
 
-    <!-- Thin gold divider under logo -->
-    <line x1="60" y1="128" x2="400" y2="128" stroke="url(#goldH)" stroke-width="1" opacity="0.4"/>
+    <!-- Thin gold line under logo -->
+    <line x1="48" y1="118" x2="350" y2="118"
+      stroke="url(#goldH)" stroke-width="1" opacity="0.35"/>
 
     <!-- Main title -->
-    <text x="230" y="175"
-      font-size="28" font-weight="900"
+    <text x="48" y="162"
+      font-size="30" font-weight="900"
+      fill="#ffffff" text-anchor="start" direction="rtl"
+      x="356"
+      filter="url(#shadow)"
+    >خدمة الصيانة المنزلية</text>
+    <text
+      x="200" y="162"
+      font-size="30" font-weight="900"
       fill="#ffffff" text-anchor="middle" direction="rtl"
-      filter="url(#shadow)" letter-spacing="0.5"
+      filter="url(#shadow)"
     >خدمة الصيانة المنزلية</text>
 
     <!-- Subtitle -->
-    <text x="230" y="208"
-      font-size="13.5" font-weight="400"
+    <text x="200" y="196"
+      font-size="14" font-weight="400"
       fill="#c5a059" text-anchor="middle" direction="rtl"
-      opacity="0.88"
-    >بسرعة واحترافية عالية</text>
+      opacity="0.9"
+    >احترافية عالية · سرعة في الاستجابة</text>
 
-    <!-- Service badges row -->
-    <g text-anchor="middle" font-size="10.5" font-weight="700" direction="rtl">
-      <!-- Electricity -->
-      <rect x="62"  y="228" width="84" height="26" rx="13" fill="#c5a059" opacity="0.13" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.45"/>
-      <text x="104" y="245" fill="#f0d080">⚡ كهرباء</text>
-      <!-- Plumbing -->
-      <rect x="154" y="228" width="84" height="26" rx="13" fill="#c5a059" opacity="0.13" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.45"/>
-      <text x="196" y="245" fill="#f0d080">🚰 سباكة</text>
-      <!-- AC -->
-      <rect x="62"  y="262" width="84" height="26" rx="13" fill="#c5a059" opacity="0.13" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.45"/>
-      <text x="104" y="279" fill="#f0d080">❄️ تكييف</text>
-      <!-- Painting -->
-      <rect x="154" y="262" width="84" height="26" rx="13" fill="#c5a059" opacity="0.13" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.45"/>
-      <text x="196" y="279" fill="#f0d080">🎨 دهانات</text>
+    <!-- Divider dots -->
+    <circle cx="140" cy="218" r="2.5" fill="#c5a059" opacity="0.5"/>
+    <circle cx="160" cy="218" r="2.5" fill="#c5a059" opacity="0.5"/>
+    <circle cx="180" cy="218" r="2.5" fill="#c5a059" opacity="0.5"/>
+    <circle cx="200" cy="218" r="2.5" fill="#f0d080" opacity="0.8"/>
+    <circle cx="220" cy="218" r="2.5" fill="#c5a059" opacity="0.5"/>
+    <circle cx="240" cy="218" r="2.5" fill="#c5a059" opacity="0.5"/>
+    <circle cx="260" cy="218" r="2.5" fill="#c5a059" opacity="0.5"/>
+
+    <!-- Service badges -->
+    <g text-anchor="middle" font-size="10.5" font-weight="700">
+      <rect x="48"  y="232" width="78" height="24" rx="12" fill="#c5a059" opacity="0.14" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.5"/>
+      <text x="87"  y="248" fill="#f0d080">⚡ كهرباء</text>
+
+      <rect x="134" y="232" width="78" height="24" rx="12" fill="#c5a059" opacity="0.14" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.5"/>
+      <text x="173" y="248" fill="#f0d080">🚰 سباكة</text>
+
+      <rect x="220" y="232" width="78" height="24" rx="12" fill="#c5a059" opacity="0.14" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.5"/>
+      <text x="259" y="248" fill="#f0d080">❄️ تكييف</text>
+
+      <rect x="48"  y="263" width="78" height="24" rx="12" fill="#c5a059" opacity="0.14" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.5"/>
+      <text x="87"  y="279" fill="#f0d080">🔧 أعطال</text>
+
+      <rect x="134" y="263" width="78" height="24" rx="12" fill="#c5a059" opacity="0.14" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.5"/>
+      <text x="173" y="279" fill="#f0d080">🎨 دهانات</text>
+
+      <rect x="220" y="263" width="78" height="24" rx="12" fill="#c5a059" opacity="0.14" stroke="#c5a059" stroke-width="0.8" stroke-opacity="0.5"/>
+      <text x="259" y="279" fill="#f0d080">🏠 عامة</text>
     </g>
 
-    <!-- Gold separator line -->
-    <line x1="60" y1="305" x2="400" y2="305" stroke="#c5a059" stroke-width="0.6" opacity="0.3"/>
+    <!-- Separator line -->
+    <line x1="48" y1="302" x2="370" y2="302"
+      stroke="#c5a059" stroke-width="0.6" opacity="0.28"/>
 
     <!-- Slogan -->
-    <text x="230" y="334"
-      font-size="13" font-weight="600"
+    <text x="200" y="328"
+      font-size="13.5" font-weight="700"
       fill="url(#goldH)" text-anchor="middle" direction="rtl"
-      opacity="0.9" filter="url(#glow)"
-    >سقف يعلو برؤيتك</text>
-    <text x="230" y="356"
-      font-size="13" font-weight="600"
-      fill="url(#goldH)" text-anchor="middle" direction="rtl"
-      opacity="0.9" filter="url(#glow)"
-    >ومسكن يحكي قصتك ✨</text>
+      filter="url(#glow)" opacity="0.95"
+    >سقف يعلو برؤيتك، ومسكن يحكي قصتك ✨</text>
 
-    <!-- Website -->
-    <text x="230" y="392"
-      font-size="11" font-weight="400"
+    <!-- Website URL -->
+    <text x="200" y="360"
+      font-size="11.5" font-weight="400"
       fill="#c5a059" text-anchor="middle"
-      opacity="0.5"
-    >semak.sa</text>
+      opacity="0.45" letter-spacing="1"
+    >www.semak.sa</text>
 
-    <!-- ═══════════════════════════════════
-         RIGHT — MAINTENANCE WORKER
-    ═══════════════════════════════════ -->
-    <g transform="translate(620, 50)" filter="url(#personShadow)">
-
-      <!-- ── HARD HAT ── -->
-      <!-- Brim -->
-      <ellipse cx="0" cy="84" rx="54" ry="11" fill="url(#helmetG)" opacity="0.95"/>
-      <!-- Dome -->
-      <path d="M-46,84 Q-50,44 0,36 Q50,44 46,84 Z" fill="url(#helmetG)"/>
-      <!-- Hat shine -->
-      <path d="M-20,50 Q-10,40 10,44" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.35"/>
-      <!-- Hat band -->
-      <path d="M-46,82 Q0,74 46,82" stroke="#1a365d" stroke-width="6" fill="none" opacity="0.7"/>
-
-      <!-- ── HEAD ── -->
-      <ellipse cx="0" cy="112" rx="30" ry="34" fill="url(#skin)"/>
-
-      <!-- Hair (slight show under hat) -->
-      <path d="M-30,96 Q-30,90 0,88 Q30,90 30,96" fill="#2a1a0a" opacity="0.7"/>
-
-      <!-- Face features -->
-      <!-- Eyebrows -->
-      <path d="M-16,102 Q-10,98 -4,102" stroke="#5a3a1a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-      <path d="M4,102 Q10,98 16,102"  stroke="#5a3a1a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-      <!-- Eyes -->
-      <ellipse cx="-10" cy="109" rx="5" ry="5.5" fill="#fff"/>
-      <ellipse cx="10"  cy="109" rx="5" ry="5.5" fill="#fff"/>
-      <circle  cx="-10" cy="110" r="3.2" fill="#2a1a0a"/>
-      <circle  cx="10"  cy="110" r="3.2" fill="#2a1a0a"/>
-      <!-- Eye glint -->
-      <circle cx="-8.5" cy="108.5" r="1.1" fill="#fff" opacity="0.9"/>
-      <circle cx="11.5" cy="108.5" r="1.1" fill="#fff" opacity="0.9"/>
-      <!-- Nose -->
-      <path d="M0,115 Q-3,121 -5,123 Q0,126 5,123 Q3,121 0,115" fill="#c98060" opacity="0.6"/>
-      <!-- Smile -->
-      <path d="M-10,130 Q0,138 10,130" stroke="#a06040" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-      <!-- Moustache subtle -->
-      <path d="M-8,126 Q0,129 8,126" stroke="#5a3a1a" stroke-width="1.8" fill="none" opacity="0.5"/>
-
-      <!-- ── NECK ── -->
-      <rect x="-10" y="144" width="20" height="18" rx="5" fill="url(#skin)"/>
-
-      <!-- ── UNIFORM BODY ── -->
-      <!-- Main torso -->
-      <path d="M-50,162 L-46,290 L46,290 L50,162 Q30,155 0,153 Q-30,155 -50,162 Z" fill="url(#uniform)"/>
-
-      <!-- Collar white -->
-      <path d="M-14,158 L0,175 L14,158 L10,153 L0,162 L-10,153 Z" fill="#f0f0f0" opacity="0.9"/>
-
-      <!-- Uniform chest pocket left -->
-      <rect x="-45" y="180" width="30" height="22" rx="3" fill="#0d1e40" opacity="0.6"/>
-      <rect x="-45" y="178" width="30" height="5"  rx="2" fill="#c5a059" opacity="0.7"/>
-
-      <!-- COMPANY BADGE on chest right side -->
-      <rect x="12" y="178" width="34" height="26" rx="4" fill="url(#goldV)" opacity="0.95"/>
-      <text x="29" y="188" font-size="6.5" font-weight="900" fill="#07111f" text-anchor="middle" font-family="Cairo, sans-serif">سـمـاك</text>
-      <line x1="14" y1="191" x2="44" y2="191" stroke="#07111f" stroke-width="0.7" opacity="0.5"/>
-      <text x="29" y="200" font-size="5.5" font-weight="600" fill="#07111f" text-anchor="middle" font-family="Cairo, sans-serif">للصيانة</text>
-
-      <!-- Uniform seam / shoulder line -->
-      <path d="M-50,162 Q-50,168 -46,172" stroke="#c5a059" stroke-width="0.8" fill="none" opacity="0.4"/>
-      <path d="M50,162 Q50,168 46,172"   stroke="#c5a059" stroke-width="0.8" fill="none" opacity="0.4"/>
-
-      <!-- Reflective stripe on uniform -->
-      <path d="M-46,240 L46,240" stroke="#c5a059" stroke-width="3" opacity="0.25" stroke-linecap="round"/>
-      <path d="M-46,248 L46,248" stroke="#c5a059" stroke-width="1.5" opacity="0.18" stroke-linecap="round"/>
-
-      <!-- ── LEFT ARM (raised, holding wrench) ── -->
-      <path d="M-50,162 L-78,210 L-88,256 L-72,260 L-62,215 L-38,172 Z" fill="url(#uniform)"/>
-      <!-- Left glove/hand -->
-      <ellipse cx="-80" cy="265" rx="13" ry="10" fill="url(#skin)"/>
-
-      <!-- ── RIGHT ARM (down at side) ── -->
-      <path d="M50,162 L72,208 L76,265 L60,266 L58,212 L38,172 Z" fill="url(#uniform)"/>
-      <!-- Right glove/hand -->
-      <ellipse cx="68" cy="271" rx="13" ry="10" fill="url(#skin)"/>
-
-      <!-- ── TOOL BELT ── -->
-      <rect x="-46" y="282" width="92" height="14" rx="5" fill="#8B6914"/>
-      <!-- Belt buckle -->
-      <rect x="-10" y="280" width="20" height="18" rx="3" fill="url(#goldV)"/>
-      <rect x="-6"  y="284" width="12" height="10" rx="2" fill="#07111f" opacity="0.6"/>
-      <!-- Belt tool loops -->
-      <rect x="-42" y="283" width="8" height="10" rx="2" fill="#6a4e10"/>
-      <rect x="-32" y="283" width="8" height="10" rx="2" fill="#6a4e10"/>
-      <rect x="24"  y="283" width="8" height="10" rx="2" fill="#6a4e10"/>
-      <rect x="34"  y="283" width="8" height="10" rx="2" fill="#6a4e10"/>
-
-      <!-- ── PANTS ── -->
-      <rect x="-44" y="294" width="38" height="82" rx="6" fill="url(#pants)"/>
-      <rect x="6"   y="294" width="38" height="82" rx="6" fill="url(#pants)"/>
-      <!-- Pants knee patch -->
-      <rect x="-44" y="330" width="38" height="18" rx="3" fill="#0d1e3a" opacity="0.5"/>
-      <rect x="6"   y="330" width="38" height="18" rx="3" fill="#0d1e3a" opacity="0.5"/>
-
-      <!-- ── BOOTS ── -->
-      <path d="M-44,373 Q-44,382 -22,384 Q-8,385 -6,382 L-6,372 L-44,372 Z" fill="#1a1a2a"/>
-      <!-- Boot toe cap -->
-      <path d="M-44,376 Q-44,384 -28,384 Q-20,384 -20,380" fill="#2d2d3d" opacity="0.7"/>
-      <path d="M6,373 Q6,382 28,384 Q42,385 44,382 L44,372 L6,372 Z" fill="#1a1a2a"/>
-      <path d="M6,376 Q6,384 22,384 Q30,384 30,380" fill="#2d2d3d" opacity="0.7"/>
-      <!-- Boot shine -->
-      <path d="M-42,374 Q-38,371 -34,373" stroke="#fff" stroke-width="1" fill="none" opacity="0.2"/>
-      <path d="M8,374 Q12,371 16,373"    stroke="#fff" stroke-width="1" fill="none" opacity="0.2"/>
-
-      <!-- ── WRENCH (in left raised hand) ── -->
-      <g transform="translate(-82, 232) rotate(-55)">
-        <!-- Handle -->
-        <rect x="-5" y="-5" width="10" height="58" rx="5" fill="url(#goldV)"/>
-        <!-- Grip texture -->
-        <rect x="-5" y="8"  width="10" height="4" rx="2" fill="#07111f" opacity="0.3"/>
-        <rect x="-5" y="18" width="10" height="4" rx="2" fill="#07111f" opacity="0.3"/>
-        <rect x="-5" y="28" width="10" height="4" rx="2" fill="#07111f" opacity="0.3"/>
-        <!-- Wrench head open end -->
-        <circle cx="0" cy="-18" r="20" fill="url(#goldV)"/>
-        <circle cx="0" cy="-18" r="11" fill="#07111f"/>
-        <!-- Jaw -->
-        <rect x="-20" y="-31" width="10" height="20" rx="3" fill="#07111f"/>
-        <!-- Shine on wrench -->
-        <path d="M-14,-28 Q-8,-34 -2,-28" stroke="#fff" stroke-width="1.5" fill="none" opacity="0.3" stroke-linecap="round"/>
-      </g>
-
-    </g>
-    <!-- END WORKER GROUP -->
-
-    <!-- Shadow on floor under worker -->
-    <ellipse cx="620" cy="410" rx="85" ry="10" fill="#000" opacity="0.25"/>
+    <!-- Phone -->
+    <text x="200" y="385"
+      font-size="12" font-weight="600"
+      fill="#ffffff" text-anchor="middle"
+      opacity="0.55"
+    >📞 920000000</text>
 
   </g>
 </svg>
