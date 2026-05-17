@@ -23,6 +23,13 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_MOTTASL_API_KEY: ${{ secrets.VITE_MOTTASL_API_KEY }}
+          VITE_WA_ADMIN_PHONE: ${{ secrets.VITE_WA_ADMIN_PHONE }}
+          VITE_WA_CLIENT_TEMPLATE_ID: ${{ secrets.VITE_WA_CLIENT_TEMPLATE_ID }}
+          VITE_WA_CLIENT_TEMPLATE_LANG: ${{ secrets.VITE_WA_CLIENT_TEMPLATE_LANG }}
+          VITE_WA_MAINT_TEMPLATE_ID: ${{ secrets.VITE_WA_MAINT_TEMPLATE_ID }}
 
       - name: Copy api.php to dist
         run: cp api.php dist/api.php
