@@ -76,22 +76,19 @@ export async function notifyAdmin({ id, name, phone, interest }) {
   return { ok: false };
 }
 
-// رد ترحيبي للعميل — قالب معتمد أولاً، ثم رسالة نصية
+// رد ترحيبي للعميل — قالب معتمد فقط (النص لا يعمل خارج نافذة 24 ساعة)
 export async function replyToClient(clientPhone, clientName) {
-  if (!API_KEY || !clientPhone) return { ok: false };
-
-  if (TEMPLATE_ID) {
-    const res = await sendTemplate(normalizePhone(clientPhone), TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
-    if (res?.ok) return { ok: true };
+  if (!API_KEY || !clientPhone || !TEMPLATE_ID) {
+    console.error("[WA] replyToClient: مفقود API_KEY أو TEMPLATE_ID", { API_KEY: !!API_KEY, TEMPLATE_ID });
+    return { ok: false };
   }
-
-  const body =
-    `مرحباً ${clientName} 👋\n\n` +
-    `شكراً لاهتمامك بـ*سماك العقارية*،\n` +
-    `تم استلام طلبك بنجاح وسيتواصل معك أحد مستشارينا في أقرب وقت.\n\n` +
-    `للاستفسار الفوري:\n📞 920032842`;
-  const res2 = await sendText(normalizePhone(clientPhone), body);
-  return { ok: !!res2?.ok };
+  const to = normalizePhone(clientPhone);
+  console.log("[WA] replyToClient → template:", TEMPLATE_ID, "to:", to, "name:", clientName);
+  const res = await sendTemplate(to, TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
+  const data = res ? await res.clone().json().catch(() => ({})) : {};
+  console.log("[WA] replyToClient result:", res?.status, data);
+  if (res?.ok) return { ok: true };
+  return { ok: false, error: data };
 }
 
 // ─── صفحة الصيانة ───────────────────────────────────────────
