@@ -62,7 +62,7 @@ async function sendTemplate(to, templateId, lang, bodyVars = []) {
 
 // ─── صفحة التواصل ───────────────────────────────────────────
 
-// إشعار الإدارة بعميل جديد — يفتح واتساب مباشرة (لا يحتاج قالب معتمد)
+// إشعار الإدارة بعميل جديد — يرسل عبر API، ويفتح wa.me كاحتياط
 export async function notifyAdmin({ id, name, phone, interest }) {
   const msg =
     `🔔 *عميل جديد - سماك العقارية*\n\n` +
@@ -71,13 +71,35 @@ export async function notifyAdmin({ id, name, phone, interest }) {
     `🏠 الاهتمام: ${interest}\n\n` +
     `⏰ ${new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}`;
   logWaSent(id, "lead");
-  window.open(`https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(msg)}`, "_blank");
+  if (API_KEY && ADMIN_PHONE) {
+    const res = await sendText(ADMIN_PHONE, msg);
+    if (res?.ok) return { ok: true };
+  }
+  // احتياط: فتح wa.me يدوياً إذا لم تعمل API
+  if (ADMIN_PHONE) {
+    window.open(`https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+  return { ok: false };
 }
 
-// رد ترحيبي للعميل — يُفعَّل فقط بعد اعتماد القالب
+// رد ترحيبي للعميل — قالب معتمد أولاً، ثم رسالة نصية احتياطية
 export async function replyToClient(clientPhone, clientName) {
-  if (!TEMPLATE_ID || TEMPLATE_ID === "semak_welcome") return; // قالب لم يُعتمد بعد
-  return sendTemplate(normalizePhone(clientPhone), TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
+  if (!API_KEY || !clientPhone) return { ok: false };
+
+  // أولوية: قالب معتمد
+  if (TEMPLATE_ID && TEMPLATE_ID !== "semak_welcome") {
+    const res = await sendTemplate(normalizePhone(clientPhone), TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
+    if (res?.ok) return { ok: true };
+  }
+
+  // احتياط: رسالة نصية
+  const body =
+    `مرحباً ${clientName} 👋\n\n` +
+    `شكراً لاهتمامك بـ*سماك العقارية*،\n` +
+    `تم استلام طلبك بنجاح وسيتواصل معك أحد مستشارينا في أقرب وقت.\n\n` +
+    `للاستفسار الفوري:\n📞 920032842`;
+  const res2 = await sendText(normalizePhone(clientPhone), body);
+  return { ok: !!res2?.ok };
 }
 
 // ─── صفحة الصيانة ───────────────────────────────────────────

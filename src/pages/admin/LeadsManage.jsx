@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Search, RefreshCw, MessageCircle, UserCheck, X, Building, CheckCircle2 } from 'lucide-react';
+import { sendWhatsAppMessage, normalizePhone } from '../../services/whatsappService';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -43,11 +44,17 @@ export default function LeadsManage({ showToast }) {
         }
     };
 
-    // إرسال رسالة واتساب للمهتم
-    const notifyWhatsApp = (lead) => {
-        let phone = lead.phone.toString().replace(/^0/, "966").replace(/\D/g, "");
-        let msg = `مرحباً بك أستاذ ${lead.name}،\nمعك فريق المبيعات من *سماك العقارية* 🏢\n\nبناءً على طلبك واهتمامك بالوحدة (${lead.unit})، يسعدنا تواصلك وتقديم كافة التفاصيل والرد على استفساراتك.\n\nكيف يمكننا خدمتك اليوم؟`;
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+    // إرسال رسالة واتساب للمهتم — API أولاً ثم wa.me احتياطاً
+    const notifyWhatsApp = async (lead) => {
+        const msg = `مرحباً بك أستاذ ${lead.name}،\nمعك فريق المبيعات من *سماك العقارية* 🏢\n\nبناءً على طلبك واهتمامك بالوحدة (${lead.unit})، يسعدنا تواصلك وتقديم كافة التفاصيل والرد على استفساراتك.\n\nكيف يمكننا خدمتك اليوم؟`;
+        const result = await sendWhatsAppMessage(lead.phone, msg);
+        if (result.success) {
+            if (showToast) showToast("تم الإرسال", `أُرسلت رسالة واتساب لـ ${lead.name}`, "success");
+        } else {
+            // احتياط: فتح wa.me يدوياً
+            const phone = normalizePhone(lead.phone);
+            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+        }
     };
 
     // تغيير حالة المهتم (جديد، مهتم، تم البيع، مرفوض)
