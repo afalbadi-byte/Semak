@@ -80,7 +80,7 @@ export async function notifyAdmin({ id, name, phone, interest }) {
 export async function replyToClient(clientPhone, clientName) {
   if (!API_KEY || !clientPhone) return { ok: false };
 
-  if (TEMPLATE_ID && TEMPLATE_ID !== "semak_welcome") {
+  if (TEMPLATE_ID) {
     const res = await sendTemplate(normalizePhone(clientPhone), TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
     if (res?.ok) return { ok: true };
   }
