@@ -49,7 +49,7 @@ async function sendTemplate(to, templateName, lang, bodyVars = []) {
       template: {
         template_id: templateName,
         language: lang,
-        ...(bodyVars.length > 0 && { body_params: bodyVars.map(String) }),
+        ...(bodyVars.length > 0 && { argument: { BODY: bodyVars.map(String) } }),
       },
     }),
   });
@@ -258,9 +258,6 @@ export async function getAzeerTemplates() {
 export async function sendWhatsAppTemplate(phone, templateName, vars = []) {
   if (!API_KEY) return { success: false, error: "API key غير مضبوط" };
   const to = normalizePhone(phone);
-  const components = vars.length
-    ? [{ type: "body", parameters: vars.map(v => ({ type: "text", text: String(v) })) }]
-    : [];
   try {
     const res = await fetch(`${BASE_URL}/message/send?create=true`, {
       method: "POST",
@@ -272,9 +269,9 @@ export async function sendWhatsAppTemplate(phone, templateName, vars = []) {
         to,
         type: "template",
         template: {
-          name: templateName,
-          language: { code: TEMPLATE_LANG },
-          components,
+          template_id: templateName,
+          language: TEMPLATE_LANG,
+          ...(vars.length > 0 && { argument: { BODY: vars.map(String) } }),
         },
       }),
     });
