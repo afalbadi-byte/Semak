@@ -38,8 +38,11 @@ async function sendText(to, body) {
   });
 }
 
-async function sendTemplate(to, templateId, lang, bodyVars = []) {
-  if (!API_KEY || !templateId) return;
+async function sendTemplate(to, templateName, lang, bodyVars = []) {
+  if (!API_KEY || !templateName) return;
+  const components = bodyVars.length > 0
+    ? [{ type: "body", parameters: bodyVars.map(v => ({ type: "text", text: String(v) })) }]
+    : [];
   return fetch(`${BASE_URL}/message/send?create=true`, {
     method: "POST",
     headers: headers(),
@@ -47,14 +50,9 @@ async function sendTemplate(to, templateId, lang, bodyVars = []) {
       to,
       type: "template",
       template: {
-        template_id: templateId,
-        language: lang,
-        ...(bodyVars.length > 0 && {
-          components: [{
-            type: "body",
-            parameters: bodyVars.map(v => ({ type: "text", text: String(v) })),
-          }],
-        }),
+        name: templateName,
+        language: { code: lang },
+        ...(components.length > 0 && { components }),
       },
     }),
   });
@@ -62,7 +60,9 @@ async function sendTemplate(to, templateId, lang, bodyVars = []) {
 
 // ─── صفحة التواصل ───────────────────────────────────────────
 
-// إشعار الإدارة بعميل جديد — تلقائي عبر API
+// إشعار الإدارة بعميل جديد
+// يعمل فقط إذا راسل المدير الحساب التجاري خلال آخر 24 ساعة (نافذة WhatsApp)
+// الحل الدائم: إنشاء قالب إداري معتمد وضع معرفه في VITE_WA_ADMIN_TEMPLATE_ID
 export async function notifyAdmin({ id, name, phone, interest }) {
   if (!API_KEY || !ADMIN_PHONE) return { ok: false };
   const msg =
