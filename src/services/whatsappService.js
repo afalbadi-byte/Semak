@@ -62,37 +62,29 @@ async function sendTemplate(to, templateId, lang, bodyVars = []) {
 
 // ─── صفحة التواصل ───────────────────────────────────────────
 
-// إشعار الإدارة بعميل جديد — يرسل عبر API، ويفتح wa.me كاحتياط
+// إشعار الإدارة بعميل جديد — تلقائي عبر API
 export async function notifyAdmin({ id, name, phone, interest }) {
+  if (!API_KEY || !ADMIN_PHONE) return { ok: false };
   const msg =
     `🔔 *عميل جديد - سماك العقارية*\n\n` +
     `👤 الاسم: ${name}\n` +
     `📞 الجوال: ${phone}\n` +
     `🏠 الاهتمام: ${interest}\n\n` +
     `⏰ ${new Date().toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}`;
-  logWaSent(id, "lead");
-  if (API_KEY && ADMIN_PHONE) {
-    const res = await sendText(ADMIN_PHONE, msg);
-    if (res?.ok) return { ok: true };
-  }
-  // احتياط: فتح wa.me يدوياً إذا لم تعمل API
-  if (ADMIN_PHONE) {
-    window.open(`https://wa.me/${ADMIN_PHONE}?text=${encodeURIComponent(msg)}`, "_blank");
-  }
+  const res = await sendText(ADMIN_PHONE, msg);
+  if (res?.ok) { logWaSent(id, "lead"); return { ok: true }; }
   return { ok: false };
 }
 
-// رد ترحيبي للعميل — قالب معتمد أولاً، ثم رسالة نصية احتياطية
+// رد ترحيبي للعميل — قالب معتمد أولاً، ثم رسالة نصية
 export async function replyToClient(clientPhone, clientName) {
   if (!API_KEY || !clientPhone) return { ok: false };
 
-  // أولوية: قالب معتمد
   if (TEMPLATE_ID && TEMPLATE_ID !== "semak_welcome") {
     const res = await sendTemplate(normalizePhone(clientPhone), TEMPLATE_ID, TEMPLATE_LANG, [clientName]);
     if (res?.ok) return { ok: true };
   }
 
-  // احتياط: رسالة نصية
   const body =
     `مرحباً ${clientName} 👋\n\n` +
     `شكراً لاهتمامك بـ*سماك العقارية*،\n` +

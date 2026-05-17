@@ -44,16 +44,13 @@ export default function LeadsManage({ showToast }) {
         }
     };
 
-    // إرسال رسالة واتساب للمهتم — API أولاً ثم wa.me احتياطاً
+    // إرسال رسالة واتساب للمهتم — تلقائي عبر API
     const notifyWhatsApp = async (lead) => {
         const msg = `مرحباً بك أستاذ ${lead.name}،\nمعك فريق المبيعات من *سماك العقارية* 🏢\n\nبناءً على طلبك واهتمامك بالوحدة (${lead.unit})، يسعدنا تواصلك وتقديم كافة التفاصيل والرد على استفساراتك.\n\nكيف يمكننا خدمتك اليوم؟`;
         const result = await sendWhatsAppMessage(lead.phone, msg);
-        if (result.success) {
-            if (showToast) showToast("تم الإرسال", `أُرسلت رسالة واتساب لـ ${lead.name}`, "success");
-        } else {
-            // احتياط: فتح wa.me يدوياً
-            const phone = normalizePhone(lead.phone);
-            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+        if (showToast) {
+            if (result.success) showToast("تم الإرسال ✅", `أُرسلت رسالة واتساب لـ ${lead.name}`);
+            else showToast("فشل الإرسال", result.error || "تحقق من إعدادات API", "error");
         }
     };
 
