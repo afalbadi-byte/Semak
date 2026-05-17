@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building,
     UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
-    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2
+    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle
 } from 'lucide-react';
 
 // استدعاء الأدوات والمكونات الخارجية
@@ -15,6 +15,7 @@ import FeasibilityCalc from './FeasibilityCalc';
 import UnitsOverview from './UnitsOverview';
 import ProjectsManage from './ProjectsManage';
 import UnitsEdit from './UnitsEdit';
+import WhatsAppInbox from './WhatsAppInbox';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -162,6 +163,7 @@ export default function Dashboard({ onLogout }) {
         { id: 'letters', title: 'منشئ الخطابات', icon: FilePenLine, permKey: 'letters', isLink: true, path: '/admin/letter-generator' },
         { id: 'accounting', title: 'النظام المحاسبي', icon: Calculator, permKey: 'accounting', isExternal: true, path: 'https://semak.daftra.com/' },
         { id: 'users', title: 'إدارة الموظفين', icon: UserCircle, permKey: 'users_manage' },
+        { id: 'whatsapp', title: 'صندوق واتساب', icon: MessageCircle, permKey: 'admin' },
     ];
 
     const authorizedMenuItems = ALL_MENU_ITEMS.filter(item => hasPermission(item.permKey));
@@ -379,8 +381,15 @@ export default function Dashboard({ onLogout }) {
 
                     {/* --- قسم سجل المهتمين (Leads) --- */}
                     {activeTab === 'leads' && hasPermission('leads') && (
-                        <div className="animate-fadeIn p-6 md:p-8"> 
+                        <div className="animate-fadeIn p-6 md:p-8">
                             <LeadsManage showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
+                        </div>
+                    )}
+
+                    {/* --- صندوق واتساب --- */}
+                    {activeTab === 'whatsapp' && hasPermission('admin') && (
+                        <div className="animate-fadeIn">
+                            <WhatsAppInbox />
                         </div>
                     )}
 
@@ -388,4 +397,4 @@ export default function Dashboard({ onLogout }) {
             </div>
         </div>
     );
-}
+}t

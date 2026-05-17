@@ -14,7 +14,7 @@ const headers = () => ({
 });
 
 // تنظيف رقم الهاتف وإضافة مفتاح السعودية
-function normalizePhone(phone) {
+export function normalizePhone(phone) {
   const clean = String(phone).replace(/\D/g, "");
   return clean.startsWith("966") ? clean : `966${clean.replace(/^0/, "")}`;
 }
@@ -188,5 +188,93 @@ export async function notifyClientStatusUpdate(ticket) {
     return { ok: false, error: `HTTP ${res2?.status}` };
   } catch (err) {
     return { ok: false, error: err.message || "خطأ غير معروف" };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// دوال صندوق البريد (WhatsAppInbox)
+// ═══════════════════════════════════════════════════════════════
+
+
+/** جلب المحادثات والرسائل من DB عبر backend */
+export async function getWhatsAppMessages(filters = {}) {
+  try {
+    const params = new URLSearchParams({ action: "get_whatsapp_messages", ...filters });
+    const res = await fetch(`${API_URL}?${params}`);
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error("getWhatsAppMessages:", err);
+    return { messages: [], conversations: [] };
+  }
+}
+
+/** إرسال رسالة نصية مباشرة عبر Azeer */
+export async function sendWhatsAppMessage(phone, message) {
+  if (!API_KEY) return { success: false, error: "API key غير مضبوط" };
+  const to = normalizePhone(phone);
+  try {
+    const res = await fetch(`${BASE_URL}/message/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({ to, type: "text", text: { body: message } }),
+    });
+    const data = await res.json();
+    return res.ok
+      ? { success: true, message_id: data.id || data.message_id || "" }
+      : { success: false, error: data.message || data.error || `HTTP ${res.status}` };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/** جلب قوالب Azeer المعتمدة */
+export async function getAzeerTemplates() {
+  if (!API_KEY) return [];
+  try {
+    const res = await fetch(`${BASE_URL}/partner/templates`, {
+      headers: { Authorization: `Bearer ${API_KEY}`, Accept: "application/json" },
+    });
+    const data = await res.json();
+    return data.data || data || [];
+  } catch (err) {
+    console.error("getAzeerTemplates:", err);
+    return [];
+  }
+}
+
+/** إرسال رسالة عبر قالب معتمد */
+export async function sendWhatsAppTemplate(phone, templateName, vars = []) {
+  if (!API_KEY) return { success: false, error: "API key غير مضبوط" };
+  const to = normalizePhone(phone);
+  const components = vars.length
+    ? [{ type: "body", parameters: vars.map(v => ({ type: "text", text: String(v) })) }]
+    : [];
+  try {
+    const res = await fetch(`${BASE_URL}/message/send?create=true`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: TEMPLATE_LANG },
+          components,
+        },
+      }),
+    });
+    const data = await res.json();
+    return res.ok
+      ? { success: true, message_id: data.id || data.message_id || "" }
+      : { success: false, error: data.message || data.error || `HTTP ${res.status}` };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 }
