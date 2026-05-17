@@ -40,9 +40,6 @@ async function sendText(to, body) {
 
 async function sendTemplate(to, templateName, lang, bodyVars = []) {
   if (!API_KEY || !templateName) return;
-  const components = bodyVars.length > 0
-    ? [{ type: "body", parameters: bodyVars.map(v => ({ type: "text", text: String(v) })) }]
-    : [];
   return fetch(`${BASE_URL}/message/send?create=true`, {
     method: "POST",
     headers: headers(),
@@ -52,7 +49,7 @@ async function sendTemplate(to, templateName, lang, bodyVars = []) {
       template: {
         template_id: templateName,
         language: lang,
-        ...(components.length > 0 && { components }),
+        ...(bodyVars.length > 0 && { body_params: bodyVars.map(String) }),
       },
     }),
   });
