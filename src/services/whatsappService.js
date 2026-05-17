@@ -50,8 +50,8 @@ async function sendTemplate(to, templateName, lang, bodyVars = []) {
       to,
       type: "template",
       template: {
-        name: templateName,
-        language: { code: lang },
+        template_id: templateName,
+        language: lang,
         ...(components.length > 0 && { components }),
       },
     }),
