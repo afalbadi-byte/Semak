@@ -77,11 +77,11 @@ export default function Footer() {
 
           {/* العمود ١: الهوية والتواصل */}
           <div className="sm:col-span-2 lg:col-span-1">
-            <img
-              src="/images/logo-footer.png"
-              alt="شعار سماك العقارية"
-              className="max-h-[72px] w-auto object-contain logo-footer-gold mb-4"
-            />
+            <div className="mb-4">
+              <span className="text-3xl font-black tracking-wide text-white">سماك</span>
+              <span className="text-3xl font-black tracking-wide text-[#c5a059]"> العقارية</span>
+              <div className="mt-1 h-[2px] w-12 bg-[#c5a059] rounded-full" />
+            </div>
             <p className="text-[#c5a059] font-bold text-sm leading-relaxed mb-3">
               سقف يعلو برؤيتك، ومسكن يحكي قصتك
             </p>
