@@ -548,6 +548,22 @@ switch ($action) {
             ]);
             curl_exec($ch);
             curl_close($ch);
+
+            // ② رسالة ترحيب للعميل (نص — تعمل فقط إذا فتح محادثة خلال 24 ساعة)
+            if (!empty($phone)) {
+                $client_phone = preg_replace('/\D/', '', $phone);
+                $client_phone = ltrim($client_phone, '0');
+                if (substr($client_phone, 0, 3) !== '966') $client_phone = '966' . $client_phone;
+                // تأكد أن رقم العميل مختلف عن رقم الإدارة لتجنب الإرسال المزدوج
+                if (strlen($client_phone) >= 12 && $client_phone !== $admin_phone) {
+                    $welcome_msg = "مرحباً $name 👋\n\nشكراً لاهتمامك بـ *سماك العقارية*.\nسيتواصل معك فريق المبيعات قريباً.\n\n🏠 الوحدة: $interest\n📞 للاستفسار: 920032842";
+                    $welcome_payload = json_encode(["to" => $client_phone, "type" => "text", "text" => ["body" => $welcome_msg]]);
+                    $ch2 = curl_init("https://api.mottasl.ai/v1/message/send");
+                    curl_setopt_array($ch2, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $welcome_payload, CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer $wa_token"], CURLOPT_TIMEOUT => 5]);
+                    curl_exec($ch2); curl_close($ch2);
+                }
+            }
+
             echo json_encode(["success" => true, "id" => $new_id]);
         } else {
             $notes = $conn->real_escape_string("الوحدة: $interest | المصدر: $source");

@@ -3,7 +3,6 @@ import { Phone, MapPin, Send, RefreshCw, MessageCircle, Mail, Clock } from 'luci
 import { API_URL } from '../utils/helpers';
 import PageMeta from '../components/PageMeta';
 import { AppContext } from '../context/AppContext';
-import { replyToClient } from '../services/whatsappService';
 
 const ALL_UNITS = ["SM-A01","SM-A02","SM-A03","SM-A04","SM-A05","SM-A06","SM-A07"];
 
@@ -50,8 +49,6 @@ export default function Contact() {
       const data = await response.json();
       if (data.success) {
         showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.", "success");
-        // إشعار الإدارة يُرسل تلقائياً من api.php — هنا فقط الرد الترحيبي للعميل
-        await replyToClient(payload.phone, payload.name);
         e.target.reset();
       } else { throw new Error("فشل"); }
     } catch (error) {
