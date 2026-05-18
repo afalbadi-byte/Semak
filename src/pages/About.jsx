@@ -46,6 +46,110 @@ export default function About() {
         </div>
       </div>
 
+      {/* ═══════════════════════════════════════════════════
+          قسم العلامة التجارية — عمق الاسم وجذره القرآني
+          ═══════════════════════════════════════════════════ */}
+      <div className="py-28 bg-[#0a0f1e] relative overflow-hidden">
+        {/* نقاط ذهبية خلفية */}
+        <div className="absolute inset-0 opacity-[0.035]" style={{ backgroundImage: "radial-gradient(#c5a059 1px, transparent 1px)", backgroundSize: "36px 36px" }} />
+        {/* توهج مركزي */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-[#c5a059]/4 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="container mx-auto px-6 relative z-10 max-w-4xl">
+
+          {/* ── الشارة ── */}
+          <div className="text-center mb-16">
+            <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-[#c5a059]/30 bg-[#c5a059]/10 text-[#c5a059] text-sm font-bold tracking-[0.25em]">
+              عمق الاسم
+            </span>
+          </div>
+
+          {/* ── الآية القرآنية ── */}
+          <div className="text-center mb-16">
+            {/* فاصل ذهبي علوي */}
+            <div className="flex items-center justify-center gap-4 mb-10">
+              <div className="h-px w-24 bg-gradient-to-r from-transparent to-[#c5a059]/50" />
+              <span className="text-[#c5a059]/60 text-lg">✦</span>
+              <div className="h-px w-24 bg-gradient-to-l from-transparent to-[#c5a059]/50" />
+            </div>
+
+            {/* إطار الآية */}
+            <div className="relative inline-block w-full max-w-2xl mx-auto">
+              <div className="absolute -inset-4 bg-[#c5a059]/5 rounded-3xl blur-2xl" />
+              <div className="relative border border-[#c5a059]/20 rounded-3xl py-12 px-8 bg-gradient-to-b from-white/[0.03] to-transparent">
+                {/* زاوية تزيينية */}
+                <span className="absolute top-4 right-5 text-[#c5a059]/25 text-3xl font-serif leading-none select-none">﴿</span>
+                <span className="absolute bottom-4 left-5 text-[#c5a059]/25 text-3xl font-serif leading-none select-none">﴾</span>
+
+                <blockquote
+                  className="text-3xl md:text-[2.6rem] text-white leading-[2] tracking-wide"
+                  style={{ fontFamily: "'Amiri', serif" }}
+                >
+                  رَفَعَ سَمْكَهَا فَسَوَّاهَا
+                </blockquote>
+              </div>
+            </div>
+
+            <p className="text-[#c5a059]/60 text-xs font-bold tracking-[0.35em] mt-6 uppercase">
+              سورة النازعات · الآية ٢٨
+            </p>
+
+            {/* فاصل ذهبي سفلي */}
+            <div className="flex items-center justify-center gap-4 mt-10">
+              <div className="h-px w-24 bg-gradient-to-r from-transparent to-[#c5a059]/50" />
+              <span className="text-[#c5a059]/60 text-lg">✦</span>
+              <div className="h-px w-24 bg-gradient-to-l from-transparent to-[#c5a059]/50" />
+            </div>
+          </div>
+
+          {/* ── بطاقتا الشرح ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-14">
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 hover:border-[#c5a059]/25 transition-colors duration-300">
+              <div className="flex items-center gap-3 mb-5">
+                <span className="w-8 h-8 rounded-full bg-[#c5a059]/15 text-[#c5a059] flex items-center justify-center text-sm font-black" style={{ fontFamily: "'Amiri', serif" }}>١</span>
+                <h3 className="text-[#c5a059] font-black text-lg">معنى الاسم</h3>
+              </div>
+              <p className="text-slate-400 leading-[2] text-base">
+                <strong className="text-white font-bold">سماك</strong> جمع مفردة "سمك"، والسمك في العربية هو السقف الرفيع المتين. وقد وردت هذه الكلمة في كتاب الله، إذ وصف الله سبحانه بها السماء في قوله الكريم:{' '}
+                <em className="text-[#c5a059] font-bold not-italic">"رَفَعَ سَمْكَهَا فَسَوَّاهَا"</em>
+                {' '}— علوٌّ وإحكام لا نظير له.
+              </p>
+            </div>
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 hover:border-[#c5a059]/25 transition-colors duration-300">
+              <div className="flex items-center gap-3 mb-5">
+                <span className="w-8 h-8 rounded-full bg-[#c5a059]/15 text-[#c5a059] flex items-center justify-center text-sm font-black" style={{ fontFamily: "'Amiri', serif" }}>٢</span>
+                <h3 className="text-[#c5a059] font-black text-lg">عمق الاختيار</h3>
+              </div>
+              <p className="text-slate-400 leading-[2] text-base">
+                اخترنا هذا الاسم عن تأمّل وقصد؛ فكما رفع الله سمك السماء بإتقان وإحكام، نحن نرفع أسقف منازلكم بالجودة والعناية ذاتهما — سقف لا يحمي فحسب، بل{' '}
+                <strong className="text-white font-bold">يعلو برؤيتك</strong>{' '}
+                ويروي قصة صاحبه.
+              </p>
+            </div>
+          </div>
+
+          {/* ── الـ Slogan ── */}
+          <div className="relative text-center rounded-[2rem] border border-[#c5a059]/20 bg-gradient-to-b from-[#c5a059]/[0.06] to-transparent p-10 md:p-14">
+            {/* شارة "شعارنا" تعلو الحد */}
+            <div className="absolute -top-[1px] left-1/2 -translate-x-1/2">
+              <span className="inline-block px-5 py-1 bg-[#0a0f1e] text-[#c5a059]/70 text-[10px] font-bold tracking-[0.4em] border-x border-t border-[#c5a059]/20 rounded-t-xl">
+                شعارنا
+              </span>
+            </div>
+
+            <p className="text-2xl md:text-4xl font-black text-white leading-[1.9] mt-2" style={{ fontFamily: "'Cairo', sans-serif" }}>
+              سقف يعلو <span className="text-[#c5a059]">برؤيتك</span>،
+              <br />
+              ومسكن يحكي <span className="text-[#c5a059]">قصتك</span>
+            </p>
+            <p className="text-slate-500 text-sm mt-6 max-w-lg mx-auto leading-relaxed">
+              من آية قرآنية تصف عظمة الخلق، إلى شعار يلخّص رسالتنا — كل مشروع نبنيه رفعةٌ لك ولأسرتك، وحكاية تبدأ بك.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
       <div className="py-24 bg-slate-50 relative">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-40" />
         <div className="container mx-auto px-6 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
