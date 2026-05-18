@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { Phone, MapPin, Send, RefreshCw, MessageCircle, Mail, Clock } from 'lucide-react';
 import { API_URL } from '../utils/helpers';
 import PageMeta from '../components/PageMeta';
@@ -11,6 +11,7 @@ export default function Contact() {
   const { showToast } = useContext(AppContext);
   const [loading, setLoading] = useState(false);
   const [soldUnits, setSoldUnits] = useState({});
+  const submitting = useRef(false);
 
   useEffect(() => {
     fetch(`${API_URL}?action=get_units_status`)
@@ -27,6 +28,8 @@ export default function Contact() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setLoading(true);
 
     const rawPhone = e.target.phone.value.trim();
@@ -59,7 +62,7 @@ export default function Contact() {
       } else { throw new Error("فشل"); }
     } catch (error) {
       showToast("تنبيه", "حدث خطأ في الاتصال، يرجى المحاولة لاحقاً.", "error");
-    } finally { setLoading(false); }
+    } finally { setLoading(false); submitting.current = false; }
   };
 
   return (
