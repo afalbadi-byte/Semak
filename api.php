@@ -548,6 +548,7 @@ switch ($action) {
             ]);
             curl_exec($ch);
             curl_close($ch);
+
             echo json_encode(["success" => true, "id" => $new_id]);
         } else {
             $notes = $conn->real_escape_string("الوحدة: $interest | المصدر: $source");

@@ -3,7 +3,7 @@ import { Phone, MapPin, Send, RefreshCw, MessageCircle, Mail, Clock } from 'luci
 import { API_URL } from '../utils/helpers';
 import PageMeta from '../components/PageMeta';
 import { AppContext } from '../context/AppContext';
-import { notifyAdmin, replyToClient } from '../services/whatsappService';
+import { replyToClient } from '../services/whatsappService';
 
 const ALL_UNITS = ["SM-A01","SM-A02","SM-A03","SM-A04","SM-A05","SM-A06","SM-A07"];
 
@@ -53,11 +53,7 @@ export default function Contact() {
       const data = await response.json();
       if (data.success) {
         showToast("تم الإرسال بنجاح", "شكراً لاهتمامك، سيتم التواصل معك قريباً.", "success");
-        // إرسال إشعار واتساب للإدارة + رد ترحيبي للعميل
-        await Promise.allSettled([
-          notifyAdmin({ id: data.id, name: payload.name, phone: payload.phone, interest: payload.interest }),
-          replyToClient(payload.phone, payload.name),
-        ]);
+        replyToClient(payload.phone, payload.name); // قالب ترحيب للعميل (إشعار الإدارة في api.php)
         e.target.reset();
       } else { throw new Error("فشل"); }
     } catch (error) {

@@ -1,82 +1,49 @@
-name: Build & Deploy to Hostinger
+﻿name: Build & Deploy to semak.sa
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:   # يسمح بالتشغيل اليدوي من GitHub
-
-# منع حلقة لا نهاية لها — الـ workflow لا يشتغل على كوميتات [skip ci]
-concurrency:
-  group: deploy
-  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # لازم عشان نقدر نكتب للـ dist branch
 
     steps:
-      # ── 1. سحب الكود ──────────────────────────────────────────
-      - name: Checkout main
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # نحتاج كل التاريخ عشان ننشئ dist branch
 
-      # ── 2. Node ───────────────────────────────────────────────
-      - name: Setup Node 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
-      # ── 3. تثبيت الحزم ───────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
-      # ── 4. متغيرات البيئة من GitHub Secrets ──────────────────
-      - name: Create .env.local
-        run: |
-          echo "VITE_MOTTASL_API_KEY=${{ secrets.VITE_MOTTASL_API_KEY }}"             >> .env.local
-          echo "VITE_WA_ADMIN_PHONE=${{ secrets.VITE_WA_ADMIN_PHONE }}"               >> .env.local
-          echo "VITE_WA_CLIENT_TEMPLATE_ID=${{ secrets.VITE_WA_CLIENT_TEMPLATE_ID }}" >> .env.local
-          echo "VITE_WA_CLIENT_TEMPLATE_LANG=${{ secrets.VITE_WA_CLIENT_TEMPLATE_LANG }}" >> .env.local
-          echo "VITE_WA_MAINT_TEMPLATE_ID=${{ secrets.VITE_WA_MAINT_TEMPLATE_ID }}"   >> .env.local
-          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}"                             >> .env.local
-
-      # ── 5. البناء ─────────────────────────────────────────────
       - name: Build
         run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_MOTTASL_API_KEY: ${{ secrets.VITE_MOTTASL_API_KEY }}
+          VITE_WA_ADMIN_PHONE: ${{ secrets.VITE_WA_ADMIN_PHONE }}
+          VITE_WA_CLIENT_TEMPLATE_ID: ${{ secrets.VITE_WA_CLIENT_TEMPLATE_ID }}
+          VITE_WA_CLIENT_TEMPLATE_LANG: ${{ secrets.VITE_WA_CLIENT_TEMPLATE_LANG }}
+          VITE_WA_MAINT_TEMPLATE_ID: ${{ secrets.VITE_WA_MAINT_TEMPLATE_ID }}
 
-      # ── 6. نشر المخرجات إلى فرع dist ─────────────────────────
-      #   الفرع dist يحتوي فقط على: مخرجات dist/ + api.php
-      #   هوستنجر يسحب هذا الفرع مباشرة إلى public_html/
-      - name: Push built files to dist branch
-        run: |
-          # إعداد git
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name  "github-actions[bot]"
+      - name: Copy api.php to dist
+        run: cp api.php dist/api.php
 
-          # احتفظ بالملفات المبنية في مجلد مؤقت خارج مجلد العمل
-          mkdir -p /tmp/deploy
-          cp -r dist/. /tmp/deploy/
-          cp api.php   /tmp/deploy/
-
-          # أضف .gitignore للفرع يمنع تسرب node_modules أو .env
-          printf 'node_modules/\n.env*\n*.local\n' > /tmp/deploy/.gitignore
-
-          # انتقل إلى فرع dist (أو أنشئه orphan إذا لم يكن موجوداً)
-          git fetch origin dist 2>/dev/null && git checkout dist || git checkout --orphan dist
-
-          # امسح كل شيء: الملفات المتتبعة + غير المتتبعة (node_modules وغيرها)
-          git rm -rf . --quiet 2>/dev/null || true
-          git clean -fdx --quiet 2>/dev/null || true
-
-          # انسخ الملفات الجديدة فقط
-          cp -r /tmp/deploy/. .
-
-          git add -A
-          git diff --cached --quiet && echo "Nothing changed, skip push." && exit 0
-
-          git commit -m "deploy: $(date -u '+%Y-%m-%d %H:%M UTC') [skip ci]"
-          git push origin dist --force
+      - name: Deploy to server via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
