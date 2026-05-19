@@ -5,7 +5,25 @@ import { AppContext } from '../../context/AppContext';
 import { API_URL, TIME_SLOTS } from '../../utils/helpers';
 // WhatsApp notifications are handled server-side in api.php
 
-const WARRANTY_MONTHS = 12;
+/* ─── فئات الضمان ─── */
+const WARRANTY_CATS = [
+  { key: 'electric',  years: 3,  types: ['كهرباء', 'إنارة', 'مراوح شفط', 'أفياش', 'مفاتيح'] },
+  { key: 'structure', years: 10, types: ['إنشاءات', 'شبابيك', 'أبواب'] },
+  { key: 'plumbing',  years: 3,  types: ['سباكة', 'خلاطات', 'شطافات', 'محابس', 'سخانات'] },
+];
+
+// يرجع مدة الضمان (بالسنوات) لنوع الطلب، أو null إذا ما ينطبق
+const getWarrantyYears = (type, handoverDate) => {
+  if (!handoverDate) return null;
+  for (const cat of WARRANTY_CATS) {
+    if (cat.types.some(t => type.includes(t))) {
+      const end = new Date(handoverDate);
+      end.setFullYear(end.getFullYear() + cat.years);
+      return new Date() < end ? cat.years : null;
+    }
+  }
+  return null;
+};
 
 export default function Maintenance() {
   const { customer, setCustomer, showToast } = useContext(AppContext);
@@ -15,7 +33,8 @@ export default function Maintenance() {
   const [loading, setLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState(true);
   const [tab, setTab] = useState("new");
-  const [warrantyActive, setWarrantyActive] = useState(false);
+  const [handoverDate, setHandoverDate] = useState(null); // تاريخ التسليم (لحساب الضمان)
+  const [warrantyYears, setWarrantyYears] = useState(null); // سنوات ضمان النوع المختار
   const [type, setType] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -67,21 +86,23 @@ export default function Maintenance() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
-  // فحص حالة الضمان عند تحميل بيانات العميل
+  // جلب تاريخ التسليم عند تحميل بيانات العميل
   useEffect(() => {
     if (!customer?.unit) return;
     fetch(`${API_URL}?action=get_inspection&unit=${encodeURIComponent(customer.unit)}`)
       .then(r => r.json())
       .then(d => {
         if (d.success && d.data?.status === 'handed_over' && d.data?.client_submitted_at) {
-          const start = new Date(d.data.client_submitted_at);
-          const end   = new Date(start);
-          end.setMonth(end.getMonth() + WARRANTY_MONTHS);
-          setWarrantyActive(new Date() < end);
+          setHandoverDate(d.data.client_submitted_at);
         }
       })
       .catch(() => {});
   }, [customer?.unit]);
+
+  // إعادة حساب الضمان عند تغيير نوع الطلب
+  useEffect(() => {
+    setWarrantyYears(getWarrantyYears(type, handoverDate));
+  }, [type, handoverDate]);
 
   const loadHistory = async (unit) => {
     setHistoryLoading(true);
@@ -120,7 +141,7 @@ export default function Maintenance() {
       name: finalName,
       phone: finalPhone,
       unit: e.target.unit.value,
-      type: warrantyActive ? `[ضمان] ${rawType}` : rawType,
+      type: warrantyYears ? `[ضمان ${warrantyYears}س] ${rawType}` : rawType,
       desc: desc
     };
 
@@ -334,11 +355,30 @@ export default function Maintenance() {
               <div>
                 <label className="block text-sm font-bold mb-2 text-[#1a365d]">نوع العطل</label>
                 <select name="type" required value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-5 py-4 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm font-bold text-slate-700">
-                  <option value="" disabled>-- اضغط لاختيار نوع العطل --</option>
-                  <option value="تكييف">مشكلة في التكييف ❄️</option>
-                  <option value="سباكة">مشكلة في السباكة 🚰</option>
-                  <option value="كهرباء">مشكلة في الكهرباء ⚡</option>
-                  <option value="أخرى">أخرى (يرجى التوضيح في الوصف) 🛠️</option>
+                  <option value="" disabled>-- اختر نوع العطل --</option>
+                  <optgroup label="⚡ كهرباء وإنارة (ضمان 3 سنوات)">
+                    <option value="إنارة">مشكلة في الإنارة 💡</option>
+                    <option value="مراوح شفط">مراوح شفط 🌀</option>
+                    <option value="أفياش">أفياش ومقابس 🔌</option>
+                    <option value="مفاتيح">مفاتيح كهربائية 🔘</option>
+                    <option value="كهرباء">كهرباء عامة ⚡</option>
+                  </optgroup>
+                  <optgroup label="🏗️ إنشاءات (ضمان 10 سنوات)">
+                    <option value="شبابيك">شبابيك 🪟</option>
+                    <option value="أبواب">أبواب 🚪</option>
+                    <option value="إنشاءات">إنشاءات عامة 🏗️</option>
+                  </optgroup>
+                  <optgroup label="🚰 سباكة (ضمان 3 سنوات)">
+                    <option value="خلاطات">خلاطات 🚿</option>
+                    <option value="شطافات">شطافات 🚽</option>
+                    <option value="محابس">محابس 🔧</option>
+                    <option value="سخانات">سخانات ♨️</option>
+                    <option value="سباكة">سباكة عامة 🚰</option>
+                  </optgroup>
+                  <optgroup label="🔧 أخرى">
+                    <option value="تكييف">تكييف ❄️</option>
+                    <option value="أخرى">أخرى (يرجى التوضيح) 🛠️</option>
+                  </optgroup>
                 </select>
               </div>
               
@@ -369,18 +409,21 @@ export default function Maintenance() {
                 <textarea name="desc" rows="3" className="w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm font-bold text-slate-700" placeholder="أخبرنا بالمزيد من التفاصيل لمساعدة الفني..." />
               </div>
               
-              {/* شارة الضمان */}
-              {warrantyActive && (
-                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
-                  <ShieldCheck size={18} className="text-green-600 flex-shrink-0" />
-                  <p className="text-green-700 text-sm font-black">هذا الطلب ضمن فترة الضمان — ستُعالَج أولوياً</p>
+              {/* شارة الضمان — تظهر فقط إذا اختار نوعاً يقع ضمن الضمان */}
+              {warrantyYears && (
+                <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
+                  <ShieldCheck size={20} className="text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-green-700 text-sm font-black">هذا النوع مشمول بضمان {warrantyYears} سنوات</p>
+                    <p className="text-green-600 text-xs font-bold">ستُعالَج بأولوية عالية على حسابنا</p>
+                  </div>
                 </div>
               )}
 
               <button type="submit" disabled={loading} className={`w-full text-white px-8 py-4 rounded-full font-black transition shadow-lg transform hover:-translate-y-1 text-lg flex justify-center items-center gap-2
-                ${warrantyActive ? 'bg-green-600 hover:bg-green-700 shadow-green-600/20' : 'bg-[#1a365d] hover:bg-[#112240] shadow-[#1a365d]/20'}`}>
-                {loading ? <RefreshCw className="animate-spin" /> : warrantyActive ? <ShieldCheck /> : <Send />}
-                {warrantyActive ? 'إرسال طلب ضمان للفني' : 'إرسال الطلب للفني'}
+                ${warrantyYears ? 'bg-green-600 hover:bg-green-700 shadow-green-600/20' : 'bg-[#1a365d] hover:bg-[#112240] shadow-[#1a365d]/20'}`}>
+                {loading ? <RefreshCw className="animate-spin" /> : warrantyYears ? <ShieldCheck /> : <Send />}
+                {warrantyYears ? `إرسال طلب ضمان (${warrantyYears} سنوات)` : 'إرسال الطلب للفني'}
               </button>
             </form>
           </div>

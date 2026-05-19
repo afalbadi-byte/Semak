@@ -7,6 +7,7 @@ import {
   AlertCircle, Loader2, Key, FileCheck,
   CheckCircle2, ArrowLeft, Star, Bell,
   Building2, ShieldCheck, CalendarClock,
+  Zap, DoorOpen, Droplets,
 } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
@@ -58,92 +59,135 @@ const WhatsAppIcon = () => (
   </svg>
 );
 
+/* ─── فئات الضمان ─── */
+const WARRANTY_CATS = [
+  {
+    key:    'electric',
+    label:  'كهرباء وإنارة',
+    icon:   Zap,
+    years:  3,
+    color:  'amber',
+    items:  ['إنارة', 'مراوح شفط', 'أفياش', 'مفاتيح'],
+    types:  ['كهرباء', 'إنارة', 'مراوح شفط', 'أفياش', 'مفاتيح'],
+  },
+  {
+    key:    'structure',
+    label:  'إنشاءات',
+    icon:   DoorOpen,
+    years:  10,
+    color:  'blue',
+    items:  ['شبابيك', 'أبواب'],
+    types:  ['إنشاءات', 'شبابيك', 'أبواب'],
+  },
+  {
+    key:    'plumbing',
+    label:  'سباكة',
+    icon:   Droplets,
+    years:  3,
+    color:  'cyan',
+    items:  ['خلاطات', 'شطافات', 'محابس', 'سخانات'],
+    types:  ['سباكة', 'خلاطات', 'شطافات', 'محابس', 'سخانات'],
+  },
+];
+
+const COLOR_MAP = {
+  amber: { bg: 'bg-amber-50', text: 'text-amber-600', bar: 'bg-amber-500', badge: 'bg-amber-50 text-amber-600 border-amber-200', icon: 'bg-amber-50' },
+  blue:  { bg: 'bg-blue-50',  text: 'text-blue-600',  bar: 'bg-blue-500',  badge: 'bg-blue-50 text-blue-600 border-blue-200',   icon: 'bg-blue-50'  },
+  cyan:  { bg: 'bg-cyan-50',  text: 'text-cyan-600',  bar: 'bg-cyan-500',  badge: 'bg-cyan-50 text-cyan-600 border-cyan-200',   icon: 'bg-cyan-50'  },
+};
+
+function calcWarranty(start, years) {
+  const end      = new Date(start);
+  end.setFullYear(end.getFullYear() + years);
+  const now      = new Date();
+  const totalMs  = end - start;
+  const usedMs   = Math.min(now - start, totalMs);
+  const remainMs = Math.max(end - now, 0);
+  return {
+    end,
+    isActive:    now < end,
+    usedPct:     Math.min(Math.round((usedMs / totalMs) * 100), 100),
+    remainDays:  Math.ceil(remainMs / (1000 * 60 * 60 * 24)),
+    remainYears: (remainMs / (1000 * 60 * 60 * 24 * 365)).toFixed(1),
+  };
+}
+
 /* ─── مكوّن بطاقة الضمان ─── */
-const WARRANTY_MONTHS = 12; // مدة الضمان بالأشهر
-
 function WarrantyCard({ handoverDate, onRequestMaintenance }) {
-  const start   = new Date(handoverDate);
-  const end     = new Date(start);
-  end.setMonth(end.getMonth() + WARRANTY_MONTHS);
-
-  const now         = new Date();
-  const totalMs     = end - start;
-  const usedMs      = Math.min(now - start, totalMs);
-  const remainMs    = Math.max(end - now, 0);
-  const remainDays  = Math.ceil(remainMs / (1000 * 60 * 60 * 24));
-  const usedPct     = Math.min(Math.round((usedMs / totalMs) * 100), 100);
-  const isActive    = now < end;
-
-  const fmt = (d) => d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+  const start = new Date(handoverDate);
+  const fmt   = (d) => d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' });
+  const hasAnyActive = WARRANTY_CATS.some(c => calcWarranty(start, c.years).isActive);
 
   return (
     <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-      {/* شريط علوي */}
-      <div className={`h-1.5 ${isActive ? 'bg-gradient-to-r from-[#c5a059] via-amber-400 to-[#c5a059]' : 'bg-slate-200'}`} />
+      <div className="h-1.5 bg-gradient-to-r from-[#c5a059] via-amber-400 to-[#c5a059]" />
       <div className="p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-[#c5a059]/10' : 'bg-slate-100'}`}>
-              <ShieldCheck size={20} className={isActive ? 'text-[#c5a059]' : 'text-slate-400'} />
-            </div>
-            <div>
-              <p className="text-[#1a365d] font-black text-sm">ضمان الوحدة</p>
-              <p className="text-slate-400 text-xs font-bold">{WARRANTY_MONTHS} أشهر</p>
-            </div>
-          </div>
-          <span className={`text-xs font-black px-3 py-1.5 rounded-full border ${
-            isActive
-              ? 'bg-green-50 text-green-600 border-green-200'
-              : 'bg-red-50 text-red-500 border-red-200'
-          }`}>
-            {isActive ? '● ساري' : '✕ منتهي'}
-          </span>
-        </div>
 
-        {/* شريط التقدم */}
-        <div className="mb-3">
-          <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1.5">
-            <span>{fmt(start)}</span>
-            <span>{fmt(end)}</span>
+        {/* العنوان */}
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-[#c5a059]/10 flex items-center justify-center flex-shrink-0">
+            <ShieldCheck size={20} className="text-[#c5a059]" />
           </div>
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ${
-                isActive
-                  ? usedPct > 75 ? 'bg-amber-500' : 'bg-green-500'
-                  : 'bg-red-400'
-              }`}
-              style={{ width: `${usedPct}%` }}
-            />
+          <div>
+            <p className="text-[#1a365d] font-black text-sm">ضمانات وحدتك</p>
+            <p className="text-slate-400 text-xs font-bold">من تاريخ التسليم: {fmt(start)}</p>
           </div>
         </div>
 
-        {/* أيام متبقية */}
-        {isActive ? (
-          <div className="flex items-center gap-2 bg-green-50 rounded-xl px-3 py-2.5 mb-4">
-            <CalendarClock size={15} className="text-green-600 flex-shrink-0" />
-            <p className="text-green-700 text-xs font-black">
-              متبقي <span className="text-base mx-0.5">{remainDays}</span> يوم من الضمان
-            </p>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 bg-red-50 rounded-xl px-3 py-2.5 mb-4">
-            <CalendarClock size={15} className="text-red-500 flex-shrink-0" />
-            <p className="text-red-600 text-xs font-bold">انتهى الضمان — تواصل معنا للاستفسار</p>
-          </div>
-        )}
+        {/* فئات الضمان */}
+        <div className="space-y-3 mb-4">
+          {WARRANTY_CATS.map(({ key, label, icon: Icon, years, color, items }) => {
+            const { end, isActive, usedPct, remainDays, remainYears } = calcWarranty(start, years);
+            const c = COLOR_MAP[color];
+            return (
+              <div key={key} className={`rounded-xl border p-3.5 ${isActive ? 'border-slate-100' : 'border-red-100 opacity-60'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-lg ${c.icon} flex items-center justify-center flex-shrink-0`}>
+                      <Icon size={15} className={c.text} />
+                    </div>
+                    <div>
+                      <p className="text-[#1a365d] font-black text-xs">{label}</p>
+                      <p className="text-slate-400 text-[10px] font-bold">{items.join(' · ')}</p>
+                    </div>
+                  </div>
+                  <div className="text-left flex-shrink-0">
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-full border ${isActive ? c.badge : 'bg-red-50 text-red-500 border-red-200'}`}>
+                      {isActive ? `● ${years} سنوات` : '✕ منتهي'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* شريط التقدم */}
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-1.5">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${isActive ? c.bar : 'bg-red-300'}`}
+                    style={{ width: `${usedPct}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] font-bold text-slate-400">
+                  <span dir="ltr">{fmt(start)}</span>
+                  {isActive
+                    ? <span className={c.text}>متبقي {remainDays > 365 ? `${remainYears} سنة` : `${remainDays} يوم`}</span>
+                    : <span className="text-red-400">انتهى {fmt(end)}</span>
+                  }
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
         {/* زر الصيانة */}
         <button
           onClick={onRequestMaintenance}
           className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all ${
-            isActive
+            hasAnyActive
               ? 'bg-[#1a365d] hover:bg-[#c5a059] text-white shadow-md hover:-translate-y-0.5'
               : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
           }`}
         >
           <Wrench size={16} />
-          {isActive ? 'رفع تذكرة صيانة (ضمان)' : 'رفع طلب صيانة'}
+          {hasAnyActive ? 'رفع تذكرة صيانة (ضمان)' : 'رفع طلب صيانة'}
         </button>
       </div>
     </div>
