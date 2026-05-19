@@ -6,7 +6,7 @@ import {
   ListChecks, CalendarDays, MessageCircle,
   AlertCircle, Loader2, Key, FileCheck,
   CheckCircle2, ArrowLeft, Star, Bell,
-  Building2,
+  Building2, ShieldCheck, CalendarClock,
 } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
@@ -57,6 +57,98 @@ const WhatsAppIcon = () => (
     <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
   </svg>
 );
+
+/* ─── مكوّن بطاقة الضمان ─── */
+const WARRANTY_MONTHS = 12; // مدة الضمان بالأشهر
+
+function WarrantyCard({ handoverDate, onRequestMaintenance }) {
+  const start   = new Date(handoverDate);
+  const end     = new Date(start);
+  end.setMonth(end.getMonth() + WARRANTY_MONTHS);
+
+  const now         = new Date();
+  const totalMs     = end - start;
+  const usedMs      = Math.min(now - start, totalMs);
+  const remainMs    = Math.max(end - now, 0);
+  const remainDays  = Math.ceil(remainMs / (1000 * 60 * 60 * 24));
+  const usedPct     = Math.min(Math.round((usedMs / totalMs) * 100), 100);
+  const isActive    = now < end;
+
+  const fmt = (d) => d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return (
+    <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+      {/* شريط علوي */}
+      <div className={`h-1.5 ${isActive ? 'bg-gradient-to-r from-[#c5a059] via-amber-400 to-[#c5a059]' : 'bg-slate-200'}`} />
+      <div className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-[#c5a059]/10' : 'bg-slate-100'}`}>
+              <ShieldCheck size={20} className={isActive ? 'text-[#c5a059]' : 'text-slate-400'} />
+            </div>
+            <div>
+              <p className="text-[#1a365d] font-black text-sm">ضمان الوحدة</p>
+              <p className="text-slate-400 text-xs font-bold">{WARRANTY_MONTHS} أشهر</p>
+            </div>
+          </div>
+          <span className={`text-xs font-black px-3 py-1.5 rounded-full border ${
+            isActive
+              ? 'bg-green-50 text-green-600 border-green-200'
+              : 'bg-red-50 text-red-500 border-red-200'
+          }`}>
+            {isActive ? '● ساري' : '✕ منتهي'}
+          </span>
+        </div>
+
+        {/* شريط التقدم */}
+        <div className="mb-3">
+          <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1.5">
+            <span>{fmt(start)}</span>
+            <span>{fmt(end)}</span>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${
+                isActive
+                  ? usedPct > 75 ? 'bg-amber-500' : 'bg-green-500'
+                  : 'bg-red-400'
+              }`}
+              style={{ width: `${usedPct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* أيام متبقية */}
+        {isActive ? (
+          <div className="flex items-center gap-2 bg-green-50 rounded-xl px-3 py-2.5 mb-4">
+            <CalendarClock size={15} className="text-green-600 flex-shrink-0" />
+            <p className="text-green-700 text-xs font-black">
+              متبقي <span className="text-base mx-0.5">{remainDays}</span> يوم من الضمان
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-red-50 rounded-xl px-3 py-2.5 mb-4">
+            <CalendarClock size={15} className="text-red-500 flex-shrink-0" />
+            <p className="text-red-600 text-xs font-bold">انتهى الضمان — تواصل معنا للاستفسار</p>
+          </div>
+        )}
+
+        {/* زر الصيانة */}
+        <button
+          onClick={onRequestMaintenance}
+          className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all ${
+            isActive
+              ? 'bg-[#1a365d] hover:bg-[#c5a059] text-white shadow-md hover:-translate-y-0.5'
+              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+        >
+          <Wrench size={16} />
+          {isActive ? 'رفع تذكرة صيانة (ضمان)' : 'رفع طلب صيانة'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function Portal() {
   const { customer, logout, showToast } = useContext(AppContext);
@@ -255,6 +347,14 @@ export default function Portal() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ══════════ بطاقة الضمان (بعد التسليم) ══════════ */}
+        {isHandedOver && inspection?.client_submitted_at && (
+          <WarrantyCard
+            handoverDate={inspection.client_submitted_at}
+            onRequestMaintenance={() => navigate('/maintenance')}
+          />
         )}
 
         {/* ─── إحصائيات ─── */}

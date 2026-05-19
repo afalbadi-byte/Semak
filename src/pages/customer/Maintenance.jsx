@@ -1,18 +1,21 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, RefreshCw, Send, ListChecks, CalendarDays, HardHat, CircleCheck, Clock, Loader2 } from 'lucide-react';
+import { LogOut, RefreshCw, Send, ListChecks, CalendarDays, HardHat, CircleCheck, Clock, Loader2, ShieldCheck } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, TIME_SLOTS } from '../../utils/helpers';
 // WhatsApp notifications are handled server-side in api.php
+
+const WARRANTY_MONTHS = 12;
 
 export default function Maintenance() {
   const { customer, setCustomer, showToast } = useContext(AppContext);
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [loading, setLoading] = useState(false);
   const [qrLoading, setQrLoading] = useState(true);
   const [tab, setTab] = useState("new");
+  const [warrantyActive, setWarrantyActive] = useState(false);
   const [type, setType] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -64,6 +67,22 @@ export default function Maintenance() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
+  // فحص حالة الضمان عند تحميل بيانات العميل
+  useEffect(() => {
+    if (!customer?.unit) return;
+    fetch(`${API_URL}?action=get_inspection&unit=${encodeURIComponent(customer.unit)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.data?.status === 'handed_over' && d.data?.client_submitted_at) {
+          const start = new Date(d.data.client_submitted_at);
+          const end   = new Date(start);
+          end.setMonth(end.getMonth() + WARRANTY_MONTHS);
+          setWarrantyActive(new Date() < end);
+        }
+      })
+      .catch(() => {});
+  }, [customer?.unit]);
+
   const loadHistory = async (unit) => {
     setHistoryLoading(true);
     try {
@@ -96,11 +115,12 @@ export default function Maintenance() {
     const finalPhone = customer.phone || guestPhone;
     const finalName  = isRegistered ? customer.name : (guestName || "غير مسجل");
 
+    const rawType = e.target.type.value;
     const payload = {
       name: finalName,
       phone: finalPhone,
       unit: e.target.unit.value,
-      type: e.target.type.value,
+      type: warrantyActive ? `[ضمان] ${rawType}` : rawType,
       desc: desc
     };
 
@@ -349,8 +369,18 @@ export default function Maintenance() {
                 <textarea name="desc" rows="3" className="w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm font-bold text-slate-700" placeholder="أخبرنا بالمزيد من التفاصيل لمساعدة الفني..." />
               </div>
               
-              <button type="submit" disabled={loading} className="w-full bg-[#1a365d] text-white px-8 py-4 rounded-full font-black hover:bg-[#112240] transition shadow-lg shadow-[#1a365d]/20 transform hover:-translate-y-1 text-lg flex justify-center items-center gap-2">
-                {loading ? <RefreshCw className="animate-spin" /> : <Send />} إرسال الطلب للفني
+              {/* شارة الضمان */}
+              {warrantyActive && (
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
+                  <ShieldCheck size={18} className="text-green-600 flex-shrink-0" />
+                  <p className="text-green-700 text-sm font-black">هذا الطلب ضمن فترة الضمان — ستُعالَج أولوياً</p>
+                </div>
+              )}
+
+              <button type="submit" disabled={loading} className={`w-full text-white px-8 py-4 rounded-full font-black transition shadow-lg transform hover:-translate-y-1 text-lg flex justify-center items-center gap-2
+                ${warrantyActive ? 'bg-green-600 hover:bg-green-700 shadow-green-600/20' : 'bg-[#1a365d] hover:bg-[#112240] shadow-[#1a365d]/20'}`}>
+                {loading ? <RefreshCw className="animate-spin" /> : warrantyActive ? <ShieldCheck /> : <Send />}
+                {warrantyActive ? 'إرسال طلب ضمان للفني' : 'إرسال الطلب للفني'}
               </button>
             </form>
           </div>
