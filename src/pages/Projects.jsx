@@ -250,8 +250,14 @@ export default function Projects() {
             )}
           </div>
           <div className="order-1 lg:order-2 h-full min-h-[420px]">
-            <div className="relative overflow-hidden rounded-3xl shadow-xl border-4 border-white h-full bg-white flex items-center justify-center p-3">
-              <FloorPlanSVG floorId={selectedFloor} />
+            <div className="relative overflow-hidden rounded-3xl shadow-xl border-4 border-white h-full bg-white flex items-center justify-center p-2">
+              <img
+                key={selectedFloor}
+                src={`/images/floor-${selectedFloor === 'ground' ? 'ground' : selectedFloor === 'first' ? '1' : selectedFloor === 'second' ? '2' : selectedFloor === 'third' ? '3' : '4'}.jpg`}
+                alt={`مخطط ${floors.find(f => f.id === selectedFloor)?.label}`}
+                className="w-full h-full object-contain rounded-2xl"
+                style={{ maxHeight: '520px' }}
+              />
             </div>
           </div>
         </div>
