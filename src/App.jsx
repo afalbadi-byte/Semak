@@ -38,7 +38,7 @@ const PageLoader = () => (
 // زر واتساب العائم
 const WhatsAppFloat = () => {
   const location = useLocation();
-  const hide = ['login', 'portal', 'maintenance', 'dashboard', 'tech-dashboard', 'letter-generator', 'admin']
+  const hide = ['login', 'portal', 'dashboard', 'tech-dashboard', 'letter-generator', 'admin']
     .some(p => location.pathname.toLowerCase().includes(p));
   if (hide) return null;
 

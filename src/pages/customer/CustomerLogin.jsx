@@ -43,7 +43,7 @@ export default function CustomerLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('/images/customer-login-bg.jpg')" }}>
+    <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative -mt-24" style={{ backgroundImage: "url('/images/customer-login-bg.jpg')" }}>
       <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
       <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10 border border-white/20">
         <div className="w-16 h-16 bg-[#c5a059]/10 text-[#c5a059] rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">

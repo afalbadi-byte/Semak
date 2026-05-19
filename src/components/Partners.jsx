@@ -6,7 +6,7 @@ export default function Partners() {
   const location = useLocation();
   
   // 🔴 التعديل هنا: تحديد الصفحات التي سيختفي منها شريط شركاء النجاح
-  const hideOnPaths = ["login", "customer-login", "portal", "maintenance", "dashboard", "tech-dashboard", "letter-generator", "admin"];
+  const hideOnPaths = ["login", "customer-login", "portal", "dashboard", "tech-dashboard", "letter-generator", "admin"];
   const shouldHide = hideOnPaths.some(path => location.pathname.toLowerCase().includes(path));
 
   // إذا كانت الصفحة الحالية من ضمن القائمة فوق، لا تعرض شيئاً (إخفاء)
