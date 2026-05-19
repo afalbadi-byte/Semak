@@ -439,7 +439,15 @@ export default function FloorPlan3D({ floorId }) {
         shadows={{ type: THREE.PCFSoftShadowMap }}
         gl={{ antialias: true }}
         style={{ position: 'absolute', inset: 0 }}
-        onCreated={({ gl }) => gl.setClearColor('#E8ECF0')}
+        onCreated={({ gl }) => {
+          const cv = gl.domElement;
+          cv.style.width   = '100%';
+          cv.style.height  = '100%';
+          cv.style.display = 'block';
+          gl.setClearColor('#E8ECF0');
+          // Trigger R3F's internal ResizeObserver so the draw buffer matches the CSS size
+          requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+        }}
       >
         <PerspectiveCamera makeDefault position={camPos} fov={40} />
         <color attach="background" args={['#E8ECF0']} />
