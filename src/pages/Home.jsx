@@ -238,11 +238,13 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ CTA نهائي ══════════════════════════ */}
-    <div
-      className="relative py-28 bg-cover bg-center overflow-hidden"
-      style={{ backgroundImage: `url('/images/contact-bg.jpg')` }}
-    >
-      <div className="absolute inset-0 bg-[#1a365d]/92" />
+    <div className="relative py-28 bg-[#0a0f1e] overflow-hidden">
+      {/* توهج ذهبي خلفي */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-[#c5a059]/8 rounded-full blur-[120px] pointer-events-none" />
+      {/* خطوط زخرفية */}
+      <div className="absolute inset-0 opacity-[0.03]"
+        style={{ backgroundImage: 'repeating-linear-gradient(90deg, #c5a059 0px, #c5a059 1px, transparent 1px, transparent 80px), repeating-linear-gradient(0deg, #c5a059 0px, #c5a059 1px, transparent 1px, transparent 80px)' }}
+      />
       <div className="container mx-auto px-6 relative z-10 text-center max-w-3xl">
         <div className="inline-flex items-center gap-2 bg-[#c5a059]/20 border border-[#c5a059]/40 text-[#c5a059] font-bold text-xs px-4 py-1.5 rounded-full mb-6">
           <CheckCircle2 size={14} /> فرصة محدودة — 7 وحدات فقط
