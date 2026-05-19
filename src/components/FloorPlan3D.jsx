@@ -1,6 +1,6 @@
-import React, { useRef, useState, Suspense, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Text, Environment, PerspectiveCamera } from '@react-three/drei';
+import React, { useState, Suspense, useEffect } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Text, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 // ── Scale: SVG coords → 3D units (680×500 SVG ≈ 20×15 meters) ──────────────
@@ -101,7 +101,6 @@ function Room({ x, y, w, h, label, area, hovered, onHover }) {
         rotation={[-Math.PI / 2, 0, 0]}
         fontSize={Math.min(sw, sh) * 0.12}
         color={isHov ? '#ffffff' : '#1e3a5f'}
-        font="/fonts/Cairo-Bold.ttf"
         anchorX="center"
         anchorY="middle"
         maxWidth={sw * 0.9}
@@ -320,23 +319,6 @@ export default function FloorPlan3D({ floorId }) {
   const [info, setInfo] = useState(null);
   const [autoRotate, setAutoRotate] = useState(false);
 
-  const containerRef = useRef();
-  const [size, setSize] = useState({ w: 0, h: 480 });
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const w = entry.contentRect.width || entry.target.clientWidth;
-      if (w > 0) setSize(s => s.w === w ? s : { w, h: 480 });
-    });
-    ro.observe(el);
-    // Also set immediately
-    const w = el.clientWidth;
-    if (w > 0) setSize({ w, h: 480 });
-    return () => ro.disconnect();
-  }, []);
-
   const handleHover = (label, area) => {
     setHovered(label);
     setInfo(label ? { label, area } : null);
@@ -349,27 +331,16 @@ export default function FloorPlan3D({ floorId }) {
 
   const camPos = isRoof ? [8, 12, 14] : [6, 10, 12];
 
-  const canvasW = size.w || 600;
-
   return (
-    <div ref={containerRef} className="relative w-full select-none" style={{ height: '480px' }}>
-      {/* Loading placeholder shown until container width is measured */}
-      {size.w === 0 && (
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ background: 'linear-gradient(160deg,#f0f4ff 0%,#e8edf5 100%)' }}
-        >
-          <div className="text-slate-400 text-sm font-cairo animate-pulse">جارٍ تحميل المخطط…</div>
-        </div>
-      )}
-
+    <div className="relative select-none" style={{ width: '100%', height: '480px' }}>
       <Canvas
         shadows
         gl={{ antialias: true }}
         style={{
-          width: canvasW,
-          height: 480,
-          display: size.w === 0 ? 'none' : 'block',
+          position: 'absolute',
+          top: 0, left: 0,
+          width: '100%',
+          height: '100%',
           background: 'linear-gradient(160deg,#f0f4ff 0%,#e8edf5 100%)',
         }}
       >
