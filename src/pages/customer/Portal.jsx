@@ -85,9 +85,9 @@ export default function Portal() {
         </div>
 
         {/* ─── Unit Card ─── */}
-        <div className="bg-white/8 border border-white/10 rounded-2xl p-5 flex items-center justify-between backdrop-blur-sm">
+        <div className="bg-white/10 border border-white/10 rounded-2xl p-5 flex items-center justify-between backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-[#c5a059]/15 flex items-center justify-center flex-shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-[#c5a059]/20 flex items-center justify-center flex-shrink-0">
               <Home size={20} className="text-[#c5a059]" />
             </div>
             <div>
