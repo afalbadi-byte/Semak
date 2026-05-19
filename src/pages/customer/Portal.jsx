@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageMeta from '../../components/PageMeta';
 import {
   LogOut, Wrench, Phone, Home, Clock,
   CircleCheck, ChevronLeft, HardHat,
@@ -249,6 +250,8 @@ export default function Portal() {
   const isSnagSubmitted = inspStatus === 'client_submitted';
 
   return (
+    <>
+    <PageMeta title="بوابة الملاك" description="بوابة ملاك سماك العقارية — تابع حالة وحدتك، ضمانات وطلبات الصيانة." />
     <div className="min-h-screen bg-gradient-to-b from-[#0f2044] to-[#1a365d] -mt-24 pt-10 pb-24 font-cairo" dir="rtl">
       <div className="max-w-2xl mx-auto px-4 space-y-4">
 
@@ -520,5 +523,6 @@ export default function Portal() {
 
       </div>
     </div>
+    </>
   );
 }

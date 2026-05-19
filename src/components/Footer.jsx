@@ -23,7 +23,7 @@ const portalLinks = [
   { label: 'الشروط والأحكام', path: '/terms' },
 ];
 
-const HIDE_ON_PATHS = ['login', 'customer-login', 'portal', 'dashboard', 'tech-dashboard', 'letter-generator', 'admin'];
+const HIDE_ON_PATHS = ['login', 'customer-login', 'portal', 'maintenance', 'dashboard', 'tech-dashboard', 'letter-generator', 'admin'];
 
 export default function Footer() {
   const navigate = useNavigate();

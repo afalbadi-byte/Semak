@@ -27,6 +27,7 @@ const TechDashboard   = lazy(() => import('./pages/admin/TechDashboard'));
 const LetterGenerator = lazy(() => import('./pages/admin/LetterGenerator'));
 const UnitInspection  = lazy(() => import('./pages/admin/UnitInspection'));
 const UnitHandover    = lazy(() => import('./pages/admin/UnitHandover'));
+const NotFound        = lazy(() => import('./pages/NotFound'));
 
 // شاشة تحميل بسيطة بين الصفحات
 const PageLoader = () => (
@@ -134,6 +135,9 @@ const MainApp = () => {
               <Route path="/admin/dashboard"          element={<Dashboard />} />
               <Route path="/admin/tech-dashboard"     element={<TechDashboard />} />
               <Route path="/admin/letter-generator"   element={<LetterGenerator />} />
+
+              {/* 404 */}
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </div>

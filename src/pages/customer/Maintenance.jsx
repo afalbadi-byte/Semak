@@ -1,5 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import PageMeta from '../../components/PageMeta';
 import { LogOut, RefreshCw, Send, ListChecks, CalendarDays, HardHat, CircleCheck, Clock, Loader2, ShieldCheck } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL, TIME_SLOTS } from '../../utils/helpers';
@@ -244,6 +245,8 @@ export default function Maintenance() {
   if (!customer) return null;
 
   return (
+    <>
+    <PageMeta title="طلب صيانة" description="ارفع طلب صيانة لوحدتك في سماك العقارية — خدمة سريعة وفنيون متخصصون." />
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen relative flex items-center justify-center bg-cover bg-center font-cairo" style={{ backgroundImage: "url('/images/maintenance-bg.jpg')" }}>
       <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
       <div className="w-full max-w-3xl px-6 relative z-10">
@@ -430,5 +433,6 @@ export default function Maintenance() {
         ) : renderTracker()}
       </div>
     </div>
+    </>
   );
 }

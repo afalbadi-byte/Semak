@@ -11,7 +11,7 @@ export default function Navbar() {
 
   const currentPage = location.pathname.substring(1) || "home";
   
-  const hideNavPaths = ["login", "customer-login", "portal", "dashboard", "tech-dashboard", "letter-generator", "admin"];
+  const hideNavPaths = ["login", "customer-login", "portal", "maintenance", "dashboard", "tech-dashboard", "letter-generator", "admin"];
   const shouldHideNav = hideNavPaths.some(path => location.pathname.toLowerCase().includes(path));
 
   useEffect(() => {

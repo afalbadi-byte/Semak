@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Home, ArrowRight, RefreshCw, MessageCircle, CheckCircle2, KeyRound } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
+import PageMeta from '../../components/PageMeta';
 
 const WaIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="white" viewBox="0 0 16 16">
@@ -134,6 +135,8 @@ export default function CustomerLogin() {
 
   // ─── الواجهة ────────────────────────────────────────────────────
   return (
+    <>
+    <PageMeta title="بوابة الملاك" description="سجّل دخولك لبوابة ملاك سماك العقارية لمتابعة وحدتك وطلبات الصيانة." />
     <div
       className="min-h-screen flex items-center justify-center bg-cover bg-center relative -mt-24"
       style={{ backgroundImage: "url('/images/customer-login-bg.jpg')" }}
@@ -174,7 +177,7 @@ export default function CustomerLogin() {
             </h2>
             <p className="text-slate-400 text-sm mt-2">
               {step === 'input'
-                ? 'أدخل بيانات وحدتك وسيصلك رمز تحقق على واتساب'
+                ? 'أدخل رقم وحدتك وسيصلك رمز المتابعة على واتساب'
                 : <>تم الإرسال إلى <span className="font-black text-[#1a365d]" dir="ltr">{maskedPhone}</span></>
               }
             </p>
@@ -295,5 +298,6 @@ export default function CustomerLogin() {
         </div>
       </div>
     </div>
+    </>
   );
 }

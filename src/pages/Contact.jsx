@@ -43,6 +43,7 @@ export default function Contact() {
       name: e.target.name.value.trim(),
       phone: rawPhone,
       interest: e.target.unit.value,
+      message: e.target.message.value.trim(),
       source: "الموقع الإلكتروني"
     };
 
@@ -90,10 +91,10 @@ export default function Contact() {
                 <div><p className="text-xs text-[#c5a059] font-bold">الرقم الموحد</p><p className="font-bold text-lg font-sans tracking-wider" dir="ltr">{supportPhone}</p></div>
               </a>
 
-              <div className="flex items-center gap-4 p-4 rounded-2xl">
-                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center"><Mail className="text-slate-300" size={24} /></div>
-                <div><p className="text-xs text-slate-400 font-bold">البريد الإلكتروني</p><p className="font-bold text-base font-sans tracking-wider" dir="ltr">info@semak.sa</p></div>
-              </div>
+              <a href="mailto:info@semak.sa" className="flex items-center gap-4 bg-white/5 hover:bg-white/10 p-4 rounded-2xl border border-white/10 transition-all group">
+                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><Mail className="text-slate-300" size={24} /></div>
+                <div><p className="text-xs text-slate-400 font-bold">البريد الإلكتروني</p><p className="font-bold text-base font-sans tracking-wider text-white" dir="ltr">info@semak.sa</p></div>
+              </a>
 
               <div className="flex items-center gap-4 p-4 rounded-2xl">
                 <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center"><MapPin className="text-slate-300" size={24} /></div>
@@ -130,6 +131,10 @@ export default function Contact() {
                     );
                   })}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-2 text-slate-200">رسالتك <span className="text-slate-400 font-normal">(اختياري)</span></label>
+                <textarea name="message" rows={3} className="w-full bg-white/10 border border-white/20 px-6 py-4 rounded-2xl outline-none focus:border-[#c5a059] text-white placeholder-gray-400 transition resize-none" placeholder="أخبرنا عن استفسارك أو ما تودّ معرفته..." />
               </div>
               <button type="submit" disabled={loading} className="w-full bg-[#c5a059] text-white py-5 rounded-2xl font-black text-xl hover:bg-yellow-600 transition flex justify-center items-center gap-2 shadow-xl">
                 {loading ? <RefreshCw className="animate-spin" /> : <Send />} إرسال الطلب
