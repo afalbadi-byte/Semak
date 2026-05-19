@@ -324,8 +324,8 @@ export default function FloorPlan3D({ floorId }) {
   const camPos = isRoof ? [8, 12, 14] : [6, 10, 12];
 
   return (
-    <div className="relative w-full h-full select-none" style={{ minHeight: 460 }}>
-      <Canvas shadows gl={{ antialias: true }} style={{ background: 'linear-gradient(160deg,#f0f4ff 0%,#e8edf5 100%)' }}>
+    <div className="relative w-full select-none" style={{ height: 480 }}>
+      <Canvas shadows gl={{ antialias: true }} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#f0f4ff 0%,#e8edf5 100%)' }}>
         <PerspectiveCamera makeDefault position={camPos} fov={45} />
 
         {/* Lighting */}
