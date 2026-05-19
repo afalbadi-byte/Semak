@@ -1,6 +1,6 @@
 import React, { useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Home, Phone, ArrowRight, RefreshCw, MessageCircle, CheckCircle2, KeyRound } from 'lucide-react';
+import { ShieldCheck, Home, ArrowRight, RefreshCw, MessageCircle, CheckCircle2, KeyRound } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
 
@@ -17,7 +17,7 @@ export default function CustomerLogin() {
   const [step, setStep]       = useState('input'); // 'input' | 'otp'
   const [loading, setLoading] = useState(false);
   const [unitCode, setUnitCode] = useState('');
-  const [phone, setPhone]       = useState('');
+  const [maskedPhone, setMaskedPhone] = useState('');
   const [otp, setOtp]           = useState(['', '', '', '', '', '']);
   const [countdown, setCountdown] = useState(0);
   const [canResend, setCanResend] = useState(false);
@@ -43,12 +43,11 @@ export default function CustomerLogin() {
   const formatTime = (s) =>
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
-  const maskedPhone = phone.replace(/(\d{3})\d{4}(\d+)/, '$1 **** $2');
 
   // ─── إرسال OTP ─────────────────────────────────────────────────
   const sendOtp = async () => {
-    if (!unitCode.trim() || !phone.trim()) {
-      showToast("تنبيه", "يرجى إدخال رقم الوحدة ورقم الجوال", "error");
+    if (!unitCode.trim()) {
+      showToast("تنبيه", "يرجى إدخال رقم الوحدة", "error");
       return false;
     }
     setLoading(true);
@@ -56,17 +55,18 @@ export default function CustomerLogin() {
       const res  = await fetch(`${API_URL}?action=send_otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ unit_code: unitCode.trim().toUpperCase(), phone: phone.trim() })
+        body: JSON.stringify({ unit_code: unitCode.trim().toUpperCase() })
       });
       const data = await res.json();
       if (data.success) {
+        setMaskedPhone(data.masked_phone || '');
         setStep('otp');
         setOtp(['', '', '', '', '', '']);
         startCountdown(120);
         setTimeout(() => otpRefs.current[0]?.focus(), 150);
         return true;
       } else {
-        showToast("خطأ", data.message || "رقم الوحدة أو الجوال غير صحيح", "error");
+        showToast("خطأ", data.message || "رقم الوحدة غير مسجل", "error");
         return false;
       }
     } catch {
@@ -195,21 +195,6 @@ export default function CustomerLogin() {
                     autoFocus
                     className="w-full bg-slate-50 border-2 border-slate-200 px-5 py-3.5 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-[#1a365d] transition font-black tracking-widest placeholder:font-normal placeholder:text-slate-300"
                     placeholder="SM-A01"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-500 uppercase tracking-wider">رقم الجوال المسجل</label>
-                <div className="relative">
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Phone size={16} /></span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border-2 border-slate-200 px-5 py-3.5 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-[#1a365d] transition font-bold placeholder:font-normal placeholder:text-slate-300"
-                    placeholder="05xxxxxxxx"
-                    dir="ltr"
                   />
                 </div>
               </div>

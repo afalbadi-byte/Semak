@@ -23,6 +23,10 @@ if ($conn->connect_error) {
 }
 $conn->set_charset("utf8mb4");
 
+// ─── auto-migrate: status columns on inspections ─────────────────────────────
+$conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT NULL");
+$conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS client_submitted_at DATETIME DEFAULT NULL");
+
 $input_data = json_decode(file_get_contents("php://input"), true);
 if (!$input_data) $input_data = [];
 
@@ -75,21 +79,20 @@ switch ($action) {
 
     // ─── إرسال OTP عبر واتساب ──────────────────────────────────────────────
     case 'send_otp':
-        $unit  = strtoupper($conn->real_escape_string(trim($input_data['unit_code'] ?? '')));
-        $phone = preg_replace('/\D/', '', $input_data['phone'] ?? '');
-        $phone = ltrim($phone, '0');
-        if (substr($phone, 0, 3) === '966') $phone = substr($phone, 3);
+        $unit = strtoupper($conn->real_escape_string(trim($input_data['unit_code'] ?? '')));
 
-        if (!$unit || !$phone) { echo json_encode(['success' => false, 'message' => 'بيانات ناقصة']); break; }
+        if (!$unit) { echo json_encode(['success' => false, 'message' => 'يرجى إدخال رقم الوحدة']); break; }
 
-        // التحقق من وجود الوحدة ومطابقة الجوال
+        // جلب بيانات المالك من قاعدة البيانات
         $res = $conn->query("SELECT owner_name, owner_phone FROM owners WHERE unit_code = '$unit' LIMIT 1");
-        if (!$res || $res->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'الوحدة غير موجودة أو غير مسجلة']); break; }
-        $owner   = $res->fetch_assoc();
+        if (!$res || $res->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'رقم الوحدة غير مسجل، تواصل مع الإدارة']); break; }
+        $owner = $res->fetch_assoc();
+
         $dbPhone = preg_replace('/\D/', '', $owner['owner_phone']);
         $dbPhone = ltrim($dbPhone, '0');
         if (substr($dbPhone, 0, 3) === '966') $dbPhone = substr($dbPhone, 3);
-        if ($phone !== $dbPhone) { echo json_encode(['success' => false, 'message' => 'رقم الجوال غير مطابق لبيانات الوحدة']); break; }
+        if (!$dbPhone) { echo json_encode(['success' => false, 'message' => 'لا يوجد رقم جوال مسجل لهذه الوحدة']); break; }
+        $phone = $dbPhone;
 
         // إنشاء جدول OTP إذا لم يكن موجوداً
         $conn->query("CREATE TABLE IF NOT EXISTS otp_sessions (
@@ -128,7 +131,9 @@ switch ($action) {
         curl_exec($ch);
         curl_close($ch);
 
-        echo json_encode(['success' => true, 'expires_in' => 600]);
+        // إخفاء جزء من رقم الجوال للعرض فقط
+        $masked = substr($dbPhone, 0, 3) . ' **** ' . substr($dbPhone, -3);
+        echo json_encode(['success' => true, 'expires_in' => 600, 'masked_phone' => $masked]);
         break;
 
     // ─── التحقق من OTP ──────────────────────────────────────────────────────
@@ -343,12 +348,20 @@ switch ($action) {
 
     case 'get_inspection':
         $unit = $conn->real_escape_string($_GET['unit']);
-        $res  = $conn->query("SELECT * FROM inspections WHERE unit = '$unit' LIMIT 1");
+        $res  = $conn->query("SELECT id, unit, progress, status, client_submitted_at FROM inspections WHERE unit = '$unit' LIMIT 1");
         if ($res && $row = $res->fetch_assoc()) {
             echo json_encode(["success" => true, "data" => $row]);
         } else {
             echo json_encode(["success" => false]);
         }
+        break;
+
+    case 'set_inspection_status':
+        $unit   = $conn->real_escape_string($input_data['unit'] ?? '');
+        $status = $conn->real_escape_string($input_data['status'] ?? '');
+        if (!$unit || !$status) { echo json_encode(["success" => false, "message" => "بيانات ناقصة"]); break; }
+        $conn->query("UPDATE inspections SET status='$status' WHERE unit='$unit'");
+        echo json_encode(["success" => true]);
         break;
 
     case 'save_inspection':
@@ -372,10 +385,11 @@ switch ($action) {
         $inspection_data = $conn->real_escape_string(json_encode($input_data['inspection_data']));
         $progress        = (int)$input_data['progress'];
         $check = $conn->query("SELECT id FROM inspections WHERE unit = '$unit'");
+        $newStatus = ($progress == 100) ? 'handed_over' : 'client_submitted';
         if ($check->num_rows > 0) {
-            $conn->query("UPDATE inspections SET inspection_data='$inspection_data', progress=$progress WHERE unit='$unit'");
+            $conn->query("UPDATE inspections SET inspection_data='$inspection_data', progress=$progress, status='$newStatus', client_submitted_at=NOW() WHERE unit='$unit'");
         } else {
-            $conn->query("INSERT INTO inspections (unit, evaluator_id, inspection_data, progress) VALUES ('$unit', 0, '$inspection_data', $progress)");
+            $conn->query("INSERT INTO inspections (unit, evaluator_id, inspection_data, progress, status, client_submitted_at) VALUES ('$unit', 0, '$inspection_data', $progress, '$newStatus', NOW())");
         }
         if ($progress == 100) {
             $checkOwner = $conn->query("SELECT id FROM owners WHERE unit_code = '$unit'");
