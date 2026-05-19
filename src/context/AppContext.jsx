@@ -4,9 +4,18 @@ import React, { createContext, useState } from 'react';
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  // حفظ بيانات المستخدمين
   const [adminUser, setAdminUser] = useState(null);
-  const [customer, setCustomer] = useState(null);
+
+  const [customer, setCustomerState] = useState(() => {
+    try { const s = localStorage.getItem('semak_customer'); return s ? JSON.parse(s) : null; }
+    catch { return null; }
+  });
+
+  const setCustomer = (data) => {
+    setCustomerState(data);
+    if (data) localStorage.setItem('semak_customer', JSON.stringify(data));
+    else localStorage.removeItem('semak_customer');
+  };
 
   // حفظ حالة الإشعارات (الرسائل المنبثقة)
   const [toast, setToast] = useState({ show: false, title: "", desc: "", type: "success" });
@@ -17,11 +26,11 @@ export const AppProvider = ({ children }) => {
     setTimeout(() => setToast({ show: false, title: "", desc: "", type: "success" }), 4000);
   };
 
-  // دالة موحدة لتسجيل الخروج
   const logout = () => {
     setAdminUser(null);
-    setCustomer(null);
+    setCustomerState(null);
     localStorage.removeItem("semak_admin_email");
+    localStorage.removeItem("semak_customer");
   };
 
   return (

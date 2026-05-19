@@ -19,6 +19,7 @@ const LegalPage    = lazy(() => import('./pages/LegalPage'));
 
 const CustomerLogin = lazy(() => import('./pages/customer/CustomerLogin'));
 const Maintenance   = lazy(() => import('./pages/customer/Maintenance'));
+const Portal        = lazy(() => import('./pages/customer/Portal'));
 
 const AdminLogin      = lazy(() => import('./pages/admin/AdminLogin'));
 const Dashboard       = lazy(() => import('./pages/admin/Dashboard'));
@@ -37,7 +38,7 @@ const PageLoader = () => (
 // زر واتساب العائم
 const WhatsAppFloat = () => {
   const location = useLocation();
-  const hide = ['login', 'dashboard', 'tech-dashboard', 'letter-generator', 'admin']
+  const hide = ['login', 'portal', 'maintenance', 'dashboard', 'tech-dashboard', 'letter-generator', 'admin']
     .some(p => location.pathname.toLowerCase().includes(p));
   if (hide) return null;
 
@@ -125,6 +126,7 @@ const MainApp = () => {
 
               {/* بوابة العملاء */}
               <Route path="/customer-login" element={<CustomerLogin />} />
+              <Route path="/portal"         element={<Portal />} />
               <Route path="/maintenance"    element={<Maintenance />} />
 
               {/* لوحات التحكم */}

@@ -31,7 +31,7 @@ export default function CustomerLogin() {
       if (data.success) {
         setCustomer(data.data);
         showToast("تم تسجيل الدخول", `أهلاً بك، ${data.data.name}`);
-        navigate("/maintenance");
+        navigate("/portal");
       } else {
         showToast("خطأ", data.message || "رقم الوحدة أو الجوال غير صحيح", "error");
       }
