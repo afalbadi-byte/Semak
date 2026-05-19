@@ -154,7 +154,7 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ الموقع ══════════════════════════ */}
-    <div className="bg-[#080d18] py-24">
+    <div className="bg-[#0a0f1e] py-24">
       <div className="container mx-auto px-6 max-w-6xl">
         <div className="text-center mb-16">
           <p className="text-[#c5a059] font-black tracking-[0.3em] text-xs uppercase mb-3">الموقع الاستراتيجي</p>
