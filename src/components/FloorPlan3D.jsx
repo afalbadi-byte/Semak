@@ -1,348 +1,243 @@
-import React, { useState, Suspense, useMemo, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
-import * as THREE from 'three';
+import React, { useState, useMemo } from 'react';
 
-/* ── Scale ──────────────────────────────────────────────────────────────── */
-const S      = 1 / 34;      // SVG px → world meters
-const WALL_H = 2.8;
-const WALL_T = 0.25;
+/* ─── Isometric projection ──────────────────────────────────────────────────
+   Standard 2:1 isometric viewed from south-east.
+   World: X = right, Z = depth (into screen), Y = up
+   Screen: right+down for X, left+down for Z, up for Y
+   isoW = pixels per world unit (horizontal), isoH = isoW/2 (vertical)
+────────────────────────────────────────────────────────────────────────── */
+const ISO_W = 26;           // px per world unit, horizontal
+const ISO_H = ISO_W / 2;   // px per world unit, vertical (2:1 ratio)
+const WALL_H = 2.6;        // metres
+const S = 1 / 34;          // SVG px → world metres
 
-function toW(x, y, w, h) {
+function pt(wx, wy, wz) {
   return {
-    cx: (x + w / 2) * S,
-    cz: (y + h / 2) * S,
-    sw: w * S,
-    sh: h * S,
+    x: (wx - wz) * ISO_W,
+    y: (wx + wz) * ISO_H - wy * ISO_W,
   };
 }
-
-/* ── Canvas wood texture ─────────────────────────────────────────────────── */
-function useWoodTex() {
-  return useMemo(() => {
-    const sz = 512;
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = sz;
-    const ctx = cv.getContext('2d');
-
-    // base oak colour
-    ctx.fillStyle = '#C8A87A';
-    ctx.fillRect(0, 0, sz, sz);
-
-    // subtle grain streaks
-    for (let i = 0; i < 80; i++) {
-      const y = Math.random() * sz;
-      ctx.strokeStyle = `rgba(${140 + Math.random() * 40 | 0},${90 + Math.random() * 30 | 0},${40 + Math.random() * 20 | 0},0.18)`;
-      ctx.lineWidth = Math.random() * 1.5;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sz, y + (Math.random() - 0.5) * 8); ctx.stroke();
-    }
-
-    // plank borders
-    const ph = 56;
-    for (let y = ph; y < sz; y += ph) {
-      ctx.strokeStyle = 'rgba(100,60,20,0.28)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sz, y); ctx.stroke();
-    }
-
-    const tex = new THREE.CanvasTexture(cv);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(5, 5);
-    return tex;
-  }, []);
+function poly(points) {
+  return points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 }
 
-/* ── Wall colour texture (subtle plaster) ────────────────────────────────── */
-function useWallTex() {
-  return useMemo(() => {
-    const sz = 128;
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = sz;
-    const ctx = cv.getContext('2d');
-    ctx.fillStyle = '#FAFAFA';
-    ctx.fillRect(0, 0, sz, sz);
-    for (let i = 0; i < 200; i++) {
-      ctx.fillStyle = `rgba(180,180,180,${Math.random() * 0.04})`;
-      ctx.fillRect(Math.random() * sz, Math.random() * sz, Math.random() * 4, Math.random() * 4);
-    }
-    const tex = new THREE.CanvasTexture(cv);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(3, 2);
-    return tex;
-  }, []);
-}
-
-/* ── Room colours ─────────────────────────────────────────────────────────── */
-const RC = {
-  'مجلس':              '#F5E8D0',
-  'مجلس فاخر':         '#F5E8D0',
-  'غرفة معيشة':        '#EAF0F8',
-  'غرفة رئيسية':       '#EAF4EA',
-  'غرفة 2':            '#EAF4EA',
-  'غرفة 3':            '#EDEAF8',
-  'غرفة 4':            '#F8F2E0',
-  'غرفة 3 + غرفة 4':  '#EDEAF8',
-  'مطبخ':              '#FFF0E0',
-  'حمام':              '#E0EEFF',
-  'حمام رئيسي':        '#E0EEFF',
-  'حمام 2':            '#E0EEFF',
-  'حمام 3':            '#E0EEFF',
-  'خادمة':             '#F4E0F8',
-  'غرفة خادمة + غسيل':'#F4E0F8',
-  'غسيل':              '#E0F8EE',
-  'مستودع':            '#E8EAEC',
-  'مدخل':              '#F2F4F6',
-  'سطح خاص':           '#D8F0E0',
-  'موقف 1':            '#E8EAEC',
-  'موقف 2':            '#F0F2F4',
-  'موقف 3':            '#E8EAEC',
-  'موقف 4':            '#F0F2F4',
-  'موقف 5':            '#E8EAEC',
-  'موقف 6':            '#F0F2F4',
-  'موقف 7':            '#E8EAEC',
-  'مصعد وسلالم':       '#D8DCE8',
-  default:             '#F2F4F6',
+/* ─── Colours ─────────────────────────────────────────────────────────────── */
+const FLOOR_COLORS = {
+  'مجلس':                   '#F0DFB8',
+  'مجلس فاخر':              '#F0DFB8',
+  'غرفة معيشة':             '#C8DCF0',
+  'غرفة رئيسية':            '#C8E8CC',
+  'غرفة 2':                 '#C8E8CC',
+  'غرفة 3':                 '#D4CCF0',
+  'غرفة 4':                 '#F0E8C0',
+  'غرفة 3 + غرفة 4':       '#D4CCF0',
+  'مطبخ':                   '#F8D8B0',
+  'حمام':                   '#B8D4F8',
+  'حمام رئيسي':             '#B8D4F8',
+  'حمام 2':                 '#B8D4F8',
+  'حمام 3':                 '#B8D4F8',
+  'خادمة':                  '#E8C8F0',
+  'غرفة خادمة + غسيل':     '#E8C8F0',
+  'غسيل':                   '#C0EDD8',
+  'مستودع':                 '#D8DCE0',
+  'مدخل':                   '#E8EAEC',
+  'سطح خاص':                '#B8E8CC',
+  'موقف 1':                 '#D8D8D8',
+  'موقف 2':                 '#E0E0E0',
+  'موقف 3':                 '#D8D8D8',
+  'موقف 4':                 '#E0E0E0',
+  'موقف 5':                 '#D8D8D8',
+  'موقف 6':                 '#E0E0E0',
+  'موقف 7':                 '#D8D8D8',
+  'مصعد وسلالم':            '#B8C4D8',
+  default:                  '#E8EAEC',
 };
 
-/* ── Shared materials ─────────────────────────────────────────────────────── */
-const MAT_WALL    = new THREE.MeshStandardMaterial({ color: '#FFFFFF', roughness: 0.75, metalness: 0 });
-const MAT_BASBD   = new THREE.MeshStandardMaterial({ color: '#E8DDD0', roughness: 0.85 });
-const MAT_PILLOW  = new THREE.MeshStandardMaterial({ color: '#F8F4EE', roughness: 0.9 });
-const MAT_SOFA    = new THREE.MeshStandardMaterial({ color: '#C8BEB0', roughness: 0.8 });
-const MAT_SOFA_DK = new THREE.MeshStandardMaterial({ color: '#A8A098', roughness: 0.8 });
-const MAT_WOOD    = new THREE.MeshStandardMaterial({ color: '#C0A070', roughness: 0.7, metalness: 0.05 });
+function darken(hex, amount = 0.15) {
+  const n = parseInt(hex.replace('#',''), 16);
+  const r = Math.max(0, ((n >> 16) & 0xff) * (1 - amount)) | 0;
+  const g = Math.max(0, ((n >> 8) & 0xff) * (1 - amount)) | 0;
+  const b = Math.max(0, (n & 0xff) * (1 - amount)) | 0;
+  return `rgb(${r},${g},${b})`;
+}
 
-/* ── Room ─────────────────────────────────────────────────────────────────── */
-function Room({ x, y, w, h, label, area, hovered, onHover, woodTex, wallTex }) {
-  const { cx, cz, sw, sh } = toW(x, y, w, h);
+/* ─── Single isometric room ───────────────────────────────────────────────── */
+function IsoRoom({ room, hovered, onHover }) {
+  const { x, y, w, h, label, area } = room;
+  const wx = x * S, wz = y * S, sw = w * S, sd = h * S;
   const isHov = hovered === label;
-  const floorCol = isHov ? '#C5A059' : (RC[label] || RC.default);
 
-  const floorMat = useMemo(() => new THREE.MeshStandardMaterial({
-    map: woodTex,
-    color: floorCol,
-    roughness: 0.6,
-  }), [floorCol, woodTex]);
+  const floorColor = isHov ? '#C5A059' : (FLOOR_COLORS[label] || FLOOR_COLORS.default);
+  const wallColorL  = darken(floorColor, isHov ? 0.28 : 0.22); // east wall (left-facing)
+  const wallColorR  = darken(floorColor, isHov ? 0.18 : 0.12); // south wall (right-facing)
+  const wallTop     = '#FFFFFF';
+
+  // 8 corners of the room box
+  const p000 = pt(wx,        0,       wz);
+  const p100 = pt(wx + sw,   0,       wz);
+  const p110 = pt(wx + sw,   0,       wz + sd);
+  const p010 = pt(wx,        0,       wz + sd);
+  const p001 = pt(wx,        WALL_H,  wz);
+  const p101 = pt(wx + sw,   WALL_H,  wz);
+  const p111 = pt(wx + sw,   WALL_H,  wz + sd);
+  const p011 = pt(wx,        WALL_H,  wz + sd);
+
+  // Center of top face for label
+  const cx = (p000.x + p100.x + p110.x + p010.x) / 4;
+  const cy = (p000.y + p100.y + p110.y + p010.y) / 4;
+
+  // Font size based on room size
+  const minDim = Math.min(sw, sd);
+  const fs = Math.max(7, Math.min(13, minDim * ISO_W * 0.38));
 
   return (
-    <group position={[cx, 0, cz]}>
-      {/* Floor */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}
-        onPointerEnter={() => onHover(label, area)}
-        onPointerLeave={() => onHover(null)}>
-        <planeGeometry args={[sw, sh]} />
-        <primitive object={floorMat} attach="material" />
-      </mesh>
+    <g
+      onPointerEnter={() => onHover(label, area)}
+      onPointerLeave={() => onHover(null)}
+      style={{ cursor: 'pointer' }}
+    >
+      {/* Top face (floor) */}
+      <polygon
+        points={poly([p000, p100, p110, p010])}
+        fill={floorColor}
+        stroke="#C0B090"
+        strokeWidth="0.5"
+        strokeLinejoin="round"
+      />
 
-      {/* 4 solid walls */}
-      {/* N */}
-      <mesh castShadow receiveShadow material={MAT_WALL}
-        position={[0, WALL_H / 2, -sh / 2 + WALL_T / 2]}>
-        <boxGeometry args={[sw, WALL_H, WALL_T]} />
-      </mesh>
-      {/* S */}
-      <mesh castShadow receiveShadow material={MAT_WALL}
-        position={[0, WALL_H / 2, sh / 2 - WALL_T / 2]}>
-        <boxGeometry args={[sw, WALL_H, WALL_T]} />
-      </mesh>
-      {/* W */}
-      <mesh castShadow receiveShadow material={MAT_WALL}
-        position={[-sw / 2 + WALL_T / 2, WALL_H / 2, 0]}>
-        <boxGeometry args={[WALL_T, WALL_H, sh]} />
-      </mesh>
-      {/* E */}
-      <mesh castShadow receiveShadow material={MAT_WALL}
-        position={[sw / 2 - WALL_T / 2, WALL_H / 2, 0]}>
-        <boxGeometry args={[WALL_T, WALL_H, sh]} />
-      </mesh>
+      {/* South wall (facing viewer, lighter) */}
+      <polygon
+        points={poly([p010, p110, p111, p011])}
+        fill={wallColorR}
+        stroke="#B8B0A0"
+        strokeWidth="0.5"
+      />
 
-      {/* Label plate floating above floor */}
-      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[Math.min(sw * 0.55, 1.8), Math.min(sh * 0.28, 0.7)]} />
-        <meshBasicMaterial color={isHov ? '#c5a059' : '#ffffff'} transparent opacity={0.82} />
-      </mesh>
-    </group>
+      {/* East wall (facing right, darker) */}
+      <polygon
+        points={poly([p100, p110, p111, p101])}
+        fill={wallColorL}
+        stroke="#B8B0A0"
+        strokeWidth="0.5"
+      />
+
+      {/* Wall tops (thin white strip) */}
+      <polygon points={poly([p001, p101, p111, p011])} fill={wallTop} stroke="#E0D8C8" strokeWidth="0.3" />
+
+      {/* Room label on top face */}
+      <text
+        x={cx}
+        y={cy - fs * 0.3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={fs}
+        fontWeight="700"
+        fontFamily="Cairo, Tajawal, Arial, sans-serif"
+        fill={isHov ? '#fff' : '#1a365d'}
+        style={{ pointerEvents: 'none', userSelect: 'none' }}
+      >
+        {label}
+      </text>
+      {area && (
+        <text
+          x={cx}
+          y={cy + fs * 0.9}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={fs * 0.75}
+          fontWeight="600"
+          fontFamily="Cairo, Tajawal, Arial, sans-serif"
+          fill={isHov ? '#ffe' : '#4a7a9b'}
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
+          {area}
+        </text>
+      )}
+    </g>
   );
 }
 
-/* ── Furniture components ─────────────────────────────────────────────────── */
-function Bed({ x, y, w, h }) {
-  const { cx, cz, sw, sh } = toW(x, y, w, h);
+/* ─── Simple furniture shapes ─────────────────────────────────────────────── */
+function IsoBed({ x, y, w, h }) {
+  const wx = x * S + 0.1, wz = y * S + 0.1;
+  const sw = w * S - 0.2, sd = h * S - 0.2;
+  const py = 0.45; // mattress height
+
+  const p000 = pt(wx, 0, wz), p100 = pt(wx+sw, 0, wz);
+  const p110 = pt(wx+sw, 0, wz+sd), p010 = pt(wx, 0, wz+sd);
+  const p001 = pt(wx, py, wz), p101 = pt(wx+sw, py, wz);
+  const p111 = pt(wx+sw, py, wz+sd), p011 = pt(wx, py, wz+sd);
+  // Headboard
+  const hbH = 0.9, hbD = 0.15;
+  const hb00 = pt(wx, 0, wz), hb10 = pt(wx+sw, 0, wz);
+  const hb01 = pt(wx, hbH, wz), hb11 = pt(wx+sw, hbH, wz);
+  const hb00b = pt(wx, 0, wz+hbD), hb10b = pt(wx+sw, 0, wz+hbD);
+  const hb01b = pt(wx, hbH, wz+hbD), hb11b = pt(wx+sw, hbH, wz+hbD);
+
   return (
-    <group position={[cx, 0, cz]}>
-      {/* Frame */}
-      <mesh castShadow position={[0, 0.08, 0]} material={MAT_WOOD}>
-        <boxGeometry args={[sw, 0.16, sh]} />
-      </mesh>
-      {/* Mattress */}
-      <mesh castShadow position={[0, 0.26, sh * 0.08]} material={MAT_BASBD}>
-        <boxGeometry args={[sw * 0.9, 0.22, sh * 0.8]} />
-      </mesh>
-      {/* Headboard */}
-      <mesh castShadow position={[0, 0.52, -sh * 0.44]} material={MAT_SOFA_DK}>
-        <boxGeometry args={[sw * 0.9, 0.68, 0.1]} />
-      </mesh>
-      {/* Pillows */}
-      {[-0.22, 0.22].map((ox, i) => (
-        <mesh key={i} castShadow position={[ox * sw, 0.42, -sh * 0.29]} material={MAT_PILLOW}>
-          <boxGeometry args={[sw * 0.33, 0.08, sh * 0.22]} />
-        </mesh>
-      ))}
-      {/* Duvet line */}
-      <mesh position={[0, 0.38, sh * 0.15]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[sw * 0.86, sh * 0.55]} />
-        <meshStandardMaterial color="#E8E0D8" roughness={0.95} />
-      </mesh>
-    </group>
+    <g style={{ pointerEvents: 'none' }}>
+      {/* Mattress top */}
+      <polygon points={poly([p000,p100,p110,p010])} fill="#E8E0D0" stroke="#C8C0B0" strokeWidth="0.4"/>
+      {/* South side */}
+      <polygon points={poly([p010,p110,p111,p011])} fill="#D8D0C0" stroke="#C8C0B0" strokeWidth="0.3"/>
+      {/* East side */}
+      <polygon points={poly([p100,p110,p111,p101])} fill="#D0C8B8" stroke="#C8C0B0" strokeWidth="0.3"/>
+      {/* Headboard front */}
+      <polygon points={poly([hb00b,hb10b,hb11b,hb01b])} fill="#8B6F4E" stroke="#6B4F2E" strokeWidth="0.4"/>
+      {/* Headboard top */}
+      <polygon points={poly([hb00,hb10,hb10b,hb00b])} fill="#9B7F5E" stroke="#6B4F2E" strokeWidth="0.3"/>
+    </g>
   );
 }
 
-function Sofa({ x, y, w, h }) {
-  const { cx, cz, sw, sh } = toW(x, y, w, h);
+function IsoSofa({ x, y, w, h }) {
+  const wx = x*S+0.1, wz = y*S+0.1, sw = w*S-0.2, sd = h*S-0.2;
+  const seatH = 0.42, backH = 0.85, armW = 0.18, backD = 0.22;
+
+  function face(pts, fill) {
+    return <polygon points={poly(pts)} fill={fill} stroke="#9A9088" strokeWidth="0.35"/>;
+  }
+
   return (
-    <group position={[cx, 0, cz]}>
-      {/* Seat cushions */}
-      <mesh castShadow position={[0, 0.22, sh * 0.1]} material={MAT_SOFA}>
-        <boxGeometry args={[sw * 0.9, 0.22, sh * 0.55]} />
-      </mesh>
-      {/* Back */}
-      <mesh castShadow position={[0, 0.5, -sh * 0.27]} material={MAT_SOFA_DK}>
-        <boxGeometry args={[sw * 0.9, 0.52, sh * 0.18]} />
-      </mesh>
-      {/* Arms */}
-      {[-1, 1].map((s, i) => (
-        <mesh key={i} castShadow position={[s * sw * 0.44, 0.38, sh * 0.05]} material={MAT_SOFA_DK}>
-          <boxGeometry args={[sh * 0.1, 0.52, sh * 0.6]} />
-        </mesh>
-      ))}
-      {/* Cushion dividers */}
-      {[-0.25, 0.25].map((ox, i) => (
-        <mesh key={i} castShadow position={[ox * sw, 0.35, sh * 0.12]} material={MAT_SOFA_DK}>
-          <boxGeometry args={[0.04, 0.26, sh * 0.5]} />
-        </mesh>
-      ))}
-    </group>
+    <g style={{ pointerEvents:'none' }}>
+      {/* Seat top */}
+      {face([pt(wx,seatH,wz), pt(wx+sw,seatH,wz), pt(wx+sw,seatH,wz+sd*0.7), pt(wx,seatH,wz+sd*0.7)], '#C8BEB0')}
+      {/* Seat south */}
+      {face([pt(wx,0,wz+sd*0.7), pt(wx+sw,0,wz+sd*0.7), pt(wx+sw,seatH,wz+sd*0.7), pt(wx,seatH,wz+sd*0.7)], '#B8AEA0')}
+      {/* Back top */}
+      {face([pt(wx,backH,wz), pt(wx+sw,backH,wz), pt(wx+sw,backH,wz+backD), pt(wx,backH,wz+backD)], '#D8D0C8')}
+      {/* Back south */}
+      {face([pt(wx,seatH,wz+backD), pt(wx+sw,seatH,wz+backD), pt(wx+sw,backH,wz+backD), pt(wx,backH,wz+backD)], '#C0B8B0')}
+    </g>
   );
 }
 
-function Table({ x, y, w, h }) {
-  const { cx, cz, sw, sh } = toW(x, y, w, h);
+function IsoTable({ x, y, w, h }) {
+  const wx = x*S+0.05, wz = y*S+0.05, sw = w*S-0.1, sd = h*S-0.1;
+  const th = 0.75;
   return (
-    <group position={[cx, 0, cz]}>
-      <mesh castShadow position={[0, 0.42, 0]} material={MAT_WOOD}>
-        <boxGeometry args={[sw, 0.06, sh]} />
-      </mesh>
-      {[[-1,-1],[1,-1],[-1,1],[1,1]].map(([a,b],i) => (
-        <mesh key={i} castShadow position={[a*sw*0.38, 0.21, b*sh*0.38]} material={MAT_WOOD}>
-          <cylinderGeometry args={[0.03, 0.03, 0.42, 8]} />
-        </mesh>
-      ))}
-    </group>
+    <g style={{ pointerEvents:'none' }}>
+      <polygon points={poly([pt(wx,th,wz),pt(wx+sw,th,wz),pt(wx+sw,th,wz+sd),pt(wx,th,wz+sd)])} fill="#C8A870" stroke="#A88850" strokeWidth="0.4"/>
+      <polygon points={poly([pt(wx,0,wz+sd),pt(wx+sw,0,wz+sd),pt(wx+sw,th,wz+sd),pt(wx,th,wz+sd)])} fill="#B89860" stroke="#A88850" strokeWidth="0.3"/>
+      <polygon points={poly([pt(wx+sw,0,wz),pt(wx+sw,0,wz+sd),pt(wx+sw,th,wz+sd),pt(wx+sw,th,wz)])} fill="#A88850" stroke="#A88850" strokeWidth="0.3"/>
+    </g>
   );
 }
 
-function Kitchen({ x, y, w, h }) {
-  const { cx, cz, sw, sh } = toW(x, y, w, h);
-  const counterH = 0.88;
+function IsoPlant({ x, y }) {
+  const cx = x*S, cz = y*S;
+  const base = pt(cx, 0, cz);
+  const top  = pt(cx, 0.8, cz);
   return (
-    <group position={[cx, 0, cz]}>
-      {/* Counter along north wall */}
-      <mesh castShadow position={[0, counterH / 2, -sh * 0.35]}>
-        <boxGeometry args={[sw * 0.85, counterH, sh * 0.28]} />
-        <meshStandardMaterial color="#E0E0DC" roughness={0.5} />
-      </mesh>
-      {/* Counter top */}
-      <mesh castShadow position={[0, counterH + 0.02, -sh * 0.35]}>
-        <boxGeometry args={[sw * 0.85, 0.04, sh * 0.28]} />
-        <meshStandardMaterial color="#C8C8C4" roughness={0.3} metalness={0.1} />
-      </mesh>
-      {/* Sink outline */}
-      <mesh position={[-sw * 0.2, counterH + 0.04, -sh * 0.35]}>
-        <boxGeometry args={[sw * 0.18, 0.01, sh * 0.14]} />
-        <meshStandardMaterial color="#A0A8B0" roughness={0.2} metalness={0.5} />
-      </mesh>
-    </group>
+    <g style={{ pointerEvents:'none' }}>
+      <ellipse cx={base.x} cy={base.y} rx={ISO_W*0.18} ry={ISO_H*0.18} fill="#7A5030"/>
+      <ellipse cx={top.x}  cy={top.y}  rx={ISO_W*0.38} ry={ISO_H*0.5}  fill="#2E8B40" opacity="0.9"/>
+      <ellipse cx={top.x-2} cy={top.y-3} rx={ISO_W*0.22} ry={ISO_H*0.3} fill="#38A050" opacity="0.7"/>
+    </g>
   );
 }
 
-function Bathtub({ x, y, w, h }) {
-  const { cx, cz, sw, sh } = toW(x, y, w, h);
-  return (
-    <group position={[cx, 0, cz]}>
-      {/* Tub shell */}
-      <mesh castShadow position={[0, 0.22, 0]}>
-        <boxGeometry args={[sw * 0.88, 0.44, sh * 0.88]} />
-        <meshStandardMaterial color="#F0F0EE" roughness={0.3} metalness={0.05} />
-      </mesh>
-      {/* Inside */}
-      <mesh position={[0, 0.46, 0]}>
-        <boxGeometry args={[sw * 0.72, 0.02, sh * 0.72]} />
-        <meshStandardMaterial color="#D8EEF8" roughness={0.1} metalness={0.05} />
-      </mesh>
-    </group>
-  );
-}
-
-function Plant({ x, y }) {
-  const cx = x * S, cz = y * S;
-  return (
-    <group position={[cx, 0, cz]}>
-      <mesh castShadow position={[0, 0.15, 0]}>
-        <cylinderGeometry args={[0.12, 0.1, 0.3, 8]} />
-        <meshStandardMaterial color="#8B5E3C" roughness={0.9} />
-      </mesh>
-      <mesh castShadow position={[0, 0.55, 0]}>
-        <sphereGeometry args={[0.28, 8, 8]} />
-        <meshStandardMaterial color="#3A8C4A" roughness={0.8} />
-      </mesh>
-    </group>
-  );
-}
-
-/* ── Scene ────────────────────────────────────────────────────────────────── */
-function Scene({ rooms, furniture, extra, hovered, onHover, woodTex, wallTex }) {
-  const allX = rooms.map(r => (r.x + r.w / 2) * S);
-  const allZ = rooms.map(r => (r.y + r.h / 2) * S);
-  const cx   = (Math.min(...allX) + Math.max(...allX)) / 2;
-  const cz   = (Math.min(...allZ) + Math.max(...allZ)) / 2;
-
-  return (
-    <group position={[-cx, 0, -cz]}>
-      {/* Ground base */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[cx, -0.01, cz]}>
-        <planeGeometry args={[40, 35]} />
-        <meshStandardMaterial color="#D4D8DC" roughness={1} />
-      </mesh>
-
-      {rooms.map((r, i) => (
-        <Room key={i} {...r} hovered={hovered} onHover={onHover} woodTex={woodTex} wallTex={wallTex} />
-      ))}
-
-      {furniture?.map((f, i) => {
-        if (f.type === 'bed')      return <Bed      key={i} {...f} />;
-        if (f.type === 'sofa')     return <Sofa     key={i} {...f} />;
-        if (f.type === 'table')    return <Table    key={i} {...f} />;
-        if (f.type === 'kitchen')  return <Kitchen  key={i} {...f} />;
-        if (f.type === 'bathtub')  return <Bathtub  key={i} {...f} />;
-        if (f.type === 'plant')    return <Plant    key={i} x={f.x} y={f.y} />;
-        return null;
-      })}
-    </group>
-  );
-}
-
-/* ── Tooltip ──────────────────────────────────────────────────────────────── */
-function Tooltip({ info }) {
-  if (!info) return null;
-  return (
-    <div className="absolute top-3 right-3 bg-white/96 backdrop-blur-sm border border-slate-200 rounded-xl px-4 py-2.5 shadow-lg z-10 pointer-events-none">
-      <p className="font-black text-[#1a365d] text-sm">{info.label}</p>
-      {info.area && <p className="text-[#c5a059] font-bold text-xs mt-0.5">{info.area}</p>}
-    </div>
-  );
-}
-
-/* ── Data ─────────────────────────────────────────────────────────────────── */
+/* ─── Data ────────────────────────────────────────────────────────────────── */
 const APARTMENT_ROOMS = [
   { x:12,  y:12,  w:200, h:190, label:'مجلس',         area:'45 م²' },
   { x:212, y:12,  w:183, h:190, label:'غرفة معيشة',   area:'32 م²' },
@@ -359,18 +254,15 @@ const APARTMENT_ROOMS = [
   { x:395, y:382, w:115, h:106, label:'مستودع',        area:'10 م²' },
   { x:510, y:382, w:158, h:106, label:'حمام 3',        area:'8 م²'  },
 ];
-
-const APARTMENT_FURNITURE = [
-  { type:'sofa',    x:22,  y:22,  w:128, h:58  },
-  { type:'table',   x:244, y:65,  w:96,  h:58  },
-  { type:'bed',     x:405, y:22,  w:100, h:145 },
-  { type:'kitchen', x:12,  y:202, w:165, h:180 },
-  { type:'bed',     x:187, y:212, w:110, h:82  },
-  { type:'bed',     x:405, y:212, w:100, h:82  },
-  { type:'bed',     x:150, y:392, w:110, h:78  },
-  { type:'bathtub', x:597, y:17,  w:66,  h:80  },
-  { type:'plant',   x:195, y:18 },
-  { type:'plant',   x:600, y:390 },
+const APARTMENT_FURN = [
+  { type:'sofa',  x:22,  y:22,  w:128, h:58  },
+  { type:'table', x:244, y:65,  w:96,  h:58  },
+  { type:'bed',   x:405, y:22,  w:100, h:145 },
+  { type:'bed',   x:187, y:212, w:110, h:82  },
+  { type:'bed',   x:405, y:212, w:100, h:82  },
+  { type:'bed',   x:150, y:392, w:110, h:78  },
+  { type:'plant', x:195, y:18  },
+  { type:'plant', x:600, y:380 },
 ];
 
 const ROOF_ROOMS = [
@@ -387,133 +279,130 @@ const ROOF_ROOMS = [
   { x:438, y:397, w:232, h:171, label:'سطح خاص',            area:'120 م²'},
   { x:670, y:397, w:78,  h:171, label:'حمام 3',             area:'7 م²'  },
 ];
-
-const ROOF_FURNITURE = [
-  { type:'sofa',    x:22,  y:22,  w:150, h:68  },
-  { type:'table',   x:274, y:75,  w:110, h:65  },
-  { type:'kitchen', x:12,  y:215, w:170, h:182 },
-  { type:'bed',     x:450, y:22,  w:130, h:165 },
-  { type:'bed',     x:192, y:225, w:125, h:95  },
-  { type:'bed',     x:162, y:407, w:115, h:92  },
-  { type:'bathtub', x:445, y:220, w:90,  h:75  },
-  { type:'plant',   x:230, y:18 },
-  { type:'plant',   x:635, y:410 },
+const ROOF_FURN = [
+  { type:'sofa',  x:22,  y:22,  w:150, h:68  },
+  { type:'table', x:274, y:75,  w:110, h:65  },
+  { type:'bed',   x:450, y:22,  w:130, h:165 },
+  { type:'bed',   x:192, y:225, w:125, h:95  },
+  { type:'bed',   x:162, y:407, w:115, h:92  },
+  { type:'plant', x:230, y:18  },
+  { type:'plant', x:635, y:410 },
 ];
 
 const GROUND_ROOMS = [
-  { x:22,  y:65,  w:148, h:185, label:'موقف 1',       area:'' },
-  { x:180, y:65,  w:148, h:185, label:'موقف 2',       area:'' },
-  { x:338, y:65,  w:148, h:185, label:'موقف 3',       area:'' },
-  { x:496, y:65,  w:148, h:185, label:'موقف 4',       area:'' },
-  { x:22,  y:275, w:148, h:185, label:'موقف 5',       area:'' },
-  { x:180, y:275, w:148, h:185, label:'موقف 6',       area:'' },
-  { x:338, y:275, w:148, h:185, label:'موقف 7',       area:'' },
-  { x:497, y:275, w:171, h:210, label:'مصعد وسلالم',  area:'' },
+  { x:22,  y:65,  w:148, h:185, label:'موقف 1',      area:'' },
+  { x:180, y:65,  w:148, h:185, label:'موقف 2',      area:'' },
+  { x:338, y:65,  w:148, h:185, label:'موقف 3',      area:'' },
+  { x:496, y:65,  w:148, h:185, label:'موقف 4',      area:'' },
+  { x:22,  y:275, w:148, h:185, label:'موقف 5',      area:'' },
+  { x:180, y:275, w:148, h:185, label:'موقف 6',      area:'' },
+  { x:338, y:275, w:148, h:185, label:'موقف 7',      area:'' },
+  { x:497, y:275, w:171, h:210, label:'مصعد وسلالم', area:'' },
 ];
 
-/* ── Main ─────────────────────────────────────────────────────────────────── */
+/* ─── Tooltip ─────────────────────────────────────────────────────────────── */
+function Tooltip({ info }) {
+  if (!info) return null;
+  return (
+    <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl px-4 py-2.5 shadow-lg z-10 pointer-events-none">
+      <p className="font-black text-[#1a365d] text-sm">{info.label}</p>
+      {info.area && <p className="text-[#c5a059] font-bold text-xs mt-0.5">{info.area}</p>}
+    </div>
+  );
+}
+
+/* ─── Main ────────────────────────────────────────────────────────────────── */
 export default function FloorPlan3D({ floorId }) {
   const [hovered, setHovered] = useState(null);
   const [info,    setInfo]    = useState(null);
-  const [autoRot, setAutoRot] = useState(false);
-
-  const woodTex = useWoodTex();
-  const wallTex = useWallTex();
 
   const isGround = floorId === 'ground';
   const isRoof   = floorId === 'fourth';
   const rooms    = isGround ? GROUND_ROOMS : isRoof ? ROOF_ROOMS : APARTMENT_ROOMS;
-  const furn     = isGround ? [] : isRoof ? ROOF_FURNITURE : APARTMENT_FURNITURE;
-
-  // isometric camera — slightly from the side so walls are visible
-  const camPos = isRoof ? [10, 12, 13] : [8, 10, 11];
+  const furn     = isGround ? [] : isRoof ? ROOF_FURN : APARTMENT_FURN;
 
   const handleHover = (label, area) => {
     setHovered(label);
     setInfo(label ? { label, area } : null);
   };
 
+  // Compute SVG bounds
+  const { minX, minY, maxX, maxY } = useMemo(() => {
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    for (const r of rooms) {
+      const corners = [
+        pt(r.x*S, 0, r.y*S),
+        pt((r.x+r.w)*S, 0, r.y*S),
+        pt((r.x+r.w)*S, 0, (r.y+r.h)*S),
+        pt(r.x*S, 0, (r.y+r.h)*S),
+        pt(r.x*S, WALL_H, r.y*S),
+        pt((r.x+r.w)*S, WALL_H, r.y*S),
+        pt(r.x*S, WALL_H, (r.y+r.h)*S),
+        pt((r.x+r.w)*S, WALL_H, (r.y+r.h)*S),
+      ];
+      for (const c of corners) {
+        minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
+        maxX = Math.max(maxX, c.x); maxY = Math.max(maxY, c.y);
+      }
+    }
+    return { minX, minY, maxX, maxY };
+  }, [rooms]);
+
+  const pad = 20;
+  const vbX = minX - pad, vbY = minY - pad;
+  const vbW = maxX - minX + pad * 2;
+  const vbH = maxY - minY + pad * 2;
+
+  // Painter's sort: rooms with smaller (wx+wz) drawn first (further back)
+  const sortedRooms = useMemo(() =>
+    [...rooms].sort((a, b) =>
+      ((a.x + a.w / 2) * S + (a.y + a.h / 2) * S) -
+      ((b.x + b.w / 2) * S + (b.y + b.h / 2) * S)
+    ), [rooms]);
+
+  const sortedFurn = useMemo(() =>
+    [...furn].sort((a, b) =>
+      ((a.x || 0) * S + (a.y || 0) * S) -
+      ((b.x || 0) * S + (b.y || 0) * S)
+    ), [furn]);
+
   return (
-    <div style={{ position: 'relative', width: '100%', height: '500px' }}>
-      <Canvas
-        shadows={{ type: THREE.PCFSoftShadowMap }}
-        gl={{ antialias: true }}
-        style={{ position: 'absolute', inset: 0 }}
-        onCreated={({ gl }) => {
-          const cv = gl.domElement;
-          cv.style.width   = '100%';
-          cv.style.height  = '100%';
-          cv.style.display = 'block';
-          gl.setClearColor('#E8ECF0');
-          // Trigger R3F's internal ResizeObserver so the draw buffer matches the CSS size
-          requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-        }}
+    <div className="relative w-full select-none" style={{ height: 480 }}>
+      <svg
+        viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
+        style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#F0F4F8 0%,#E4EAF2 100%)' }}
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <PerspectiveCamera makeDefault position={camPos} fov={40} />
-        <color attach="background" args={['#E8ECF0']} />
+        {/* Subtle shadow under the building */}
+        <defs>
+          <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+            <feDropShadow dx="4" dy="8" stdDeviation="6" floodColor="#00000030"/>
+          </filter>
+        </defs>
 
-        {/* ── Lighting ── */}
-        {/* Ambient: soft fill */}
-        <ambientLight intensity={1.0} color="#F8F4EE" />
+        <g filter="url(#shadow)">
+          {/* Rooms — back to front */}
+          {sortedRooms.map((r, i) => (
+            <IsoRoom key={i} room={r} hovered={hovered} onHover={handleHover} />
+          ))}
 
-        {/* Main sun: top-left, warm, casts shadows */}
-        <directionalLight
-          position={[14, 24, 10]}
-          intensity={2.2}
-          color="#FFF8F0"
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-near={1}
-          shadow-camera-far={100}
-          shadow-camera-left={-22}
-          shadow-camera-right={22}
-          shadow-camera-top={22}
-          shadow-camera-bottom={-22}
-          shadow-bias={-0.0003}
-        />
-
-        {/* Fill from front-right, cool */}
-        <directionalLight position={[-8, 10, 14]} intensity={0.7} color="#E8F0FF" />
-
-        {/* Sky hemisphere */}
-        <hemisphereLight skyColor="#EEF4FF" groundColor="#C8B890" intensity={0.5} />
-
-        <Suspense fallback={null}>
-          <Scene
-            rooms={rooms}
-            furniture={furn}
-            hovered={hovered}
-            onHover={handleHover}
-            woodTex={woodTex}
-            wallTex={wallTex}
-          />
-        </Suspense>
-
-        <OrbitControls
-          autoRotate={autoRot}
-          autoRotateSpeed={0.6}
-          enableZoom
-          enablePan
-          minPolarAngle={0.2}
-          maxPolarAngle={Math.PI / 2.1}
-          minDistance={4}
-          maxDistance={28}
-        />
-      </Canvas>
+          {/* Furniture */}
+          {sortedFurn.map((f, i) => {
+            if (f.type === 'bed')   return <IsoBed   key={i} {...f}/>;
+            if (f.type === 'sofa')  return <IsoSofa  key={i} {...f}/>;
+            if (f.type === 'table') return <IsoTable key={i} {...f}/>;
+            if (f.type === 'plant') return <IsoPlant key={i} {...f}/>;
+            return null;
+          })}
+        </g>
+      </svg>
 
       <Tooltip info={info} />
 
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-        <button
-          onClick={() => setAutoRot(v => !v)}
-          className={`px-4 py-1.5 rounded-full text-xs font-bold border shadow-sm transition
-            ${autoRot ? 'bg-[#1a365d] text-white border-[#1a365d]' : 'bg-white/90 text-[#1a365d] border-slate-200 hover:bg-white'}`}
-        >
-          {autoRot ? '⏹ إيقاف الدوران' : '▶ دوران تلقائي'}
-        </button>
-        <span className="bg-white/80 px-3 py-1.5 rounded-full text-[10px] text-slate-400 border border-slate-200">
-          اسحب للتدوير • اسكرول للتكبير
-        </span>
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none">
+        <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-[10px] text-slate-400 border border-slate-200 shadow-sm">
+          مرّر الماوس فوق أي غرفة لمعرفة تفاصيلها
+        </div>
       </div>
     </div>
   );
