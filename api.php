@@ -53,8 +53,7 @@ switch ($action) {
         }
         break;
 
-    // ─── تسجيل دخول العملاء (رقم الوحدة + الجوال) ──────────────────────────
-
+    // ─── تسجيل دخول العملاء (رقم الوحدة + الجوال) — احتياطي ──────────────────
     case 'customer_login':
         $unit  = $conn->real_escape_string(trim($input_data['unit_code'] ?? ''));
         $phone = preg_replace('/\D/', '', $input_data['phone'] ?? '');
@@ -72,6 +71,87 @@ switch ($action) {
         } else {
             echo json_encode(['success' => false, 'message' => 'رقم الجوال غير مطابق']);
         }
+        break;
+
+    // ─── إرسال OTP عبر واتساب ──────────────────────────────────────────────
+    case 'send_otp':
+        $unit  = strtoupper($conn->real_escape_string(trim($input_data['unit_code'] ?? '')));
+        $phone = preg_replace('/\D/', '', $input_data['phone'] ?? '');
+        $phone = ltrim($phone, '0');
+        if (substr($phone, 0, 3) === '966') $phone = substr($phone, 3);
+
+        if (!$unit || !$phone) { echo json_encode(['success' => false, 'message' => 'بيانات ناقصة']); break; }
+
+        // التحقق من وجود الوحدة ومطابقة الجوال
+        $res = $conn->query("SELECT owner_name, owner_phone FROM owners WHERE unit_code = '$unit' LIMIT 1");
+        if (!$res || $res->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'الوحدة غير موجودة أو غير مسجلة']); break; }
+        $owner   = $res->fetch_assoc();
+        $dbPhone = preg_replace('/\D/', '', $owner['owner_phone']);
+        $dbPhone = ltrim($dbPhone, '0');
+        if (substr($dbPhone, 0, 3) === '966') $dbPhone = substr($dbPhone, 3);
+        if ($phone !== $dbPhone) { echo json_encode(['success' => false, 'message' => 'رقم الجوال غير مطابق لبيانات الوحدة']); break; }
+
+        // إنشاء جدول OTP إذا لم يكن موجوداً
+        $conn->query("CREATE TABLE IF NOT EXISTS otp_sessions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            unit_code VARCHAR(20) NOT NULL,
+            otp_code VARCHAR(10) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_unit (unit_code)
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+
+        // حذف OTP القديمة لهذه الوحدة
+        $conn->query("DELETE FROM otp_sessions WHERE unit_code = '$unit'");
+
+        // توليد رمز عشوائي 6 أرقام
+        $otp_code = str_pad(random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $expires  = date('Y-m-d H:i:s', time() + 600); // صالح 10 دقائق
+        $conn->query("INSERT INTO otp_sessions (unit_code, otp_code, expires_at) VALUES ('$unit', '$otp_code', '$expires')");
+
+        // إرسال رمز التحقق عبر واتساب (Mottasl API)
+        $wa_to   = '966' . $phone;
+        $wa_name = $owner['owner_name'];
+        $wa_body = "🔐 *سماك العقارية — رمز الدخول*\n\nأهلاً {$wa_name}،\n\nرمز التحقق الخاص بك:\n\n*{$otp_code}*\n\n⏰ صالح لمدة 10 دقائق فقط\n🔒 لا تشارك هذا الرمز مع أي شخص";
+
+        $mottasl_key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo';
+
+        $ch = curl_init('https://api.mottasl.ai/v1/message/send');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode(['to' => $wa_to, 'type' => 'text', 'text' => ['body' => $wa_body]]),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json', "Authorization: Bearer {$mottasl_key}"],
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        curl_exec($ch);
+        curl_close($ch);
+
+        echo json_encode(['success' => true, 'expires_in' => 600]);
+        break;
+
+    // ─── التحقق من OTP ──────────────────────────────────────────────────────
+    case 'verify_otp':
+        $unit = strtoupper($conn->real_escape_string(trim($input_data['unit_code'] ?? '')));
+        $otp  = $conn->real_escape_string(trim($input_data['otp'] ?? ''));
+        if (!$unit || !$otp) { echo json_encode(['success' => false, 'message' => 'بيانات ناقصة']); break; }
+
+        $now = date('Y-m-d H:i:s');
+        $res = $conn->query("SELECT id FROM otp_sessions WHERE unit_code = '$unit' AND otp_code = '$otp' AND expires_at > '$now' LIMIT 1");
+        if (!$res || $res->num_rows === 0) {
+            echo json_encode(['success' => false, 'message' => 'الرمز غير صحيح أو انتهت صلاحيته']);
+            break;
+        }
+
+        // حذف الرمز بعد الاستخدام
+        $conn->query("DELETE FROM otp_sessions WHERE unit_code = '$unit'");
+
+        // إرجاع بيانات العميل
+        $owner_res = $conn->query("SELECT owner_name as name, owner_phone as phone, unit_code as unit FROM owners WHERE unit_code = '$unit' LIMIT 1");
+        $owner_data = $owner_res ? $owner_res->fetch_assoc() : null;
+        if (!$owner_data) { echo json_encode(['success' => false, 'message' => 'خطأ في استرجاع بيانات الملك']); break; }
+        echo json_encode(['success' => true, 'data' => $owner_data]);
         break;
 
     // ─── المشاريع والوحدات ──────────────────────────────────────────────────

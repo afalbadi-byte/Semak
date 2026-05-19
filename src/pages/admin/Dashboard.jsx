@@ -184,7 +184,7 @@ export default function Dashboard({ onLogout }) {
         localStorage.removeItem('semak_admin_email');
         localStorage.removeItem('semak_current_user');
         if (typeof onLogout === 'function') onLogout();
-        window.location.replace('/');
+        window.location.replace('/login');
     };
 
     if (authLoading) {
