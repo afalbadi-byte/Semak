@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageMeta from '../components/PageMeta';
 import { API_URL } from '../utils/helpers';
-import { X, HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ZoomIn, ChevronDown, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
+import FloorPlanSVG from '../components/FloorPlanSVG';
+import { HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ChevronDown, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
 
 
 export default function Projects() {
   const navigate = useNavigate();
   const [selectedFloor, setSelectedFloor] = useState("first");
   const [expandedUnit, setExpandedUnit] = useState(null);
-  const [previewImg, setPreviewImg] = useState(null);
   const [soldUnits, setSoldUnits] = useState({});
 
   useEffect(() => {
@@ -56,26 +56,10 @@ export default function Projects() {
     ])
   );
 
-  const images = {
-    ground: "/images/floor-ground.jpg",
-    first: "/images/floor-1.jpg",
-    second: "/images/floor-2.jpg",
-    third: "/images/floor-3.jpg",
-    fourth: "/images/floor-4.jpg"
-  };
-
   return (
     <>
     <PageMeta title="مشاريعنا" description="استكشف مشروع سماك البوابة 1 — 7 وحدات سكنية حصرية بمواصفات فاخرة في حي البوابة بمكة المكرمة." />
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen animate-fadeIn">
-      {previewImg && (
-        <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4 cursor-pointer" onClick={() => setPreviewImg(null)}>
-          <img src={previewImg} className="max-w-full max-h-screen rounded-lg shadow-2xl" alt="مخطط مكبر" />
-          <button className="absolute top-4 right-4 text-white p-2">
-            <X size={40} />
-          </button>
-        </div>
-      )}
       <div className="container mx-auto px-6 mb-24">
         <div className="max-w-3xl mx-auto text-center mb-16">
           <h2 className="text-[#c5a059] font-black tracking-[0.3em] uppercase text-sm mb-4 leading-tight">مشاريعنا</h2>
@@ -265,15 +249,9 @@ export default function Projects() {
               </div>
             )}
           </div>
-          <div className="order-1 lg:order-2 h-full min-h-[400px]">
-            <div className="relative group cursor-pointer overflow-hidden rounded-3xl shadow-lg border-4 border-white h-full bg-slate-200 flex items-center justify-center" onClick={() => setPreviewImg(images[selectedFloor])}>
-              <div className="absolute top-4 left-4 z-20 w-16 h-16 md:w-24 md:h-24 opacity-50 pointer-events-none mix-blend-multiply">
-                <img src="/images/logo-main.png" className="w-full h-full object-contain" alt="Logo" />
-              </div>
-              <img src={images[selectedFloor]} className="w-full h-full object-cover transform group-hover:scale-105 transition duration-700" alt="مخطط" />
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-3 rounded-full text-sm font-bold text-[#1a365d] shadow-lg flex items-center gap-2 transition-transform hover:scale-105">
-                <ZoomIn size={16} /> اضغط للتكبير
-              </div>
+          <div className="order-1 lg:order-2 h-full min-h-[420px]">
+            <div className="relative overflow-hidden rounded-3xl shadow-xl border-4 border-white h-full bg-white flex items-center justify-center p-3">
+              <FloorPlanSVG floorId={selectedFloor} />
             </div>
           </div>
         </div>
