@@ -1,5 +1,5 @@
-import React, { useRef, useState, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useRef, useState, Suspense, useEffect } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, Environment, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -304,11 +304,38 @@ function Scene({ rooms, furniture, onHover, hovered }) {
   );
 }
 
+// ── Force R3F resize after mount ───────────────────────────────────────────
+function ForceResize() {
+  useEffect(() => {
+    window.dispatchEvent(new Event('resize'));
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
+    return () => clearTimeout(t);
+  }, []);
+  return null;
+}
+
 // ── Main export ────────────────────────────────────────────────────────────
 export default function FloorPlan3D({ floorId }) {
   const [hovered, setHovered] = useState(null);
   const [info, setInfo] = useState(null);
   const [autoRotate, setAutoRotate] = useState(false);
+
+  const containerRef = useRef();
+  const [size, setSize] = useState({ w: 0, h: 480 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width || entry.target.clientWidth;
+      if (w > 0) setSize(s => s.w === w ? s : { w, h: 480 });
+    });
+    ro.observe(el);
+    // Also set immediately
+    const w = el.clientWidth;
+    if (w > 0) setSize({ w, h: 480 });
+    return () => ro.disconnect();
+  }, []);
 
   const handleHover = (label, area) => {
     setHovered(label);
@@ -320,12 +347,32 @@ export default function FloorPlan3D({ floorId }) {
   const rooms    = isGround ? GROUND_ROOMS : isRoof ? ROOF_ROOMS : APARTMENT_ROOMS;
   const furn     = isGround ? [] : isRoof ? ROOF_FURNITURE : APARTMENT_FURNITURE;
 
-  // Camera position: nice isometric-ish angle
   const camPos = isRoof ? [8, 12, 14] : [6, 10, 12];
 
+  const canvasW = size.w || 600;
+
   return (
-    <div className="relative w-full select-none" style={{ height: 480 }}>
-      <Canvas shadows gl={{ antialias: true }} style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg,#f0f4ff 0%,#e8edf5 100%)' }}>
+    <div ref={containerRef} className="relative w-full select-none" style={{ height: '480px' }}>
+      {/* Loading placeholder shown until container width is measured */}
+      {size.w === 0 && (
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ background: 'linear-gradient(160deg,#f0f4ff 0%,#e8edf5 100%)' }}
+        >
+          <div className="text-slate-400 text-sm font-cairo animate-pulse">جارٍ تحميل المخطط…</div>
+        </div>
+      )}
+
+      <Canvas
+        shadows
+        gl={{ antialias: true }}
+        style={{
+          width: canvasW,
+          height: 480,
+          display: size.w === 0 ? 'none' : 'block',
+          background: 'linear-gradient(160deg,#f0f4ff 0%,#e8edf5 100%)',
+        }}
+      >
         <PerspectiveCamera makeDefault position={camPos} fov={45} />
 
         {/* Lighting */}
@@ -344,6 +391,7 @@ export default function FloorPlan3D({ floorId }) {
         <pointLight position={[-5, 8, -5]} intensity={0.6} color="#fff8f0" />
         <pointLight position={[5, 6, 5]}   intensity={0.4} color="#f0f8ff" />
 
+        <ForceResize />
         <Suspense fallback={null}>
           <Scene
             rooms={rooms}
