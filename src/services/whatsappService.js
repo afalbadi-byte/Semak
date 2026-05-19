@@ -1,10 +1,14 @@
 import { API_URL } from '../utils/helpers';
 
-const API_KEY            = import.meta.env.VITE_MOTTASL_API_KEY;
-const ADMIN_PHONE        = import.meta.env.VITE_WA_ADMIN_PHONE;
-const TEMPLATE_ID        = import.meta.env.VITE_WA_CLIENT_TEMPLATE_ID;
-const TEMPLATE_LANG      = import.meta.env.VITE_WA_CLIENT_TEMPLATE_LANG || "ar";
-const MAINT_TEMPLATE_ID  = import.meta.env.VITE_WA_MAINT_TEMPLATE_ID;
+const API_KEY        = import.meta.env.VITE_MOTTASL_API_KEY;
+const ADMIN_PHONE    = import.meta.env.VITE_WA_ADMIN_PHONE;
+const TEMPLATE_ID    = import.meta.env.VITE_WA_CLIENT_TEMPLATE_ID;
+const TEMPLATE_LANG  = import.meta.env.VITE_WA_CLIENT_TEMPLATE_LANG || "ar";
+
+// قوالب الصيانة — تنتظر موافقة WhatsApp
+const T_MAINT_RECEIVED = "semak_maint_received";  // [name, ticket_id, type]
+const T_MAINT_UPDATE   = "semak_maint_update";    // [name, ticket_id, status]
+const T_TECH_ASSIGNED  = "semak_tech_assigned";   // [name, ticket_id, tech_name]
 
 const BASE_URL = "https://api.mottasl.ai/v1";
 
@@ -93,22 +97,13 @@ export async function replyToClient(clientPhone, clientName) {
 // تأكيد استلام الطلب للعميل فور إرسال طلبه
 export async function notifyClientTicketReceived({ id, name, unit, type, date, time, phone }) {
   if (!API_KEY || !phone) return { ok: false };
-  const tech  = "سيتم التحديد";
-  const dateV = date ? `${date} — ${time || ""}` : "سيتم التأكيد";
 
-  // إذا كان عندنا قالب معتمد نستخدمه
-  if (MAINT_TEMPLATE_ID) {
-    const res = await sendTemplate(normalizePhone(phone), MAINT_TEMPLATE_ID, TEMPLATE_LANG, [
-      String(id),           // {{1}} رقم الطلب
-      unit,                 // {{2}} الوحدة
-      type,                 // {{3}} نوع الطلب
-      "قيد الانتظار",       // {{4}} الحالة
-      tech,                 // {{5}} الفني
-      dateV,                // {{6}} الموعد
-      "—",                  // {{7}} رمز الإغلاق
-    ]);
-    if (res?.ok) { logWaSent(id, "maintenance"); return { ok: true }; }
-  }
+  const res = await sendTemplate(normalizePhone(phone), T_MAINT_RECEIVED, TEMPLATE_LANG, [
+    name,       // {{1}} اسم العميل
+    String(id), // {{2}} رقم الطلب
+    type,       // {{3}} نوع الطلب
+  ]);
+  if (res?.ok) { logWaSent(id, "maintenance"); return { ok: true }; }
 
   // fallback: نص
   const body =
@@ -141,40 +136,48 @@ export async function notifyMaintenanceAdmin({ id, name, phone, unit, type, date
   return res;
 }
 
+// إشعار العميل عند تعيين فني لطلبه
+export async function notifyClientTechAssigned(ticket) {
+  if (!API_KEY || !ticket.phone) return { ok: false };
+  const tech = ticket.technician && ticket.technician !== "لم يتم التعيين"
+    ? ticket.technician : "سيتم التحديد";
+
+  const res = await sendTemplate(normalizePhone(ticket.phone), T_TECH_ASSIGNED, TEMPLATE_LANG, [
+    ticket.name || "العميل الكريم", // {{1}} اسم العميل
+    String(ticket.id),              // {{2}} رقم الطلب
+    tech,                           // {{3}} اسم الفني
+  ]);
+  if (res?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
+
+  // fallback: نص
+  const body =
+    `🔧 *تحديث طلب الصيانة - سماك العقارية*\n\n` +
+    `مرحباً، تم تعيين الفني *${tech}* لطلبك رقم #${ticket.id}.\n` +
+    `سيصل إليك قريباً. للاستفسار ردّ على هذه الرسالة 💬`;
+  const res2 = await sendText(normalizePhone(ticket.phone), body);
+  if (res2?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
+  return { ok: false };
+}
+
 // إشعار العميل تلقائياً عند كل تغيير في حالة طلبه
-// يُرجع { ok: true } عند النجاح، أو { ok: false, error } عند الفشل
 export async function notifyClientStatusUpdate(ticket) {
   if (!API_KEY)        return { ok: false, error: "API key غير مضبوط" };
   if (!ticket.phone)   return { ok: false, error: "رقم جوال العميل غير موجود" };
 
-  const tech = ticket.technician && ticket.technician !== "لم يتم التعيين"
-    ? ticket.technician : "سيتم التحديد";
-  const date = ticket.scheduleDate
-    ? `${ticket.scheduleDate} — ${ticket.scheduleTime || ""}` : "سيتم التأكيد";
-  const otp = ticket.otp || "—";
-
   try {
-    // ── أولوية: قالب معتمد ──────────────────────────────────
-    if (MAINT_TEMPLATE_ID) {
-      const res = await sendTemplate(
-        normalizePhone(ticket.phone),
-        MAINT_TEMPLATE_ID,
-        TEMPLATE_LANG,
-        [
-          String(ticket.id),  // {{1}} رقم الطلب
-          ticket.unit,        // {{2}} الوحدة
-          ticket.type,        // {{3}} نوع الطلب
-          ticket.status,      // {{4}} الحالة
-          tech,               // {{5}} الفني
-          date,               // {{6}} الموعد
-          otp,                // {{7}} رمز الإغلاق
-        ]
-      );
-      if (res?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
-      // إذا فشل القالب نجرب النص
-    }
+    const res = await sendTemplate(
+      normalizePhone(ticket.phone),
+      T_MAINT_UPDATE,
+      TEMPLATE_LANG,
+      [
+        ticket.name || "العميل الكريم", // {{1}} اسم العميل
+        String(ticket.id),              // {{2}} رقم الطلب
+        ticket.status,                  // {{3}} الحالة الجديدة
+      ]
+    );
+    if (res?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
 
-    // ── fallback: رسالة نصية ────────────────────────────────
+    // fallback: نص
     const techLine = ticket.technician && ticket.technician !== "لم يتم التعيين"
       ? `👨‍🔧 الفني: ${ticket.technician}\n` : "";
     const dateLine = ticket.scheduleDate
