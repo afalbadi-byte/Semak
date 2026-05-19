@@ -1,155 +1,101 @@
 import React, { useState, useMemo } from 'react';
 
-/* ─── Isometric projection ──────────────────────────────────────────────────
-   Standard 2:1 isometric viewed from south-east.
-   World: X = right, Z = depth (into screen), Y = up
-   Screen: right+down for X, left+down for Z, up for Y
-   isoW = pixels per world unit (horizontal), isoH = isoW/2 (vertical)
-────────────────────────────────────────────────────────────────────────── */
-const ISO_W = 26;           // px per world unit, horizontal
-const ISO_H = ISO_W / 2;   // px per world unit, vertical (2:1 ratio)
-const WALL_H = 2.6;        // metres
-const S = 1 / 34;          // SVG px → world metres
+/* ── Isometric projection (2:1) ─────────────────────────────────────────── */
+const IW   = 30;          // px per world unit – horizontal
+const IH   = IW / 2;     // px per world unit – vertical
+const WH   = 1.8;         // wall height (world units)
+const S    = 1 / 34;      // SVG px → world m
 
 function pt(wx, wy, wz) {
-  return {
-    x: (wx - wz) * ISO_W,
-    y: (wx + wz) * ISO_H - wy * ISO_W,
-  };
+  return { x: (wx - wz) * IW, y: (wx + wz) * IH - wy * IW };
 }
-function poly(points) {
-  return points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+function pp(pts) {
+  return pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 }
 
-/* ─── Colours ─────────────────────────────────────────────────────────────── */
-const FLOOR_COLORS = {
-  'مجلس':                   '#F0DFB8',
-  'مجلس فاخر':              '#F0DFB8',
-  'غرفة معيشة':             '#C8DCF0',
-  'غرفة رئيسية':            '#C8E8CC',
-  'غرفة 2':                 '#C8E8CC',
-  'غرفة 3':                 '#D4CCF0',
-  'غرفة 4':                 '#F0E8C0',
-  'غرفة 3 + غرفة 4':       '#D4CCF0',
-  'مطبخ':                   '#F8D8B0',
-  'حمام':                   '#B8D4F8',
-  'حمام رئيسي':             '#B8D4F8',
-  'حمام 2':                 '#B8D4F8',
-  'حمام 3':                 '#B8D4F8',
-  'خادمة':                  '#E8C8F0',
-  'غرفة خادمة + غسيل':     '#E8C8F0',
-  'غسيل':                   '#C0EDD8',
-  'مستودع':                 '#D8DCE0',
-  'مدخل':                   '#E8EAEC',
-  'سطح خاص':                '#B8E8CC',
-  'موقف 1':                 '#D8D8D8',
-  'موقف 2':                 '#E0E0E0',
-  'موقف 3':                 '#D8D8D8',
-  'موقف 4':                 '#E0E0E0',
-  'موقف 5':                 '#D8D8D8',
-  'موقف 6':                 '#E0E0E0',
-  'موقف 7':                 '#D8D8D8',
-  'مصعد وسلالم':            '#B8C4D8',
-  default:                  '#E8EAEC',
+/* ── Room tints (floor only – walls always white) ───────────────────────── */
+const TINT = {
+  'مجلس':                '#EDD9A3',
+  'مجلس فاخر':           '#EDD9A3',
+  'غرفة معيشة':          '#B8D4EC',
+  'غرفة رئيسية':         '#B8DDB8',
+  'غرفة 2':              '#B8DDB8',
+  'غرفة 3':              '#C8C0E8',
+  'غرفة 4':              '#EDE0A8',
+  'غرفة 3 + غرفة 4':    '#C8C0E8',
+  'مطبخ':                '#F5C896',
+  'حمام':                '#96C0F0',
+  'حمام رئيسي':          '#96C0F0',
+  'حمام 2':              '#96C0F0',
+  'حمام 3':              '#96C0F0',
+  'خادمة':               '#D8A8E8',
+  'غرفة خادمة + غسيل':  '#D8A8E8',
+  'غسيل':                '#A8DCC0',
+  'مستودع':              '#C8CCD0',
+  'مدخل':                '#D8DCE0',
+  'سطح خاص':             '#A8D8BC',
+  'موقف 1':              '#C4C8CC',
+  'موقف 2':              '#CCCED2',
+  'موقف 3':              '#C4C8CC',
+  'موقف 4':              '#CCCED2',
+  'موقف 5':              '#C4C8CC',
+  'موقف 6':              '#CCCED2',
+  'موقف 7':              '#C4C8CC',
+  'مصعد وسلالم':         '#A8B4C8',
+  default:               '#D8DCE0',
 };
 
-function darken(hex, amount = 0.15) {
-  const n = parseInt(hex.replace('#',''), 16);
-  const r = Math.max(0, ((n >> 16) & 0xff) * (1 - amount)) | 0;
-  const g = Math.max(0, ((n >> 8) & 0xff) * (1 - amount)) | 0;
-  const b = Math.max(0, (n & 0xff) * (1 - amount)) | 0;
-  return `rgb(${r},${g},${b})`;
-}
-
-/* ─── Single isometric room ───────────────────────────────────────────────── */
+/* ── Room ───────────────────────────────────────────────────────────────── */
 function IsoRoom({ room, hovered, onHover }) {
   const { x, y, w, h, label, area } = room;
-  const wx = x * S, wz = y * S, sw = w * S, sd = h * S;
+  const x0 = x * S, z0 = y * S, x1 = x0 + w * S, z1 = z0 + h * S;
   const isHov = hovered === label;
+  const floor  = isHov ? '#C5A059' : (TINT[label] || TINT.default);
 
-  const floorColor = isHov ? '#C5A059' : (FLOOR_COLORS[label] || FLOOR_COLORS.default);
-  const wallColorL  = darken(floorColor, isHov ? 0.28 : 0.22); // east wall (left-facing)
-  const wallColorR  = darken(floorColor, isHov ? 0.18 : 0.12); // south wall (right-facing)
-  const wallTop     = '#FFFFFF';
+  // 8 corners
+  const A = pt(x0, 0,  z0), B = pt(x1, 0,  z0);
+  const C = pt(x1, 0,  z1), D = pt(x0, 0,  z1);
+  const E = pt(x0, WH, z0), F = pt(x1, WH, z0);
+  const G = pt(x1, WH, z1), H = pt(x0, WH, z1);
 
-  // 8 corners of the room box
-  const p000 = pt(wx,        0,       wz);
-  const p100 = pt(wx + sw,   0,       wz);
-  const p110 = pt(wx + sw,   0,       wz + sd);
-  const p010 = pt(wx,        0,       wz + sd);
-  const p001 = pt(wx,        WALL_H,  wz);
-  const p101 = pt(wx + sw,   WALL_H,  wz);
-  const p111 = pt(wx + sw,   WALL_H,  wz + sd);
-  const p011 = pt(wx,        WALL_H,  wz + sd);
-
-  // Center of top face for label
-  const cx = (p000.x + p100.x + p110.x + p010.x) / 4;
-  const cy = (p000.y + p100.y + p110.y + p010.y) / 4;
-
-  // Font size based on room size
-  const minDim = Math.min(sw, sd);
-  const fs = Math.max(7, Math.min(13, minDim * ISO_W * 0.38));
+  // label center on top face
+  const lx = (A.x + B.x + C.x + D.x) / 4;
+  const ly = (A.y + B.y + C.y + D.y) / 4;
+  const sw = w * S, sd = h * S;
+  const fs = Math.max(6, Math.min(11, Math.min(sw, sd) * IW * 0.32));
 
   return (
-    <g
-      onPointerEnter={() => onHover(label, area)}
-      onPointerLeave={() => onHover(null)}
-      style={{ cursor: 'pointer' }}
-    >
-      {/* Top face (floor) */}
-      <polygon
-        points={poly([p000, p100, p110, p010])}
-        fill={floorColor}
-        stroke="#C0B090"
-        strokeWidth="0.5"
-        strokeLinejoin="round"
-      />
+    <g onPointerEnter={() => onHover(label, area)}
+       onPointerLeave={() => onHover(null)}
+       style={{ cursor: 'pointer' }}>
 
-      {/* South wall (facing viewer, lighter) */}
-      <polygon
-        points={poly([p010, p110, p111, p011])}
-        fill={wallColorR}
-        stroke="#B8B0A0"
-        strokeWidth="0.5"
-      />
+      {/* Top / floor */}
+      <polygon points={pp([A,B,C,D])} fill={floor}
+        stroke="#C8C0A8" strokeWidth="0.6" strokeLinejoin="round"/>
 
-      {/* East wall (facing right, darker) */}
-      <polygon
-        points={poly([p100, p110, p111, p101])}
-        fill={wallColorL}
-        stroke="#B8B0A0"
-        strokeWidth="0.5"
-      />
+      {/* South wall — viewer-facing, near-white */}
+      <polygon points={pp([D,C,G,H])} fill={isHov ? '#F5EDD8' : '#F0F0EE'}
+        stroke="#D8D0C0" strokeWidth="0.5"/>
 
-      {/* Wall tops (thin white strip) */}
-      <polygon points={poly([p001, p101, p111, p011])} fill={wallTop} stroke="#E0D8C8" strokeWidth="0.3" />
+      {/* East wall — side-facing, slightly darker */}
+      <polygon points={pp([B,C,G,F])} fill={isHov ? '#E8E0C8' : '#E4E4E0'}
+        stroke="#D0C8B8" strokeWidth="0.5"/>
 
-      {/* Room label on top face */}
-      <text
-        x={cx}
-        y={cy - fs * 0.3}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={fs}
-        fontWeight="700"
-        fontFamily="Cairo, Tajawal, Arial, sans-serif"
+      {/* Top edge cap */}
+      <polygon points={pp([E,F,G,H])} fill="#FAFAF8" stroke="#E0D8C8" strokeWidth="0.3"/>
+
+      {/* Label */}
+      <text x={lx} y={ly - fs * 0.2} textAnchor="middle" dominantBaseline="middle"
+        fontSize={fs} fontWeight="700" fontFamily="Cairo,Tajawal,Arial,sans-serif"
         fill={isHov ? '#fff' : '#1a365d'}
-        style={{ pointerEvents: 'none', userSelect: 'none' }}
-      >
+        style={{ pointerEvents:'none', userSelect:'none' }}>
         {label}
       </text>
       {area && (
-        <text
-          x={cx}
-          y={cy + fs * 0.9}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={fs * 0.75}
-          fontWeight="600"
-          fontFamily="Cairo, Tajawal, Arial, sans-serif"
-          fill={isHov ? '#ffe' : '#4a7a9b'}
-          style={{ pointerEvents: 'none', userSelect: 'none' }}
-        >
+        <text x={lx} y={ly + fs * 0.95} textAnchor="middle" dominantBaseline="middle"
+          fontSize={fs * 0.72} fontWeight="600" fontFamily="Cairo,Tajawal,Arial,sans-serif"
+          fill={isHov ? '#FFE' : '#4A6A8A'}
+          style={{ pointerEvents:'none', userSelect:'none' }}>
           {area}
         </text>
       )}
@@ -157,87 +103,102 @@ function IsoRoom({ room, hovered, onHover }) {
   );
 }
 
-/* ─── Simple furniture shapes ─────────────────────────────────────────────── */
-function IsoBed({ x, y, w, h }) {
-  const wx = x * S + 0.1, wz = y * S + 0.1;
-  const sw = w * S - 0.2, sd = h * S - 0.2;
-  const py = 0.45; // mattress height
-
-  const p000 = pt(wx, 0, wz), p100 = pt(wx+sw, 0, wz);
-  const p110 = pt(wx+sw, 0, wz+sd), p010 = pt(wx, 0, wz+sd);
-  const p001 = pt(wx, py, wz), p101 = pt(wx+sw, py, wz);
-  const p111 = pt(wx+sw, py, wz+sd), p011 = pt(wx, py, wz+sd);
-  // Headboard
-  const hbH = 0.9, hbD = 0.15;
-  const hb00 = pt(wx, 0, wz), hb10 = pt(wx+sw, 0, wz);
-  const hb01 = pt(wx, hbH, wz), hb11 = pt(wx+sw, hbH, wz);
-  const hb00b = pt(wx, 0, wz+hbD), hb10b = pt(wx+sw, 0, wz+hbD);
-  const hb01b = pt(wx, hbH, wz+hbD), hb11b = pt(wx+sw, hbH, wz+hbD);
-
+/* ── Furniture helpers ──────────────────────────────────────────────────── */
+// A simple isometric box at world coords
+function IsoBox({ wx, wy, wz, sw, sh, bh, topColor, southColor, eastColor, stroke='#A89870' }) {
+  const A = pt(wx,    wy,    wz),    B = pt(wx+sw, wy,    wz);
+  const C = pt(wx+sw, wy,    wz+sh), D = pt(wx,    wy,    wz+sh);
+  const E = pt(wx,    wy+bh, wz),    F = pt(wx+sw, wy+bh, wz);
+  const G = pt(wx+sw, wy+bh, wz+sh), H = pt(wx,    wy+bh, wz+sh);
   return (
-    <g style={{ pointerEvents: 'none' }}>
-      {/* Mattress top */}
-      <polygon points={poly([p000,p100,p110,p010])} fill="#E8E0D0" stroke="#C8C0B0" strokeWidth="0.4"/>
-      {/* South side */}
-      <polygon points={poly([p010,p110,p111,p011])} fill="#D8D0C0" stroke="#C8C0B0" strokeWidth="0.3"/>
-      {/* East side */}
-      <polygon points={poly([p100,p110,p111,p101])} fill="#D0C8B8" stroke="#C8C0B0" strokeWidth="0.3"/>
-      {/* Headboard front */}
-      <polygon points={poly([hb00b,hb10b,hb11b,hb01b])} fill="#8B6F4E" stroke="#6B4F2E" strokeWidth="0.4"/>
-      {/* Headboard top */}
-      <polygon points={poly([hb00,hb10,hb10b,hb00b])} fill="#9B7F5E" stroke="#6B4F2E" strokeWidth="0.3"/>
+    <g style={{ pointerEvents:'none' }}>
+      <polygon points={pp([E,F,G,H])} fill={topColor}   stroke={stroke} strokeWidth="0.4"/>
+      <polygon points={pp([D,C,G,H])} fill={southColor} stroke={stroke} strokeWidth="0.4"/>
+      <polygon points={pp([B,C,G,F])} fill={eastColor}  stroke={stroke} strokeWidth="0.4"/>
+    </g>
+  );
+}
+
+function IsoBed({ x, y, w, h }) {
+  const wx=x*S+0.08, wz=y*S+0.08, sw=w*S-0.16, sd=h*S-0.16;
+  const frame_h=0.12, matt_h=0.22, hb_h=0.72, hb_d=0.12;
+  return (
+    <g style={{ pointerEvents:'none' }}>
+      {/* frame */}
+      <IsoBox wx={wx} wy={0} wz={wz} sw={sw} sh={sd} bh={frame_h}
+        topColor="#C8A870" southColor="#B89060" eastColor="#A88050" stroke="#907040"/>
+      {/* mattress */}
+      <IsoBox wx={wx+0.04} wy={frame_h} wz={wz+0.04} sw={sw-0.08} sh={sd-0.08} bh={matt_h}
+        topColor="#EDE4D4" southColor="#DDD4C4" eastColor="#D0C8B4" stroke="#C0B8A0"/>
+      {/* headboard */}
+      <IsoBox wx={wx} wy={0} wz={wz} sw={sw} sh={hb_d} bh={hb_h}
+        topColor="#8B6540" southColor="#7A5430" eastColor="#6A4420" stroke="#5A3410"/>
+      {/* pillow L */}
+      <IsoBox wx={wx+sw*0.08} wy={frame_h+matt_h} wz={wz+hb_d+0.02}
+        sw={sw*0.37} sh={sd*0.22} bh={0.08}
+        topColor="#F5F0E8" southColor="#E8E0D0" eastColor="#DDD8C8" stroke="#C8C0B0"/>
+      {/* pillow R */}
+      <IsoBox wx={wx+sw*0.55} wy={frame_h+matt_h} wz={wz+hb_d+0.02}
+        sw={sw*0.37} sh={sd*0.22} bh={0.08}
+        topColor="#F5F0E8" southColor="#E8E0D0" eastColor="#DDD8C8" stroke="#C8C0B0"/>
     </g>
   );
 }
 
 function IsoSofa({ x, y, w, h }) {
-  const wx = x*S+0.1, wz = y*S+0.1, sw = w*S-0.2, sd = h*S-0.2;
-  const seatH = 0.42, backH = 0.85, armW = 0.18, backD = 0.22;
-
-  function face(pts, fill) {
-    return <polygon points={poly(pts)} fill={fill} stroke="#9A9088" strokeWidth="0.35"/>;
-  }
-
+  const wx=x*S+0.06, wz=y*S+0.06, sw=w*S-0.12, sd=h*S-0.12;
+  const seatH=0.36, backH=0.62, armW=0.15, backD=0.2;
   return (
     <g style={{ pointerEvents:'none' }}>
-      {/* Seat top */}
-      {face([pt(wx,seatH,wz), pt(wx+sw,seatH,wz), pt(wx+sw,seatH,wz+sd*0.7), pt(wx,seatH,wz+sd*0.7)], '#C8BEB0')}
-      {/* Seat south */}
-      {face([pt(wx,0,wz+sd*0.7), pt(wx+sw,0,wz+sd*0.7), pt(wx+sw,seatH,wz+sd*0.7), pt(wx,seatH,wz+sd*0.7)], '#B8AEA0')}
-      {/* Back top */}
-      {face([pt(wx,backH,wz), pt(wx+sw,backH,wz), pt(wx+sw,backH,wz+backD), pt(wx,backH,wz+backD)], '#D8D0C8')}
-      {/* Back south */}
-      {face([pt(wx,seatH,wz+backD), pt(wx+sw,seatH,wz+backD), pt(wx+sw,backH,wz+backD), pt(wx,backH,wz+backD)], '#C0B8B0')}
+      {/* seat */}
+      <IsoBox wx={wx+armW} wy={0} wz={wz+backD} sw={sw-armW*2} sh={sd-backD} bh={seatH}
+        topColor="#C0B4A0" southColor="#B0A490" eastColor="#A09480" stroke="#908070"/>
+      {/* back */}
+      <IsoBox wx={wx+armW} wy={0} wz={wz} sw={sw-armW*2} sh={backD} bh={backH}
+        topColor="#D0C4B0" southColor="#C0B4A0" eastColor="#B0A490" stroke="#908070"/>
+      {/* left arm */}
+      <IsoBox wx={wx} wy={0} wz={wz} sw={armW} sh={sd} bh={seatH*1.4}
+        topColor="#B8AC98" southColor="#A89C88" eastColor="#988C78" stroke="#887060"/>
+      {/* right arm */}
+      <IsoBox wx={wx+sw-armW} wy={0} wz={wz} sw={armW} sh={sd} bh={seatH*1.4}
+        topColor="#B8AC98" southColor="#A89C88" eastColor="#988C78" stroke="#887060"/>
     </g>
   );
 }
 
 function IsoTable({ x, y, w, h }) {
-  const wx = x*S+0.05, wz = y*S+0.05, sw = w*S-0.1, sd = h*S-0.1;
-  const th = 0.75;
+  const wx=x*S+0.06, wz=y*S+0.06, sw=w*S-0.12, sd=h*S-0.12;
+  const legW=0.06, legH=0.68, topT=0.06;
   return (
     <g style={{ pointerEvents:'none' }}>
-      <polygon points={poly([pt(wx,th,wz),pt(wx+sw,th,wz),pt(wx+sw,th,wz+sd),pt(wx,th,wz+sd)])} fill="#C8A870" stroke="#A88850" strokeWidth="0.4"/>
-      <polygon points={poly([pt(wx,0,wz+sd),pt(wx+sw,0,wz+sd),pt(wx+sw,th,wz+sd),pt(wx,th,wz+sd)])} fill="#B89860" stroke="#A88850" strokeWidth="0.3"/>
-      <polygon points={poly([pt(wx+sw,0,wz),pt(wx+sw,0,wz+sd),pt(wx+sw,th,wz+sd),pt(wx+sw,th,wz)])} fill="#A88850" stroke="#A88850" strokeWidth="0.3"/>
+      {/* legs */}
+      {[[0,0],[1,0],[0,1],[1,1]].map(([a,b],i)=>(
+        <IsoBox key={i}
+          wx={wx+a*(sw-legW)} wy={0} wz={wz+b*(sd-legW)}
+          sw={legW} sh={legW} bh={legH}
+          topColor="#C0A060" southColor="#B09050" eastColor="#A08040" stroke="#907030"/>
+      ))}
+      {/* tabletop */}
+      <IsoBox wx={wx-0.04} wy={legH} wz={wz-0.04} sw={sw+0.08} sh={sd+0.08} bh={topT}
+        topColor="#D4B070" southColor="#C4A060" eastColor="#B49050" stroke="#A08040"/>
     </g>
   );
 }
 
 function IsoPlant({ x, y }) {
-  const cx = x*S, cz = y*S;
-  const base = pt(cx, 0, cz);
-  const top  = pt(cx, 0.8, cz);
+  const p0 = pt(x*S, 0,    y*S);
+  const p1 = pt(x*S, 0.28, y*S);
+  const p2 = pt(x*S, 0.72, y*S);
   return (
     <g style={{ pointerEvents:'none' }}>
-      <ellipse cx={base.x} cy={base.y} rx={ISO_W*0.18} ry={ISO_H*0.18} fill="#7A5030"/>
-      <ellipse cx={top.x}  cy={top.y}  rx={ISO_W*0.38} ry={ISO_H*0.5}  fill="#2E8B40" opacity="0.9"/>
-      <ellipse cx={top.x-2} cy={top.y-3} rx={ISO_W*0.22} ry={ISO_H*0.3} fill="#38A050" opacity="0.7"/>
+      <ellipse cx={p0.x} cy={p0.y} rx={IW*0.14} ry={IH*0.14} fill="#8B6030"/>
+      <ellipse cx={p1.x} cy={p1.y} rx={IW*0.32} ry={IH*0.42} fill="#2A7A35" opacity="0.85"/>
+      <ellipse cx={p2.x-3} cy={p2.y-2} rx={IW*0.18} ry={IH*0.26} fill="#38A045" opacity="0.7"/>
     </g>
   );
 }
 
-/* ─── Data ────────────────────────────────────────────────────────────────── */
+/* ── Data ───────────────────────────────────────────────────────────────── */
 const APARTMENT_ROOMS = [
   { x:12,  y:12,  w:200, h:190, label:'مجلس',         area:'45 م²' },
   { x:212, y:12,  w:183, h:190, label:'غرفة معيشة',   area:'32 م²' },
@@ -261,8 +222,8 @@ const APARTMENT_FURN = [
   { type:'bed',   x:187, y:212, w:110, h:82  },
   { type:'bed',   x:405, y:212, w:100, h:82  },
   { type:'bed',   x:150, y:392, w:110, h:78  },
-  { type:'plant', x:195, y:18  },
-  { type:'plant', x:600, y:380 },
+  { type:'plant', x:195, y:20  },
+  { type:'plant', x:598, y:378 },
 ];
 
 const ROOF_ROOMS = [
@@ -285,8 +246,8 @@ const ROOF_FURN = [
   { type:'bed',   x:450, y:22,  w:130, h:165 },
   { type:'bed',   x:192, y:225, w:125, h:95  },
   { type:'bed',   x:162, y:407, w:115, h:92  },
-  { type:'plant', x:230, y:18  },
-  { type:'plant', x:635, y:410 },
+  { type:'plant', x:230, y:20  },
+  { type:'plant', x:633, y:408 },
 ];
 
 const GROUND_ROOMS = [
@@ -300,18 +261,18 @@ const GROUND_ROOMS = [
   { x:497, y:275, w:171, h:210, label:'مصعد وسلالم', area:'' },
 ];
 
-/* ─── Tooltip ─────────────────────────────────────────────────────────────── */
+/* ── Tooltip ────────────────────────────────────────────────────────────── */
 function Tooltip({ info }) {
   if (!info) return null;
   return (
-    <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-xl px-4 py-2.5 shadow-lg z-10 pointer-events-none">
+    <div className="absolute top-3 right-3 bg-white/96 backdrop-blur-sm border border-slate-200 rounded-xl px-4 py-2.5 shadow-lg z-10 pointer-events-none">
       <p className="font-black text-[#1a365d] text-sm">{info.label}</p>
       {info.area && <p className="text-[#c5a059] font-bold text-xs mt-0.5">{info.area}</p>}
     </div>
   );
 }
 
-/* ─── Main ────────────────────────────────────────────────────────────────── */
+/* ── Main ───────────────────────────────────────────────────────────────── */
 export default function FloorPlan3D({ floorId }) {
   const [hovered, setHovered] = useState(null);
   const [info,    setInfo]    = useState(null);
@@ -326,78 +287,64 @@ export default function FloorPlan3D({ floorId }) {
     setInfo(label ? { label, area } : null);
   };
 
-  // Compute SVG bounds
-  const { minX, minY, maxX, maxY } = useMemo(() => {
-    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  // Compute SVG viewBox
+  const vb = useMemo(() => {
+    let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
     for (const r of rooms) {
       const corners = [
-        pt(r.x*S, 0, r.y*S),
-        pt((r.x+r.w)*S, 0, r.y*S),
-        pt((r.x+r.w)*S, 0, (r.y+r.h)*S),
-        pt(r.x*S, 0, (r.y+r.h)*S),
-        pt(r.x*S, WALL_H, r.y*S),
-        pt((r.x+r.w)*S, WALL_H, r.y*S),
-        pt(r.x*S, WALL_H, (r.y+r.h)*S),
-        pt((r.x+r.w)*S, WALL_H, (r.y+r.h)*S),
+        pt(r.x*S,0,r.y*S), pt((r.x+r.w)*S,0,r.y*S),
+        pt((r.x+r.w)*S,0,(r.y+r.h)*S), pt(r.x*S,0,(r.y+r.h)*S),
+        pt(r.x*S,WH,r.y*S), pt((r.x+r.w)*S,WH,r.y*S),
+        pt(r.x*S,WH,(r.y+r.h)*S), pt((r.x+r.w)*S,WH,(r.y+r.h)*S),
       ];
       for (const c of corners) {
-        minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
-        maxX = Math.max(maxX, c.x); maxY = Math.max(maxY, c.y);
+        x0=Math.min(x0,c.x); y0=Math.min(y0,c.y);
+        x1=Math.max(x1,c.x); y1=Math.max(y1,c.y);
       }
     }
-    return { minX, minY, maxX, maxY };
+    const pad = 24;
+    return `${x0-pad} ${y0-pad} ${x1-x0+pad*2} ${y1-y0+pad*2}`;
   }, [rooms]);
 
-  const pad = 20;
-  const vbX = minX - pad, vbY = minY - pad;
-  const vbW = maxX - minX + pad * 2;
-  const vbH = maxY - minY + pad * 2;
-
-  // Painter's sort: rooms with smaller (wx+wz) drawn first (further back)
+  // Painter's sort (back to front by wx+wz)
   const sortedRooms = useMemo(() =>
-    [...rooms].sort((a, b) =>
-      ((a.x + a.w / 2) * S + (a.y + a.h / 2) * S) -
-      ((b.x + b.w / 2) * S + (b.y + b.h / 2) * S)
+    [...rooms].sort((a,b)=>
+      (a.x+a.w/2)*S+(a.y+a.h/2)*S - ((b.x+b.w/2)*S+(b.y+b.h/2)*S)
     ), [rooms]);
 
   const sortedFurn = useMemo(() =>
-    [...furn].sort((a, b) =>
-      ((a.x || 0) * S + (a.y || 0) * S) -
-      ((b.x || 0) * S + (b.y || 0) * S)
+    [...furn].sort((a,b)=> (a.x||0)*S+(a.y||0)*S - ((b.x||0)*S+(b.y||0)*S)
     ), [furn]);
 
   return (
     <div className="relative w-full select-none" style={{ height: 480 }}>
       <svg
-        viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
-        style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#F0F4F8 0%,#E4EAF2 100%)' }}
-        xmlns="http://www.w3.org/2000/svg"
+        viewBox={vb}
+        style={{
+          width: '100%', height: '100%',
+          background: 'linear-gradient(150deg,#EEF2F8 0%,#E4EAF4 100%)',
+        }}
       >
-        {/* Subtle shadow under the building */}
         <defs>
-          <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
-            <feDropShadow dx="4" dy="8" stdDeviation="6" floodColor="#00000030"/>
+          <filter id="bshadow">
+            <feDropShadow dx="6" dy="12" stdDeviation="8" floodColor="#00000022"/>
           </filter>
         </defs>
-
-        <g filter="url(#shadow)">
-          {/* Rooms — back to front */}
-          {sortedRooms.map((r, i) => (
-            <IsoRoom key={i} room={r} hovered={hovered} onHover={handleHover} />
+        <g filter="url(#bshadow)">
+          {sortedRooms.map((r,i)=>(
+            <IsoRoom key={i} room={r} hovered={hovered} onHover={handleHover}/>
           ))}
-
-          {/* Furniture */}
-          {sortedFurn.map((f, i) => {
-            if (f.type === 'bed')   return <IsoBed   key={i} {...f}/>;
-            if (f.type === 'sofa')  return <IsoSofa  key={i} {...f}/>;
-            if (f.type === 'table') return <IsoTable key={i} {...f}/>;
-            if (f.type === 'plant') return <IsoPlant key={i} {...f}/>;
+          {sortedFurn.map((f,i)=>{
+            if (f.type==='bed')   return <IsoBed   key={i} {...f}/>;
+            if (f.type==='sofa')  return <IsoSofa  key={i} {...f}/>;
+            if (f.type==='table') return <IsoTable key={i} {...f}/>;
+            if (f.type==='plant') return <IsoPlant key={i} {...f}/>;
             return null;
           })}
         </g>
       </svg>
 
-      <Tooltip info={info} />
+      <Tooltip info={info}/>
 
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none">
         <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-[10px] text-slate-400 border border-slate-200 shadow-sm">
