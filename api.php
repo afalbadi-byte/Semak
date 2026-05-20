@@ -27,6 +27,16 @@ $conn->set_charset("utf8mb4");
 $conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT NULL");
 $conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS client_submitted_at DATETIME DEFAULT NULL");
 
+// ─── auto-migrate: WhatsApp bot conversation history ────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    phone       VARCHAR(20) NOT NULL,
+    role        ENUM('user','assistant') NOT NULL,
+    message     TEXT NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_phone_time (phone, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 $input_data = json_decode(file_get_contents("php://input"), true);
 if (!$input_data) $input_data = [];
 
@@ -769,6 +779,228 @@ switch ($action) {
             }
         }
         echo json_encode(["success" => true, "fixed" => $fixed]);
+        break;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // بوت الواتساب — يستقبل الرسائل الواردة ويرد بالذكاء الاصطناعي
+    // ════════════════════════════════════════════════════════════════════════
+    case 'wa_webhook':
+        // ── مفتاح Claude API ── ضعه هنا بعد إنشاء الحساب
+        $anthropic_key = "ANTHROPIC_API_KEY_HERE";
+
+        // ── إعدادات الواتساب (Mottasl) ──
+        $mottasl_key  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
+        $mottasl_base = "https://api.mottasl.ai/v1";
+
+        // ── قاعدة معارف سماك العقارية (system prompt) ──
+        $semak_knowledge = <<<'KNOWLEDGE'
+أنت مساعد خدمة عملاء لشركة سماك العقارية. ردودك دائماً باللغة العربية، واضحة وودية ومختصرة.
+لا تخترع معلومات. إذا سُئلت عن شيء خارج نطاق معلوماتك، اطلب من العميل التواصل المباشر.
+
+═══ معلومات سماك العقارية ═══
+
+🏢 الشركة:
+- الاسم: سماك العقارية
+- الشعار: "سقف يعلو برؤيتك، ومسكن يحكي قصتك"
+- اسم سماك مأخوذ من "رَفَعَ سَمْكَهَا فَسَوَّاهَا" (سورة النازعات، الآية 28)
+- تأسست في مكة المكرمة لتطوير مجتمعات سكنية ذكية ومستدامة
+- رؤيتنا: الريادة في صياغة مفهوم السكن العصري في مكة، متوافقة مع رؤية 2030
+
+📍 الموقع:
+- حي البوابة، مكة المكرمة
+- 15 دقيقة عن المسجد الحرام
+- 9 دقائق عن محطة قطار الحرمين
+- 50 دقيقة عن مطار الملك عبدالعزيز الدولي
+- مقابل مسجد ومقابل حديقة عامة
+- 5 دقائق عن 5 مراكز تسوق كبرى
+
+🏗️ المشروع الحالي: سماك البوابة 1
+عدد الوحدات: 7 وحدات حصرية فقط | تملك حر 100%
+
+📋 الوحدات المتاحة وأسعارها:
+الدور الأرضي: مواقف خاصة ومدخل ومصعد (لا يُباع)
+
+الدور الأول:
+• SM-A01 — واجهتين — 720,000 ريال — وحدة مميزة
+• SM-A02 — واجهة أمامية — 700,000 ريال
+
+الدور الثاني:
+• SM-A03 — واجهتين — 720,000 ريال — وحدة مميزة
+• SM-A04 — واجهة أمامية — 700,000 ريال
+
+الدور الثالث:
+• SM-A05 — واجهتين — 720,000 ريال — وحدة مميزة
+• SM-A06 — واجهة أمامية — 700,000 ريال
+
+الدور الرابع:
+• SM-A07 — فيلا روف فاخرة — 1,100,000 ريال — وحدة مميزة جداً
+
+📐 المواصفات العامة (وحدات الأدوار 1-3):
+- المساحة: 204 م²
+- عدد الغرف: 5 غرف نوم
+- 4 دورات مياه
+- غرفة خادمة + غرفة غسيل + مستودع
+- موقف سيارة خاص
+- دخول ذكي بصمة
+- منزل ذكي (تحكم بالإضاءة والتكييف والدخول من الهاتف)
+- خزان أرضي وعلوي مستقل
+
+📐 مواصفات فيلا الروف SM-A07:
+- المساحة: 422 م²
+- عدد الغرف: 4 غرف نوم
+- 4 دورات مياه + غرفة خادمة
+- سطح خاص كبير جداً
+- خزان أرضي وعلوي مستقل
+
+✨ المميزات العامة للمشروع:
+- بيئة ذكية متكاملة: أنظمة إنارة ودخول ذكي
+- أمان 24/7: كاميرات CCTV وأقفال إلكترونية ذكية
+- تشطيبات فاخرة: أرقى خامات البورسلان والرخام من ماركات عالمية
+- ضمان 10 سنوات على الإنشاءات والأعمال الكهروميكانيكية
+
+🔧 الخدمات التي تقدمها سماك:
+1. التطوير العقاري — مشاريع سكنية وتجارية متكاملة
+2. إدارة الأملاك — تأجير وتحصيل وصيانة دورية
+3. دراسات الجدوى والمبيعات — تحليلات سوقية واستراتيجية
+4. الحلول الذكية للمنازل — أنظمة تحكم ذكية متكاملة
+5. الصيانة والتشغيل — فريق هندسي وفني متخصص
+6. التسليم وخدمات ما بعد البيع — ضمانات شاملة
+
+📞 معلومات التواصل:
+- واتساب: 920032842 (اتصل على هذا الرقم)
+- الرقم الموحد: 920032842
+- البريد: info@semak.sa
+- الموقع الإلكتروني: semak.sa
+- المقر: حي البوابة، مكة المكرمة
+
+═══ تعليمات الرد ═══
+- رد بالعربية الواضحة دائماً
+- لا تزيد على 3 فقرات قصيرة في الرد
+- إذا سأل عن وحدة بعينها أعطه سعرها ومواصفاتها فوراً
+- إذا أراد الحجز أو المعاينة وجّهه للتواصل: "للحجز أو المعاينة تواصل معنا على 920032842"
+- لا تعطِ وعوداً بالتخفيض أو التفاوض على الأسعار
+- إذا سأل عن شيء مجهول قل: "سيتواصل معك أحد مستشارينا قريباً للإجابة بشكل مفصل"
+KNOWLEDGE;
+
+        // ── استخراج رسالة العميل من payload الواتساب ──
+        $raw_body  = file_get_contents("php://input");
+        $payload   = json_decode($raw_body, true);
+
+        // Mottasl webhook formats
+        $from_phone = null;
+        $user_msg   = null;
+
+        // format 1: { entry: [{ changes: [{ value: { messages: [{ from, text: { body } }] } }] }] }
+        if (!empty($payload['entry'][0]['changes'][0]['value']['messages'][0])) {
+            $msg_obj    = $payload['entry'][0]['changes'][0]['value']['messages'][0];
+            $from_phone = $msg_obj['from'] ?? null;
+            $user_msg   = $msg_obj['text']['body'] ?? null;
+        }
+        // format 2: { data: { from, message: { type, text: { body } } } }
+        elseif (!empty($payload['data']['from'])) {
+            $from_phone = $payload['data']['from'] ?? null;
+            $user_msg   = $payload['data']['message']['text']['body']
+                       ?? $payload['data']['message']['body']
+                       ?? null;
+        }
+        // format 3: flat { from, text }
+        elseif (!empty($payload['from'])) {
+            $from_phone = $payload['from'] ?? null;
+            $user_msg   = $payload['text']['body'] ?? $payload['text'] ?? $payload['body'] ?? null;
+        }
+
+        // تجاهل إذا لم تكن رسالة نصية
+        if (!$from_phone || !$user_msg) {
+            echo json_encode(["ok" => true, "skipped" => "not a text message"]);
+            break;
+        }
+
+        $from_phone = preg_replace('/\D/', '', $from_phone);
+
+        // ── حفظ رسالة المستخدم ──
+        $safe_phone = $conn->real_escape_string($from_phone);
+        $safe_msg   = $conn->real_escape_string($user_msg);
+        $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'user', '$safe_msg')");
+
+        // ── جلب آخر 10 رسائل للمحادثة (للسياق) ──
+        $history_res = $conn->query(
+            "SELECT role, message FROM wa_bot_conversations
+             WHERE phone='$safe_phone'
+             ORDER BY created_at DESC LIMIT 10"
+        );
+        $history_rows = [];
+        if ($history_res) {
+            while ($row = $history_res->fetch_assoc()) {
+                $history_rows[] = $row;
+            }
+        }
+        // عكس الترتيب (الأقدم أولاً)
+        $history_rows = array_reverse($history_rows);
+
+        // بناء messages array لـ Claude
+        $claude_messages = [];
+        foreach ($history_rows as $h) {
+            $claude_messages[] = ["role" => $h['role'], "content" => $h['message']];
+        }
+
+        // ── استدعاء Claude API ──
+        $claude_payload = json_encode([
+            "model"      => "claude-haiku-4-5",
+            "max_tokens" => 500,
+            "system"     => $semak_knowledge,
+            "messages"   => $claude_messages
+        ], JSON_UNESCAPED_UNICODE);
+
+        $ch = curl_init("https://api.anthropic.com/v1/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $claude_payload,
+            CURLOPT_HTTPHEADER     => [
+                "Content-Type: application/json",
+                "x-api-key: {$anthropic_key}",
+                "anthropic-version: 2023-06-01"
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $claude_raw = curl_exec($ch);
+        curl_close($ch);
+
+        $claude_data = json_decode($claude_raw, true);
+        $bot_reply   = $claude_data['content'][0]['text'] ?? null;
+
+        if (!$bot_reply) {
+            // فشل Claude — لا ترد لتجنب إزعاج العميل
+            echo json_encode(["ok" => false, "error" => "claude_failed", "raw" => $claude_raw]);
+            break;
+        }
+
+        // ── حفظ رد البوت ──
+        $safe_reply = $conn->real_escape_string($bot_reply);
+        $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'assistant', '$safe_reply')");
+
+        // ── إرسال الرد عبر واتساب ──
+        $wa_payload = json_encode([
+            "to"   => $from_phone,
+            "type" => "text",
+            "text" => ["body" => $bot_reply]
+        ], JSON_UNESCAPED_UNICODE);
+
+        $ch2 = curl_init("{$mottasl_base}/message/send");
+        curl_setopt_array($ch2, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $wa_payload,
+            CURLOPT_HTTPHEADER     => [
+                "Content-Type: application/json",
+                "Authorization: Bearer {$mottasl_key}"
+            ],
+            CURLOPT_TIMEOUT => 10,
+        ]);
+        $wa_result = curl_exec($ch2);
+        curl_close($ch2);
+
+        echo json_encode(["ok" => true, "sent" => json_decode($wa_result, true)]);
         break;
 
     // ────────────────────────────────────────────────────────────────────────
