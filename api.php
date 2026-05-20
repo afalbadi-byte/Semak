@@ -906,8 +906,21 @@ KNOWLEDGE;
         $from_phone = null;
         $user_msg   = null;
 
+        // تجاهل الرسائل الصادرة (direction=out)
+        if (($payload['direction'] ?? '') === 'out') {
+            echo json_encode(["ok" => true, "skipped" => "outgoing message"]);
+            break;
+        }
+
+        // format Mottasl الفعلي: { from, message_body: { text: { body } } }
+        if (!empty($payload['from']) && !empty($payload['message_body'])) {
+            $from_phone = $payload['from'];
+            $user_msg   = $payload['message_body']['text']['body']
+                       ?? $payload['message_body']['body']
+                       ?? null;
+        }
         // format 1: { entry: [{ changes: [{ value: { messages: [{ from, text: { body } }] } }] }] }
-        if (!empty($payload['entry'][0]['changes'][0]['value']['messages'][0])) {
+        elseif (!empty($payload['entry'][0]['changes'][0]['value']['messages'][0])) {
             $msg_obj    = $payload['entry'][0]['changes'][0]['value']['messages'][0];
             $from_phone = $msg_obj['from'] ?? null;
             $user_msg   = $msg_obj['text']['body'] ?? null;
