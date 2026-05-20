@@ -782,6 +782,22 @@ switch ($action) {
         echo json_encode(["success" => true, "fixed" => $fixed]);
         break;
 
+    case 'test_claude':
+        $key = "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";
+        $ch = curl_init("https://api.anthropic.com/v1/messages");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode(["model"=>"claude-haiku-4-5","max_tokens"=>50,"messages"=>[["role"=>"user","content"=>"قل مرحبا"]]]),
+            CURLOPT_HTTPHEADER => ["Content-Type: application/json","x-api-key: $key","anthropic-version: 2023-06-01"],
+            CURLOPT_TIMEOUT => 20,
+        ]);
+        $res = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+        echo json_encode(["curl_err"=>$err,"response"=>json_decode($res,true)]);
+        break;
+
     // ════════════════════════════════════════════════════════════════════════
     // بوت الواتساب — يستقبل الرسائل الواردة ويرد بالذكاء الاصطناعي
     // ════════════════════════════════════════════════════════════════════════
