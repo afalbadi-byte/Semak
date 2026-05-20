@@ -112,24 +112,59 @@ switch ($action) {
         $expires  = date('Y-m-d H:i:s', time() + 600); // صالح 10 دقائق
         $conn->query("INSERT INTO otp_sessions (unit_code, otp_code, expires_at) VALUES ('$unit', '$otp_code', '$expires')");
 
-        // إرسال رمز التحقق عبر واتساب (Mottasl API)
+        // إرسال رمز التحقق عبر واتساب (Mottasl API — قالب semak_request_ref)
         $wa_to   = '966' . $phone;
         $wa_name = $owner['owner_name'];
-        $wa_body = "🔐 *سماك العقارية — رمز الدخول*\n\nأهلاً {$wa_name}،\n\nرمز التحقق الخاص بك:\n\n*{$otp_code}*\n\n⏰ صالح لمدة 10 دقائق فقط\n🔒 لا تشارك هذا الرمز مع أي شخص";
 
         $mottasl_key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo';
 
-        $ch = curl_init('https://api.mottasl.ai/v1/message/send');
+        // ① الإرسال عبر قالب semak_request_ref ({{1}}=الاسم، {{2}}=رقم الوحدة، {{3}}=الرمز)
+        //    القالب يعمل حتى خارج نافذة الـ 24 ساعة بعد الموافقة عليه
+        $template_payload = json_encode([
+            'to'   => $wa_to,
+            'type' => 'template',
+            'template' => [
+                'name'     => 'semak_request_ref',
+                'language' => ['code' => 'ar'],
+                'components' => [[
+                    'type'       => 'body',
+                    'parameters' => [
+                        ['type' => 'text', 'text' => $wa_name],
+                        ['type' => 'text', 'text' => $unit],
+                        ['type' => 'text', 'text' => $otp_code],
+                    ],
+                ]],
+            ],
+        ]);
+
+        $ch = curl_init('https://api.mottasl.ai/v1/message/send?create=true');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode(['to' => $wa_to, 'type' => 'text', 'text' => ['body' => $wa_body]]),
+            CURLOPT_POSTFIELDS     => $template_payload,
             CURLOPT_HTTPHEADER     => ['Content-Type: application/json', "Authorization: Bearer {$mottasl_key}"],
             CURLOPT_TIMEOUT        => 10,
             CURLOPT_SSL_VERIFYPEER => false,
         ]);
-        curl_exec($ch);
+        $wa_resp   = curl_exec($ch);
+        $wa_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        // ② احتياطي: رسالة نصية مباشرة إن فشل القالب (ضمن نافذة 24 ساعة)
+        if ($wa_status !== 200 && $wa_status !== 201) {
+            $wa_body = "🔐 سماك العقارية\n\nأهلاً {$wa_name}، رمز المتابعة لوحدة {$unit}:\n\n{$otp_code}\n\nصالح 10 دقائق.";
+            $ch2 = curl_init('https://api.mottasl.ai/v1/message/send');
+            curl_setopt_array($ch2, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode(['to' => $wa_to, 'type' => 'text', 'text' => ['body' => $wa_body]]),
+                CURLOPT_HTTPHEADER     => ['Content-Type: application/json', "Authorization: Bearer {$mottasl_key}"],
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            curl_exec($ch2);
+            curl_close($ch2);
+        }
 
         // إخفاء جزء من رقم الجوال للعرض فقط
         $masked = substr($dbPhone, 0, 3) . ' **** ' . substr($dbPhone, -3);
@@ -492,41 +527,27 @@ switch ($action) {
             $wa_headers  = ["Content-Type: application/json", "Authorization: Bearer $wa_token"];
             $admin_phone = "966550163121";
 
-            // ① إشعار الإدارة (نص)
-            $wa_msg = "🔧 *طلب صيانة جديد #$new_id - سماك*\n\n👤 المالك: $name\n📞 الجوال: $phone\n🏠 الوحدة: $unit\n⚠️ نوع العطل: $type\n\n⏰ " . date('Y-m-d H:i', strtotime('+3 hours'));
-            $ch = curl_init("https://api.mottasl.ai/v1/message/send");
-            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(["to" => $admin_phone, "type" => "text", "text" => ["body" => $wa_msg]]), CURLOPT_HTTPHEADER => $wa_headers, CURLOPT_TIMEOUT => 5]);
+            // ① إشعار الإدارة (قالب semak_admin_maintenance)
+            $ch = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode(["to" => $admin_phone, "type" => "template",
+                    "template" => ["template_id" => "semak_admin_maintenance", "language" => "ar",
+                        "argument" => ["BODY" => [$name, (string)$new_id, $type]]]]),
+                CURLOPT_HTTPHEADER => $wa_headers, CURLOPT_TIMEOUT => 5]);
             curl_exec($ch); curl_close($ch);
 
-            // ② تأكيد استلام الطلب للعميل (قالب)
+            // ② تأكيد استلام الطلب للعميل (قالب semak_maint_received)
             if (!empty($phone)) {
                 $client_phone = preg_replace('/\D/', '', $phone);
                 $client_phone = ltrim($client_phone, '0');
                 if (substr($client_phone, 0, 3) !== '966') $client_phone = '966' . $client_phone;
                 if (strlen($client_phone) >= 12) {
-                    $client_payload = json_encode([
-                        "to" => $client_phone, "type" => "template",
-                        "template" => [
-                            "template_id" => "semak_maintenance", "language" => "ar",
-                            "components"  => [
-                                ["type" => "header", "parameters" => [
-                                    ["type" => "image", "image" => ["link" => "https://semak.sa/images/wa-maintenance-cover.png"]]
-                                ]],
-                                ["type" => "body", "parameters" => [
-                                    ["type" => "text", "text" => $name],           // {{1}} الاسم
-                                    ["type" => "text", "text" => (string)$new_id], // {{2}} رقم الطلب
-                                    ["type" => "text", "text" => $unit],           // {{3}} الوحدة
-                                    ["type" => "text", "text" => $type],           // {{4}} نوع العطل
-                                    ["type" => "text", "text" => "قيد الانتظار"], // {{5}} الحالة
-                                    ["type" => "text", "text" => "سيتم التحديد"], // {{6}} الفني
-                                    ["type" => "text", "text" => "سيتم التأكيد"], // {{7}} الموعد
-                                    ["type" => "text", "text" => "—"],             // {{8}} رمز الإغلاق
-                                ]]
-                            ]
-                        ]
-                    ]);
                     $ch2 = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
-                    curl_setopt_array($ch2, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $client_payload, CURLOPT_HTTPHEADER => $wa_headers, CURLOPT_TIMEOUT => 5]);
+                    curl_setopt_array($ch2, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                        CURLOPT_POSTFIELDS => json_encode(["to" => $client_phone, "type" => "template",
+                            "template" => ["template_id" => "semak_maint_received", "language" => "ar",
+                                "argument" => ["BODY" => [$name, (string)$new_id, $type]]]]),
+                        CURLOPT_HTTPHEADER => $wa_headers, CURLOPT_TIMEOUT => 5]);
                     curl_exec($ch2); curl_close($ch2);
                 }
             }
@@ -561,35 +582,15 @@ switch ($action) {
                 $tech  = (!empty($row['technician']) && $row['technician'] !== 'لم يتم التعيين') ? $row['technician'] : 'سيتم التحديد';
                 $sched = !empty($row['date']) ? $row['date'] : 'سيتم التأكيد';
                 $otp_val = !empty($row['otp']) ? $row['otp'] : '—';
+                // قالب semak_maint_update: [name, ticket_id, status]
                 $wa_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
-                $wa_payload = json_encode([
-                    "to"       => $client_phone,
-                    "type"     => "template",
-                    "template" => [
-                        "template_id" => "semak_maintenance",
-                        "language"    => "ar",
-                        "components"  => [
-                            ["type" => "header", "parameters" => [
-                                ["type" => "image", "image" => ["link" => "https://semak.sa/images/wa-maintenance-cover.png"]]
-                            ]],
-                            ["type" => "body", "parameters" => [
-                                ["type" => "text", "text" => $row['name']],        // {{1}} الاسم
-                                ["type" => "text", "text" => (string)$row['id']],  // {{2}} رقم الطلب
-                                ["type" => "text", "text" => $row['unit']],        // {{3}} الوحدة
-                                ["type" => "text", "text" => $row['type']],        // {{4}} نوع العطل
-                                ["type" => "text", "text" => $value],              // {{5}} الحالة
-                                ["type" => "text", "text" => $tech],               // {{6}} الفني
-                                ["type" => "text", "text" => $sched],              // {{7}} الموعد
-                                ["type" => "text", "text" => $otp_val],            // {{8}} رمز الإغلاق
-                            ]]
-                        ]
-                    ]
-                ]);
                 $ch = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
                 curl_setopt_array($ch, [
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_POST           => true,
-                    CURLOPT_POSTFIELDS     => $wa_payload,
+                    CURLOPT_POSTFIELDS     => json_encode(["to" => $client_phone, "type" => "template",
+                        "template" => ["template_id" => "semak_maint_update", "language" => "ar",
+                            "argument" => ["BODY" => [$row['name'], (string)$row['id'], $value]]]]),
                     CURLOPT_HTTPHEADER     => ["Content-Type: application/json", "Authorization: Bearer $wa_token"],
                     CURLOPT_TIMEOUT        => 5,
                 ]);
@@ -630,9 +631,11 @@ switch ($action) {
             // إرسال إشعار واتساب للإدارة تلقائياً
             $wa_token  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
             $admin_phone = "966550163121";
-            $wa_msg = "🔔 *عميل جديد - سماك العقارية*\n\n👤 الاسم: $name\n📞 الجوال: $phone\n🏠 الاهتمام: $interest\n\n⏰ " . date('Y-m-d H:i', strtotime('+3 hours'));
-            $wa_payload = json_encode(["to" => $admin_phone, "type" => "text", "text" => ["body" => $wa_msg]]);
-            $ch = curl_init("https://api.mottasl.ai/v1/message/send");
+            // قالب semak_admin_lead: [name, phone, interest]
+            $wa_payload = json_encode(["to" => $admin_phone, "type" => "template",
+                "template" => ["template_id" => "semak_admin_lead", "language" => "ar",
+                    "argument" => ["BODY" => [$name, $phone, $interest]]]]);
+            $ch = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_POST           => true,

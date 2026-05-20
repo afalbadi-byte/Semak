@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, RefreshCw, LogOut, Lock, Shield, FilePenLine, Wrench, ClipboardCheck, Calculator, ExternalLink, QrCode, Users, UserCog, CalendarDays, LayoutGrid, GanttChartSquare, CheckSquare, Printer } from 'lucide-react';
 import { API_URL } from '../../utils/helpers';
-import { notifyClientStatusUpdate } from '../../services/whatsappService';
+import { notifyClientStatusUpdate, notifyClientTechAssigned } from '../../services/whatsappService';
 import { AppContext } from '../../context/AppContext';
 
 const TIME_SLOTS = [
@@ -252,7 +252,7 @@ export default function TechDashboard(props) {
       const data = await res.json();
       if (data.success) {
         showToast("تم التحديث", "تم حفظ التغييرات في قاعدة البيانات");
-        // إرسال واتساب تلقائي للعميل عند تغيير الحالة فقط
+        // إشعار العميل عند تغيير الحالة
         if (field === "status") {
           const updatedTicket = {
             ...currentTicket,
@@ -260,6 +260,10 @@ export default function TechDashboard(props) {
             ...(newOtp && { otp: newOtp }),
           };
           notifyClientStatusUpdate(updatedTicket);
+        }
+        // إشعار العميل عند تعيين فني (semak_tech_assigned)
+        if (field === "technician" && value && value !== "لم يتم التعيين") {
+          notifyClientTechAssigned({ ...currentTicket, technician: value });
         }
       }
     } catch (error) {
