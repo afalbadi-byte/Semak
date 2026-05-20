@@ -785,6 +785,16 @@ switch ($action) {
     // بوت الواتساب — يستقبل الرسائل الواردة ويرد بالذكاء الاصطناعي
     // ════════════════════════════════════════════════════════════════════════
     case 'wa_webhook':
+        // ── التحقق من رمز الأمان ──
+        $webhook_token = "SemakBot2026";
+        $req_token = $_SERVER['HTTP_X_WEBHOOK_TOKEN'] ?? $_SERVER['HTTP_X_HUB_SIGNATURE'] ?? ($_GET['token'] ?? '');
+        // تحقق متساهل: إذا أرسل Mottasl التوكن نتحقق منه، وإذا لم يرسله نكمل (بعض الإعدادات لا ترسله)
+        if (!empty($req_token) && $req_token !== $webhook_token) {
+            http_response_code(403);
+            echo json_encode(["error" => "Unauthorized"]);
+            break;
+        }
+
         // ── مفتاح Claude API ── ضعه هنا بعد إنشاء الحساب
         $anthropic_key = "sk-ant-api03-WkmbYsYDpjHly-ZMJDIoPzKzTYa9WmR8dCmJy7El2aBaiB3bfJKQN2_qbVYuOhZOlX_CxqlCXaQGbxPOTAkkcg-NDcOkQAA";
 
