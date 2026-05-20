@@ -897,10 +897,10 @@ KNOWLEDGE;
         // $raw_input و $input_data تم تحميلهما في بداية الملف
         $payload = $input_data;
 
-        // لوج مؤقت للتشخيص
-        file_put_contents(__DIR__ . '/wa_debug.log',
-            date('Y-m-d H:i:s') . " | raw: " . substr($raw_input, 0, 500) . "\n",
-            FILE_APPEND);
+        // لوج تشخيص مفصّل
+        $log_file = __DIR__ . '/wa_debug.log';
+        $log_line = date('Y-m-d H:i:s') . " | raw: " . $raw_input . "\n";
+        file_put_contents($log_file, $log_line, FILE_APPEND);
 
         // Mottasl webhook formats
         $from_phone = null;
@@ -937,6 +937,11 @@ KNOWLEDGE;
             $from_phone = $payload['from'] ?? null;
             $user_msg   = $payload['text']['body'] ?? $payload['text'] ?? $payload['body'] ?? null;
         }
+
+        // لوج: نتيجة تحليل الـ payload
+        file_put_contents($log_file,
+            date('Y-m-d H:i:s') . " | parsed: from=$from_phone | msg=" . substr($user_msg ?? 'NULL', 0, 100) . "\n",
+            FILE_APPEND);
 
         // تجاهل إذا لم تكن رسالة نصية
         if (!$from_phone || !$user_msg) {
@@ -993,7 +998,13 @@ KNOWLEDGE;
             CURLOPT_TIMEOUT => 30,
         ]);
         $claude_raw = curl_exec($ch);
+        $curl_err   = curl_error($ch);
         curl_close($ch);
+
+        // لوج: رد Claude
+        file_put_contents($log_file,
+            date('Y-m-d H:i:s') . " | claude_err=$curl_err | claude_raw=" . substr($claude_raw ?? '', 0, 300) . "\n",
+            FILE_APPEND);
 
         $claude_data = json_decode($claude_raw, true);
         $bot_reply   = $claude_data['content'][0]['text'] ?? null;
