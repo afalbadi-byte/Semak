@@ -907,7 +907,7 @@ switch ($action) {
 🪟 الشبابيك والأبواب:
 - شبابيك ألمنيوم عازل للحرارة والصوت
 - زجاج دبل/تربل قلاس حسب الموقع
-- أبواب داخلية فاخرة + باب رئيسي مدرع
+- أبواب داخلية فاخرة + باب رئيسي بجودة عالية
 
 ⚡ الأعمال الكهربائية:
 - أفياش ومفاتيح من ماركات أوروبية معتمدة
@@ -1070,6 +1070,50 @@ KNOWLEDGE;
         $safe_msg   = $conn->real_escape_string($user_msg);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'user', '$safe_msg')");
 
+        // ── جلب بيانات العميل من قاعدة البيانات ──
+        // الجوال قد يكون مخزّن بصيغة 05xxxxxxxx أو 9665xxxxxxxx، نبحث عن كل الصيغ
+        $phone_local = preg_replace('/^966/', '0', $safe_phone);  // 9665... → 05...
+        $phone_intl  = $safe_phone;                                 // 9665...
+        $phone_no_zero = preg_replace('/^0/', '', $phone_local);   // 5xxxxxxxx
+        $phone_search = "(phone LIKE '%$phone_no_zero%')";
+
+        $customer_context = "";
+
+        // 1) هل هو عميل مهتم في leads؟
+        $lead_res = $conn->query("SELECT name, interest, status, created_at FROM leads WHERE $phone_search ORDER BY id DESC LIMIT 1");
+        if ($lead_res && $lead_row = $lead_res->fetch_assoc()) {
+            $customer_context .= "\n═══ سجل العميل (مهم استخدمه) ═══\n";
+            $customer_context .= "👤 الاسم: " . $lead_row['name'] . "\n";
+            $customer_context .= "🏠 الوحدة التي أبدى اهتماماً بها: " . $lead_row['interest'] . "\n";
+            $customer_context .= "📋 حالة الطلب: " . $lead_row['status'] . "\n";
+            $customer_context .= "📅 تاريخ التسجيل: " . $lead_row['created_at'] . "\n";
+        }
+
+        // 2) هل هو مالك له طلبات صيانة؟
+        $maint_res = $conn->query(
+            "SELECT id, unit, type, status, technician, scheduleDate, scheduleTime, created_at
+             FROM maintenance
+             WHERE $phone_search
+             ORDER BY id DESC LIMIT 3"
+        );
+        if ($maint_res && $maint_res->num_rows > 0) {
+            $customer_context .= "\n═══ طلبات الصيانة للعميل (آخر 3) ═══\n";
+            while ($m = $maint_res->fetch_assoc()) {
+                $customer_context .= "🔧 طلب #{$m['id']} | وحدة {$m['unit']} | نوع: {$m['type']} | الحالة: {$m['status']}";
+                if (!empty($m['technician']) && $m['technician'] !== 'لم يتم التعيين') {
+                    $customer_context .= " | الفني: {$m['technician']}";
+                }
+                if (!empty($m['scheduleDate'])) {
+                    $customer_context .= " | الموعد: {$m['scheduleDate']} {$m['scheduleTime']}";
+                }
+                $customer_context .= "\n";
+            }
+            $customer_context .= "إذا سأل العميل عن طلبه أعطه الحالة والفني والموعد فوراً.\n";
+        }
+
+        // إضافة سياق العميل للـ system prompt
+        $semak_knowledge_with_context = $semak_knowledge . "\n\n" . $customer_context;
+
         // ── جلب آخر 10 رسائل للمحادثة (للسياق) ──
         $history_res = $conn->query(
             "SELECT role, message FROM wa_bot_conversations
@@ -1095,7 +1139,7 @@ KNOWLEDGE;
         $claude_payload = json_encode([
             "model"      => "claude-haiku-4-5",
             "max_tokens" => 500,
-            "system"     => $semak_knowledge,
+            "system"     => $semak_knowledge_with_context,
             "messages"   => $claude_messages
         ], JSON_UNESCAPED_UNICODE);
 
