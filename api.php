@@ -37,7 +37,8 @@ $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
     INDEX idx_phone_time (phone, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-$input_data = json_decode(file_get_contents("php://input"), true);
+$raw_input  = file_get_contents("php://input");
+$input_data = json_decode($raw_input, true);
 if (!$input_data) $input_data = [];
 
 $action = '';
@@ -893,8 +894,13 @@ switch ($action) {
 KNOWLEDGE;
 
         // ── استخراج رسالة العميل من payload الواتساب ──
-        $raw_body  = file_get_contents("php://input");
-        $payload   = json_decode($raw_body, true);
+        // $raw_input و $input_data تم تحميلهما في بداية الملف
+        $payload = $input_data;
+
+        // لوج مؤقت للتشخيص
+        file_put_contents(__DIR__ . '/wa_debug.log',
+            date('Y-m-d H:i:s') . " | raw: " . substr($raw_input, 0, 500) . "\n",
+            FILE_APPEND);
 
         // Mottasl webhook formats
         $from_phone = null;
