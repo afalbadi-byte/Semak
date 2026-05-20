@@ -783,7 +783,7 @@ switch ($action) {
         break;
 
     case 'test_claude':
-        $key = "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";
+        $key = "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";
         $ch = curl_init("https://api.anthropic.com/v1/messages");
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -813,7 +813,7 @@ switch ($action) {
         }
 
         // ── مفتاح Claude API ── ضعه هنا بعد إنشاء الحساب
-        $anthropic_key = "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";
+        $anthropic_key = "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";
 
         // ── إعدادات الواتساب (Mottasl) ──
         $mottasl_key  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
