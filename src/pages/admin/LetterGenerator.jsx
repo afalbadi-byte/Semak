@@ -6,9 +6,27 @@ import 'react-quill-new/dist/quill.snow.css';
 import { FilePenLine, Printer, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
-import { createPortal } from 'react-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
 import PrintableLetterhead from '../../components/PrintableLetterhead';
-import '../../components/PrintableLetterhead.css';
+
+// فتح نافذة طباعة مستقلة بمحتوى React
+const printInNewWindow = (jsx, title) => {
+    const html = renderToStaticMarkup(jsx);
+    const w = window.open('', '_blank', 'width=900,height=1200');
+    if (!w) { alert('يرجى السماح بفتح النوافذ المنبثقة'); return; }
+    w.document.write(`<!DOCTYPE html>
+<html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title}</title>
+<style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+html, body { margin: 0; padding: 0; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; }
+table { border-collapse: collapse; width: 100%; }
+img { max-width: 100%; }
+@media print { html, body { margin: 0 !important; padding: 0 !important; } }
+</style></head><body>${html}</body></html>`);
+    w.document.close();
+    w.onload = () => { setTimeout(() => { w.focus(); w.print(); }, 300); };
+};
 
 export default function LetterGenerator() {
   const { user: contextUser, showToast } = useContext(AppContext);
@@ -37,17 +55,43 @@ export default function LetterGenerator() {
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
 
-  // دالة الطباعة - window.print() مع CSS print media + Portal
-  const [printActive, setPrintActive] = useState(false);
+  // دالة الطباعة - نافذة جديدة مستقلة (الأكثر موثوقية)
   const handlePrint = () => {
-    setPrintActive(true);
-    setTimeout(() => {
-      const oldTitle = document.title;
-      document.title = `خطاب_${data.recipient || 'سماك'}`;
-      window.print();
-      document.title = oldTitle;
-      setTimeout(() => setPrintActive(false), 500);
-    }, 50);
+    const jsx = (
+      <PrintableLetterhead documentLabel="خطاب رسمي" date={data.date}>
+        <div className="font-amiri" style={{ fontSize: '15px', lineHeight: 2.2, color: '#1e293b' }}>
+          <div style={{ marginTop: '8mm', marginBottom: '6mm', borderRight: '4px solid #c5a059', paddingRight: '14px', paddingTop: '6px', paddingBottom: '6px', backgroundColor: '#f8fafc', borderRadius: '0 12px 12px 0' }}>
+            <h3 style={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700, fontSize: '20px', color: '#1a365d', margin: 0, lineHeight: 1.6 }}>
+              السادة / {data.recipient}<br />
+              <span style={{ color: '#c5a059', fontSize: '16px', marginTop: '2px', display: 'inline-block' }}>المحترمين،،</span>
+            </h3>
+          </div>
+          {data.subject && (
+            <div style={{ textAlign: 'center', margin: '8mm 0' }}>
+              <div style={{ display: 'inline-block', border: '2px solid rgba(26,54,93,0.15)', padding: '8px 26px', borderRadius: '999px', backgroundColor: '#ffffff', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                <span style={{ fontFamily: 'Cairo, sans-serif', fontWeight: 900, fontSize: '17px', color: '#1a365d' }}>الموضوع: {data.subject}</span>
+              </div>
+            </div>
+          )}
+          <div className="quill-content"
+            style={{ textAlign: 'justify', lineHeight: 2.3, color: '#1e293b', fontSize: '15px', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.body) }}
+          />
+          <div style={{ marginTop: '16mm', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '0 14px', minHeight: '120px' }}>
+            <div style={{ width: '140px', display: 'flex', justifyContent: 'center', position: 'relative' }}>
+              {data.showStamp && dbUser?.role === 'admin' && (
+                <img src="/images/stamp.png" alt="ختم" style={{ width: '100%', objectFit: 'contain', opacity: 0.95, mixBlendMode: 'multiply' }} />
+              )}
+            </div>
+            <div style={{ textAlign: 'center', fontFamily: 'Cairo, sans-serif' }}>
+              <p style={{ fontWeight: 700, color: '#c5a059', marginBottom: '8px', fontSize: '14px', letterSpacing: '0.05em', margin: '0 0 8px' }}>{data.signTitle}</p>
+              <p style={{ fontWeight: 900, fontSize: '18px', color: '#1a365d', borderTop: '2px solid #e2e8f0', paddingTop: '8px', minWidth: '200px', margin: 0 }}>{data.signName}</p>
+            </div>
+          </div>
+        </div>
+      </PrintableLetterhead>
+    );
+    printInNewWindow(jsx, `خطاب_${data.recipient || 'سماك'}`);
   };
 
   useEffect(() => {
@@ -381,53 +425,6 @@ export default function LetterGenerator() {
         </div>
       </div>
 
-      {/* نسخة الطباعة عبر Portal — تُحقن في body عند تفعيل الطباعة */}
-      {printActive && createPortal(
-        <div className="semak-print-portal">
-        <PrintableLetterhead documentLabel="خطاب رسمي" date={data.date}>
-          <div className="font-amiri" style={{ fontSize: '15px', lineHeight: 2.2, color: '#1e293b' }}>
-            {/* المُرسل إليه */}
-            <div style={{ marginTop: '8mm', marginBottom: '6mm', borderRight: '4px solid #c5a059', paddingRight: '14px', paddingTop: '6px', paddingBottom: '6px', backgroundColor: '#f8fafc', borderRadius: '0 12px 12px 0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-              <h3 style={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700, fontSize: '20px', color: '#1a365d', margin: 0, lineHeight: 1.6 }}>
-                السادة / {data.recipient}
-                <br />
-                <span style={{ color: '#c5a059', fontSize: '16px', marginTop: '2px', display: 'inline-block' }}>المحترمين،،</span>
-              </h3>
-            </div>
-
-            {/* الموضوع */}
-            {data.subject && (
-              <div style={{ textAlign: 'center', margin: '8mm 0' }}>
-                <div style={{ display: 'inline-block', border: '2px solid rgba(26,54,93,0.15)', padding: '8px 26px', borderRadius: '999px', backgroundColor: '#ffffff', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-                  <span style={{ fontFamily: 'Cairo, sans-serif', fontWeight: 900, fontSize: '17px', color: '#1a365d' }}>الموضوع: {data.subject}</span>
-                </div>
-              </div>
-            )}
-
-            {/* نص الخطاب */}
-            <div
-              className="quill-content"
-              style={{ textAlign: 'justify', lineHeight: 2.3, color: '#1e293b', fontSize: '15px', wordWrap: 'break-word', whiteSpace: 'pre-wrap' }}
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.body) }}
-            />
-
-            {/* التوقيع والختم */}
-            <div className="page-break-avoid" style={{ marginTop: '16mm', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '0 14px', minHeight: '120px' }}>
-              <div style={{ width: '140px', display: 'flex', justifyContent: 'center', position: 'relative' }}>
-                {data.showStamp && dbUser?.role === 'admin' && (
-                  <img src="/images/stamp.png" alt="ختم" style={{ width: '100%', objectFit: 'contain', opacity: 0.95, mixBlendMode: 'multiply' }} />
-                )}
-              </div>
-              <div style={{ textAlign: 'center', fontFamily: 'Cairo, sans-serif' }}>
-                <p style={{ fontWeight: 700, color: '#c5a059', marginBottom: '8px', fontSize: '14px', letterSpacing: '0.05em', margin: '0 0 8px' }}>{data.signTitle}</p>
-                <p style={{ fontWeight: 900, fontSize: '18px', color: '#1a365d', borderTop: '2px solid #e2e8f0', paddingTop: '8px', minWidth: '200px', margin: 0 }}>{data.signName}</p>
-              </div>
-            </div>
-          </div>
-        </PrintableLetterhead>
-        </div>,
-        document.body
-      )}
     </>
   );
 }
