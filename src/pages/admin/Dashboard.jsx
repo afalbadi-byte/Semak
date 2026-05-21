@@ -232,12 +232,10 @@ export default function Dashboard({ onLogout }) {
                     className="flex items-center gap-3 hover:opacity-80 transition"
                     title="العودة للرئيسية"
                 >
-                    <div className="w-10 h-10 bg-gradient-to-br from-[#c5a059] to-yellow-600 rounded-xl flex items-center justify-center shadow-md">
-                        <Building size={20} className="text-white"/>
-                    </div>
-                    <div className="text-right">
-                        <div className="text-lg font-black text-[#1a365d] leading-tight">سماك العقارية</div>
-                        <div className="text-[10px] font-bold text-slate-400 leading-tight hidden sm:block">{currentPageTitle}</div>
+                    <img src="/images/logo-main.png" alt="سماك العقارية" className="h-12 md:h-14 w-auto object-contain"/>
+                    <div className="text-right hidden sm:block border-r border-slate-200 pr-3">
+                        <div className="text-[11px] font-bold text-slate-500 leading-tight">لوحة الإدارة</div>
+                        <div className="text-sm font-black text-[#1a365d] leading-tight">{currentPageTitle}</div>
                     </div>
                 </button>
 
