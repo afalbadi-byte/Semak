@@ -1198,7 +1198,8 @@ KNOWLEDGE;
              WHERE $phone_search
              ORDER BY id DESC LIMIT 3"
         );
-        if ($maint_res && $maint_res->num_rows > 0) {
+        $has_maintenance = ($maint_res && $maint_res->num_rows > 0);
+        if ($has_maintenance) {
             $customer_context .= "\n═══ طلبات الصيانة للعميل (آخر 3) ═══\n";
             while ($m = $maint_res->fetch_assoc()) {
                 $customer_context .= "طلب رقم {$m['id']} | الوحدة: {$m['unit']} | النوع: {$m['type']} | الحالة: {$m['status']}";
@@ -1211,6 +1212,19 @@ KNOWLEDGE;
                 $customer_context .= "\n";
             }
             $customer_context .= "إذا سأل العميل عن طلبه أعطه الحالة والفني والموعد فوراً.\n";
+        }
+
+        // 3) إذا لم يكن مسجلاً في leads ولا maintenance → سجّله تلقائياً كعميل مهتم
+        $has_lead = isset($lead_row) && !empty($lead_row);
+        if (!$has_lead && !$has_maintenance) {
+            $contact_name = $payload['contact_name'] ?? 'عميل واتساب';
+            $safe_name    = $conn->real_escape_string($contact_name);
+            $first_msg    = $conn->real_escape_string(mb_substr($user_msg, 0, 200));
+            $conn->query(
+                "INSERT INTO leads (name, phone, interest, source, unit, status, notes)
+                 VALUES ('$safe_name', '$safe_phone', 'استفسار واتساب', 'بوت فهد', 'استفسار واتساب', 'جديد', 'أول رسالة: $first_msg')"
+            );
+            $customer_context .= "\n[ملاحظة: تم تسجيل العميل '$contact_name' تلقائياً في قائمة المهتمين الآن. اعتبره عميلاً جديداً.]\n";
         }
 
         // إضافة سياق العميل للـ system prompt
