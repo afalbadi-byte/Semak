@@ -6,15 +6,16 @@ import 'react-quill-new/dist/quill.snow.css';
 import { FilePenLine, Printer, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
-import { useReactToPrint } from 'react-to-print'; // 🔥 المكتبة السحرية للطباعة
-import PrintableLetterhead, { SEMAK_PRINT_PAGE_STYLE } from '../../components/PrintableLetterhead';
+import { createPortal } from 'react-dom';
+import PrintableLetterhead from '../../components/PrintableLetterhead';
+import '../../components/PrintableLetterhead.css';
 
 export default function LetterGenerator() {
   const { user: contextUser, showToast } = useContext(AppContext);
   const navigate = useNavigate();
 
   // 🔥 مرجع (Ref) لربط الورقة المخفية بالطابعة
-  const printRef = useRef();
+  // printRef غير مستخدم بعد التحويل لـ Portal
 
   const [dbUser, setDbUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -36,12 +37,18 @@ export default function LetterGenerator() {
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
 
-  // 🔥 دالة الطباعة - react-to-print v3 API (contentRef)
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: `خطاب_${data.recipient || 'سماك'}`,
-    pageStyle: SEMAK_PRINT_PAGE_STYLE,
-  });
+  // دالة الطباعة - window.print() مع CSS print media + Portal
+  const [printActive, setPrintActive] = useState(false);
+  const handlePrint = () => {
+    setPrintActive(true);
+    setTimeout(() => {
+      const oldTitle = document.title;
+      document.title = `خطاب_${data.recipient || 'سماك'}`;
+      window.print();
+      document.title = oldTitle;
+      setTimeout(() => setPrintActive(false), 500);
+    }, 50);
+  };
 
   useEffect(() => {
     const fetchUserFromDB = async () => {
@@ -374,9 +381,10 @@ export default function LetterGenerator() {
         </div>
       </div>
 
-      {/* نسخة الطباعة - مرئية لكنها خارج الشاشة (تضمن تحميل الصور وعمل react-to-print) */}
-      <div style={{ position: 'fixed', top: 0, left: '-210mm', width: '210mm', visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }} aria-hidden="true">
-        <PrintableLetterhead ref={printRef} documentLabel="خطاب رسمي" date={data.date}>
+      {/* نسخة الطباعة عبر Portal — تُحقن في body عند تفعيل الطباعة */}
+      {printActive && createPortal(
+        <div className="semak-print-portal">
+        <PrintableLetterhead documentLabel="خطاب رسمي" date={data.date}>
           <div className="font-amiri" style={{ fontSize: '15px', lineHeight: 2.2, color: '#1e293b' }}>
             {/* المُرسل إليه */}
             <div style={{ marginTop: '8mm', marginBottom: '6mm', borderRight: '4px solid #c5a059', paddingRight: '14px', paddingTop: '6px', paddingBottom: '6px', backgroundColor: '#f8fafc', borderRadius: '0 12px 12px 0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
@@ -417,7 +425,9 @@ export default function LetterGenerator() {
             </div>
           </div>
         </PrintableLetterhead>
-      </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 }

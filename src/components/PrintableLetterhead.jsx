@@ -62,7 +62,7 @@ const PrintableLetterhead = forwardRef(function PrintableLetterhead(
       }}
       dir="rtl"
     >
-      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead style={{ display: 'table-header-group' }}>
           <tr>
             <td style={{ padding: 0 }}>

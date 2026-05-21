@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Calculator, Save, CloudDownload, RefreshCw, Printer, Plus, Trash2, Users, FileSpreadsheet, Presentation } from 'lucide-react';
-import { useReactToPrint } from 'react-to-print';
 import { API_URL, getImg } from '../../utils/helpers';
-import PrintableLetterhead, { SEMAK_PRINT_PAGE_STYLE } from '../../components/PrintableLetterhead';
+import PrintableLetterhead from '../../components/PrintableLetterhead';
+import '../../components/PrintableLetterhead.css';
 
 export default function FeasibilityCalc({ showToast }) {
     const [loading, setLoading] = useState(false);
@@ -10,8 +11,7 @@ export default function FeasibilityCalc({ showToast }) {
     const [currentProjectId, setCurrentProjectId] = useState("");
     const [projectName, setProjectName] = useState("");
 
-    const teaserPrintRef = useRef();
-    const detailedPrintRef = useRef();
+    // refs غير مستخدمة بعد التحويل لـ window.print() — تُحذف
 
     // خيارات الطباعة
     const [printMode, setPrintMode] = useState("all");
@@ -128,17 +128,24 @@ export default function FeasibilityCalc({ showToast }) {
         } catch(e) {} finally { setLoading(false); }
     };
 
-    // --- دوال الطباعة (react-to-print v3 API: contentRef بدل content) ---
-    const handlePrintTeaser = useReactToPrint({
-        contentRef: teaserPrintRef,
-        documentTitle: `عرض_استثماري_${projectName || 'سماك'}`,
-        pageStyle: SEMAK_PRINT_PAGE_STYLE,
-    });
-    const handlePrintDetailed = useReactToPrint({
-        contentRef: detailedPrintRef,
-        documentTitle: `الملحق_المالي_${projectName || 'سماك'}`,
-        pageStyle: SEMAK_PRINT_PAGE_STYLE,
-    });
+    // --- دوال الطباعة المباشرة عبر window.print() مع CSS print media ---
+    const [printTarget, setPrintTarget] = useState(null); // 'teaser' | 'detailed' | null
+
+    const triggerPrint = (target) => {
+        setPrintTarget(target);
+        // الانتظار قليلاً ليتم رسم العنصر بالفئة الصحيحة قبل فتح نافذة الطباعة
+        setTimeout(() => {
+            const oldTitle = document.title;
+            document.title = target === 'teaser'
+                ? `عرض_استثماري_${projectName || 'سماك'}`
+                : `الملحق_المالي_${projectName || 'سماك'}`;
+            window.print();
+            document.title = oldTitle;
+            setTimeout(() => setPrintTarget(null), 500);
+        }, 50);
+    };
+    const handlePrintTeaser   = () => triggerPrint('teaser');
+    const handlePrintDetailed = () => triggerPrint('detailed');
 
     return (
         <div className="animate-fadeIn pb-10 font-cairo" dir="rtl">
@@ -298,11 +305,11 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
             </div>
             
-            {/* قوالب الطباعة - مرئية لكنها خارج الشاشة (تضمن تحميل الصور وعمل react-to-print) */}
-            <div style={{ position: 'fixed', top: 0, left: '-210mm', width: '210mm', visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }} aria-hidden="true">
-
-                {/* Teaser Print Template — العرض الاستثماري المختصر */}
-                <PrintableLetterhead ref={teaserPrintRef} documentLabel="عرض استثماري" subtitle={projectName || 'مشروع سماك'} date={new Date().toLocaleDateString('en-GB')}>
+            {/* قوالب الطباعة عبر Portal — تُحقن مباشرة في body عند تفعيل الطباعة */}
+            {printTarget && createPortal(
+                <div className="semak-print-portal">
+                    {printTarget === 'teaser' && (
+                <PrintableLetterhead documentLabel="عرض استثماري" subtitle={projectName || 'مشروع سماك'} date={new Date().toLocaleDateString('en-GB')}>
                     <div style={{ fontFamily: 'Cairo, sans-serif', fontSize: '13px', color: '#1e293b' }}>
                         {/* العنوان */}
                         <div style={{ textAlign: 'center', margin: '6mm 0 8mm' }}>
@@ -358,9 +365,10 @@ export default function FeasibilityCalc({ showToast }) {
                         </div>
                     </div>
                 </PrintableLetterhead>
+                    )}
 
-                {/* Detailed Print Template — الملحق المالي التفصيلي */}
-                <PrintableLetterhead ref={detailedPrintRef} documentLabel="الملحق المالي التفصيلي" subtitle={projectName || 'مشروع سماك'} date={new Date().toLocaleDateString('en-GB')}>
+                    {printTarget === 'detailed' && (
+                <PrintableLetterhead documentLabel="الملحق المالي التفصيلي" subtitle={projectName || 'مشروع سماك'} date={new Date().toLocaleDateString('en-GB')}>
                     <div style={{ fontFamily: 'Cairo, sans-serif', color: '#1e293b' }}>
                         {/* جدول التكاليف والمبيعات */}
                         <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#1a365d', margin: '0 0 8px' }}>اقتصاديات المشروع الإجمالية</h3>
@@ -485,8 +493,11 @@ export default function FeasibilityCalc({ showToast }) {
                         </div>
                     </div>
                 </PrintableLetterhead>
+                    )}
+                </div>,
+                document.body
+            )}
 
-            </div>
         </div>
     );
 }
