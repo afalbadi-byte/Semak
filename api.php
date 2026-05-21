@@ -1523,6 +1523,39 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_follow_redirect':
+        // تتبع redirect لـ ID 5 لمعرفة الـ endpoint الجديد
+        $daftra_key = "__DAFTRA_KEY__";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $ch = curl_init("https://semak.daftra.com/api2/work_orders/5.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_FOLLOWLOCATION => false,
+        ]);
+        $res = curl_exec($ch);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $info = curl_getinfo($ch);
+        curl_close($ch);
+
+        // استخراج Location header
+        $location = null;
+        if (preg_match('/^Location:\s*(.+)$/mi', $res, $m)) {
+            $location = trim($m[1]);
+        }
+
+        echo json_encode([
+            "original_url" => "work_orders/5.json",
+            "http" => $http,
+            "redirect_to" => $location,
+            "full_info" => $info,
+            "raw_response_first_500" => substr($res, 0, 500),
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_probe_work_order_filters':
         // اختبار فلاتر work_orders للوصول لكل المشاريع
         $daftra_key = "__DAFTRA_KEY__";
