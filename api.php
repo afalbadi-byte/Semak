@@ -27,6 +27,22 @@ $conn->set_charset("utf8mb4");
 $conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT NULL");
 $conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS client_submitted_at DATETIME DEFAULT NULL");
 
+// ─── auto-migrate: work cycles (دورات العمل) ───────────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS work_cycles (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    name         VARCHAR(255) NOT NULL,
+    description  TEXT,
+    project_name VARCHAR(255),
+    start_date   DATE,
+    end_date     DATE,
+    budget       DECIMAL(14,2) DEFAULT 0,
+    supplier_ids TEXT,
+    categories   TEXT,
+    status       VARCHAR(40) DEFAULT 'active',
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // ─── auto-migrate: WhatsApp bot conversation history ────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -972,6 +988,211 @@ switch ($action) {
         $res = curl_exec($ch);
         curl_close($ch);
         echo $res;
+        break;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // دورات العمل (Work Cycles) — تجميع التكاليف والإيرادات بفترة ومشروع
+    // ═══════════════════════════════════════════════════════════════════════
+
+    case 'cycles_list':
+        $res = $conn->query("SELECT * FROM work_cycles ORDER BY id DESC");
+        $rows = [];
+        if ($res) while ($r = $res->fetch_assoc()) $rows[] = $r;
+        echo json_encode(["success" => true, "data" => $rows]);
+        break;
+
+    case 'cycle_save':
+        $id          = (int)($input_data['id'] ?? 0);
+        $name        = $conn->real_escape_string($input_data['name'] ?? '');
+        $description = $conn->real_escape_string($input_data['description'] ?? '');
+        $project     = $conn->real_escape_string($input_data['project_name'] ?? '');
+        $start       = $conn->real_escape_string($input_data['start_date'] ?? null);
+        $end         = $conn->real_escape_string($input_data['end_date'] ?? null);
+        $budget      = (float)($input_data['budget'] ?? 0);
+        $suppliers   = $conn->real_escape_string(is_array($input_data['supplier_ids'] ?? null) ? implode(',', $input_data['supplier_ids']) : ($input_data['supplier_ids'] ?? ''));
+        $categories  = $conn->real_escape_string(is_array($input_data['categories'] ?? null) ? implode(',', $input_data['categories']) : ($input_data['categories'] ?? ''));
+        $status      = $conn->real_escape_string($input_data['status'] ?? 'active');
+
+        if (!$name) { echo json_encode(["success" => false, "message" => "اسم الدورة مطلوب"]); break; }
+
+        if ($id) {
+            $sql = "UPDATE work_cycles SET name='$name', description='$description', project_name='$project',
+                    start_date=" . ($start ? "'$start'" : "NULL") . ", end_date=" . ($end ? "'$end'" : "NULL") . ",
+                    budget=$budget, supplier_ids='$suppliers', categories='$categories', status='$status'
+                    WHERE id=$id";
+            $conn->query($sql);
+            echo json_encode(["success" => true, "id" => $id]);
+        } else {
+            $sql = "INSERT INTO work_cycles (name, description, project_name, start_date, end_date, budget, supplier_ids, categories, status)
+                    VALUES ('$name', '$description', '$project',
+                    " . ($start ? "'$start'" : "NULL") . ", " . ($end ? "'$end'" : "NULL") . ",
+                    $budget, '$suppliers', '$categories', '$status')";
+            if ($conn->query($sql)) {
+                echo json_encode(["success" => true, "id" => $conn->insert_id]);
+            } else {
+                echo json_encode(["success" => false, "message" => $conn->error]);
+            }
+        }
+        break;
+
+    case 'cycle_delete':
+        $id = (int)($input_data['id'] ?? 0);
+        if ($id) $conn->query("DELETE FROM work_cycles WHERE id=$id");
+        echo json_encode(["success" => true]);
+        break;
+
+    case 'cycle_summary':
+        // إحصائيات دورة عمل: المصروفات + المشتريات + الفواتير الصادرة خلال الفترة
+        $id = (int)($_GET['id'] ?? 0);
+        $cycle_q = $conn->query("SELECT * FROM work_cycles WHERE id=$id");
+        if (!$cycle_q || $cycle_q->num_rows === 0) {
+            echo json_encode(["success" => false, "message" => "الدورة غير موجودة"]);
+            break;
+        }
+        $cycle = $cycle_q->fetch_assoc();
+        $start = $cycle['start_date'] ?? null;
+        $end   = $cycle['end_date'] ?? null;
+        $sup_ids = array_filter(explode(',', $cycle['supplier_ids'] ?? ''));
+        $cats    = array_filter(array_map('trim', explode(',', $cycle['categories'] ?? '')));
+
+        // جلب بيانات دفترة
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+        $fetch_all = function($endpoint) use ($base, $headers) {
+            $all = []; $page = 1;
+            while ($page <= 50) {
+                $ch = curl_init("$base/$endpoint.json?page=$page&limit=100");
+                curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers, CURLOPT_TIMEOUT => 15]);
+                $res = curl_exec($ch); curl_close($ch);
+                $data = json_decode($res, true);
+                if (!isset($data['data']) || count($data['data']) === 0) break;
+                $all = array_merge($all, $data['data']);
+                if (count($data['data']) < 100) break;
+                $page++;
+            }
+            return $all;
+        };
+
+        $purchases = $fetch_all("purchase_invoices");
+        $expenses  = $fetch_all("expenses");
+        $invoices  = $fetch_all("invoices");
+
+        $in_range = function($date) use ($start, $end) {
+            if (!$date) return false;
+            if ($start && $date < $start) return false;
+            if ($end   && $date > $end)   return false;
+            return true;
+        };
+
+        // المشتريات المنطبقة
+        $matched_purchases = [];
+        $total_purchases = 0;
+        $paid_purchases = 0;
+        foreach ($purchases as $r) {
+            $p = $r['PurchaseOrder'] ?? [];
+            if (!$in_range($p['date'] ?? '')) continue;
+            if (count($sup_ids) > 0 && !in_array($p['supplier_id'] ?? '', $sup_ids)) continue;
+            $matched_purchases[] = [
+                'id' => $p['id'], 'no' => $p['no'], 'date' => $p['date'],
+                'supplier' => $p['supplier_business_name'] ?? '',
+                'total' => (float)($p['summary_total'] ?? 0),
+                'paid'  => (float)($p['summary_paid']  ?? 0),
+            ];
+            $total_purchases += (float)($p['summary_total'] ?? 0);
+            $paid_purchases  += (float)($p['summary_paid'] ?? 0);
+        }
+
+        // المصروفات المنطبقة
+        $matched_expenses = [];
+        $total_expenses = 0;
+        foreach ($expenses as $r) {
+            $e = $r['Expense'] ?? [];
+            if (!$in_range($e['date'] ?? '')) continue;
+            if (count($cats) > 0 && !in_array($e['category'] ?? '', $cats)) continue;
+            $matched_expenses[] = [
+                'id' => $e['id'], 'date' => $e['date'],
+                'amount' => (float)($e['amount'] ?? 0),
+                'category' => $e['category'] ?? '',
+                'note' => $e['note'] ?? '',
+            ];
+            $total_expenses += (float)($e['amount'] ?? 0);
+        }
+
+        // الفواتير الصادرة (إيرادات الدورة)
+        $matched_invoices = [];
+        $total_revenue = 0;
+        $paid_revenue = 0;
+        foreach ($invoices as $r) {
+            $i = $r['Invoice'] ?? [];
+            if (!$in_range($i['date'] ?? '')) continue;
+            $matched_invoices[] = [
+                'id' => $i['id'], 'no' => $i['no'], 'date' => $i['date'],
+                'client' => $i['client_business_name'] ?? '',
+                'total' => (float)($i['summary_total'] ?? 0),
+                'paid' => (float)($i['summary_paid'] ?? 0),
+            ];
+            $total_revenue += (float)($i['summary_total'] ?? 0);
+            $paid_revenue  += (float)($i['summary_paid'] ?? 0);
+        }
+
+        $total_cost = $total_purchases + $total_expenses;
+        $net_profit = $total_revenue - $total_cost;
+        $budget_left = (float)$cycle['budget'] - $total_cost;
+
+        echo json_encode([
+            "success" => true,
+            "cycle" => $cycle,
+            "summary" => [
+                "total_revenue" => $total_revenue,
+                "paid_revenue"  => $paid_revenue,
+                "total_purchases" => $total_purchases,
+                "paid_purchases"  => $paid_purchases,
+                "total_expenses"  => $total_expenses,
+                "total_cost"      => $total_cost,
+                "net_profit"      => $net_profit,
+                "budget"          => (float)$cycle['budget'],
+                "budget_left"     => $budget_left,
+                "budget_used_pct" => $cycle['budget'] > 0 ? round(($total_cost / (float)$cycle['budget']) * 100, 1) : 0,
+            ],
+            "purchases" => $matched_purchases,
+            "expenses"  => $matched_expenses,
+            "invoices"  => $matched_invoices,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_view':
+        // جلب تفاصيل سجل واحد كاملاً (مع الأصناف للفواتير)
+        $daftra_key = "__DAFTRA_KEY__";
+        $module = preg_replace('/[^a-z_]/i', '', $_GET['module'] ?? '');
+        $id     = (int)($_GET['id'] ?? 0);
+        if (!$module || !$id) {
+            echo json_encode(["success" => false, "message" => "module و id مطلوبان"]);
+            break;
+        }
+        // دفترة تقدم endpoint مختلف للتفاصيل: /api2/{module}/view/{id}.json
+        $endpoints = [
+            "$module/view/$id.json",   // الصيغة المعتادة
+            "$module/$id.json",        // بديل
+        ];
+        $found = null;
+        foreach ($endpoints as $ep) {
+            $ch = curl_init("https://semak.daftra.com/api2/$ep");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
+                CURLOPT_TIMEOUT => 15,
+            ]);
+            $res = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($http === 200) {
+                $found = json_decode($res, true);
+                $found['_endpoint_used'] = $ep;
+                break;
+            }
+        }
+        echo json_encode($found ?: ["success" => false, "message" => "السجل غير موجود"], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_list':

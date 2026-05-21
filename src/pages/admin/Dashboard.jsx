@@ -15,6 +15,7 @@ import LeadsManage from './LeadsManage';
 import BotSettings from './BotSettings';
 import Finance from './Finance';
 import DaftraExplorer from './DaftraExplorer';
+import WorkCycles from './WorkCycles';
 import FeasibilityCalc from './FeasibilityCalc';
 import UnitsOverview from './UnitsOverview';
 import ProjectsManage from './ProjectsManage';
@@ -187,6 +188,7 @@ export default function Dashboard({ onLogout }) {
         { id: 'letters',     title: 'منشئ الخطابات',            icon: FilePenLine,     permKey: 'letters', isLink: true, path: '/admin/letter-generator' },
         { id: 'finance',     title: 'الإدارة المالية',          icon: DollarSign,      permKey: 'finance' },
         { id: 'daftra_explorer', title: 'مستكشف دفترة (كل البيانات)', icon: DollarSign, permKey: 'finance' },
+        { id: 'work_cycles',     title: 'دورات العمل',               icon: Building2,  permKey: 'finance' },
         { id: 'accounting',  title: 'النظام المحاسبي (دفترة)',  icon: Calculator,      permKey: 'accounting', isExternal: true, path: 'https://semak.daftra.com/' },
         { id: 'users',       title: 'إدارة الموظفين',           icon: UserCircle,      permKey: 'users_manage' },
     ];
@@ -344,6 +346,10 @@ export default function Dashboard({ onLogout }) {
                                     <IconCard icon={DollarSign} label="مستكشف دفترة" color="teal"
                                         onClick={() => setActiveTab('daftra_explorer')}/>
                                 )}
+                                {hasPermission('finance') && (
+                                    <IconCard icon={Building2} label="دورات العمل" color="indigo"
+                                        onClick={() => setActiveTab('work_cycles')}/>
+                                )}
                                 {hasPermission('inspection') && (
                                     <IconCard icon={ClipboardCheck} label="فحص الوحدات" badge={dashCounts.inspections_pending} color="indigo"
                                         onClick={() => setActiveTab('inspection')}/>
@@ -464,6 +470,13 @@ export default function Dashboard({ onLogout }) {
                     {activeTab === 'daftra_explorer' && hasPermission('finance') && (
                         <div className="animate-fadeIn">
                             <DaftraExplorer />
+                        </div>
+                    )}
+
+                    {/* --- دورات العمل --- */}
+                    {activeTab === 'work_cycles' && hasPermission('finance') && (
+                        <div className="animate-fadeIn">
+                            <WorkCycles />
                         </div>
                     )}
 

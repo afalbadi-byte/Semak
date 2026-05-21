@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Database, RefreshCw, Search, Eye, X, ExternalLink, Receipt, FileText,
     ShoppingCart, Users, Truck, Package, FolderTree, Building, Wallet,
-    TrendingDown, UserCog, Percent, Tag
+    TrendingDown, UserCog, Percent, Filter, ArrowRight, Calendar, DollarSign
 } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
-// تعريف كل الوحدات المتاحة في دفترة
 const MODULES = [
     { id: 'invoices',           label: 'الفواتير الصادرة',  icon: Receipt,      color: 'blue' },
     { id: 'estimates',          label: 'عروض الأسعار',      icon: FileText,     color: 'indigo' },
@@ -23,7 +22,6 @@ const MODULES = [
     { id: 'taxes',              label: 'الضرائب',           icon: Percent,      color: 'orange' },
 ];
 
-// أهم الحقول لعرض جدول مختصر
 const KEY_FIELDS = {
     invoices: ['no', 'date', 'client_business_name', 'summary_total', 'summary_paid', 'summary_unpaid', 'payment_status'],
     estimates: ['no', 'date', 'client_business_name', 'summary_total'],
@@ -39,32 +37,80 @@ const KEY_FIELDS = {
     taxes: ['name', 'value', 'description', 'is_active'],
 };
 
+// أي الوحدات تدعم التنقل لتفاصيل المورد/العميل
+const DRILL_LINKS = {
+    suppliers: { target: 'purchase_invoices', filterField: 'supplier_id', matchField: 'id', label: 'فواتير الشراء' },
+    clients:   { target: 'invoices',          filterField: 'client_id',   matchField: 'id', label: 'الفواتير الصادرة' },
+};
+
 export default function DaftraExplorer() {
     const [activeModule, setActiveModule] = useState('invoices');
-    const [data, setData] = useState({});  // {module: {count, data}}
+    const [data, setData] = useState({});
     const [loading, setLoading] = useState({});
     const [search, setSearch] = useState('');
     const [selectedRow, setSelectedRow] = useState(null);
+    const [detail, setDetail] = useState(null);     // بيانات السجل المفصّلة من API
+    const [detailLoading, setDetailLoading] = useState(false);
+
+    // فلاتر متقدّمة
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo,   setFilterDateTo]   = useState('');
+    const [filterMinAmount, setFilterMinAmount] = useState('');
+    const [filterMaxAmount, setFilterMaxAmount] = useState('');
+    const [filterRef, setFilterRef] = useState(null);   // {field, value, label} للتصفية بالـ supplier_id/client_id من drill-down
 
     const loadModule = async (mod) => {
-        if (data[mod] && data[mod].data) return;  // محمّل مسبقاً
+        if (data[mod]) return;
         setLoading(prev => ({ ...prev, [mod]: true }));
         try {
             const res = await fetch(`${API_URL}?action=daftra_list&module=${mod}`);
             const json = await res.json();
-            if (json.success) {
-                setData(prev => ({ ...prev, [mod]: json }));
-            }
+            if (json.success) setData(prev => ({ ...prev, [mod]: json }));
         } finally {
             setLoading(prev => ({ ...prev, [mod]: false }));
         }
     };
-
     useEffect(() => { loadModule(activeModule); }, [activeModule]);
 
     const reload = () => {
-        setData(prev => { const n = {...prev}; delete n[activeModule]; return n; });
+        setData(prev => { const n={...prev}; delete n[activeModule]; return n; });
         loadModule(activeModule);
+    };
+
+    const clearFilters = () => {
+        setSearch('');
+        setFilterDateFrom('');
+        setFilterDateTo('');
+        setFilterMinAmount('');
+        setFilterMaxAmount('');
+        setFilterRef(null);
+    };
+
+    // الانتقال لتفاصيل سجل (drill down)
+    const drillToRelated = (sourceRow, link) => {
+        const value = sourceRow[link.matchField];
+        const label = sourceRow.business_name || sourceRow.name || `#${value}`;
+        setActiveModule(link.target);
+        clearFilters();
+        setFilterRef({ field: link.filterField, value: String(value), label, sourceLabel: link.label });
+    };
+
+    // فتح نافذة التفاصيل
+    const openDetails = async (row, module) => {
+        setSelectedRow(row);
+        setDetail(null);
+        // الوحدات اللي عندها تفاصيل (فواتير → أصناف)
+        const detailable = ['invoices','estimates','purchase_invoices'];
+        if (detailable.includes(module) && row.id) {
+            setDetailLoading(true);
+            try {
+                const res = await fetch(`${API_URL}?action=daftra_view&module=${module}&id=${row.id}`);
+                const json = await res.json();
+                setDetail(json);
+            } finally {
+                setDetailLoading(false);
+            }
+        }
     };
 
     const fmt = (v) => {
@@ -82,9 +128,38 @@ export default function DaftraExplorer() {
     const rows = moduleData?.data || [];
     const fields = KEY_FIELDS[activeModule] || (rows[0] ? Object.keys(rows[0]).slice(0, 6) : []);
 
-    const filtered = search
-        ? rows.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(search.toLowerCase())))
-        : rows;
+    // الفلترة المركّبة
+    const filtered = useMemo(() => {
+        return rows.filter(r => {
+            // بحث نصي
+            if (search && !Object.values(r).some(v => String(v).toLowerCase().includes(search.toLowerCase()))) return false;
+            // مرجع (drill-down)
+            if (filterRef && String(r[filterRef.field]) !== filterRef.value) return false;
+            // فترة تاريخ
+            const dateField = r.date || r.created;
+            if (filterDateFrom && dateField && dateField < filterDateFrom) return false;
+            if (filterDateTo   && dateField && dateField > filterDateTo)   return false;
+            // قيمة
+            const amountField = parseFloat(r.summary_total || r.amount || r.unit_price || r.balance || 0);
+            if (filterMinAmount && amountField < parseFloat(filterMinAmount)) return false;
+            if (filterMaxAmount && amountField > parseFloat(filterMaxAmount)) return false;
+            return true;
+        });
+    }, [rows, search, filterRef, filterDateFrom, filterDateTo, filterMinAmount, filterMaxAmount]);
+
+    // المجاميع للقيم المالية
+    const totals = useMemo(() => {
+        let total = 0, paid = 0, unpaid = 0;
+        filtered.forEach(r => {
+            total  += parseFloat(r.summary_total  || r.amount || 0);
+            paid   += parseFloat(r.summary_paid   || 0);
+            unpaid += parseFloat(r.summary_unpaid || 0);
+        });
+        return { total, paid, unpaid };
+    }, [filtered]);
+
+    const drillLink = DRILL_LINKS[activeModule];
+    const showFinanceFilters = ['invoices','estimates','purchase_invoices','expenses'].includes(activeModule);
 
     return (
         <div className="space-y-6 p-4 md:p-6">
@@ -115,31 +190,92 @@ export default function DaftraExplorer() {
                         count={data[m.id]?.count}
                         loading={loading[m.id]}
                         module={m}
-                        onClick={() => setActiveModule(m.id)}
+                        onClick={() => { setActiveModule(m.id); clearFilters(); }}
                         onPrefetch={() => loadModule(m.id)}
                     />
                 ))}
             </div>
 
-            {/* محتوى الوحدة المختارة */}
+            {/* شريط الفلاتر */}
+            {filterRef && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2 flex-wrap text-sm">
+                    <Filter size={14} className="text-amber-700"/>
+                    <span className="font-bold text-amber-900">يعرض: {filterRef.sourceLabel} لـ <span className="bg-white px-2 py-0.5 rounded font-mono">{filterRef.label}</span></span>
+                    <button onClick={() => setFilterRef(null)} className="bg-white text-amber-700 hover:bg-amber-100 px-2 py-0.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                        <X size={12}/> إزالة
+                    </button>
+                </div>
+            )}
+
+            {/* البطاقات الإجمالية للوحدات المالية */}
+            {showFinanceFilters && filtered.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <SumCard label="عدد السجلات" value={filtered.length} color="slate"/>
+                    <SumCard label="الإجمالي" value={fmt(totals.total)} color="blue" suffix="ريال"/>
+                    {(activeModule === 'invoices' || activeModule === 'purchase_invoices') && (
+                        <>
+                            <SumCard label="المسدد" value={fmt(totals.paid)} color="emerald" suffix="ريال"/>
+                            <SumCard label="المستحق" value={fmt(totals.unpaid)} color="red" suffix="ريال"/>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* محتوى الوحدة */}
             <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
-                <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        {moduleConfig && <moduleConfig.icon size={24} className={`text-${moduleConfig.color}-600`}/>}
-                        <h3 className="text-lg md:text-xl font-black text-[#1a365d]">
-                            {moduleConfig?.label}
-                            {moduleData && <span className="text-sm font-bold text-slate-500 mr-2">({moduleData.count} سجل)</span>}
-                        </h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="relative">
-                            <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                            <input type="text" placeholder="بحث..." value={search} onChange={e=>setSearch(e.target.value)}
-                                className="bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm w-40 md:w-64 outline-none focus:border-emerald-500"/>
+                <div className="p-4 md:p-6 border-b border-slate-100">
+                    <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                            {moduleConfig && <moduleConfig.icon size={24} className={`text-${moduleConfig.color}-600`}/>}
+                            <h3 className="text-lg md:text-xl font-black text-[#1a365d]">
+                                {moduleConfig?.label}
+                                {moduleData && <span className="text-sm font-bold text-slate-500 mr-2">({filtered.length} / {moduleData.count})</span>}
+                            </h3>
                         </div>
                         <button onClick={reload} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 p-2 rounded-xl transition" title="تحديث">
                             <RefreshCw size={16} className={loading[activeModule] ? 'animate-spin' : ''}/>
                         </button>
+                    </div>
+
+                    {/* الفلاتر */}
+                    <div className="flex flex-wrap gap-2 items-end">
+                        <div className="flex-1 min-w-[180px]">
+                            <label className="text-[10px] font-bold text-slate-500 block mb-1">بحث في كل الحقول</label>
+                            <div className="relative">
+                                <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                <input type="text" placeholder="بحث..." value={search} onChange={e=>setSearch(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                            </div>
+                        </div>
+                        {showFinanceFilters && (
+                            <>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">من تاريخ</label>
+                                    <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)}
+                                        className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">إلى تاريخ</label>
+                                    <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)}
+                                        className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">أقل قيمة</label>
+                                    <input type="number" placeholder="0" value={filterMinAmount} onChange={e=>setFilterMinAmount(e.target.value)}
+                                        className="w-24 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">أعلى قيمة</label>
+                                    <input type="number" placeholder="∞" value={filterMaxAmount} onChange={e=>setFilterMaxAmount(e.target.value)}
+                                        className="w-24 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                </div>
+                            </>
+                        )}
+                        {(search || filterRef || filterDateFrom || filterDateTo || filterMinAmount || filterMaxAmount) && (
+                            <button onClick={clearFilters} className="bg-red-50 text-red-600 hover:bg-red-100 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1">
+                                <X size={14}/> مسح الفلاتر
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -147,25 +283,34 @@ export default function DaftraExplorer() {
                     <div className="p-12 text-center text-slate-400">
                         <RefreshCw className="animate-spin inline mr-2"/> جاري التحميل من دفترة...
                     </div>
-                ) : rows.length === 0 ? (
-                    <div className="p-12 text-center text-slate-400">لا توجد سجلات</div>
+                ) : filtered.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400">لا توجد سجلات مطابقة</div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-right text-sm">
                             <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
                                 <tr>
                                     {fields.map(f => (<th key={f} className="px-3 py-2 font-bold whitespace-nowrap">{translateField(f)}</th>))}
+                                    {drillLink && <th className="px-3 py-2 text-center">{drillLink.label}</th>}
                                     <th className="px-3 py-2 text-center w-16">تفاصيل</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {filtered.slice(0, 200).map((row, i) => (
+                                {filtered.slice(0, 300).map((row, i) => (
                                     <tr key={i} className="hover:bg-slate-50/50">
                                         {fields.map(f => (
                                             <td key={f} className="px-3 py-2 whitespace-nowrap text-slate-700">{fmt(row[f])}</td>
                                         ))}
+                                        {drillLink && (
+                                            <td className="px-3 py-2 text-center">
+                                                <button onClick={()=>drillToRelated(row, drillLink)}
+                                                    className="text-xs bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white px-2 py-1 rounded-lg font-bold flex items-center gap-1 mx-auto">
+                                                    عرض <ArrowRight size={12}/>
+                                                </button>
+                                            </td>
+                                        )}
                                         <td className="px-3 py-2 text-center">
-                                            <button onClick={()=>setSelectedRow(row)} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-lg">
+                                            <button onClick={()=>openDetails(row, activeModule)} className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-lg">
                                                 <Eye size={14}/>
                                             </button>
                                         </td>
@@ -173,38 +318,144 @@ export default function DaftraExplorer() {
                                 ))}
                             </tbody>
                         </table>
-                        {filtered.length > 200 && (
+                        {filtered.length > 300 && (
                             <div className="p-3 text-center text-xs text-slate-500 bg-slate-50 border-t">
-                                عرض أول 200 من {filtered.length} سجل — استخدم البحث للتصفية
+                                عرض أول 300 من {filtered.length} سجل — ضيّق بالفلاتر
                             </div>
                         )}
                     </div>
                 )}
             </div>
 
-            {/* نافذة تفاصيل السجل الكاملة */}
+            {/* نافذة التفاصيل */}
             {selectedRow && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-50 flex items-center justify-center p-4" onClick={()=>setSelectedRow(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                        <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center">
-                            <h3 className="font-black text-[#1a365d]">تفاصيل السجل الكاملة</h3>
-                            <button onClick={()=>setSelectedRow(null)} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
-                        </div>
-                        <div className="p-4 space-y-1">
-                            {Object.entries(selectedRow).map(([k, v]) => (
-                                <div key={k} className="flex flex-col md:flex-row md:items-center gap-1 py-2 border-b border-slate-50 last:border-0">
-                                    <div className="md:w-1/3 text-xs font-bold text-slate-500 font-mono">{k}</div>
-                                    <div className="md:w-2/3 text-sm text-slate-800 break-all">
-                                        {v === null ? <em className="text-slate-300">null</em>
-                                         : typeof v === 'object' ? <pre className="text-xs bg-slate-50 p-2 rounded">{JSON.stringify(v, null, 2)}</pre>
-                                         : String(v) || <em className="text-slate-300">فارغ</em>}
-                                    </div>
-                                </div>
-                            ))}
+                <DetailModal
+                    row={selectedRow}
+                    detail={detail}
+                    detailLoading={detailLoading}
+                    module={activeModule}
+                    onClose={() => { setSelectedRow(null); setDetail(null); }}
+                />
+            )}
+        </div>
+    );
+}
+
+function DetailModal({ row, detail, detailLoading, module, onClose }) {
+    const isInvoice = ['invoices','estimates','purchase_invoices'].includes(module);
+    const items = detail?.data?.[0]?.InvoiceItem
+        || detail?.data?.[0]?.PurchaseOrderItem
+        || detail?.data?.[0]?.EstimateItem
+        || detail?.InvoiceItem
+        || detail?.PurchaseOrderItem
+        || detail?.EstimateItem
+        || [];
+    const itemsArray = Array.isArray(items) ? items : (items ? [items] : []);
+
+    const fmt = (v) => v === null || v === undefined || v === '' ? '—' :
+        typeof v === 'number' || /^\d+(\.\d+)?$/.test(v) ? Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }) : String(v);
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center z-10">
+                    <h3 className="font-black text-[#1a365d]">
+                        {isInvoice ? `تفاصيل ${row.no ? '#' + row.no : 'الفاتورة'}` : 'تفاصيل السجل'}
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
+                </div>
+
+                {/* ملخص رأس الفاتورة */}
+                {isInvoice && (
+                    <div className="p-4 bg-gradient-to-l from-slate-50 to-blue-50 border-b border-slate-200">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div><div className="text-[10px] font-bold text-slate-500">رقم</div><div className="font-black text-[#1a365d]">{row.no || '—'}</div></div>
+                            <div><div className="text-[10px] font-bold text-slate-500">التاريخ</div><div className="font-bold">{row.date || '—'}</div></div>
+                            <div><div className="text-[10px] font-bold text-slate-500">{module === 'purchase_invoices' ? 'المورد' : 'العميل'}</div>
+                                <div className="font-bold">{row.supplier_business_name || row.client_business_name || '—'}</div></div>
+                            <div><div className="text-[10px] font-bold text-slate-500">الإجمالي</div>
+                                <div className="font-black text-emerald-700">{fmt(row.summary_total)} <span className="text-xs">ريال</span></div></div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+
+                {/* الأصناف */}
+                {isInvoice && (
+                    <div className="p-4 border-b border-slate-100">
+                        <h4 className="font-bold text-[#1a365d] mb-2 flex items-center gap-2"><Package size={16}/> الأصناف</h4>
+                        {detailLoading ? (
+                            <div className="py-6 text-center text-slate-400"><RefreshCw className="animate-spin inline mr-2"/> جاري جلب الأصناف...</div>
+                        ) : itemsArray.length === 0 ? (
+                            <p className="text-slate-400 text-sm py-3">لا توجد أصناف</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-right text-sm">
+                                    <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
+                                        <tr>
+                                            <th className="px-3 py-2">الصنف</th>
+                                            <th className="px-3 py-2">الوصف</th>
+                                            <th className="px-3 py-2 text-center">الكمية</th>
+                                            <th className="px-3 py-2 text-center">سعر الوحدة</th>
+                                            <th className="px-3 py-2 text-center">الإجمالي</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {itemsArray.map((it, idx) => {
+                                            const item = it.InvoiceItem || it.PurchaseOrderItem || it.EstimateItem || it;
+                                            const qty   = parseFloat(item.quantity || 0);
+                                            const price = parseFloat(item.unit_price || 0);
+                                            const total = parseFloat(item.subtotal || item.summary_subtotal || (qty * price));
+                                            return (
+                                                <tr key={idx} className="hover:bg-slate-50/50">
+                                                    <td className="px-3 py-2 font-bold">{item.name || '—'}</td>
+                                                    <td className="px-3 py-2 text-slate-600 text-xs">{item.description || '—'}</td>
+                                                    <td className="px-3 py-2 text-center font-bold">{fmt(qty)}</td>
+                                                    <td className="px-3 py-2 text-center">{fmt(price)}</td>
+                                                    <td className="px-3 py-2 text-center font-black text-emerald-700">{fmt(total)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* كل الحقول */}
+                <details className="border-b border-slate-100">
+                    <summary className="p-4 cursor-pointer font-bold text-slate-700 hover:bg-slate-50 select-none">
+                        كل الحقول الخام
+                    </summary>
+                    <div className="p-4 bg-slate-50 space-y-1">
+                        {Object.entries(row).map(([k, v]) => (
+                            <div key={k} className="flex flex-col md:flex-row md:items-center gap-1 py-1 border-b border-slate-200 last:border-0">
+                                <div className="md:w-1/3 text-xs font-bold text-slate-500 font-mono">{k}</div>
+                                <div className="md:w-2/3 text-sm text-slate-800 break-all">
+                                    {v === null ? <em className="text-slate-300">null</em>
+                                     : typeof v === 'object' ? <pre className="text-xs bg-white p-2 rounded">{JSON.stringify(v, null, 2)}</pre>
+                                     : String(v) || <em className="text-slate-300">فارغ</em>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </details>
+            </div>
+        </div>
+    );
+}
+
+function SumCard({ label, value, color, suffix }) {
+    const colors = {
+        slate: 'bg-slate-50 text-slate-700 border-slate-200',
+        blue: 'bg-blue-50 text-blue-700 border-blue-200',
+        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        red: 'bg-red-50 text-red-700 border-red-200',
+    };
+    return (
+        <div className={`border rounded-xl p-3 ${colors[color]}`}>
+            <div className="text-[10px] font-bold opacity-80">{label}</div>
+            <div className="text-xl font-black">{value} {suffix && <span className="text-xs">{suffix}</span>}</div>
         </div>
     );
 }
@@ -239,9 +490,7 @@ function ModuleCard({ active, count, loading, module: m, onClick, onPrefetch }) 
                     {count}
                 </span>
             )}
-            {loading && (
-                <span className="absolute top-1 left-1"><RefreshCw size={10} className="animate-spin"/></span>
-            )}
+            {loading && <span className="absolute top-1 left-1"><RefreshCw size={10} className="animate-spin"/></span>}
             <Icon size={20} className="mb-1"/>
             <span className="text-[10px] md:text-xs font-bold leading-tight">{m.label}</span>
         </button>
