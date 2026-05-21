@@ -285,10 +285,15 @@ export default function LeadsManage({ showToast }) {
                             <tr><td colSpan="6" className="text-center py-12 text-teal-600 font-bold"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr>
                         ) : filteredLeads.length === 0 ? (
                             <tr><td colSpan="6" className="text-center py-12 text-slate-400 font-bold">لا يوجد سجلات مهتمين مطابقة.</td></tr>
-                        ) : filteredLeads.map((lead) => (
-                            <tr key={lead.id} className="hover:bg-teal-50/30 transition-colors duration-200">
+                        ) : filteredLeads.map((lead) => {
+                            const entries = parseNotes(lead.notes);
+                            const isOpen  = expandedNotes[lead.id];
+                            const latest  = entries[0];
+                            return (
+                            <React.Fragment key={lead.id}>
+                            <tr className="hover:bg-teal-50/30 transition-colors duration-200">
                                 <td className="px-6 py-4">
-                                    <div className="font-bold text-[#1a365d] text-base flex items-center gap-2">
+                                    <div className="font-bold text-[#1a365d] text-base flex items-center gap-2 flex-wrap">
                                         {lead.name}
                                         {lead.merged_count > 1 && (
                                             <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full" title={`${lead.merged_count} اهتمامات بنفس الجوال`}>
@@ -303,46 +308,28 @@ export default function LeadsManage({ showToast }) {
                                         <Building size={14} /> {lead.unit || "غير محدد"}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 max-w-sm">
-                                    {(() => {
-                                        const entries = parseNotes(lead.notes);
-                                        if (entries.length === 0) {
-                                            return <span className="text-xs text-slate-300 italic">لا توجد ملاحظات بعد</span>;
-                                        }
-                                        const isOpen = expandedNotes[lead.id];
-                                        const latest = entries[0];
-                                        return (
-                                            <div className="bg-amber-50/60 border-r-2 border-amber-300 rounded-l-lg overflow-hidden">
-                                                <button
-                                                    onClick={() => setExpandedNotes(p => ({ ...p, [lead.id]: !p[lead.id] }))}
-                                                    className="w-full text-right px-3 py-2 flex items-start justify-between gap-2 hover:bg-amber-100/50 transition"
-                                                >
-                                                    <div className="flex-1 min-w-0">
-                                                        {latest.time && (
-                                                            <div className="text-[10px] text-amber-700 font-mono font-bold mb-0.5">{latest.time}</div>
-                                                        )}
-                                                        <div className="text-xs text-slate-700 leading-relaxed line-clamp-2">{latest.text}</div>
-                                                    </div>
-                                                    <div className="flex flex-col items-center shrink-0 mt-0.5">
-                                                        {isOpen ? <ChevronUp size={14} className="text-amber-700"/> : <ChevronDown size={14} className="text-amber-700"/>}
-                                                        {entries.length > 1 && (
-                                                            <span className="text-[9px] font-bold bg-amber-200 text-amber-900 rounded-full px-1.5 mt-0.5">{entries.length}</span>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                                {isOpen && entries.length > 1 && (
-                                                    <div className="border-t border-amber-200 bg-white/60 max-h-64 overflow-y-auto">
-                                                        {entries.slice(1).map((e, i) => (
-                                                            <div key={i} className="px-3 py-1.5 border-b border-amber-100 last:border-0">
-                                                                {e.time && <div className="text-[10px] text-slate-500 font-mono">{e.time}</div>}
-                                                                <div className="text-xs text-slate-700 leading-relaxed">{e.text}</div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                <td className="px-6 py-4 min-w-[260px]">
+                                    {entries.length === 0 ? (
+                                        <span className="text-xs text-slate-300 italic">لا توجد ملاحظات بعد</span>
+                                    ) : (
+                                        <button
+                                            onClick={() => setExpandedNotes(p => ({ ...p, [lead.id]: !p[lead.id] }))}
+                                            className="w-full text-right bg-amber-50/60 border-r-2 border-amber-300 rounded-l-lg px-3 py-2 flex items-start justify-between gap-2 hover:bg-amber-100/50 transition"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                {latest.time && (
+                                                    <div className="text-[10px] text-amber-700 font-mono font-bold mb-0.5">{latest.time}</div>
+                                                )}
+                                                <div className="text-xs text-slate-700 leading-relaxed line-clamp-2">{latest.text}</div>
+                                            </div>
+                                            <div className="flex flex-col items-center shrink-0 mt-0.5">
+                                                {isOpen ? <ChevronUp size={14} className="text-amber-700"/> : <ChevronDown size={14} className="text-amber-700"/>}
+                                                {entries.length > 1 && (
+                                                    <span className="text-[9px] font-bold bg-amber-200 text-amber-900 rounded-full px-1.5 mt-0.5">{entries.length}</span>
                                                 )}
                                             </div>
-                                        );
-                                    })()}
+                                        </button>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     <select
@@ -380,7 +367,31 @@ export default function LeadsManage({ showToast }) {
                                     </button>
                                 </td>
                             </tr>
-                        ))}
+                            {isOpen && entries.length > 1 && (
+                                <tr className="bg-amber-50/40">
+                                    <td colSpan="6" className="px-6 py-4">
+                                        <div className="border-r-4 border-amber-400 pr-4">
+                                            <div className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-2">
+                                                <span>سجل المحادثات الكامل لـ {lead.name}</span>
+                                                <span className="bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full text-[10px]">{entries.length} ملاحظة</span>
+                                            </div>
+                                            <div className="space-y-2 max-h-96 overflow-y-auto pl-2">
+                                                {entries.map((e, i) => (
+                                                    <div key={i} className="bg-white border border-amber-100 rounded-lg p-3 shadow-sm">
+                                                        {e.time && (
+                                                            <div className="text-[11px] text-amber-700 font-mono font-bold mb-1">{e.time}</div>
+                                                        )}
+                                                        <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words">{e.text}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                            </React.Fragment>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
