@@ -160,8 +160,14 @@ export default function LeadsManage({ showToast }) {
 
     // مفتاح تجميع موحّد للجوال (يلغي الفروق بين 05.., 9665.., +9665.., 5..)
     const phoneKey = (p) => {
-        const digits = String(p || '').replace(/\D/g, '');
-        return digits.replace(/^(966|0)/, '').replace(/^/, ''); // النسخة المختصرة (بدون 0 أو 966)
+        if (!p) return '';
+        // حوّل الأرقام العربية إلى لاتينية
+        let s = String(p).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+        // أبقِ الأرقام فقط
+        const digits = s.replace(/[^0-9]/g, '');
+        // أزل البادئة 966 أو الصفر، خذ آخر 9 أرقام كمفتاح موحد
+        const stripped = digits.replace(/^(966|0)+/, '');
+        return stripped.slice(-9); // آخر 9 أرقام (الجزء الفريد من الجوال السعودي)
     };
 
     // دمج كل المهتمين بنفس الجوال في سجل واحد، مع تجميع الاهتمامات والملاحظات

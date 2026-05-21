@@ -1272,7 +1272,11 @@ KNOWLEDGE;
         // 3) إذا لم يكن مسجلاً في leads ولا maintenance → سجّله تلقائياً كعميل مهتم
         $has_lead = isset($lead_row) && !empty($lead_row);
         if (!$has_lead && !$has_maintenance) {
-            $contact_name = $payload['contact_name'] ?? 'عميل واتساب';
+            $contact_name = trim($payload['contact_name'] ?? '');
+            // تجاهل الأسماء التافهة مثل "0" أو الأرقام أو الفراغ
+            if ($contact_name === '' || $contact_name === '0' || ctype_digit($contact_name)) {
+                $contact_name = 'عميل واتساب';
+            }
             $safe_name    = $conn->real_escape_string($contact_name);
             $first_msg    = $conn->real_escape_string(mb_substr($user_msg, 0, 200));
             $conn->query(
