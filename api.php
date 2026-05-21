@@ -974,6 +974,58 @@ switch ($action) {
         echo $res;
         break;
 
+    case 'daftra_list':
+        // endpoint عام لجلب أي وحدة من دفترة مع pagination كامل
+        $daftra_key = "__DAFTRA_KEY__";
+        $module = preg_replace('/[^a-z_]/i', '', $_GET['module'] ?? '');
+        if (!$module) {
+            echo json_encode(["success" => false, "message" => "module مطلوب"]);
+            break;
+        }
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $all = [];
+        $page = 1;
+        $entity_key = null;
+        while ($page <= 100) {
+            $url = "$base/$module.json?page=$page&limit=100";
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 20,
+            ]);
+            $res = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($http !== 200) break;
+            $data = json_decode($res, true);
+            if (!isset($data['data']) || !is_array($data['data']) || count($data['data']) === 0) break;
+            if (!$entity_key && count($data['data']) > 0) {
+                $entity_key = array_keys($data['data'][0])[0] ?? null;
+            }
+            $all = array_merge($all, $data['data']);
+            if (count($data['data']) < 100) break;
+            $page++;
+        }
+
+        // استخراج البيانات من entity wrapper
+        $flat = [];
+        foreach ($all as $row) {
+            $flat[] = $entity_key && isset($row[$entity_key]) ? $row[$entity_key] : $row;
+        }
+
+        echo json_encode([
+            "success" => true,
+            "module" => $module,
+            "entity" => $entity_key,
+            "count" => count($flat),
+            "pages_fetched" => $page,
+            "data" => $flat,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_full_summary':
         // ملخص مالي موسّع: فواتير + مصروفات + مشتريات + موردين + خزائن
         $daftra_key = "__DAFTRA_KEY__";
