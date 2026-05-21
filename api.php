@@ -1515,6 +1515,57 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_probe_projects':
+        // اكتشاف endpoint إدارة المشاريع تحت دورات العمل
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $candidates = [
+            "projects", "project", "pm_projects", "pm/projects",
+            "project_management", "work_order_projects", "work_orders/projects",
+            "work_orders",  // التأكد من العدد فيه
+            "tasks", "jobs", "engagements", "agreements", "contracts",
+            "schedules", "appointments",
+        ];
+
+        $results = [];
+        foreach ($candidates as $ep) {
+            $ch = curl_init("$base/$ep.json?limit=1");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 8,
+                CURLOPT_FOLLOWLOCATION => false,
+            ]);
+            $res = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($http === 200) {
+                $data = json_decode($res, true);
+                $count = isset($data['data']) ? count($data['data']) : 0;
+                // اجلب العدد الكلي بصفحة واحدة بحدّ كبير
+                $ch2 = curl_init("$base/$ep.json?limit=500");
+                curl_setopt_array($ch2, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers, CURLOPT_TIMEOUT => 10]);
+                $r2 = curl_exec($ch2); curl_close($ch2);
+                $d2 = json_decode($r2, true);
+                $real_count = isset($d2['data']) ? count($d2['data']) : 0;
+                $first_key = $count > 0 ? array_keys($data['data'][0])[0] : null;
+                $sample_fields = ($first_key && isset($data['data'][0][$first_key]))
+                    ? array_slice(array_keys($data['data'][0][$first_key]), 0, 15) : [];
+                $results[$ep] = [
+                    "status" => "✅ متاح",
+                    "entity_key" => $first_key,
+                    "total_count" => $real_count,
+                    "sample_fields" => $sample_fields,
+                ];
+            } else {
+                $results[$ep] = ["status" => "❌ HTTP $http"];
+            }
+        }
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_probe_cycles':
         // اكتشاف endpoint دورات العمل في دفترة
         $daftra_key = "__DAFTRA_KEY__";
