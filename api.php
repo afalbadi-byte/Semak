@@ -974,6 +974,47 @@ switch ($action) {
         echo $res;
         break;
 
+    case 'daftra_probe_endpoints':
+        // اكتشاف endpoints المشتريات والموردين والخزائن
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $endpoints = [
+            // مشتريات
+            "purchase_orders.json", "purchases.json", "purchase_invoices.json", "vendor_invoices.json",
+            // موردين
+            "suppliers.json", "vendors.json",
+            // خزائن
+            "treasuries.json", "cash_boxes.json", "accounts.json", "bank_accounts.json",
+            // أخرى
+            "payments.json", "receipts.json", "store_transfers.json",
+        ];
+
+        $results = [];
+        foreach ($endpoints as $ep) {
+            $ch = curl_init("$base/$ep");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 10,
+            ]);
+            $res = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            $data = json_decode($res, true);
+            $count = isset($data['data']) && is_array($data['data']) ? count($data['data']) : 0;
+            $results[$ep] = [
+                "http" => $http,
+                "count" => $count,
+                "first_key" => $count > 0 ? array_keys($data['data'][0] ?? [])[0] : null,
+                "preview" => substr($res ?: '', 0, 100),
+            ];
+        }
+
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_invoice_sample':
         // إظهار أول فاتورة كاملةً لمعرفة أسماء الحقول
         $daftra_key = "__DAFTRA_KEY__";
