@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, RefreshCw, MessageCircle, UserCheck, X, Building, CheckCircle2 } from 'lucide-react';
+import { Users, Search, RefreshCw, MessageCircle, UserCheck, X, Building, CheckCircle2, Trash2 } from 'lucide-react';
 import { sendWhatsAppMessage, normalizePhone } from '../../services/whatsappService';
 
 const API_URL = "https://semak.sa/api.php";
@@ -41,6 +41,27 @@ export default function LeadsManage({ showToast }) {
             if(showToast) showToast("خطأ", "تعذر جلب البيانات", "error");
         } finally {
             setLoading(false);
+        }
+    };
+
+    // حذف مهتم
+    const deleteLead = async (lead) => {
+        if (!confirm(`تأكيد حذف ${lead.name} (${lead.phone})؟\n\nسيتم حذف السجل نهائياً.`)) return;
+        try {
+            const res = await fetch(`${API_URL}?action=delete_lead`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: lead.id })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setLeads(prev => prev.filter(l => l.id !== lead.id));
+                if (showToast) showToast("تم الحذف", `حُذف سجل ${lead.name}`);
+            } else if (showToast) {
+                showToast("فشل الحذف", data.message || "خطأ", "error");
+            }
+        } catch (e) {
+            if (showToast) showToast("فشل الحذف", e.message, "error");
         }
     };
 
@@ -205,13 +226,14 @@ export default function LeadsManage({ showToast }) {
                             <th className="px-6 py-4 border-b">ملاحظات فهد</th>
                             <th className="px-6 py-4 border-b text-center">الحالة والإجراء</th>
                             <th className="px-6 py-4 border-b text-center">تواصل سريع</th>
+                            <th className="px-6 py-4 border-b text-center">حذف</th>
                         </tr>
                     </thead>
                     <tbody className="text-slate-700 divide-y divide-slate-50">
                         {loading ? (
-                            <tr><td colSpan="5" className="text-center py-12 text-teal-600 font-bold"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr>
+                            <tr><td colSpan="6" className="text-center py-12 text-teal-600 font-bold"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr>
                         ) : filteredLeads.length === 0 ? (
-                            <tr><td colSpan="5" className="text-center py-12 text-slate-400 font-bold">لا يوجد سجلات مهتمين مطابقة.</td></tr>
+                            <tr><td colSpan="6" className="text-center py-12 text-slate-400 font-bold">لا يوجد سجلات مهتمين مطابقة.</td></tr>
                         ) : filteredLeads.map((lead) => (
                             <tr key={lead.id} className="hover:bg-teal-50/30 transition-colors duration-200">
                                 <td className="px-6 py-4">
@@ -250,12 +272,21 @@ export default function LeadsManage({ showToast }) {
                                     </select>
                                 </td>
                                 <td className="px-6 py-4 text-center">
-                                    <button 
-                                        onClick={() => notifyWhatsApp(lead)} 
+                                    <button
+                                        onClick={() => notifyWhatsApp(lead)}
                                         className="bg-[#25D366] text-white p-2.5 rounded-xl hover:bg-green-600 transition shadow-md shadow-green-200 mx-auto flex items-center justify-center"
                                         title="مراسلة العميل عبر الواتساب"
                                     >
                                         <MessageCircle size={20} />
+                                    </button>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                    <button
+                                        onClick={() => deleteLead(lead)}
+                                        className="bg-red-50 text-red-600 p-2.5 rounded-xl hover:bg-red-600 hover:text-white transition shadow-sm mx-auto flex items-center justify-center"
+                                        title="حذف السجل نهائياً"
+                                    >
+                                        <Trash2 size={18} />
                                     </button>
                                 </td>
                             </tr>

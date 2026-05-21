@@ -636,6 +636,29 @@ switch ($action) {
         $interest = $conn->real_escape_string($input_data['interest'] ?? '');
         $source   = $conn->real_escape_string($input_data['source']   ?? '');
         $status   = "جديد";
+
+        // ── منع تكرار الجوال: إذا الرقم مسجل مسبقاً، أضف الاهتمام للسجل القائم ──
+        $clean_phone   = preg_replace('/\D/', '', $phone);
+        $phone_no_zero = preg_replace('/^(0|966)/', '', $clean_phone);
+        $dup_res = $conn->query("SELECT id, interest, notes FROM leads WHERE REPLACE(REPLACE(phone, '+', ''), ' ', '') LIKE '%$phone_no_zero%' ORDER BY id DESC LIMIT 1");
+        if ($dup_res && $dup_row = $dup_res->fetch_assoc()) {
+            $existing_id       = (int)$dup_row['id'];
+            $existing_interest = $dup_row['interest'] ?? '';
+            $existing_notes    = $dup_row['notes'] ?? '';
+            $stamp             = date('Y-m-d H:i');
+            $new_interest = $existing_interest;
+            if ($interest && strpos($existing_interest, $interest) === false) {
+                $new_interest = $existing_interest ? "$existing_interest، $interest" : $interest;
+            }
+            $appended_note = "[$stamp - $source] اهتمام إضافي: $interest";
+            $merged_notes  = $existing_notes ? "$existing_notes\n$appended_note" : $appended_note;
+            $safe_interest = $conn->real_escape_string($new_interest);
+            $safe_notes    = $conn->real_escape_string($merged_notes);
+            $conn->query("UPDATE leads SET interest='$safe_interest', notes='$safe_notes', status='جديد' WHERE id=$existing_id");
+            echo json_encode(["success" => true, "id" => $existing_id, "merged" => true]);
+            break;
+        }
+
         $sql = "INSERT INTO leads (name, phone, interest, source, unit, status) VALUES ('$name', '$phone', '$interest', '$source', '$interest', '$status')";
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
