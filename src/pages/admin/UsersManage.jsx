@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, UserPlus, Shield, ShieldCheck, Trash2, RefreshCw, Key, Mail, User, X, Edit,
     Wrench, FilePenLine, QrCode, Calculator, ClipboardCheck, CheckSquare,
-    Building, Building2, Edit2, TrendingUp, Bot, MessageCircle, FileWarning
+    Building, Building2, Edit2, Bot, MessageCircle, FileWarning
 } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
@@ -12,7 +12,6 @@ const APP_MODULES = [
   { id: "projects",    label: "إدارة المشاريع والوحدات", icon: Building,        color: "text-blue-600",    bg: "bg-blue-50" },
   { id: "units",       label: "بيانات الوحدات",          icon: Building2,       color: "text-sky-600",     bg: "bg-sky-50" },
   { id: "units_edit",  label: "تعديل الوحدات والملاك",   icon: Edit2,           color: "text-cyan-600",    bg: "bg-cyan-50" },
-  { id: "feasibility", label: "حاسبة الجدوى والعروض",    icon: TrendingUp,      color: "text-emerald-600", bg: "bg-emerald-50" },
   { id: "inspection",  label: "فحص وتسليم الوحدات",      icon: ClipboardCheck,  color: "text-indigo-600",  bg: "bg-indigo-50" },
   { id: "snaglist",    label: "تقارير الملاحظات",        icon: FileWarning,     color: "text-red-600",     bg: "bg-red-50" },
   { id: "maintenance", label: "إدارة طلبات الصيانة",     icon: Wrench,          color: "text-purple-600",  bg: "bg-purple-50" },

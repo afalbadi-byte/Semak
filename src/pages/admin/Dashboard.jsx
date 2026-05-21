@@ -13,7 +13,8 @@ import UsersManage from './UsersManage';
 import MaintenanceManage from './MaintenanceManage';
 import LeadsManage from './LeadsManage';
 import BotSettings from './BotSettings';
-import FeasibilityCalc from './FeasibilityCalc';
+// ملاحظة: تم تعطيل "حاسبة الجدوى" مؤقتاً حتى يُبنى كود مستقل لها (الملف القديم كان مكرراً من منشئ الخطابات)
+// import FeasibilityCalc from './FeasibilityCalc'; // معطّل مؤقتاً
 import UnitsOverview from './UnitsOverview';
 import ProjectsManage from './ProjectsManage';
 import UnitsEdit from './UnitsEdit';
@@ -174,7 +175,6 @@ export default function Dashboard({ onLogout }) {
         { id: 'projects',    title: 'إدارة المشاريع والوحدات',  icon: Building,        permKey: 'projects' },
         { id: 'units',       title: 'بيانات الوحدات',           icon: Building2,       permKey: 'units' },
         { id: 'units_edit',  title: 'تعديل الوحدات والملاك',    icon: Edit2,           permKey: 'units_edit' },
-        { id: 'feasibility', title: 'حاسبة الجدوى والعروض',     icon: TrendingUp,      permKey: 'feasibility' },
         { id: 'inspection',  title: 'فحص وتسليم الوحدات',       icon: ClipboardCheck,  permKey: 'inspection' },
         { id: 'snaglist',    title: 'تقارير الملاحظات',         icon: FileWarning,     permKey: 'snaglist' },
         { id: 'maintenance', title: 'إدارة الصيانة',            icon: Wrench,          permKey: 'maintenance' },
@@ -352,10 +352,6 @@ export default function Dashboard({ onLogout }) {
                                     <IconCard icon={Edit2} label="تعديل الوحدات" color="cyan"
                                         onClick={() => setActiveTab('units_edit')}/>
                                 )}
-                                {hasPermission('feasibility') && (
-                                    <IconCard icon={TrendingUp} label="حاسبة الجدوى" color="emerald"
-                                        onClick={() => setActiveTab('feasibility')}/>
-                                )}
                                 {hasPermission('whatsapp') && (
                                     <IconCard icon={MessageCircle} label="صندوق واتساب" color="green"
                                         onClick={() => setActiveTab('whatsapp')}/>
@@ -394,11 +390,6 @@ export default function Dashboard({ onLogout }) {
                         </div>
                     )}
 
-                    {activeTab === 'feasibility' && hasPermission('feasibility') && (
-                        <div className="animate-fadeIn">
-                            <FeasibilityCalc showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
-                        </div>
-                    )}
 
                     {/* --- قسم الفحص --- */}
                     {activeTab === 'inspection' && hasPermission('inspection') && (
