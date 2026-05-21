@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Calculator, Save, CloudDownload, RefreshCw, Printer, Plus, Trash2, Users, FileSpreadsheet, Presentation } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { API_URL, getImg } from '../../utils/helpers';
+import PrintableLetterhead, { SEMAK_PRINT_PAGE_STYLE } from '../../components/PrintableLetterhead';
 
 export default function FeasibilityCalc({ showToast }) {
     const [loading, setLoading] = useState(false);
@@ -127,9 +128,17 @@ export default function FeasibilityCalc({ showToast }) {
         } catch(e) {} finally { setLoading(false); }
     };
 
-    // --- دوال الطباعة ---
-    const handlePrintTeaser = useReactToPrint({ content: () => teaserPrintRef.current, documentTitle: `عرض_استثماري_${projectName || 'سماك'}` });
-    const handlePrintDetailed = useReactToPrint({ content: () => detailedPrintRef.current, documentTitle: `الملحق_المالي_${projectName || 'سماك'}` });
+    // --- دوال الطباعة (تستخدم ترويسة سماك المشتركة + علامة مائية متكررة) ---
+    const handlePrintTeaser = useReactToPrint({
+        content: () => teaserPrintRef.current,
+        documentTitle: `عرض_استثماري_${projectName || 'سماك'}`,
+        pageStyle: SEMAK_PRINT_PAGE_STYLE,
+    });
+    const handlePrintDetailed = useReactToPrint({
+        content: () => detailedPrintRef.current,
+        documentTitle: `الملحق_المالي_${projectName || 'سماك'}`,
+        pageStyle: SEMAK_PRINT_PAGE_STYLE,
+    });
 
     return (
         <div className="animate-fadeIn pb-10 font-cairo" dir="rtl">
@@ -290,176 +299,193 @@ export default function FeasibilityCalc({ showToast }) {
             </div>
             
             {/* قوالب الطباعة (مخفية عن الشاشة وتظهر فقط عند الطباعة) */}
-            <div style={{ display: "none" }}>
-                
-                {/* Teaser Print Template */}
-                <div ref={teaserPrintRef} className="font-cairo bg-white p-10 flex flex-col justify-between" style={{ height: "297mm", width: "210mm" }}>
-                    <div>
-                        <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-8">
-                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-16" alt="Logo" />
-                            <div className="text-left border-l-4 border-[#c5a059] pl-4"><h1 className="text-xl font-black text-[#1a365d]">سماك العقارية</h1><p className="text-[#c5a059] font-bold text-xs mt-1">سقف يعلو برؤيتك ومسكن يحكي قصتك</p></div>
+            <div style={{ position: 'absolute', left: '-99999px', top: 0, width: '210mm' }}>
+
+                {/* Teaser Print Template — العرض الاستثماري المختصر */}
+                <PrintableLetterhead ref={teaserPrintRef} documentLabel="عرض استثماري" subtitle={projectName || 'مشروع سماك'} date={new Date().toLocaleDateString('en-GB')}>
+                    <div style={{ fontFamily: 'Cairo, sans-serif', fontSize: '13px', color: '#1e293b' }}>
+                        {/* العنوان */}
+                        <div style={{ textAlign: 'center', margin: '6mm 0 8mm' }}>
+                            <div style={{ display: 'inline-block', padding: '6px 14px', borderRadius: '999px', backgroundColor: 'rgba(197,160,89,0.10)', border: '1px solid rgba(197,160,89,0.25)', color: '#c5a059', fontWeight: 700, fontSize: '11px', marginBottom: '10px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>ملخص تنفيذي - فرصة استثمارية</div>
+                            <h2 style={{ fontSize: '30px', fontWeight: 900, color: '#1a365d', margin: '0 0 6px' }}>{projectName || 'مشروع سماك الصفوة'}</h2>
+                            <p style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, margin: 0 }}>بناء شراكة استراتيجية بتمويل (وافي)</p>
                         </div>
-                        
-                        <div className="text-center mb-10 relative">
-                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-0 left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[60%] pointer-events-none grayscale z-0" />
-                            <div className="relative z-10">
-                                <div className="inline-block px-4 py-1.5 rounded-full bg-[#c5a059]/10 border border-[#c5a059]/20 text-[#c5a059] font-bold text-xs mb-3">ملخص تنفيذي - فرصة استثمارية</div>
-                                <h2 className="text-4xl font-black text-[#1a365d] mb-2">{projectName || "مشروع سماك الصفوة 2"}</h2>
-                                <p className="text-sm text-slate-500 font-bold">بناء شراكة استراتيجية بتمويل (وافي)</p>
+
+                        {/* الأرقام الرئيسية */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '10mm' }}>
+                            <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '18px', textAlign: 'center', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <p style={{ color: '#64748b', fontWeight: 700, fontSize: '12px', margin: '0 0 6px' }}>رأس المال الاستثماري المستهدف</p>
+                                <p style={{ fontSize: '24px', fontWeight: 900, color: '#1a365d', margin: '0 0 4px' }}>{printMode === 'single' ? formatMoney(investors[selectedInvestorIndex]?.amount) : formatMoney(investorCapitalPool)}</p>
+                                <p style={{ fontSize: '9px', color: '#c5a059', fontWeight: 700, margin: 0 }}>يغطى بتوفير الأرض والمصاريف التأسيسية</p>
+                            </div>
+                            <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '20px', padding: '18px', textAlign: 'center', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <p style={{ color: '#065f46', fontWeight: 700, fontSize: '12px', margin: '0 0 6px' }}>المبيعات المتوقعة للمشروع</p>
+                                <p style={{ fontSize: '24px', fontWeight: 900, color: '#059669', margin: '0 0 4px' }}>{formatMoney(totalSales)}</p>
+                                <p style={{ fontSize: '9px', color: '#059669', fontWeight: 700, margin: 0 }}>يتم تمويل البناء من التدفقات النقدية</p>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-8 mb-8 relative z-10">
-                            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200 text-center">
-                                <p className="text-slate-500 font-bold text-sm mb-2">رأس المال الاستثماري المستهدف</p>
-                                <p className="text-3xl font-black text-[#1a365d] mb-1">{printMode === 'single' ? formatMoney(investors[selectedInvestorIndex]?.amount) : formatMoney(investorCapitalPool)}</p>
-                                <p className="text-[10px] text-[#c5a059] font-bold">يغطى بتوفير الأرض والمصاريف التأسيسية</p>
-                            </div>
-                            <div className="bg-emerald-50 p-8 rounded-3xl border border-emerald-100 text-center">
-                                <p className="text-emerald-800 font-bold text-sm mb-2">المبيعات المتوقعة للمشروع</p>
-                                <p className="text-3xl font-black text-emerald-600 mb-1">{formatMoney(totalSales)}</p>
-                                <p className="text-[10px] text-emerald-600 font-bold">يتم تمويل البناء من التدفقات النقدية</p>
-                            </div>
-                        </div>
-
-                        <div className="bg-[#1a365d] text-white p-8 rounded-3xl grid grid-cols-2 text-center mb-8 relative z-10" style={{WebkitPrintColorAdjust:"exact", printColorAdjust:"exact", backgroundColor:"#1a365d", color:"white"}}>
-                            <div className="border-l border-white/20">
-                                <p className="text-slate-300 font-bold mb-2 text-sm">العائد المتوقع (ROI)</p>
-                                <p className="text-4xl font-black text-[#c5a059]" style={{color:"#c5a059"}}>
-                                    {printMode === 'single' ? (investors[selectedInvestorIndex]?.amount > 0 ? (invProfitPool * (investors[selectedInvestorIndex].amount / investorCapitalPool) / investors[selectedInvestorIndex].amount * 100).toFixed(1) : 0) + "%" : overAllROI.toFixed(1) + "%"}
+                        {/* ROI / المدة */}
+                        <div style={{ backgroundColor: '#1a365d', color: 'white', padding: '20px', borderRadius: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', textAlign: 'center', marginBottom: '10mm', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                            <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)' }}>
+                                <p style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '12px', margin: '0 0 4px' }}>العائد المتوقع (ROI)</p>
+                                <p style={{ fontSize: '28px', fontWeight: 900, color: '#c5a059', margin: 0 }}>
+                                    {printMode === 'single'
+                                        ? (investors[selectedInvestorIndex]?.amount > 0 ? (invProfitPool * (investors[selectedInvestorIndex].amount / investorCapitalPool) / investors[selectedInvestorIndex].amount * 100).toFixed(1) : 0) + '%'
+                                        : overAllROI.toFixed(1) + '%'}
                                 </p>
                             </div>
                             <div>
-                                <p className="text-slate-300 font-bold mb-2 text-sm">دورة المشروع المستهدفة</p>
-                                <p className="text-4xl font-black">{inputs.sDuration} شهر</p>
+                                <p style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '12px', margin: '0 0 4px' }}>دورة المشروع المستهدفة</p>
+                                <p style={{ fontSize: '28px', fontWeight: 900, color: 'white', margin: 0 }}>{inputs.sDuration} شهر</p>
                             </div>
                         </div>
 
-                        <div className="bg-white border-2 border-[#c5a059]/20 p-6 rounded-3xl relative z-10">
-                            <h3 className="text-lg font-black text-[#1a365d] mb-4 border-b border-slate-100 pb-2">التفاصيل المعمارية</h3>
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                                <div><span className="block text-2xl font-black text-[#1a365d]">{totalUnits}</span><span className="text-[11px] font-bold text-slate-500">وحدة سكنية</span></div>
-                                <div><span className="block text-2xl font-black text-[#1a365d]">{formatMoney(totalBuilt)}</span><span className="text-[11px] font-bold text-slate-500">متر مربع بناء</span></div>
-                                <div><span className="block text-2xl font-black text-[#1a365d]">{formatMoney(totalNet)}</span><span className="text-[11px] font-bold text-slate-500">متر مساحة للبيع</span></div>
+                        {/* التفاصيل المعمارية */}
+                        <div style={{ backgroundColor: '#ffffff', border: '2px solid rgba(197,160,89,0.2)', padding: '14px 18px', borderRadius: '20px' }}>
+                            <h3 style={{ fontSize: '15px', fontWeight: 900, color: '#1a365d', margin: '0 0 10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>التفاصيل المعمارية</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', textAlign: 'center' }}>
+                                <div><span style={{ display: 'block', fontSize: '22px', fontWeight: 900, color: '#1a365d' }}>{totalUnits}</span><span style={{ fontSize: '10px', fontWeight: 700, color: '#64748b' }}>وحدة سكنية</span></div>
+                                <div><span style={{ display: 'block', fontSize: '22px', fontWeight: 900, color: '#1a365d' }}>{formatMoney(totalBuilt)}</span><span style={{ fontSize: '10px', fontWeight: 700, color: '#64748b' }}>متر مربع بناء</span></div>
+                                <div><span style={{ display: 'block', fontSize: '22px', fontWeight: 900, color: '#1a365d' }}>{formatMoney(totalNet)}</span><span style={{ fontSize: '10px', fontWeight: 700, color: '#64748b' }}>متر مساحة للبيع</span></div>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="mt-auto pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
-                        <div className="bg-slate-100 px-4 py-2 rounded-lg w-full flex justify-between items-center" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f1f5f9"}}>
-                            <span>إدارة التطوير والاستثمار - وثيقة سرية</span>
+                        {/* تنبيه السرية */}
+                        <div style={{ marginTop: '10mm', backgroundColor: '#f1f5f9', padding: '8px 14px', borderRadius: '10px', fontSize: '10px', color: '#475569', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                            <span>إدارة التطوير والاستثمار — وثيقة سرية</span>
                             <span dir="ltr">info@semak.sa | semak.sa | 920032842</span>
                         </div>
                     </div>
-                </div>
+                </PrintableLetterhead>
 
-                {/* Detailed Print Template */}
-                <div ref={detailedPrintRef} className="a4-page font-cairo bg-white p-10 flex flex-col justify-between" style={{ height: "297mm", width: "210mm" }}>
-                    <div>
-                        <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
-                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-14" alt="Logo" />
-                            <div className="text-left border-l-4 border-[#c5a059] pl-4"><h1 className="text-xl font-black text-[#1a365d]">الملحق المالي التفصيلي</h1><p className="text-[#c5a059] font-bold text-[10px] mt-1">{projectName || "مشروع سماك الصفوة 2"}</p></div>
-                        </div>
-                        
-                        <div className="bg-white rounded-2xl border-2 border-slate-200 overflow-hidden mb-6">
-                            <table className="w-full text-right text-xs">
-                                <tbody className="divide-y divide-slate-100 font-bold">
-                                    <tr><td className="p-3 bg-slate-50 text-slate-500 w-2/3" style={{backgroundColor:"#f8fafc"}}>رأس المال التأسيسي (الأرض + التأسيس والرخص)</td><td className="p-3 text-[#1a365d] text-sm font-black">{formatMoney(investorCapitalPool)}</td></tr>
-                                    <tr><td className="p-3 bg-white text-slate-500">تكلفة البناء والخدمات الإجمالية (ممول من المبيعات)</td><td className="p-3 text-[#1a365d] text-sm font-black">{formatMoney(buildCost)}</td></tr>
-                                    <tr><td className="p-3 bg-slate-50 text-slate-500" style={{backgroundColor:"#f8fafc"}}>ميزانية التسويق والسعي</td><td className="p-3 text-[#1a365d] text-sm font-black">{formatMoney(marketingCost)}</td></tr>
-                                    <tr className="bg-red-50 border-t-2 border-red-200" style={{backgroundColor:"#fef2f2", WebkitPrintColorAdjust:"exact"}}><td className="p-3 font-black text-red-900">إجمالي التكاليف المتوقعة للمشروع</td><td className="p-3 text-red-700 font-black text-sm">{formatMoney(totalProjectCosts)}</td></tr>
-                                    <tr className="bg-emerald-50 border-t-2 border-emerald-200" style={{backgroundColor:"#ecfdf5", WebkitPrintColorAdjust:"exact"}}><td className="p-3 font-black text-emerald-900">إجمالي المبيعات المتوقعة للمشروع</td><td className="p-3 text-emerald-700 font-black text-sm">{formatMoney(totalSales)}</td></tr>
-                                    <tr className="bg-[#1a365d] text-white" style={{backgroundColor:"#1a365d", color:"white", WebkitPrintColorAdjust:"exact"}}><td className="p-3 font-black">صافي الربح الكلي للمشروع</td><td className="p-3 text-[#c5a059] font-black text-lg" style={{color:"#c5a059"}}>{formatMoney(netProfit)}</td></tr>
+                {/* Detailed Print Template — الملحق المالي التفصيلي */}
+                <PrintableLetterhead ref={detailedPrintRef} documentLabel="الملحق المالي التفصيلي" subtitle={projectName || 'مشروع سماك'} date={new Date().toLocaleDateString('en-GB')}>
+                    <div style={{ fontFamily: 'Cairo, sans-serif', color: '#1e293b' }}>
+                        {/* جدول التكاليف والمبيعات */}
+                        <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#1a365d', margin: '0 0 8px' }}>اقتصاديات المشروع الإجمالية</h3>
+                        <div style={{ border: '2px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', marginBottom: '6mm' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'right' }}>
+                                <tbody>
+                                    <tr style={{ backgroundColor: '#f8fafc', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <td style={{ padding: '10px 14px', color: '#475569', fontWeight: 700, width: '66%' }}>رأس المال التأسيسي (الأرض + التأسيس والرخص)</td>
+                                        <td style={{ padding: '10px 14px', color: '#1a365d', fontWeight: 900 }}>{formatMoney(investorCapitalPool)} ريال</td>
+                                    </tr>
+                                    <tr>
+                                        <td style={{ padding: '10px 14px', color: '#475569', fontWeight: 700 }}>تكلفة البناء والخدمات (تُمَول من المبيعات)</td>
+                                        <td style={{ padding: '10px 14px', color: '#1a365d', fontWeight: 900 }}>{formatMoney(buildCost)} ريال</td>
+                                    </tr>
+                                    <tr style={{ backgroundColor: '#f8fafc', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <td style={{ padding: '10px 14px', color: '#475569', fontWeight: 700 }}>ميزانية التسويق والسعي</td>
+                                        <td style={{ padding: '10px 14px', color: '#1a365d', fontWeight: 900 }}>{formatMoney(marketingCost)} ريال</td>
+                                    </tr>
+                                    <tr style={{ backgroundColor: '#fef2f2', borderTop: '2px solid #fecaca', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <td style={{ padding: '10px 14px', color: '#7f1d1d', fontWeight: 900 }}>إجمالي التكاليف المتوقعة للمشروع</td>
+                                        <td style={{ padding: '10px 14px', color: '#b91c1c', fontWeight: 900 }}>{formatMoney(totalProjectCosts)} ريال</td>
+                                    </tr>
+                                    <tr style={{ backgroundColor: '#ecfdf5', borderTop: '2px solid #a7f3d0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <td style={{ padding: '10px 14px', color: '#064e3b', fontWeight: 900 }}>إجمالي المبيعات المتوقعة للمشروع</td>
+                                        <td style={{ padding: '10px 14px', color: '#047857', fontWeight: 900 }}>{formatMoney(totalSales)} ريال</td>
+                                    </tr>
+                                    <tr style={{ backgroundColor: '#1a365d', color: 'white', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <td style={{ padding: '12px 14px', fontWeight: 900, color: 'white' }}>صافي الربح الكلي للمشروع</td>
+                                        <td style={{ padding: '12px 14px', color: '#c5a059', fontWeight: 900, fontSize: '15px' }}>{formatMoney(netProfit)} ريال</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        <h3 className="text-sm font-black text-[#1a365d] mb-2">توزيع حصص التمويل والأرباح على المستثمرين</h3>
-                        <div className="rounded-xl border border-slate-200 overflow-hidden mb-6">
-                            <table className="w-full text-right text-[10px]">
-                                <thead className="bg-slate-100 border-b border-slate-200" style={{backgroundColor:"#f1f5f9", WebkitPrintColorAdjust:"exact"}}>
+                        {/* جدول المستثمرين */}
+                        <h3 style={{ fontSize: '14px', fontWeight: 900, color: '#1a365d', margin: '8mm 0 8px' }}>توزيع حصص التمويل والأرباح</h3>
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', marginBottom: '6mm' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', textAlign: 'right' }}>
+                                <thead style={{ backgroundColor: '#f1f5f9', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                                     <tr>
-                                        <th className="p-2.5 text-[#1a365d] font-black">المستثمر</th>
-                                        <th className="p-2.5 text-center text-[#1a365d] font-black">المبلغ المستثمر</th>
-                                        <th className="p-2.5 text-center text-[#1a365d] font-black">الحصة %</th>
-                                        <th className="p-2.5 text-center text-[#1a365d] font-black">الربح المتوقع</th>
-                                        <th className="p-2.5 text-center text-[#1a365d] font-black">إجمالي الاسترداد</th>
-                                        <th className="p-2.5 text-center text-[#1a365d] font-black">ROI</th>
-                                        <th className="p-2.5 text-center text-[#1a365d] font-black">سنوي</th>
+                                        <th style={{ padding: '8px', color: '#1a365d', fontWeight: 900 }}>المستثمر</th>
+                                        <th style={{ padding: '8px', color: '#1a365d', fontWeight: 900, textAlign: 'center' }}>المبلغ</th>
+                                        <th style={{ padding: '8px', color: '#1a365d', fontWeight: 900, textAlign: 'center' }}>الحصة %</th>
+                                        <th style={{ padding: '8px', color: '#1a365d', fontWeight: 900, textAlign: 'center' }}>الربح المتوقع</th>
+                                        <th style={{ padding: '8px', color: '#1a365d', fontWeight: 900, textAlign: 'center' }}>إجمالي الاسترداد</th>
+                                        <th style={{ padding: '8px', color: '#1a365d', fontWeight: 900, textAlign: 'center' }}>ROI</th>
+                                        <th style={{ padding: '8px', color: '#1a365d', fontWeight: 900, textAlign: 'center' }}>سنوي</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 font-bold bg-white">
-                                    {printMode === 'single' ? (
-                                        <tr>
-                                            <td className="p-2.5 border-r border-slate-100">{investors[selectedInvestorIndex]?.name}</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100">{formatMoney(investors[selectedInvestorIndex]?.amount)}</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100 text-slate-500">{investorCapitalPool > 0 ? ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool*100).toFixed(1) : 0}%</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100 text-emerald-600">{formatMoney(invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney((investors[selectedInvestorIndex]?.amount||0) + invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100">{((invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool)) / (investors[selectedInvestorIndex]?.amount||1) * 100).toFixed(1)}%</td>
-                                            <td className="p-2.5 text-center text-blue-600">{(((invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool)) / (investors[selectedInvestorIndex]?.amount||1) * 100) / (inputs.sDuration/12)).toFixed(1)}%</td>
+                                <tbody>
+                                    {printMode === 'single' ? (() => {
+                                        const inv = investors[selectedInvestorIndex] || { name: '', amount: 0 };
+                                        const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
+                                        const prof = invProfitPool * (pct / 100);
+                                        const r = inv.amount > 0 ? (prof / inv.amount * 100) : 0;
+                                        return (
+                                            <tr style={{ backgroundColor: 'white' }}>
+                                                <td style={{ padding: '8px' }}>{inv.name || '---'}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center' }}>{formatMoney(inv.amount)}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#64748b' }}>{pct.toFixed(1)}%</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#059669' }}>{formatMoney(prof)}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#c5a059', fontWeight: 900 }}>{formatMoney(inv.amount + prof)}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center' }}>{r.toFixed(1)}%</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#2563eb' }}>{(r / (inputs.sDuration/12)).toFixed(1)}%</td>
+                                            </tr>
+                                        );
+                                    })() : printMode === 'summary' ? (
+                                        <tr style={{ backgroundColor: 'white' }}>
+                                            <td style={{ padding: '8px' }}>إجمالي المستثمرين</td>
+                                            <td style={{ padding: '8px', textAlign: 'center' }}>{formatMoney(totalInvestedVal)}</td>
+                                            <td style={{ padding: '8px', textAlign: 'center', color: '#64748b' }}>{totalInvestedPct.toFixed(1)}%</td>
+                                            <td style={{ padding: '8px', textAlign: 'center', color: '#059669' }}>{formatMoney(invProfitPool * (totalInvestedVal/investorCapitalPool || 0))}</td>
+                                            <td style={{ padding: '8px', textAlign: 'center', color: '#c5a059', fontWeight: 900 }}>{formatMoney(totalInvestedVal + (invProfitPool * (totalInvestedVal/investorCapitalPool || 0)))}</td>
+                                            <td style={{ padding: '8px', textAlign: 'center' }}>{overAllROI.toFixed(1)}%</td>
+                                            <td style={{ padding: '8px', textAlign: 'center', color: '#2563eb' }}>{annualROI.toFixed(1)}%</td>
                                         </tr>
-                                    ) : printMode === 'summary' ? (
-                                        <tr>
-                                            <td className="p-2.5 border-r border-slate-100">إجمالي المستثمرين</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100">{formatMoney(totalInvestedVal)}</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100 text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100 text-emerald-600">{formatMoney(invProfitPool * (totalInvestedVal/investorCapitalPool))}</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney(totalInvestedVal + (invProfitPool * (totalInvestedVal/investorCapitalPool)))}</td>
-                                            <td className="p-2.5 text-center border-r border-slate-100">{overAllROI.toFixed(1)}%</td>
-                                            <td className="p-2.5 text-center text-blue-600">{annualROI.toFixed(1)}%</td>
-                                        </tr>
-                                    ) : (
-                                        investors.map((inv, i) => {
-                                            const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
-                                            const prof = invProfitPool * (pct / 100);
-                                            const r = inv.amount > 0 ? (prof / inv.amount * 100) : 0;
-                                            return (
-                                                <tr key={i}>
-                                                    <td className="p-2.5 border-r border-slate-100">{inv.name || '---'}</td>
-                                                    <td className="p-2.5 text-center border-r border-slate-100">{formatMoney(inv.amount)}</td>
-                                                    <td className="p-2.5 text-center border-r border-slate-100 text-slate-500">{pct.toFixed(1)}%</td>
-                                                    <td className="p-2.5 text-center border-r border-slate-100 text-emerald-600">{formatMoney(prof)}</td>
-                                                    <td className="p-2.5 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney(inv.amount + prof)}</td>
-                                                    <td className="p-2.5 text-center border-r border-slate-100">{r.toFixed(1)}%</td>
-                                                    <td className="p-2.5 text-center text-blue-600">{(r / (inputs.sDuration/12)).toFixed(1)}%</td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
+                                    ) : investors.map((inv, i) => {
+                                        const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
+                                        const prof = invProfitPool * (pct / 100);
+                                        const r = inv.amount > 0 ? (prof / inv.amount * 100) : 0;
+                                        return (
+                                            <tr key={i} style={{ backgroundColor: i % 2 === 0 ? 'white' : '#fafbfc', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                                <td style={{ padding: '8px' }}>{inv.name || '---'}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center' }}>{formatMoney(inv.amount)}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#64748b' }}>{pct.toFixed(1)}%</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#059669' }}>{formatMoney(prof)}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#c5a059', fontWeight: 900 }}>{formatMoney(inv.amount + prof)}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center' }}>{r.toFixed(1)}%</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#2563eb' }}>{(r / (inputs.sDuration/12)).toFixed(1)}%</td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        {/* المؤشرات */}
+                        <div style={{ display: 'grid', gridTemplateColumns: showDevInPrint ? '1fr 1fr' : '1fr', gap: '10px' }}>
                             {showDevInPrint && (
-                                <div className="border-t-4 border-[#1a365d] bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-                                    <h4 className="text-xs font-black text-[#1a365d] mb-1">حصة المطور العقاري (أتعاب التطوير)</h4>
-                                    <p className="text-xl font-black text-[#1a365d] mb-1">{formatMoney(devProfit)} SAR</p>
-                                    <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">يمثل العائد أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
+                                <div style={{ borderTop: '4px solid #1a365d', backgroundColor: 'white', padding: '12px 14px', borderRadius: '14px', border: '1px solid #e2e8f0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                    <h4 style={{ fontSize: '11px', fontWeight: 900, color: '#1a365d', margin: '0 0 4px' }}>حصة المطور العقاري (أتعاب التطوير)</h4>
+                                    <p style={{ fontSize: '18px', fontWeight: 900, color: '#1a365d', margin: '0 0 4px' }}>{formatMoney(devProfit)} ريال</p>
+                                    <p style={{ fontSize: '9px', color: '#64748b', margin: 0, lineHeight: 1.6 }}>أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
                                 </div>
                             )}
-                            
-                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center gap-3" style={{backgroundColor:"#f8fafc", WebkitPrintColorAdjust:"exact"}}>
-                                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                                    <span className="text-[10px] font-bold text-slate-600">تكلفة الأرض للمتر المباع</span>
-                                    <span className="text-sm font-black text-[#1a365d]">{formatMoney(landCostPerSqm)} SAR</span>
+                            <div style={{ backgroundColor: '#f8fafc', padding: '12px 14px', borderRadius: '14px', border: '1px solid #e2e8f0', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#475569' }}>تكلفة الأرض للمتر المباع</span>
+                                    <span style={{ fontSize: '12px', fontWeight: 900, color: '#1a365d' }}>{formatMoney(landCostPerSqm)} ريال</span>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-slate-600">إجمالي التكلفة للمتر المباع</span>
-                                    <span className="text-sm font-black text-red-600">{formatMoney(totalCostPerSqm)} SAR</span>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#475569' }}>إجمالي التكلفة للمتر المباع</span>
+                                    <span style={{ fontSize: '12px', fontWeight: 900, color: '#dc2626' }}>{formatMoney(totalCostPerSqm)} ريال</span>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="mt-auto border-t pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
-                        <div className="bg-slate-100 px-4 py-2 rounded-lg w-full flex justify-between items-center" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f1f5f9"}}>
-                            <span>إدارة التطوير والاستثمار - وثيقة سرية</span>
+                        {/* تنبيه السرية */}
+                        <div style={{ marginTop: '6mm', backgroundColor: '#f1f5f9', padding: '8px 14px', borderRadius: '10px', fontSize: '10px', color: '#475569', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                            <span>إدارة التطوير والاستثمار — وثيقة سرية</span>
                             <span dir="ltr">info@semak.sa | semak.sa | 920032842</span>
                         </div>
                     </div>
-                </div>
+                </PrintableLetterhead>
+
             </div>
         </div>
     );
