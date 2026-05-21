@@ -1135,6 +1135,80 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_discover_all':
+        // اكتشاف شامل لكل endpoints دفترة المتاحة
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $all_endpoints = [
+            // المبيعات
+            "invoices", "estimates", "credit_notes", "delivery_notes", "sales_returns",
+            "orders", "sales_orders", "quotations",
+            // المشتريات
+            "purchase_invoices", "purchase_orders", "purchase_returns", "purchase_estimates",
+            // جهات الاتصال
+            "clients", "suppliers", "contacts", "leads",
+            // المنتجات والمخزون
+            "products", "product_categories", "stores", "stock_levels",
+            "stock_transfers", "stock_adjustments", "warehouses",
+            // المالية
+            "treasuries", "treasury_transactions", "payments", "receipts",
+            "expenses", "expense_categories", "revenues", "journal_entries",
+            // الموارد البشرية
+            "staff", "departments", "positions", "attendance", "leaves",
+            "payroll", "salaries",
+            // CRM
+            "opportunities", "deals", "tasks", "events",
+            // المشاريع
+            "projects", "milestones", "time_logs",
+            // التقارير
+            "reports", "profit_loss", "balance_sheet", "cash_flow",
+            // الإعدادات
+            "branches", "currencies", "taxes", "payment_methods",
+            "categories", "tags", "custom_fields",
+            // الأنشطة
+            "activities", "logs", "audit_logs", "notifications",
+        ];
+
+        $results = [];
+        foreach ($all_endpoints as $ep) {
+            $ch = curl_init("$base/$ep.json?limit=1");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 8,
+            ]);
+            $res = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($http === 200) {
+                $data = json_decode($res, true);
+                $has_data = isset($data['data']) && is_array($data['data']);
+                $sample = $has_data && count($data['data']) > 0 ? $data['data'][0] : null;
+                $first_key = $sample ? array_keys($sample)[0] : null;
+                $field_names = ($first_key && isset($sample[$first_key]) && is_array($sample[$first_key]))
+                    ? array_keys($sample[$first_key]) : [];
+                $results[$ep] = [
+                    "status" => "✅ متاح",
+                    "entity_key" => $first_key,
+                    "fields_count" => count($field_names),
+                    "sample_fields" => array_slice($field_names, 0, 15),
+                ];
+            } elseif ($http === 404) {
+                // skip - not available
+            } else {
+                $results[$ep] = ["status" => "⚠️ HTTP $http"];
+            }
+        }
+
+        echo json_encode([
+            "discovered" => count($results),
+            "endpoints" => $results
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_probe_endpoints':
         // اكتشاف endpoints المشتريات والموردين والخزائن
         $daftra_key = "__DAFTRA_KEY__";
