@@ -974,6 +974,149 @@ switch ($action) {
         echo $res;
         break;
 
+    case 'daftra_full_summary':
+        // ملخص مالي موسّع: فواتير + مصروفات + مشتريات + موردين + خزائن
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $fetch = function($endpoint) use ($base, $headers) {
+            $ch = curl_init("$base/$endpoint");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 15,
+            ]);
+            $res = curl_exec($ch);
+            curl_close($ch);
+            return json_decode($res, true);
+        };
+
+        $invoices_data  = $fetch("invoices.json");
+        $expenses_data  = $fetch("expenses.json");
+        $purchases_data = $fetch("purchase_invoices.json");
+        $suppliers_data = $fetch("suppliers.json");
+        $treasuries_data = $fetch("treasuries.json");
+        $clients_data   = $fetch("clients.json");
+
+        // فواتير المبيعات
+        $sales = ['total'=>0,'paid'=>0,'unpaid'=>0,'count'=>0,'unpaid_count'=>0];
+        $invoices_by_client = [];
+        if (isset($invoices_data['data'])) {
+            foreach ($invoices_data['data'] as $r) {
+                $i = $r['Invoice'] ?? [];
+                $t = (float)($i['summary_total']  ?? 0);
+                $p = (float)($i['summary_paid']   ?? 0);
+                $u = (float)($i['summary_unpaid'] ?? max(0, $t-$p));
+                $sales['total']  += $t;
+                $sales['paid']   += $p;
+                $sales['unpaid'] += $u;
+                $sales['count']++;
+                if ($u > 0.01) $sales['unpaid_count']++;
+                $cid = $i['client_id'] ?? 0;
+                $cname = $i['client_business_name'] ?: trim(($i['client_first_name']??'').' '.($i['client_last_name']??'')) ?: 'عميل #'.$cid;
+                if (!isset($invoices_by_client[$cid])) $invoices_by_client[$cid] = ['name'=>$cname,'total'=>0,'paid'=>0,'unpaid'=>0,'count'=>0];
+                $invoices_by_client[$cid]['total']  += $t;
+                $invoices_by_client[$cid]['paid']   += $p;
+                $invoices_by_client[$cid]['unpaid'] += $u;
+                $invoices_by_client[$cid]['count']++;
+            }
+        }
+
+        // المصروفات
+        $expenses = ['total'=>0,'count'=>0];
+        $expenses_by_category = [];
+        if (isset($expenses_data['data'])) {
+            foreach ($expenses_data['data'] as $r) {
+                $e = $r['Expense'] ?? [];
+                $a = (float)($e['amount'] ?? 0);
+                $cat = $e['category'] ?? '';
+                $expenses['total'] += $a;
+                $expenses['count']++;
+                if (!isset($expenses_by_category[$cat])) $expenses_by_category[$cat] = ['total'=>0,'count'=>0];
+                $expenses_by_category[$cat]['total'] += $a;
+                $expenses_by_category[$cat]['count']++;
+            }
+        }
+
+        // فواتير الشراء
+        $purchases = ['total'=>0,'paid'=>0,'unpaid'=>0,'count'=>0,'unpaid_count'=>0];
+        $purchases_by_supplier = [];
+        if (isset($purchases_data['data'])) {
+            foreach ($purchases_data['data'] as $r) {
+                $po = $r['PurchaseOrder'] ?? [];
+                $t  = (float)($po['summary_total']  ?? $po['total']         ?? 0);
+                $p  = (float)($po['summary_paid']   ?? $po['paid_amount']   ?? 0);
+                $u  = (float)($po['summary_unpaid'] ?? max(0, $t-$p));
+                $purchases['total']  += $t;
+                $purchases['paid']   += $p;
+                $purchases['unpaid'] += $u;
+                $purchases['count']++;
+                if ($u > 0.01) $purchases['unpaid_count']++;
+                $sid = $po['supplier_id'] ?? 0;
+                $sname = $po['supplier_business_name']
+                       ?: trim(($po['supplier_first_name']??'').' '.($po['supplier_last_name']??''))
+                       ?: 'مورد #'.$sid;
+                if (!isset($purchases_by_supplier[$sid])) $purchases_by_supplier[$sid] = ['name'=>$sname,'total'=>0,'paid'=>0,'unpaid'=>0,'count'=>0];
+                $purchases_by_supplier[$sid]['total']  += $t;
+                $purchases_by_supplier[$sid]['paid']   += $p;
+                $purchases_by_supplier[$sid]['unpaid'] += $u;
+                $purchases_by_supplier[$sid]['count']++;
+            }
+        }
+
+        // الخزائن
+        $treasuries_list = [];
+        $total_balance = 0;
+        if (isset($treasuries_data['data'])) {
+            foreach ($treasuries_data['data'] as $r) {
+                $t = $r['Treasury'] ?? [];
+                $bal = (float)($t['balance'] ?? $t['current_balance'] ?? $t['amount'] ?? 0);
+                $total_balance += $bal;
+                $treasuries_list[] = [
+                    'id' => $t['id'] ?? '',
+                    'name' => $t['name'] ?? '',
+                    'currency' => $t['currency_code'] ?? 'SAR',
+                    'balance' => $bal,
+                ];
+            }
+        }
+
+        // قائمة الموردين
+        $suppliers_list = [];
+        if (isset($suppliers_data['data'])) {
+            foreach ($suppliers_data['data'] as $r) {
+                $s = $r['Supplier'] ?? [];
+                $suppliers_list[] = [
+                    'id' => $s['id'] ?? '',
+                    'name' => $s['business_name'] ?: trim(($s['first_name']??'').' '.($s['last_name']??'')) ?: '—',
+                    'phone' => $s['phone1'] ?? $s['phone2'] ?? '',
+                    'email' => $s['email'] ?? '',
+                    'balance' => (float)($s['starting_balance'] ?? 0),
+                ];
+            }
+        }
+
+        $clients_count = isset($clients_data['data']) ? count($clients_data['data']) : 0;
+
+        echo json_encode([
+            "success" => true,
+            "currency" => "SAR",
+            "sales" => $sales,
+            "expenses" => $expenses,
+            "purchases" => $purchases,
+            "treasuries_total_balance" => $total_balance,
+            "clients_count" => $clients_count,
+            "suppliers_count" => count($suppliers_list),
+            "net_position" => $sales['paid'] - $expenses['total'] - $purchases['paid'],
+            "expenses_by_category" => $expenses_by_category,
+            "invoices_by_client" => $invoices_by_client,
+            "purchases_by_supplier" => $purchases_by_supplier,
+            "treasuries" => $treasuries_list,
+            "suppliers" => $suppliers_list,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_probe_endpoints':
         // اكتشاف endpoints المشتريات والموردين والخزائن
         $daftra_key = "__DAFTRA_KEY__";
