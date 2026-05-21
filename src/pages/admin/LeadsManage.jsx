@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, RefreshCw, MessageCircle, UserCheck, X, Building, CheckCircle2, Trash2 } from 'lucide-react';
+import { Users, Search, RefreshCw, MessageCircle, UserCheck, X, Building, CheckCircle2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { sendWhatsAppMessage, normalizePhone } from '../../services/whatsappService';
 
 const API_URL = "https://semak.sa/api.php";
@@ -15,6 +15,18 @@ export default function LeadsManage({ showToast }) {
     const [selectedLead, setSelectedLead] = useState(null);
     const [convertData, setConvertData] = useState({ project_id: "", unit_code: "" });
     const [converting, setConverting] = useState(false);
+    const [expandedNotes, setExpandedNotes] = useState({}); // {leadId: true/false}
+
+    // تحليل الملاحظات لقائمة عناصر بتاريخ ووقت [YYYY-MM-DD HH:MM] متن
+    const parseNotes = (notesText) => {
+        if (!notesText) return [];
+        const lines = notesText.split('\n').filter(l => l.trim());
+        return lines.map(line => {
+            const m = line.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\]\s*(.+)$/);
+            if (m) return { time: m[1], text: m[2] };
+            return { time: null, text: line };
+        }).reverse(); // الأحدث أولاً
+    };
 
     useEffect(() => {
         loadData();
@@ -245,14 +257,46 @@ export default function LeadsManage({ showToast }) {
                                         <Building size={14} /> {lead.unit || "غير محدد"}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 max-w-xs">
-                                    {lead.notes ? (
-                                        <div className="text-xs text-slate-600 leading-relaxed bg-amber-50/50 border-r-2 border-amber-300 px-3 py-2 rounded-l-lg whitespace-pre-wrap" title={lead.notes}>
-                                            {lead.notes.length > 180 ? lead.notes.slice(0, 180) + '…' : lead.notes}
-                                        </div>
-                                    ) : (
-                                        <span className="text-xs text-slate-300 italic">لا توجد ملاحظات بعد</span>
-                                    )}
+                                <td className="px-6 py-4 max-w-sm">
+                                    {(() => {
+                                        const entries = parseNotes(lead.notes);
+                                        if (entries.length === 0) {
+                                            return <span className="text-xs text-slate-300 italic">لا توجد ملاحظات بعد</span>;
+                                        }
+                                        const isOpen = expandedNotes[lead.id];
+                                        const latest = entries[0];
+                                        return (
+                                            <div className="bg-amber-50/60 border-r-2 border-amber-300 rounded-l-lg overflow-hidden">
+                                                <button
+                                                    onClick={() => setExpandedNotes(p => ({ ...p, [lead.id]: !p[lead.id] }))}
+                                                    className="w-full text-right px-3 py-2 flex items-start justify-between gap-2 hover:bg-amber-100/50 transition"
+                                                >
+                                                    <div className="flex-1 min-w-0">
+                                                        {latest.time && (
+                                                            <div className="text-[10px] text-amber-700 font-mono font-bold mb-0.5">{latest.time}</div>
+                                                        )}
+                                                        <div className="text-xs text-slate-700 leading-relaxed line-clamp-2">{latest.text}</div>
+                                                    </div>
+                                                    <div className="flex flex-col items-center shrink-0 mt-0.5">
+                                                        {isOpen ? <ChevronUp size={14} className="text-amber-700"/> : <ChevronDown size={14} className="text-amber-700"/>}
+                                                        {entries.length > 1 && (
+                                                            <span className="text-[9px] font-bold bg-amber-200 text-amber-900 rounded-full px-1.5 mt-0.5">{entries.length}</span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                                {isOpen && entries.length > 1 && (
+                                                    <div className="border-t border-amber-200 bg-white/60 max-h-64 overflow-y-auto">
+                                                        {entries.slice(1).map((e, i) => (
+                                                            <div key={i} className="px-3 py-1.5 border-b border-amber-100 last:border-0">
+                                                                {e.time && <div className="text-[10px] text-slate-500 font-mono">{e.time}</div>}
+                                                                <div className="text-xs text-slate-700 leading-relaxed">{e.text}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     <select

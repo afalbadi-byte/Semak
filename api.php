@@ -885,8 +885,12 @@ switch ($action) {
 تعليمات تحليل META:
 - "unit": رمز الوحدة من 7 وحدات سماك (SM-A01..SM-A07) أو "غير محدد" أو "متعدد".
 - "interest": وصف موجز جداً (سطر واحد) مثل "سكن عائلي" أو "استثمار موسمي" أو "فيلا روف".
-- "notes": ملاحظات سرية لمندوب المبيعات. اكتبها بشكل مفيد للمراجعة لاحقاً. تراكَم المعلومة عبر المحادثات: في كل رد اكتب الصورة الكاملة لما تعرفه عن العميل حتى الآن، لا فقط آخر معلومة.
-- لا تضع META فارغاً. إذا لم تعرف بعد اكتب ما توصلت إليه من سياق "لا يزال يستكشف، لم يحدد ميزانية، يسأل عن المواصفات".
+- "notes": اكتب الجديد فقط في هذه الرسالة. النظام سيختم ملاحظتك بالتاريخ والوقت تلقائياً ويضيفها فوق الملاحظات السابقة. لا تكرر ما قلته في رسالة سابقة. أمثلة:
+  • "سأل عن سعر المتر، أبدى استغراباً من السعر"
+  • "حدد ميزانيته بـ 600 ألف"
+  • "يبحث للاستثمار الموسمي، 3 أفراد فقط"
+  • "طلب جدولة معاينة يوم الخميس"
+- إذا لم تتعلم شيئاً جديداً (مجرد ترحيب أو سؤال عام) اكتب: "لا جديد".
 - ممنوع وضع أي إيموجي أو رموز خاصة داخل META.
 - ممنوع وضع علامات اقتباس داخل القيم. استخدم نصاً عادياً.
 
@@ -1335,30 +1339,48 @@ KNOWLEDGE;
             $meta_json = trim($meta_match[1]);
             $meta = json_decode($meta_json, true);
             if (is_array($meta)) {
-                $u_unit     = $conn->real_escape_string($meta['unit']     ?? '');
-                $u_interest = $conn->real_escape_string($meta['interest'] ?? '');
-                $u_notes    = $conn->real_escape_string($meta['notes']    ?? '');
-                // حدّث أحدث lead لهذا الرقم
-                $conn->query(
-                    "UPDATE leads SET
-                        unit     = IF(? = '', unit, ?),
-                        interest = IF(? = '', interest, ?),
-                        notes    = IF(? = '', notes, ?)
-                     WHERE $phone_search
-                     ORDER BY id DESC LIMIT 1"
-                );
-                // mysqli prepared لا تدعم WHERE LIKE بسهولة هنا، نستخدم escape مباشرة
-                $sql_upd = "UPDATE leads SET ";
-                $fields = [];
-                if ($u_unit !== '')     $fields[] = "unit='$u_unit'";
-                if ($u_interest !== '') $fields[] = "interest='$u_interest'";
-                if ($u_notes !== '')    $fields[] = "notes='$u_notes'";
-                if (!empty($fields)) {
-                    $sql_upd .= implode(', ', $fields) . " WHERE $phone_search ORDER BY id DESC LIMIT 1";
-                    $conn->query($sql_upd);
-                    file_put_contents($log_file,
-                        date('Y-m-d H:i:s') . " | META updated: unit=$u_unit | interest=$u_interest\n",
-                        FILE_APPEND);
+                $u_unit     = trim($meta['unit']     ?? '');
+                $u_interest = trim($meta['interest'] ?? '');
+                $u_note     = trim($meta['notes']    ?? '');
+
+                // اجلب سجل العميل الحالي
+                $cur_res = $conn->query("SELECT id, notes FROM leads WHERE $phone_search ORDER BY id DESC LIMIT 1");
+                if ($cur_res && $cur_row = $cur_res->fetch_assoc()) {
+                    $lead_id_upd   = (int)$cur_row['id'];
+                    $existing_notes = $cur_row['notes'] ?? '';
+                    $stamp = date('Y-m-d H:i');
+
+                    // أضف الملاحظة الجديدة مع تاريخ ووقت
+                    $merged_notes = $existing_notes;
+                    $skip_notes = ['', 'غير محدد', 'لا جديد', 'لا توجد ملاحظات جديدة', 'لا يوجد'];
+                    if (!in_array($u_note, $skip_notes) && mb_strlen($u_note) > 2) {
+                        $new_entry = "[$stamp] $u_note";
+                        if (strpos($existing_notes, $u_note) === false) {
+                            $merged_notes = $existing_notes ? "$existing_notes\n$new_entry" : $new_entry;
+                        }
+                    }
+
+                    $sql_upd = "UPDATE leads SET ";
+                    $fields = [];
+                    if ($u_unit !== '' && $u_unit !== 'غير محدد') {
+                        $safe_u = $conn->real_escape_string($u_unit);
+                        $fields[] = "unit='$safe_u'";
+                    }
+                    if ($u_interest !== '') {
+                        $safe_i = $conn->real_escape_string($u_interest);
+                        $fields[] = "interest='$safe_i'";
+                    }
+                    if ($merged_notes !== $existing_notes) {
+                        $safe_n = $conn->real_escape_string($merged_notes);
+                        $fields[] = "notes='$safe_n'";
+                    }
+                    if (!empty($fields)) {
+                        $sql_upd .= implode(', ', $fields) . " WHERE id=$lead_id_upd";
+                        $conn->query($sql_upd);
+                        file_put_contents($log_file,
+                            date('Y-m-d H:i:s') . " | META appended note for lead $lead_id_upd\n",
+                            FILE_APPEND);
+                    }
                 }
             }
             // احذف META من الرد قبل إرساله للعميل
