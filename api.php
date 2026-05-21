@@ -1303,7 +1303,8 @@ switch ($action) {
         break;
 
     case 'daftra_list':
-        // endpoint عام لجلب أي وحدة من دفترة مع pagination كامل
+        // endpoint عام لجلب أي وحدة من دفترة مع pagination محدود وtimeout قصير
+        set_time_limit(45);
         $daftra_key = "__DAFTRA_KEY__";
         $module = preg_replace('/[^a-z_]/i', '', $_GET['module'] ?? '');
         if (!$module) {
@@ -1316,13 +1317,20 @@ switch ($action) {
         $all = [];
         $page = 1;
         $entity_key = null;
-        while ($page <= 100) {
+        $max_pages = 20; // حد آمن (= 2000 سجل max)
+        $start_time = microtime(true);
+
+        while ($page <= $max_pages) {
+            // قطع التنفيذ لو الوقت تجاوز 40 ثانية
+            if (microtime(true) - $start_time > 40) break;
+
             $url = "$base/$module.json?page=$page&limit=100";
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HTTPHEADER => $headers,
-                CURLOPT_TIMEOUT => 20,
+                CURLOPT_TIMEOUT => 10,           // أقصر للصفحة الواحدة
+                CURLOPT_CONNECTTIMEOUT => 5,
             ]);
             $res = curl_exec($ch);
             $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -1338,7 +1346,6 @@ switch ($action) {
             $page++;
         }
 
-        // استخراج البيانات من entity wrapper
         $flat = [];
         foreach ($all as $row) {
             $flat[] = $entity_key && isset($row[$entity_key]) ? $row[$entity_key] : $row;
@@ -1350,6 +1357,7 @@ switch ($action) {
             "entity" => $entity_key,
             "count" => count($flat),
             "pages_fetched" => $page,
+            "elapsed_sec" => round(microtime(true) - $start_time, 2),
             "data" => $flat,
         ], JSON_UNESCAPED_UNICODE);
         break;
