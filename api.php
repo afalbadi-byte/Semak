@@ -980,24 +980,42 @@ switch ($action) {
         $base = "https://semak.daftra.com/api2";
         $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
 
-        $fetch = function($endpoint) use ($base, $headers) {
-            $ch = curl_init("$base/$endpoint");
+        // جلب صفحة واحدة
+        $fetch_page = function($endpoint, $page = 1, $limit = 100) use ($base, $headers) {
+            $sep = strpos($endpoint, '?') === false ? '?' : '&';
+            $url = "$base/$endpoint{$sep}page=$page&limit=$limit";
+            $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HTTPHEADER => $headers,
-                CURLOPT_TIMEOUT => 15,
+                CURLOPT_TIMEOUT => 20,
             ]);
             $res = curl_exec($ch);
             curl_close($ch);
             return json_decode($res, true);
         };
 
-        $invoices_data  = $fetch("invoices.json");
-        $expenses_data  = $fetch("expenses.json");
-        $purchases_data = $fetch("purchase_invoices.json");
-        $suppliers_data = $fetch("suppliers.json");
-        $treasuries_data = $fetch("treasuries.json");
-        $clients_data   = $fetch("clients.json");
+        // جلب كل الصفحات (يدمج البيانات في data واحدة)
+        $fetch_all = function($endpoint) use ($fetch_page) {
+            $all = [];
+            $page = 1;
+            $max_pages = 50; // حد أمان
+            while ($page <= $max_pages) {
+                $resp = $fetch_page($endpoint, $page, 100);
+                if (!isset($resp['data']) || !is_array($resp['data']) || count($resp['data']) === 0) break;
+                $all = array_merge($all, $resp['data']);
+                if (count($resp['data']) < 100) break; // الصفحة الأخيرة
+                $page++;
+            }
+            return ['data' => $all, 'pages_fetched' => $page];
+        };
+
+        $invoices_data   = $fetch_all("invoices.json");
+        $expenses_data   = $fetch_all("expenses.json");
+        $purchases_data  = $fetch_all("purchase_invoices.json");
+        $suppliers_data  = $fetch_all("suppliers.json");
+        $treasuries_data = $fetch_all("treasuries.json");
+        $clients_data    = $fetch_all("clients.json");
 
         // فواتير المبيعات
         $sales = ['total'=>0,'paid'=>0,'unpaid'=>0,'count'=>0,'unpaid_count'=>0];
