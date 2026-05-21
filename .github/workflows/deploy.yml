@@ -37,6 +37,9 @@ jobs:
       - name: Inject Anthropic API key
         run: sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g" dist/api.php
 
+      - name: Inject Daftra API key
+        run: sed -i "s|__DAFTRA_KEY__|${{ secrets.DAFTRA_API_KEY }}|g" dist/api.php
+
       - name: Deploy to server via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
