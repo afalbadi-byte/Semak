@@ -7,25 +7,28 @@ import { FilePenLine, Printer, RefreshCw, Loader2, ArrowRight } from 'lucide-rea
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
 import { renderToStaticMarkup } from 'react-dom/server';
-import PrintableLetterhead from '../../components/PrintableLetterhead';
+import PrintableLetterhead, { SEMAK_PRINT_CSS } from '../../components/PrintableLetterhead';
 
-// فتح نافذة طباعة مستقلة بمحتوى React
+// فتح نافذة طباعة مستقلة - الهيدر/الفوتر/العلامة المائية تتكرر على كل صفحة
 const printInNewWindow = (jsx, title) => {
     const html = renderToStaticMarkup(jsx);
     const w = window.open('', '_blank', 'width=900,height=1200');
     if (!w) { alert('يرجى السماح بفتح النوافذ المنبثقة'); return; }
     w.document.write(`<!DOCTYPE html>
 <html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title}</title>
-<style>
-@page { size: A4; margin: 0; }
-* { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-html, body { margin: 0; padding: 0; font-family: 'Cairo', Tahoma, Arial, sans-serif; background: #fff; color: #000; }
-table { border-collapse: collapse; width: 100%; }
-img { max-width: 100%; }
-@media print { html, body { margin: 0 !important; padding: 0 !important; } }
-</style></head><body>${html}</body></html>`);
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<style>${SEMAK_PRINT_CSS}</style></head><body>${html}</body></html>`);
     w.document.close();
-    w.onload = () => { setTimeout(() => { w.focus(); w.print(); }, 300); };
+    w.onload = () => {
+        const tryPrint = () => { w.focus(); w.print(); };
+        if (w.document.fonts && w.document.fonts.ready) {
+            w.document.fonts.ready.then(() => setTimeout(tryPrint, 200));
+        } else {
+            setTimeout(tryPrint, 500);
+        }
+    };
 };
 
 export default function LetterGenerator() {

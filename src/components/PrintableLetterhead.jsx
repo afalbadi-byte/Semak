@@ -1,151 +1,294 @@
-import React, { forwardRef } from 'react';
+import React from 'react';
 
 /**
- * ترويسة سماك الرسمية للطباعة والـ PDF.
- * - thead/tfoot يضمنان تكرار الترويسة والذيل على كل صفحة عند الطباعة.
- * - علامة مائية مكررة عبر background-image على @page (تتكرر طبيعياً لكل ورقة).
- * - متجاوبة مع الجوال والكمبيوتر مع طباعة الألوان.
+ * ترويسة سماك الرسمية للطباعة في نافذة منفصلة.
+ *
+ * تستخدم نمط position:fixed مع @page margins لضمان:
+ * - تكرار الترويسة على كل صفحة (top fixed)
+ * - تكرار الذيل على كل صفحة (bottom fixed)
+ * - تكرار العلامة المائية على كل صفحة (centered fixed)
+ *
+ * يجب أن يُحقن CSS التالي في النافذة الجديدة قبل المحتوى:
+ *   import { SEMAK_PRINT_CSS } from 'PrintableLetterhead';
  */
 
-const LOGO = '/images/logo-main.png';
+const LOGO = 'https://semak.sa/images/logo-main.png';
 
-export const SEMAK_PRINT_PAGE_STYLE = `
-  @page { size: A4; margin: 0; }
+// CSS كامل يُحقن في نافذة الطباعة الجديدة
+export const SEMAK_PRINT_CSS = `
+  @page {
+    size: A4;
+    margin: 38mm 0 26mm 0;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    color: #000000;
+    font-family: 'Cairo', Tahoma, Arial, sans-serif;
+  }
+
+  /* الهيدر الثابت — يتكرر على كل صفحة */
+  .semak-print-header {
+    position: fixed;
+    top: -38mm;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 36mm;
+    background: #ffffff;
+    z-index: 100;
+  }
+
+  .semak-print-header-bar {
+    height: 6mm;
+    width: 100%;
+    display: flex;
+  }
+  .semak-print-header-bar > div:first-child {
+    width: 75%;
+    height: 100%;
+    background: #1a365d;
+  }
+  .semak-print-header-bar > div:last-child {
+    width: 25%;
+    height: 100%;
+    background: #c5a059;
+  }
+
+  .semak-print-header-main {
+    padding: 4mm 12mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .semak-print-header-main img {
+    height: 18mm;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .semak-print-header-info {
+    text-align: left;
+    border-left: 4px solid #c5a059;
+    padding-left: 10px;
+  }
+
+  .semak-print-header-info h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 900;
+    color: #1a365d;
+    line-height: 1.2;
+  }
+
+  .semak-print-header-info .tagline {
+    color: #c5a059;
+    font-weight: 700;
+    font-size: 10px;
+    margin-top: 2px;
+  }
+
+  .semak-print-header-info .cr {
+    color: #94a3b8;
+    font-size: 8px;
+    margin-top: 2px;
+    direction: ltr;
+    text-align: left;
+  }
+
+  .semak-print-doc-bar {
+    padding: 2mm 12mm;
+    background: #f8fafc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dashed #e2e8f0;
+    font-size: 10px;
+  }
+  .semak-print-doc-bar .label {
+    font-weight: 700;
+    color: #1a365d;
+  }
+  .semak-print-doc-bar .dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #c5a059;
+    margin-left: 5px;
+    vertical-align: middle;
+  }
+  .semak-print-doc-bar .sub {
+    font-weight: 500;
+    color: #64748b;
+    margin-right: 6px;
+  }
+  .semak-print-doc-bar .date {
+    color: #475569;
+  }
+  .semak-print-doc-bar .date strong {
+    color: #1a365d;
+    margin-left: 4px;
+  }
+
+  /* الفوتر الثابت — يتكرر على كل صفحة */
+  .semak-print-footer {
+    position: fixed;
+    bottom: -26mm;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 22mm;
+    padding: 4mm 12mm;
+    background: #ffffff;
+    z-index: 100;
+  }
+
+  .semak-print-footer-inner {
+    background: #1a365d;
+    color: #ffffff;
+    border-radius: 12px;
+    padding: 8px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+  }
+
+  .semak-print-footer-left .name {
+    font-weight: 700;
+    font-size: 11px;
+    color: #c5a059;
+  }
+  .semak-print-footer-left .addr {
+    color: rgba(255,255,255,0.85);
+    font-size: 8px;
+    margin-top: 2px;
+  }
+
+  .semak-print-footer-right {
+    direction: ltr;
+    text-align: left;
+    font-size: 9px;
+    color: #ffffff;
+  }
+  .semak-print-footer-right .phone {
+    font-weight: 700;
+    font-size: 10px;
+  }
+  .semak-print-footer-right .url {
+    color: rgba(255,255,255,0.85);
+    margin-top: 2px;
+  }
+
+  /* العلامة المائية — تتكرر على كل صفحة عبر position:fixed */
+  .semak-print-watermark {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%;
+    max-width: 500px;
+    opacity: 0.05;
+    filter: grayscale(100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* المحتوى يتدفق بين الهيدر والفوتر */
+  .semak-print-content {
+    padding: 4mm 12mm;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* قواعد فصل الصفحات */
+  .page-break-avoid { page-break-inside: avoid; break-inside: avoid; }
+  .page-break-after { page-break-after: always; break-after: page; }
+
+  /* جداول تتكرر رؤوسها على كل صفحة */
+  table thead { display: table-header-group; }
+  table tfoot { display: table-footer-group; }
+
   @media print {
-    html, body {
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-    body {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      color-adjust: exact !important;
-    }
+    html, body { margin: 0 !important; padding: 0 !important; }
+    .semak-print-watermark { display: block !important; }
+    .semak-print-header { display: block !important; }
+    .semak-print-footer { display: block !important; }
   }
 `;
 
-const PrintableLetterhead = forwardRef(function PrintableLetterhead(
-  { children, documentLabel = '', subtitle = '', date = '' },
-  ref
-) {
-  // الستايلات inline لضمان عملها في كل المتصفحات
-  const watermarkStyle = {
-    position: 'absolute',
-    top: '40mm',
-    left: '0',
-    right: '0',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    pointerEvents: 'none',
-    zIndex: 0,
-    width: '100%',
-  };
+/**
+ * مكوّن المحتوى القابل للطباعة (يتضمّن الهيدر/الفوتر/العلامة المائية الثابتة).
+ * يجب أن يُلَفّ المحتوى داخل صفحة HTML تتضمن SEMAK_PRINT_CSS.
+ */
+export default function PrintableLetterhead({ children, documentLabel = '', subtitle = '', date = '' }) {
+    return (
+        <>
+            {/* العلامة المائية — position:fixed تتكرر تلقائياً على كل صفحة */}
+            <img className="semak-print-watermark" src={LOGO} alt="" aria-hidden="true" />
 
-  return (
-    <div
-      ref={ref}
-      style={{
-        fontFamily: 'Cairo, Tahoma, Arial, sans-serif',
-        backgroundColor: '#ffffff',
-        color: '#000000',
-        width: '210mm',
-        margin: 0,
-        padding: 0,
-        position: 'relative',
-        WebkitPrintColorAdjust: 'exact',
-        printColorAdjust: 'exact',
-      }}
-      dir="rtl"
-    >
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead style={{ display: 'table-header-group' }}>
-          <tr>
-            <td style={{ padding: 0 }}>
-              {/* الشريط العلوي */}
-              <div style={{ height: '12px', width: '100%', display: 'flex', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                <div style={{ height: '12px', width: '75%', backgroundColor: '#1a365d' }} />
-                <div style={{ height: '12px', width: '25%', backgroundColor: '#c5a059' }} />
-              </div>
-
-              {/* الترويسة */}
-              <div style={{ padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', backgroundColor: '#ffffff' }}>
-                <img src={LOGO} alt="شعار سماك" style={{ height: '64px', width: 'auto', objectFit: 'contain' }} crossOrigin="anonymous" />
-                <div style={{ textAlign: 'left', borderLeft: '4px solid #c5a059', paddingLeft: '12px' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 900, color: '#1a365d', lineHeight: 1.2 }}>سماك العقارية</div>
-                  <div style={{ color: '#c5a059', fontWeight: 700, fontSize: '11px', marginTop: '3px' }}>سقف يعلو برؤيتك ومسكن يحكي قصتك</div>
-                  <div style={{ color: '#94a3b8', fontSize: '9px', marginTop: '2px', direction: 'ltr', textAlign: 'left' }}>CR: 7051031099 — 920032842</div>
+            {/* الهيدر الثابت — يتكرر على كل صفحة */}
+            <div className="semak-print-header">
+                <div className="semak-print-header-bar">
+                    <div></div>
+                    <div></div>
                 </div>
-              </div>
-
-              {(documentLabel || date) && (
-                <div style={{ padding: '6px 24px', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #e2e8f0', fontSize: '11px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                  {documentLabel && (
-                    <span style={{ fontWeight: 700, color: '#1a365d' }}>
-                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#c5a059', marginLeft: '6px', verticalAlign: 'middle' }} />
-                      {documentLabel}
-                      {subtitle && <span style={{ fontWeight: 500, color: '#64748b', marginRight: '6px' }}>— {subtitle}</span>}
-                    </span>
-                  )}
-                  {date && (
-                    <span style={{ color: '#475569' }}>
-                      <strong style={{ color: '#1a365d', marginLeft: '4px' }}>التاريخ:</strong> {date}
-                    </span>
-                  )}
+                <div className="semak-print-header-main">
+                    <img src={LOGO} alt="شعار سماك" />
+                    <div className="semak-print-header-info">
+                        <h1>سماك العقارية</h1>
+                        <div className="tagline">سقف يعلو برؤيتك ومسكن يحكي قصتك</div>
+                        <div className="cr">CR: 7051031099 — 920032842</div>
+                    </div>
                 </div>
-              )}
+                {(documentLabel || date) && (
+                    <div className="semak-print-doc-bar">
+                        {documentLabel && (
+                            <span className="label">
+                                <span className="dot"></span>
+                                {documentLabel}
+                                {subtitle && <span className="sub">— {subtitle}</span>}
+                            </span>
+                        )}
+                        {date && (
+                            <span className="date">
+                                <strong>التاريخ:</strong> {date}
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
 
-              <div style={{ height: '6px' }} />
-            </td>
-          </tr>
-        </thead>
+            {/* الفوتر الثابت — يتكرر على كل صفحة */}
+            <div className="semak-print-footer">
+                <div className="semak-print-footer-inner">
+                    <div className="semak-print-footer-left">
+                        <div className="name">سماك العقارية</div>
+                        <div className="addr">المملكة العربية السعودية — مكة المكرمة — حي البوابة</div>
+                    </div>
+                    <div className="semak-print-footer-right">
+                        <div className="phone">📞 920032842</div>
+                        <div className="url">🌐 semak.sa</div>
+                    </div>
+                </div>
+            </div>
 
-        <tbody>
-          <tr>
-            <td style={{ padding: 0, verticalAlign: 'top', position: 'relative' }}>
-              {/* علامة مائية بصرية في وسط المحتوى */}
-              <div style={watermarkStyle} aria-hidden="true">
-                <img
-                  src={LOGO}
-                  alt=""
-                  style={{ width: '70%', maxWidth: '500px', opacity: 0.05, filter: 'grayscale(100%)' }}
-                  crossOrigin="anonymous"
-                />
-              </div>
-
-              <div style={{ padding: '8mm 12mm', position: 'relative', zIndex: 1, minHeight: '180mm' }}>
+            {/* المحتوى يتدفق بشكل طبيعي بين الهيدر والفوتر */}
+            <div className="semak-print-content">
                 {children}
-              </div>
-            </td>
-          </tr>
-        </tbody>
-
-        <tfoot style={{ display: 'table-footer-group' }}>
-          <tr>
-            <td style={{ padding: 0 }}>
-              <div style={{ height: '6px' }} />
-              <div style={{ padding: '0 16px 8px', backgroundColor: '#ffffff' }}>
-                <div style={{ backgroundColor: '#1a365d', color: 'white', borderRadius: '10px', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '12px', color: '#c5a059' }}>سماك العقارية</div>
-                    <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '9px', marginTop: '2px' }}>المملكة العربية السعودية — مكة المكرمة — حي البوابة</div>
-                  </div>
-                  <div style={{ direction: 'ltr', textAlign: 'left', fontSize: '10px', color: 'white' }}>
-                    <div style={{ fontWeight: 700, fontSize: '11px' }}>📞 920032842</div>
-                    <div style={{ color: 'rgba(255,255,255,0.85)', marginTop: '2px' }}>🌐 semak.sa</div>
-                  </div>
-                </div>
-              </div>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  );
-});
-
-export default PrintableLetterhead;
+            </div>
+        </>
+    );
+}
