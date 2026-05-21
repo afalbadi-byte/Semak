@@ -220,77 +220,66 @@ export default function Dashboard({ onLogout }) {
 
     if (!dbUser) return null;
 
+    const currentPageTitle = activeTab === 'overview'
+        ? 'لوحة الإدارة'
+        : (authorizedMenuItems.find(m => m.id === activeTab)?.title || 'لوحة التحكم');
+
     return (
-        <div className="flex h-screen bg-slate-50 font-cairo overflow-hidden" dir="rtl">
-            
-            <aside className={`fixed lg:static inset-y-0 right-0 z-50 w-72 bg-[#1a365d] text-white transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'} flex flex-col shadow-2xl`}>
-                <div className="h-24 flex items-center justify-between px-6 border-b border-white/10">
-                    <div className="text-2xl font-black flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-[#c5a059] to-yellow-600 rounded-xl flex items-center justify-center shadow-lg"><Building size={20} className="text-white"/></div>
-                        سماك العقارية
+        <div className="flex flex-col h-screen bg-slate-50 font-cairo overflow-hidden" dir="rtl">
+
+            {/* الهيدر العلوي بدلاً من القائمة الجانبية */}
+            <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 z-30 shrink-0 shadow-sm">
+                <button
+                    onClick={() => setActiveTab('overview')}
+                    className="flex items-center gap-3 hover:opacity-80 transition"
+                    title="العودة للرئيسية"
+                >
+                    <div className="w-10 h-10 bg-gradient-to-br from-[#c5a059] to-yellow-600 rounded-xl flex items-center justify-center shadow-md">
+                        <Building size={20} className="text-white"/>
                     </div>
-                    <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden text-slate-300 hover:text-white"><X size={24}/></button>
-                </div>
-
-                <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-                    {authorizedMenuItems.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = activeTab === item.id;
-                        return (
-                            <button 
-                                key={item.id} 
-                                onClick={() => handleMenuClick(item)} 
-                                className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl font-bold transition-all ${isActive ? 'bg-[#c5a059] text-white shadow-lg' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
-                            >
-                                <Icon size={20} /> {item.title}
-                                {(item.isExternal || item.isLink) && <ExternalLink size={14} className="mr-auto opacity-50" />}
-                            </button>
-                        );
-                    })}
-                </nav>
-
-                <div className="p-4 border-t border-white/10">
-                    <button onClick={handleForceLogout} className="w-full flex items-center justify-center gap-3 px-4 py-4 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-2xl font-bold transition-all">
-                        <LogOut size={20} /> تسجيل الخروج
-                    </button>
-                </div>
-            </aside>
-
-            {isMobileMenuOpen && <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>}
-
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                
-                <header className="h-24 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 z-30 absolute top-0 w-full">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200"><Menu size={24} /></button>
-                        <h1 className="text-xl font-black text-[#1a365d] hidden sm:block">{authorizedMenuItems.find(m => m.id === activeTab)?.title || 'لوحة التحكم'}</h1>
+                    <div className="text-right">
+                        <div className="text-lg font-black text-[#1a365d] leading-tight">سماك العقارية</div>
+                        <div className="text-[10px] font-bold text-slate-400 leading-tight hidden sm:block">{currentPageTitle}</div>
                     </div>
+                </button>
 
-                    <div className="flex items-center gap-6">
-                        <button className="relative text-slate-400 hover:text-indigo-600"><Bell size={24} /><span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span></button>
-                        <div className="flex items-center gap-3 border-r border-slate-200 pr-6">
-                            <div className="text-left hidden md:block">
-                                <p className="text-sm font-black text-[#1a365d]">{dbUser.name}</p>
-                                <p className="text-xs font-bold text-slate-400">
-                                  {dbUser.role === 'admin' ? 'مدير نظام (صلاحيات كاملة)' : dbUser.job || 'موظف'}
-                                </p>
-                            </div>
-                            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center"><UserCircle size={28} /></div>
+                <div className="flex items-center gap-3 md:gap-4">
+                    <div className="flex items-center gap-2 border-l border-slate-200 pl-3 md:pl-4">
+                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center shrink-0">
+                            <UserCircle size={22}/>
+                        </div>
+                        <div className="text-right hidden md:block">
+                            <p className="text-sm font-black text-[#1a365d] leading-tight">{dbUser.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 leading-tight">
+                                {dbUser.role === 'admin' ? 'مدير نظام' : dbUser.job || 'موظف'}
+                            </p>
                         </div>
                     </div>
-                </header>
+                    <button
+                        onClick={handleForceLogout}
+                        className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-3 md:px-4 py-2 rounded-xl font-bold transition flex items-center gap-2 text-sm"
+                        title="تسجيل الخروج"
+                    >
+                        <LogOut size={16}/>
+                        <span className="hidden md:inline">خروج</span>
+                    </button>
+                </div>
+            </header>
 
-                <main className="flex-1 overflow-y-auto bg-slate-50 pt-24 relative custom-scrollbar">
+            <main className="flex-1 overflow-y-auto bg-slate-50 custom-scrollbar">
 
-                    {/* زر العودة للرئيسية — يظهر داخل أي صفحة فرعية */}
+                    {/* زر العودة للرئيسية + اسم الصفحة الحالية */}
                     {activeTab !== 'overview' && (
-                        <div className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur px-4 md:px-8 py-3 border-b border-slate-200 -mt-1">
+                        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur px-4 md:px-8 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
                             <button
                                 onClick={() => setActiveTab('overview')}
-                                className="flex items-center gap-2 text-sm font-bold text-[#1a365d] hover:text-teal-600 transition bg-white border border-slate-200 hover:border-teal-500 px-4 py-2 rounded-xl shadow-sm"
+                                className="flex items-center gap-2 text-sm font-bold text-[#1a365d] hover:text-teal-600 transition bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-500 px-3 md:px-4 py-2 rounded-xl"
                             >
-                                <ArrowLeft size={16}/> العودة للرئيسية
+                                <ArrowLeft size={16}/>
+                                <span className="hidden sm:inline">العودة للرئيسية</span>
+                                <span className="sm:hidden">رجوع</span>
                             </button>
+                            <h2 className="text-sm md:text-base font-black text-[#1a365d] truncate">{currentPageTitle}</h2>
                         </div>
                     )}
 
@@ -463,8 +452,7 @@ export default function Dashboard({ onLogout }) {
                         </div>
                     )}
 
-                </main>
-            </div>
+            </main>
         </div>
     );
 }
