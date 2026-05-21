@@ -854,6 +854,19 @@ switch ($action) {
 - عند ذكر أرقام أو خيارات استخدم سطراً جديداً لكل بند بدون رموز تنسيق.
 - لا تذكر معلومة لم يسأل عنها العميل إلا إذا كانت ضرورية لفهم إجابته.
 
+=== التحليل المخفي في نهاية كل رد (إلزامي) ===
+في نهاية كل رد، أضف سطراً واحداً مخفياً بهذه الصيغة بالضبط (سيتم حذفه قبل إرسال الرد للعميل، فهو لاستخدام فريق المبيعات فقط):
+
+[META]{"unit":"رمز الوحدة المهتم بها أو فارغ","interest":"وصف اهتمامه باختصار","notes":"ملخص فعلي وكامل لما تعرفه عن العميل: الغرض من الشراء، الميزانية، عدد الأفراد، التفضيلات، الاعتراضات، ما تم الاتفاق عليه"}[/META]
+
+تعليمات تحليل META:
+- "unit": رمز الوحدة من 7 وحدات سماك (SM-A01..SM-A07) أو "غير محدد" أو "متعدد".
+- "interest": وصف موجز جداً (سطر واحد) مثل "سكن عائلي" أو "استثمار موسمي" أو "فيلا روف".
+- "notes": ملاحظات سرية لمندوب المبيعات. اكتبها بشكل مفيد للمراجعة لاحقاً. تراكَم المعلومة عبر المحادثات: في كل رد اكتب الصورة الكاملة لما تعرفه عن العميل حتى الآن، لا فقط آخر معلومة.
+- لا تضع META فارغاً. إذا لم تعرف بعد اكتب ما توصلت إليه من سياق "لا يزال يستكشف، لم يحدد ميزانية، يسأل عن المواصفات".
+- ممنوع وضع أي إيموجي أو رموز خاصة داخل META.
+- ممنوع وضع علامات اقتباس داخل القيم. استخدم نصاً عادياً.
+
 === التقاط العميل (مهم لا يفلت) ===
 لا تترك العميل المهتم دون تسجيل بياناته. عند أي إشارة اهتمام (سؤال عن وحدة، سعر، معاينة، حجز، مواصفات تفصيلية، تمويل، استفسار جدي):
 - وجّهه لتسجيل اهتمامه عبر الرابط: https://semak.sa/contact
@@ -1292,6 +1305,41 @@ KNOWLEDGE;
             // فشل Claude — لا ترد لتجنب إزعاج العميل
             echo json_encode(["ok" => false, "error" => "claude_failed", "raw" => $claude_raw]);
             break;
+        }
+
+        // ── استخراج META من رد فهد وتحديث lead ──
+        if (preg_match('/\[META\](.+?)\[\/META\]/s', $bot_reply, $meta_match)) {
+            $meta_json = trim($meta_match[1]);
+            $meta = json_decode($meta_json, true);
+            if (is_array($meta)) {
+                $u_unit     = $conn->real_escape_string($meta['unit']     ?? '');
+                $u_interest = $conn->real_escape_string($meta['interest'] ?? '');
+                $u_notes    = $conn->real_escape_string($meta['notes']    ?? '');
+                // حدّث أحدث lead لهذا الرقم
+                $conn->query(
+                    "UPDATE leads SET
+                        unit     = IF(? = '', unit, ?),
+                        interest = IF(? = '', interest, ?),
+                        notes    = IF(? = '', notes, ?)
+                     WHERE $phone_search
+                     ORDER BY id DESC LIMIT 1"
+                );
+                // mysqli prepared لا تدعم WHERE LIKE بسهولة هنا، نستخدم escape مباشرة
+                $sql_upd = "UPDATE leads SET ";
+                $fields = [];
+                if ($u_unit !== '')     $fields[] = "unit='$u_unit'";
+                if ($u_interest !== '') $fields[] = "interest='$u_interest'";
+                if ($u_notes !== '')    $fields[] = "notes='$u_notes'";
+                if (!empty($fields)) {
+                    $sql_upd .= implode(', ', $fields) . " WHERE $phone_search ORDER BY id DESC LIMIT 1";
+                    $conn->query($sql_upd);
+                    file_put_contents($log_file,
+                        date('Y-m-d H:i:s') . " | META updated: unit=$u_unit | interest=$u_interest\n",
+                        FILE_APPEND);
+                }
+            }
+            // احذف META من الرد قبل إرساله للعميل
+            $bot_reply = trim(preg_replace('/\[META\].+?\[\/META\]/s', '', $bot_reply));
         }
 
         // ── حفظ رد البوت ──

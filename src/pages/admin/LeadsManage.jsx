@@ -202,15 +202,16 @@ export default function LeadsManage({ showToast }) {
                         <tr>
                             <th className="px-6 py-4 border-b">الاسم والجوال</th>
                             <th className="px-6 py-4 border-b">الوحدة المفضلة</th>
+                            <th className="px-6 py-4 border-b">ملاحظات فهد</th>
                             <th className="px-6 py-4 border-b text-center">الحالة والإجراء</th>
                             <th className="px-6 py-4 border-b text-center">تواصل سريع</th>
                         </tr>
                     </thead>
                     <tbody className="text-slate-700 divide-y divide-slate-50">
                         {loading ? (
-                            <tr><td colSpan="4" className="text-center py-12 text-teal-600 font-bold"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr>
+                            <tr><td colSpan="5" className="text-center py-12 text-teal-600 font-bold"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr>
                         ) : filteredLeads.length === 0 ? (
-                            <tr><td colSpan="4" className="text-center py-12 text-slate-400 font-bold">لا يوجد سجلات مهتمين مطابقة.</td></tr>
+                            <tr><td colSpan="5" className="text-center py-12 text-slate-400 font-bold">لا يوجد سجلات مهتمين مطابقة.</td></tr>
                         ) : filteredLeads.map((lead) => (
                             <tr key={lead.id} className="hover:bg-teal-50/30 transition-colors duration-200">
                                 <td className="px-6 py-4">
@@ -222,8 +223,17 @@ export default function LeadsManage({ showToast }) {
                                         <Building size={14} /> {lead.unit || "غير محدد"}
                                     </span>
                                 </td>
+                                <td className="px-6 py-4 max-w-xs">
+                                    {lead.notes ? (
+                                        <div className="text-xs text-slate-600 leading-relaxed bg-amber-50/50 border-r-2 border-amber-300 px-3 py-2 rounded-l-lg whitespace-pre-wrap" title={lead.notes}>
+                                            {lead.notes.length > 180 ? lead.notes.slice(0, 180) + '…' : lead.notes}
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-slate-300 italic">لا توجد ملاحظات بعد</span>
+                                    )}
+                                </td>
                                 <td className="px-6 py-4 text-center">
-                                    <select 
+                                    <select
                                         value={lead.status || "جديد"} 
                                         onChange={(e) => handleStatusChange(lead.id, e.target.value)}
                                         className={`text-xs font-bold px-3 py-2 rounded-xl border outline-none cursor-pointer shadow-sm transition
