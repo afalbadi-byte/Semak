@@ -711,6 +711,86 @@ switch ($action) {
         echo json_encode(["success" => true]);
         break;
 
+    // ─── إحصائيات بوت فهد ─────────────────────────────────────────────────────
+    case 'bot_stats':
+        $stats = [];
+
+        // محادثات اليوم
+        $r = $conn->query("SELECT COUNT(*) c FROM wa_bot_conversations WHERE DATE(created_at)=CURDATE()");
+        $stats['messages_today'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+        // محادثات هذا الأسبوع
+        $r = $conn->query("SELECT COUNT(*) c FROM wa_bot_conversations WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+        $stats['messages_week'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+        // إجمالي الرسائل
+        $r = $conn->query("SELECT COUNT(*) c FROM wa_bot_conversations");
+        $stats['messages_total'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+        // عدد العملاء الفريدين
+        $r = $conn->query("SELECT COUNT(DISTINCT phone) c FROM wa_bot_conversations");
+        $stats['unique_customers'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+        // عدد المهتمين الذين سجلهم البوت
+        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE source = 'بوت فهد'");
+        $stats['leads_from_bot'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+        // المهتمين الذين تحولوا لمشترين (تم البيع) من البوت
+        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE source = 'بوت فهد' AND status = 'تم البيع'");
+        $stats['conversions_from_bot'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+        // آخر محادثة
+        $r = $conn->query("SELECT created_at FROM wa_bot_conversations ORDER BY id DESC LIMIT 1");
+        $stats['last_interaction'] = $r ? ($r->fetch_assoc()['created_at'] ?? null) : null;
+
+        // تقدير الكلفة التقريبية (Claude Haiku 4.5: ~$1/M input, ~$5/M output)
+        // متوسط الرسالة: ~50 كلمة = ~75 token، السيستم برومبت: ~3000 token تقريباً
+        $r = $conn->query("SELECT SUM(CHAR_LENGTH(message)) bytes, role FROM wa_bot_conversations GROUP BY role");
+        $user_chars = 0; $assistant_chars = 0;
+        if ($r) {
+            while ($row = $r->fetch_assoc()) {
+                if ($row['role'] === 'user')      $user_chars      = (int)$row['bytes'];
+                if ($row['role'] === 'assistant') $assistant_chars = (int)$row['bytes'];
+            }
+        }
+        // تقدير: 4 حروف ≈ 1 token (للعربية تقريباً 3 حروف = 1 token)
+        $user_tokens      = (int)($user_chars / 3);
+        $assistant_tokens = (int)($assistant_chars / 3);
+        // كل رسالة بوت ترفع كامل السيستم + التاريخ (تقدير 3500 token كمتوسط)
+        $r = $conn->query("SELECT COUNT(*) c FROM wa_bot_conversations WHERE role = 'assistant'");
+        $bot_calls = (int)($r ? $r->fetch_assoc()['c'] : 0);
+        $system_tokens = $bot_calls * 3500;
+        $total_input_tokens = $user_tokens + $system_tokens;
+        $cost_estimate = ($total_input_tokens / 1000000) * 1.0 + ($assistant_tokens / 1000000) * 5.0;
+        $stats['estimated_cost_usd'] = round($cost_estimate, 4);
+        $stats['estimated_input_tokens']  = $total_input_tokens;
+        $stats['estimated_output_tokens'] = $assistant_tokens;
+        $stats['bot_calls']               = $bot_calls;
+
+        // إعدادات البوت
+        $stats['config'] = [
+            'name'      => 'فهد',
+            'model'     => 'claude-haiku-4-5',
+            'language'  => 'العربية الفصحى',
+            'webhook'   => 'https://semak.sa/api.php?action=wa_webhook',
+            'connected' => true,
+        ];
+
+        echo json_encode(["success" => true, "stats" => $stats]);
+        break;
+
+    // ─── محادثات البوت (آخر 50) ──────────────────────────────────────────────
+    case 'bot_recent_conversations':
+        $res = $conn->query(
+            "SELECT phone, role, message, created_at
+             FROM wa_bot_conversations
+             ORDER BY id DESC LIMIT 50"
+        );
+        $rows = [];
+        if ($res) while ($row = $res->fetch_assoc()) $rows[] = $row;
+        echo json_encode(["success" => true, "data" => $rows]);
+        break;
+
     // ─── واتساب ─────────────────────────────────────────────────────────────
 
     case 'update_wa_status':

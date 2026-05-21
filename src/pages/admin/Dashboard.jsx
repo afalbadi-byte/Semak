@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building,
     UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
-    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle
+    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle, Bot
 } from 'lucide-react';
 
 // استدعاء الأدوات والمكونات الخارجية
@@ -11,6 +11,7 @@ import SnagList from './SnagList';
 import UsersManage from './UsersManage';
 import MaintenanceManage from './MaintenanceManage';
 import LeadsManage from './LeadsManage';
+import BotSettings from './BotSettings';
 import FeasibilityCalc from './FeasibilityCalc';
 import UnitsOverview from './UnitsOverview';
 import ProjectsManage from './ProjectsManage';
@@ -159,6 +160,7 @@ export default function Dashboard({ onLogout }) {
         { id: 'snaglist', title: 'تقارير الملاحظات', icon: FileWarning, permKey: 'inspection' }, 
         { id: 'maintenance', title: 'إدارة الصيانة', icon: Wrench, permKey: 'maintenance' },
         { id: 'leads', title: 'سجل المهتمين', icon: Users, permKey: 'leads' },
+        { id: 'bot', title: 'بوت فهد (إعدادات وإحصائيات)', icon: Bot, permKey: 'admin' },
         { id: 'qr', title: 'رموز الوحدات (QR)', icon: QrCode, permKey: 'qr' },
         { id: 'letters', title: 'منشئ الخطابات', icon: FilePenLine, permKey: 'letters', isLink: true, path: '/admin/letter-generator' },
         { id: 'accounting', title: 'النظام المحاسبي', icon: Calculator, permKey: 'accounting', isExternal: true, path: 'https://semak.daftra.com/' },
@@ -377,6 +379,13 @@ export default function Dashboard({ onLogout }) {
                     {/* --- قسم رموز الاستجابة السريعة (QR) --- */}
                     {activeTab === 'qr' && hasPermission('qr') && (
                         <QrSection />
+                    )}
+
+                    {/* --- قسم بوت فهد --- */}
+                    {activeTab === 'bot' && hasPermission('admin') && (
+                        <div className="animate-fadeIn">
+                            <BotSettings />
+                        </div>
                     )}
 
                     {/* --- قسم سجل المهتمين (Leads) --- */}
