@@ -840,108 +840,128 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
 
-    case 'daftra_projects':
-        // قائمة المشاريع من دفترة
+    case 'daftra_summary':
+        // ملخص مالي شامل من دفترة (سماك الخير - المقاول الداخلي)
         $daftra_key = "__DAFTRA_KEY__";
-        $ch = curl_init("https://semak.daftra.com/api2/projects/list/1");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
-            CURLOPT_TIMEOUT => 15,
-        ]);
-        $res = curl_exec($ch);
-        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        echo json_encode(["success" => $http === 200, "data" => json_decode($res, true)]);
-        break;
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
 
-    case 'daftra_expenses':
-        // المصروفات (لمشروع معيّن إذا أُرسل project_id)
-        $daftra_key = "__DAFTRA_KEY__";
-        $project_id = isset($_GET['project_id']) ? (int)$_GET['project_id'] : 0;
-        $url = "https://semak.daftra.com/api2/expenses/list/1";
-        if ($project_id) $url .= "?project_id=$project_id";
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
-            CURLOPT_TIMEOUT => 15,
-        ]);
-        $res = curl_exec($ch);
-        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        echo json_encode(["success" => $http === 200, "data" => json_decode($res, true)]);
-        break;
+        $fetch = function($endpoint) use ($base, $headers) {
+            $ch = curl_init("$base/$endpoint");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 15,
+            ]);
+            $res = curl_exec($ch);
+            curl_close($ch);
+            return json_decode($res, true);
+        };
 
-    case 'daftra_project_summary':
-        // ملخّص مشروع: المصروفات الفعلية مقابل الميزانية المتوقعة
-        $daftra_key = "__DAFTRA_KEY__";
-        $project_id = isset($_GET['project_id']) ? (int)$_GET['project_id'] : 0;
-
-        // 1) جلب بيانات المشروع
-        $ch = curl_init("https://semak.daftra.com/api2/projects/view/$project_id");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
-            CURLOPT_TIMEOUT => 15,
-        ]);
-        $project_raw = curl_exec($ch);
-        curl_close($ch);
-        $project = json_decode($project_raw, true);
-
-        // 2) جلب المصروفات لهذا المشروع
-        $ch = curl_init("https://semak.daftra.com/api2/expenses/list/1?project_id=$project_id");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
-            CURLOPT_TIMEOUT => 15,
-        ]);
-        $expenses_raw = curl_exec($ch);
-        curl_close($ch);
-        $expenses = json_decode($expenses_raw, true);
-
-        // 3) جلب الفواتير الصادرة (إيرادات المشروع)
-        $ch = curl_init("https://semak.daftra.com/api2/invoices/list/1?project_id=$project_id");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
-            CURLOPT_TIMEOUT => 15,
-        ]);
-        $invoices_raw = curl_exec($ch);
-        curl_close($ch);
-        $invoices = json_decode($invoices_raw, true);
-
-        // حساب الإجماليات
-        $total_expenses = 0;
-        if (isset($expenses['data'])) {
-            foreach ($expenses['data'] as $e) {
-                $total_expenses += (float)($e['Expense']['amount'] ?? $e['amount'] ?? 0);
-            }
-        }
+        $invoices_data = $fetch("invoices.json");
+        $expenses_data = $fetch("expenses.json");
+        $clients_data  = $fetch("clients.json");
 
         $total_invoiced = 0;
         $total_paid = 0;
-        if (isset($invoices['data'])) {
-            foreach ($invoices['data'] as $i) {
-                $total_invoiced += (float)($i['Invoice']['total'] ?? $i['total'] ?? 0);
-                $total_paid     += (float)($i['Invoice']['amount_paid'] ?? $i['amount_paid'] ?? 0);
+        $invoice_count = 0;
+        $unpaid_count = 0;
+        $invoices_by_client = [];
+
+        if (isset($invoices_data['data'])) {
+            foreach ($invoices_data['data'] as $row) {
+                $i = $row['Invoice'] ?? [];
+                $total = (float)($i['total'] ?? 0);
+                $paid  = (float)($i['payments_total'] ?? $i['amount_paid'] ?? 0);
+                $total_invoiced += $total;
+                $total_paid     += $paid;
+                $invoice_count++;
+                if ($paid < $total) $unpaid_count++;
+                $cid = $i['client_id'] ?? 0;
+                if (!isset($invoices_by_client[$cid])) $invoices_by_client[$cid] = ['total'=>0,'paid'=>0,'count'=>0];
+                $invoices_by_client[$cid]['total'] += $total;
+                $invoices_by_client[$cid]['paid']  += $paid;
+                $invoices_by_client[$cid]['count']++;
             }
         }
 
+        $total_expenses = 0;
+        $expense_count = 0;
+        $expenses_by_category = [];
+        if (isset($expenses_data['data'])) {
+            foreach ($expenses_data['data'] as $row) {
+                $e = $row['Expense'] ?? [];
+                $amount = (float)($e['amount'] ?? 0);
+                $cat    = $e['category'] ?? 'بدون تصنيف';
+                $total_expenses += $amount;
+                $expense_count++;
+                if (!isset($expenses_by_category[$cat])) $expenses_by_category[$cat] = ['total'=>0,'count'=>0];
+                $expenses_by_category[$cat]['total'] += $amount;
+                $expenses_by_category[$cat]['count']++;
+            }
+        }
+
+        $clients_count = isset($clients_data['data']) ? count($clients_data['data']) : 0;
+
         echo json_encode([
             "success" => true,
-            "project" => $project,
             "summary" => [
-                "total_expenses"  => $total_expenses,
-                "total_invoiced"  => $total_invoiced,
-                "total_paid"      => $total_paid,
-                "outstanding"     => $total_invoiced - $total_paid,
-                "expense_count"   => isset($expenses['data']) ? count($expenses['data']) : 0,
-                "invoice_count"   => isset($invoices['data']) ? count($invoices['data']) : 0,
+                "total_invoiced"   => round($total_invoiced, 2),
+                "total_paid"       => round($total_paid, 2),
+                "outstanding"      => round($total_invoiced - $total_paid, 2),
+                "total_expenses"   => round($total_expenses, 2),
+                "net_cashflow"     => round($total_paid - $total_expenses, 2),
+                "invoice_count"    => $invoice_count,
+                "unpaid_count"     => $unpaid_count,
+                "expense_count"    => $expense_count,
+                "clients_count"    => $clients_count,
+                "currency"         => "SAR",
             ],
-            "expenses" => $expenses,
-            "invoices" => $invoices,
+            "expenses_by_category" => $expenses_by_category,
+            "invoices_by_client"   => $invoices_by_client,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_invoices':
+        // قائمة الفواتير
+        $daftra_key = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/invoices.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
+            CURLOPT_TIMEOUT => 15,
         ]);
+        $res = curl_exec($ch);
+        curl_close($ch);
+        echo $res;
+        break;
+
+    case 'daftra_expenses':
+        // قائمة المصروفات
+        $daftra_key = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/expenses.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        $res = curl_exec($ch);
+        curl_close($ch);
+        echo $res;
+        break;
+
+    case 'daftra_clients':
+        // قائمة العملاء
+        $daftra_key = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/clients.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        $res = curl_exec($ch);
+        curl_close($ch);
+        echo $res;
         break;
 
     // ─── إحصائيات بوت فهد ─────────────────────────────────────────────────────
