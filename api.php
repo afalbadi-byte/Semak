@@ -1523,6 +1523,43 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_probe_work_order_filters':
+        // اختبار فلاتر work_orders للوصول لكل المشاريع
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $urls = [
+            "work_orders.json",
+            "work_orders.json?workflow_type_id=1",
+            "work_orders.json?type=1",
+            "work_orders.json?workflow_type_id=all",
+            "work_orders/5.json",   // ID 5 مباشرة
+            "work_orders/view/5.json",
+            "work_orders/2.json",
+        ];
+
+        $results = [];
+        foreach ($urls as $url) {
+            $ch = curl_init("$base/$url");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 8,
+            ]);
+            $res = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            $data = json_decode($res, true);
+            $results[$url] = [
+                "http" => $http,
+                "count" => isset($data['data']) ? count($data['data']) : (isset($data['WorkOrder']) ? 1 : 0),
+                "preview" => substr($res ?: '', 0, 250),
+            ];
+        }
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_probe_workflows':
         // V2 API: workflows / workflow_types / entities
         $daftra_key = "__DAFTRA_KEY__";
