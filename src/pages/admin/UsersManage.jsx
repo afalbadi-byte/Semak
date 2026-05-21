@@ -1,17 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, ShieldCheck, Trash2, RefreshCw, Key, Mail, User, X, Edit, Wrench, FilePenLine, QrCode, Calculator, ClipboardCheck, CheckSquare } from 'lucide-react';
+import {
+    Users, UserPlus, Shield, ShieldCheck, Trash2, RefreshCw, Key, Mail, User, X, Edit,
+    Wrench, FilePenLine, QrCode, Calculator, ClipboardCheck, CheckSquare,
+    Building, Building2, Edit2, TrendingUp, Bot, MessageCircle, FileWarning
+} from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
-// 🔥 قائمة الأدوات المتاحة للنظام ليتم توزيعها كصلاحيات
+// قائمة كل أدوات النظام للصلاحيات
 const APP_MODULES = [
-  { id: "maintenance", label: "إدارة طلبات الصيانة", icon: Wrench, color: "text-purple-600", bg: "bg-purple-50" },
-  { id: "letters", label: "منشئ الخطابات", icon: FilePenLine, color: "text-orange-500", bg: "bg-orange-50" },
-  { id: "qr", label: "رموز الوحدات (QR)", icon: QrCode, color: "text-slate-800", bg: "bg-slate-100" },
-  { id: "leads", label: "سجل المهتمين (Leads)", icon: Users, color: "text-teal-600", bg: "bg-teal-50" },
-  { id: "accounting", label: "النظام المحاسبي (دفترة)", icon: Calculator, color: "text-emerald-600", bg: "bg-emerald-50" },
-  { id: "inspection", label: "فحص وتسليم الوحدات", icon: ClipboardCheck, color: "text-indigo-600", bg: "bg-indigo-50" },
-  { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
+  { id: "projects",    label: "إدارة المشاريع والوحدات", icon: Building,        color: "text-blue-600",    bg: "bg-blue-50" },
+  { id: "units",       label: "بيانات الوحدات",          icon: Building2,       color: "text-sky-600",     bg: "bg-sky-50" },
+  { id: "units_edit",  label: "تعديل الوحدات والملاك",   icon: Edit2,           color: "text-cyan-600",    bg: "bg-cyan-50" },
+  { id: "feasibility", label: "حاسبة الجدوى والعروض",    icon: TrendingUp,      color: "text-emerald-600", bg: "bg-emerald-50" },
+  { id: "inspection",  label: "فحص وتسليم الوحدات",      icon: ClipboardCheck,  color: "text-indigo-600",  bg: "bg-indigo-50" },
+  { id: "snaglist",    label: "تقارير الملاحظات",        icon: FileWarning,     color: "text-red-600",     bg: "bg-red-50" },
+  { id: "maintenance", label: "إدارة طلبات الصيانة",     icon: Wrench,          color: "text-purple-600",  bg: "bg-purple-50" },
+  { id: "leads",       label: "سجل المهتمين",            icon: Users,           color: "text-teal-600",    bg: "bg-teal-50" },
+  { id: "bot",         label: "بوت فهد (إعدادات وإحصائيات)", icon: Bot,         color: "text-amber-600",   bg: "bg-amber-50" },
+  { id: "whatsapp",    label: "صندوق واتساب",            icon: MessageCircle,   color: "text-green-600",   bg: "bg-green-50" },
+  { id: "qr",          label: "رموز الوحدات (QR)",       icon: QrCode,          color: "text-slate-700",   bg: "bg-slate-100" },
+  { id: "letters",     label: "منشئ الخطابات",           icon: FilePenLine,     color: "text-rose-600",    bg: "bg-rose-50" },
+  { id: "accounting",  label: "النظام المحاسبي (دفترة)", icon: Calculator,      color: "text-emerald-600", bg: "bg-emerald-50" },
+  { id: "users_manage",label: "إدارة الموظفين والصلاحيات", icon: Shield,        color: "text-[#1a365d]",   bg: "bg-blue-50" },
 ];
 
 export default function UsersManage({ showToast }) {

@@ -170,21 +170,21 @@ export default function Dashboard({ onLogout }) {
 
     // القائمة الجانبية الشاملة لجميع أدوات النظام (تم إضافة الحاسبة هنا 🔥)
     const ALL_MENU_ITEMS = [
-        { id: 'overview',   title: 'الرئيسية والإحصائيات',  icon: LayoutDashboard, permKey: 'all' },
-        { id: 'projects',   title: 'إدارة المشاريع والوحدات', icon: Building,        permKey: 'admin' },
-        { id: 'units',      title: 'بيانات الوحدات',         icon: Building2,       permKey: 'admin' },
-        { id: 'units_edit', title: 'تعديل الوحدات والملاك',  icon: Edit2,            permKey: 'admin' },
-        { id: 'feasibility',title: 'حاسبة الجدوى والعروض',  icon: TrendingUp,      permKey: 'admin' },
-        { id: 'inspection', title: 'فحص وتسليم الوحدات', icon: ClipboardCheck, permKey: 'inspection' },
-        { id: 'snaglist', title: 'تقارير الملاحظات', icon: FileWarning, permKey: 'inspection' }, 
-        { id: 'maintenance', title: 'إدارة الصيانة', icon: Wrench, permKey: 'maintenance' },
-        { id: 'leads', title: 'سجل المهتمين', icon: Users, permKey: 'leads' },
-        { id: 'bot', title: 'بوت فهد (إعدادات وإحصائيات)', icon: Bot, permKey: 'admin' },
-        { id: 'qr', title: 'رموز الوحدات (QR)', icon: QrCode, permKey: 'qr' },
-        { id: 'letters', title: 'منشئ الخطابات', icon: FilePenLine, permKey: 'letters', isLink: true, path: '/admin/letter-generator' },
-        { id: 'accounting', title: 'النظام المحاسبي', icon: Calculator, permKey: 'accounting', isExternal: true, path: 'https://semak.daftra.com/' },
-        { id: 'users', title: 'إدارة الموظفين', icon: UserCircle, permKey: 'users_manage' },
-        { id: 'whatsapp', title: 'صندوق واتساب', icon: MessageCircle, permKey: 'admin' },
+        { id: 'overview',    title: 'الرئيسية والإحصائيات',     icon: LayoutDashboard, permKey: 'all' },
+        { id: 'projects',    title: 'إدارة المشاريع والوحدات',  icon: Building,        permKey: 'projects' },
+        { id: 'units',       title: 'بيانات الوحدات',           icon: Building2,       permKey: 'units' },
+        { id: 'units_edit',  title: 'تعديل الوحدات والملاك',    icon: Edit2,           permKey: 'units_edit' },
+        { id: 'feasibility', title: 'حاسبة الجدوى والعروض',     icon: TrendingUp,      permKey: 'feasibility' },
+        { id: 'inspection',  title: 'فحص وتسليم الوحدات',       icon: ClipboardCheck,  permKey: 'inspection' },
+        { id: 'snaglist',    title: 'تقارير الملاحظات',         icon: FileWarning,     permKey: 'snaglist' },
+        { id: 'maintenance', title: 'إدارة الصيانة',            icon: Wrench,          permKey: 'maintenance' },
+        { id: 'leads',       title: 'سجل المهتمين',             icon: Users,           permKey: 'leads' },
+        { id: 'bot',         title: 'بوت فهد (إعدادات وإحصائيات)', icon: Bot,          permKey: 'bot' },
+        { id: 'whatsapp',    title: 'صندوق واتساب',             icon: MessageCircle,   permKey: 'whatsapp' },
+        { id: 'qr',          title: 'رموز الوحدات (QR)',        icon: QrCode,          permKey: 'qr' },
+        { id: 'letters',     title: 'منشئ الخطابات',            icon: FilePenLine,     permKey: 'letters', isLink: true, path: '/admin/letter-generator' },
+        { id: 'accounting',  title: 'النظام المحاسبي',          icon: Calculator,      permKey: 'accounting', isExternal: true, path: 'https://semak.daftra.com/' },
+        { id: 'users',       title: 'إدارة الموظفين',           icon: UserCircle,      permKey: 'users_manage' },
     ];
 
     const authorizedMenuItems = ALL_MENU_ITEMS.filter(item => hasPermission(item.permKey));
@@ -328,31 +328,37 @@ export default function Dashboard({ onLogout }) {
                                     <IconCard icon={Wrench} label="الصيانة" badge={dashCounts.maintenance_open} color="purple"
                                         onClick={() => setActiveTab('maintenance')}/>
                                 )}
-                                {hasPermission('admin') && (
+                                {hasPermission('bot') && (
                                     <IconCard icon={Bot} label="بوت فهد" badge={dashCounts.bot_customers_today} color="amber" badgeLabel="اليوم"
                                         onClick={() => setActiveTab('bot')}/>
                                 )}
                                 {hasPermission('inspection') && (
-                                    <>
-                                        <IconCard icon={ClipboardCheck} label="فحص الوحدات" badge={dashCounts.inspections_pending} color="indigo"
-                                            onClick={() => setActiveTab('inspection')}/>
-                                        <IconCard icon={FileWarning} label="الملاحظات" color="red"
-                                            onClick={() => setActiveTab('snaglist')}/>
-                                    </>
+                                    <IconCard icon={ClipboardCheck} label="فحص الوحدات" badge={dashCounts.inspections_pending} color="indigo"
+                                        onClick={() => setActiveTab('inspection')}/>
                                 )}
-                                {hasPermission('admin') && (
-                                    <>
-                                        <IconCard icon={Building} label="المشاريع" color="blue"
-                                            onClick={() => setActiveTab('projects')}/>
-                                        <IconCard icon={Building2} label="الوحدات" color="sky"
-                                            onClick={() => setActiveTab('units')}/>
-                                        <IconCard icon={Edit2} label="تعديل الوحدات" color="cyan"
-                                            onClick={() => setActiveTab('units_edit')}/>
-                                        <IconCard icon={TrendingUp} label="حاسبة الجدوى" color="emerald"
-                                            onClick={() => setActiveTab('feasibility')}/>
-                                        <IconCard icon={MessageCircle} label="صندوق واتساب" color="green"
-                                            onClick={() => setActiveTab('whatsapp')}/>
-                                    </>
+                                {hasPermission('snaglist') && (
+                                    <IconCard icon={FileWarning} label="تقارير الملاحظات" color="red"
+                                        onClick={() => setActiveTab('snaglist')}/>
+                                )}
+                                {hasPermission('projects') && (
+                                    <IconCard icon={Building} label="المشاريع" color="blue"
+                                        onClick={() => setActiveTab('projects')}/>
+                                )}
+                                {hasPermission('units') && (
+                                    <IconCard icon={Building2} label="الوحدات" color="sky"
+                                        onClick={() => setActiveTab('units')}/>
+                                )}
+                                {hasPermission('units_edit') && (
+                                    <IconCard icon={Edit2} label="تعديل الوحدات" color="cyan"
+                                        onClick={() => setActiveTab('units_edit')}/>
+                                )}
+                                {hasPermission('feasibility') && (
+                                    <IconCard icon={TrendingUp} label="حاسبة الجدوى" color="emerald"
+                                        onClick={() => setActiveTab('feasibility')}/>
+                                )}
+                                {hasPermission('whatsapp') && (
+                                    <IconCard icon={MessageCircle} label="صندوق واتساب" color="green"
+                                        onClick={() => setActiveTab('whatsapp')}/>
                                 )}
                                 {hasPermission('qr') && (
                                     <IconCard icon={QrCode} label="رموز QR" color="slate"
@@ -374,21 +380,21 @@ export default function Dashboard({ onLogout }) {
                         </div>
                     )}
 
-                    {activeTab === 'projects' && hasPermission('admin') && (
+                    {activeTab === 'projects' && hasPermission('projects') && (
                         <ProjectsManage />
                     )}
 
-                    {activeTab === 'units' && hasPermission('admin') && (
+                    {activeTab === 'units' && hasPermission('units') && (
                         <UnitsOverview showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                     )}
 
-                    {activeTab === 'units_edit' && hasPermission('admin') && (
+                    {activeTab === 'units_edit' && hasPermission('units_edit') && (
                         <div className="animate-fadeIn p-6 md:p-8">
                             <UnitsEdit showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                         </div>
                     )}
 
-                    {activeTab === 'feasibility' && hasPermission('admin') && (
+                    {activeTab === 'feasibility' && hasPermission('feasibility') && (
                         <div className="animate-fadeIn">
                             <FeasibilityCalc showToast={(title, msg, type) => alert(`${title}: ${msg}`)} />
                         </div>
@@ -402,8 +408,8 @@ export default function Dashboard({ onLogout }) {
                     )}
                     
                     {/* --- قسم التقارير --- */}
-                    {activeTab === 'snaglist' && hasPermission('inspection') && (
-                        <div className="animate-fadeIn p-6 md:p-8"> 
+                    {activeTab === 'snaglist' && hasPermission('snaglist') && (
+                        <div className="animate-fadeIn p-6 md:p-8">
                             <SnagList />
                         </div>
                     )}
@@ -428,7 +434,7 @@ export default function Dashboard({ onLogout }) {
                     )}
 
                     {/* --- قسم بوت فهد --- */}
-                    {activeTab === 'bot' && hasPermission('admin') && (
+                    {activeTab === 'bot' && hasPermission('bot') && (
                         <div className="animate-fadeIn">
                             <BotSettings />
                         </div>
@@ -442,7 +448,7 @@ export default function Dashboard({ onLogout }) {
                     )}
 
                     {/* --- صندوق واتساب --- */}
-                    {activeTab === 'whatsapp' && hasPermission('admin') && (
+                    {activeTab === 'whatsapp' && hasPermission('whatsapp') && (
                         <div className="animate-fadeIn">
                             <WhatsAppInbox />
                         </div>

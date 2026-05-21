@@ -514,6 +514,22 @@ switch ($action) {
         echo json_encode(["success" => true]);
         break;
 
+    case 'update_permissions':
+        $user_id = (int)($input_data['user_id'] ?? 0);
+        $perms   = $input_data['permissions'] ?? [];
+        if (!$user_id) {
+            echo json_encode(["success" => false, "message" => "معرّف الموظف مطلوب"]);
+            break;
+        }
+        if (!is_array($perms)) $perms = [];
+        $perms_json = $conn->real_escape_string(json_encode(array_values($perms), JSON_UNESCAPED_UNICODE));
+        if ($conn->query("UPDATE users SET permissions='$perms_json' WHERE id=$user_id")) {
+            echo json_encode(["success" => true, "message" => "تم تحديث الصلاحيات بنجاح"]);
+        } else {
+            echo json_encode(["success" => false, "message" => $conn->error]);
+        }
+        break;
+
     // ─── الصيانة ─────────────────────────────────────────────────────────────
 
     case 'get_maintenance':
