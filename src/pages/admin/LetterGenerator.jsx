@@ -36,9 +36,9 @@ export default function LetterGenerator() {
   const [isSaving, setIsSaving] = useState(false);
   const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
 
-  // 🔥 دالة الطباعة السحرية - تستخدم ترويسة سماك المشتركة
+  // 🔥 دالة الطباعة - react-to-print v3 API (contentRef)
   const handlePrint = useReactToPrint({
-    content: () => printRef.current,
+    contentRef: printRef,
     documentTitle: `خطاب_${data.recipient || 'سماك'}`,
     pageStyle: SEMAK_PRINT_PAGE_STYLE,
   });

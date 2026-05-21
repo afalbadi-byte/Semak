@@ -128,14 +128,14 @@ export default function FeasibilityCalc({ showToast }) {
         } catch(e) {} finally { setLoading(false); }
     };
 
-    // --- دوال الطباعة (تستخدم ترويسة سماك المشتركة + علامة مائية متكررة) ---
+    // --- دوال الطباعة (react-to-print v3 API: contentRef بدل content) ---
     const handlePrintTeaser = useReactToPrint({
-        content: () => teaserPrintRef.current,
+        contentRef: teaserPrintRef,
         documentTitle: `عرض_استثماري_${projectName || 'سماك'}`,
         pageStyle: SEMAK_PRINT_PAGE_STYLE,
     });
     const handlePrintDetailed = useReactToPrint({
-        content: () => detailedPrintRef.current,
+        contentRef: detailedPrintRef,
         documentTitle: `الملحق_المالي_${projectName || 'سماك'}`,
         pageStyle: SEMAK_PRINT_PAGE_STYLE,
     });
