@@ -1408,6 +1408,49 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_probe_cycles':
+        // اكتشاف endpoint دورات العمل في دفترة
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $candidates = [
+            "work_cycles", "cycles", "work_orders", "workorders", "workflows",
+            "accounting_cycles", "fiscal_periods", "periods", "accounting_periods",
+            "billing_cycles", "subscription_cycles",
+            "milestones", "phases", "stages", "contracts",
+            "projects", "campaigns", "pipelines",
+        ];
+
+        $results = [];
+        foreach ($candidates as $ep) {
+            $ch = curl_init("$base/$ep.json?limit=1");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 8,
+                CURLOPT_FOLLOWLOCATION => false,
+            ]);
+            $res = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($http === 200) {
+                $data = json_decode($res, true);
+                $count = isset($data['data']) && is_array($data['data']) ? count($data['data']) : 0;
+                $first_key = $count > 0 ? array_keys($data['data'][0])[0] : null;
+                $fields = $count > 0 && isset($data['data'][0][$first_key]) ? array_keys($data['data'][0][$first_key]) : [];
+                $results[$ep] = [
+                    "status" => "✅ متاح",
+                    "entity_key" => $first_key,
+                    "fields" => $fields,
+                ];
+            } else {
+                $results[$ep] = ["status" => "❌ HTTP $http"];
+            }
+        }
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_discover_all':
         // اكتشاف شامل لكل endpoints دفترة المتاحة
         $daftra_key = "__DAFTRA_KEY__";
