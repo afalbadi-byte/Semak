@@ -871,19 +871,26 @@ switch ($action) {
         if (isset($invoices_data['data'])) {
             foreach ($invoices_data['data'] as $row) {
                 $i = $row['Invoice'] ?? [];
-                // جرّب عدة أسماء حقول للمبلغ الإجمالي
-                $total = (float)($i['summary_total'] ?? $i['grand_total'] ?? $i['total'] ?? $i['amount'] ?? $i['final_total'] ?? $i['invoice_total'] ?? 0);
-                $paid  = (float)($i['payments_total'] ?? $i['paid_amount'] ?? $i['amount_paid'] ?? 0);
-                // إذا paid_status موجود
-                $status = $i['payment_status'] ?? $i['status'] ?? '';
+                // الحقول الصحيحة في دفترة: summary_total / summary_paid / summary_unpaid
+                $total  = (float)($i['summary_total']  ?? 0);
+                $paid   = (float)($i['summary_paid']   ?? 0);
+                $unpaid = (float)($i['summary_unpaid'] ?? max(0, $total - $paid));
+
                 $total_invoiced += $total;
                 $total_paid     += $paid;
                 $invoice_count++;
-                if ($paid < $total) $unpaid_count++;
+                if ($unpaid > 0.01) $unpaid_count++;
+
                 $cid = $i['client_id'] ?? 0;
-                if (!isset($invoices_by_client[$cid])) $invoices_by_client[$cid] = ['total'=>0,'paid'=>0,'count'=>0];
-                $invoices_by_client[$cid]['total'] += $total;
-                $invoices_by_client[$cid]['paid']  += $paid;
+                $cname = $i['client_business_name']
+                       ?: trim(($i['client_first_name'] ?? '') . ' ' . ($i['client_last_name'] ?? ''))
+                       ?: 'عميل #' . $cid;
+                if (!isset($invoices_by_client[$cid])) {
+                    $invoices_by_client[$cid] = ['name'=>$cname,'total'=>0,'paid'=>0,'unpaid'=>0,'count'=>0];
+                }
+                $invoices_by_client[$cid]['total']  += $total;
+                $invoices_by_client[$cid]['paid']   += $paid;
+                $invoices_by_client[$cid]['unpaid'] += $unpaid;
                 $invoices_by_client[$cid]['count']++;
             }
         }

@@ -129,10 +129,11 @@ export default function Finance() {
                     <Users size={20} className="text-blue-600"/>
                     الفواتير حسب العميل
                 </h3>
+                <div className="overflow-x-auto">
                 <table className="w-full text-right text-sm">
                     <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
                         <tr>
-                            <th className="px-4 py-2">معرّف العميل</th>
+                            <th className="px-4 py-2">العميل</th>
                             <th className="px-4 py-2 text-center">عدد الفواتير</th>
                             <th className="px-4 py-2 text-center">إجمالي المفوتر</th>
                             <th className="px-4 py-2 text-center">المسدد</th>
@@ -140,17 +141,20 @@ export default function Finance() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {Object.entries(data.invoices_by_client || {}).map(([cid, c]) => (
+                        {Object.entries(data.invoices_by_client || {})
+                            .sort((a, b) => b[1].total - a[1].total)
+                            .map(([cid, c]) => (
                             <tr key={cid} className="hover:bg-slate-50/50">
-                                <td className="px-4 py-3 font-bold text-[#1a365d]">#{cid}</td>
+                                <td className="px-4 py-3 font-bold text-[#1a365d]">{c.name || `#${cid}`}</td>
                                 <td className="px-4 py-3 text-center font-bold">{c.count}</td>
                                 <td className="px-4 py-3 text-center font-bold">{fmt(c.total)}</td>
                                 <td className="px-4 py-3 text-center text-emerald-600 font-bold">{fmt(c.paid)}</td>
-                                <td className="px-4 py-3 text-center text-amber-600 font-bold">{fmt(c.total - c.paid)}</td>
+                                <td className={`px-4 py-3 text-center font-bold ${c.unpaid > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{fmt(c.unpaid || 0)}</td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             <div className="flex justify-center">
