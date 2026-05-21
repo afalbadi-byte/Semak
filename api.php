@@ -711,6 +711,58 @@ switch ($action) {
         echo json_encode(["success" => true]);
         break;
 
+    // ─── عدادات لوحة الإدارة (شارات الإشعارات) ─────────────────────────────────
+    case 'dashboard_counts':
+        $counts = [];
+        $tasks  = [];
+
+        // مهتمون جدد (لم تتغير حالتهم بعد)
+        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE status = 'جديد'");
+        $counts['leads_new'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+        if ($counts['leads_new'] > 0) {
+            $tasks[] = ["icon" => "Users", "color" => "teal", "tab" => "leads",
+                "text" => "{$counts['leads_new']} مهتم جديد ينتظر المتابعة"];
+        }
+
+        // طلبات صيانة مفتوحة
+        $r = $conn->query("SELECT COUNT(*) c FROM maintenance WHERE status NOT IN ('مكتمل', 'مغلق', 'ملغي')");
+        $counts['maintenance_open'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+        if ($counts['maintenance_open'] > 0) {
+            $tasks[] = ["icon" => "Wrench", "color" => "purple", "tab" => "maintenance",
+                "text" => "{$counts['maintenance_open']} طلب صيانة مفتوح"];
+        }
+
+        // طلبات صيانة بلا فني
+        $r = $conn->query("SELECT COUNT(*) c FROM maintenance WHERE (technician IS NULL OR technician = '' OR technician = 'لم يتم التعيين') AND status NOT IN ('مكتمل', 'مغلق', 'ملغي')");
+        $counts['maintenance_unassigned'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+        if ($counts['maintenance_unassigned'] > 0) {
+            $tasks[] = ["icon" => "AlertTriangle", "color" => "red", "tab" => "maintenance",
+                "text" => "{$counts['maintenance_unassigned']} طلب صيانة بدون فني معيّن"];
+        }
+
+        // محادثات البوت اليوم
+        $r = $conn->query("SELECT COUNT(DISTINCT phone) c FROM wa_bot_conversations WHERE DATE(created_at) = CURDATE()");
+        $counts['bot_customers_today'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+
+        // تقارير ملاحظات (snaglist) معلقة
+        $r = $conn->query("SELECT COUNT(*) c FROM inspections WHERE status IS NULL OR status = ''");
+        $counts['inspections_pending'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+        if ($counts['inspections_pending'] > 0) {
+            $tasks[] = ["icon" => "ClipboardCheck", "color" => "indigo", "tab" => "inspection",
+                "text" => "{$counts['inspections_pending']} فحص لم يُغلق بعد"];
+        }
+
+        // اعتراضات ميزانية (في الملاحظات)
+        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE notes LIKE '%ميزانية%' OR notes LIKE '%اعتراض%'");
+        $counts['budget_objections'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
+        if ($counts['budget_objections'] > 0) {
+            $tasks[] = ["icon" => "DollarSign", "color" => "amber", "tab" => "leads",
+                "text" => "{$counts['budget_objections']} عميل أبدى اعتراض ميزانية يحتاج مراجعة الإدارة"];
+        }
+
+        echo json_encode(["success" => true, "counts" => $counts, "tasks" => $tasks]);
+        break;
+
     // ─── إحصائيات بوت فهد ─────────────────────────────────────────────────────
     case 'bot_stats':
         $stats = [];

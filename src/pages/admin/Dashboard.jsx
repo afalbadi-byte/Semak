@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building,
     UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
-    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle, Bot
+    ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle, Bot,
+    AlertTriangle, DollarSign, ArrowLeft, CheckCircle2
 } from 'lucide-react';
 
 // استدعاء الأدوات والمكونات الخارجية
@@ -90,6 +91,25 @@ export default function Dashboard({ onLogout }) {
     const [leads, setLeads] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [dataLoading, setDataLoading] = useState(false);
+
+    // عدادات الإشعارات والمهام للوحة الرئيسية
+    const [dashCounts, setDashCounts] = useState({});
+    const [dashTasks, setDashTasks] = useState([]);
+
+    const loadDashboardCounts = async () => {
+        try {
+            const res = await fetch(`${API_URL}?action=dashboard_counts`);
+            const data = await res.json();
+            if (data.success) {
+                setDashCounts(data.counts || {});
+                setDashTasks(data.tasks || []);
+            }
+        } catch (e) {}
+    };
+
+    useEffect(() => {
+        if (activeTab === 'overview') loadDashboardCounts();
+    }, [activeTab]);
 
     useEffect(() => {
         const verifyUser = async () => {
@@ -261,69 +281,110 @@ export default function Dashboard({ onLogout }) {
                 </header>
 
                 <main className="flex-1 overflow-y-auto bg-slate-50 pt-24 relative custom-scrollbar">
-                    
-                    {/* --- الصفحة الرئيسية (Overview) --- */}
-                    {activeTab === 'overview' && (
-                        <div className="p-6 md:p-8 animate-fadeIn max-w-6xl mx-auto">
-                            <h2 className="text-2xl font-black text-[#1a365d] mb-6">مرحباً بك، {dbUser.name.split(' ')[0]} 👋</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                
-                                {/* 🔥 الكارت الجديد الخاص بالحاسبة يظهر للمدير فقط */}
-                                {hasPermission('admin') && (
-                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('feasibility')}>
-                                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors"><TrendingUp size={24}/></div>
-                                        <h3 className="text-slate-500 font-bold text-sm">حاسبة الجدوى</h3>
-                                        <p className="text-2xl font-black text-[#1a365d] mt-2">دراسة وعروض</p>
-                                    </div>
-                                )}
 
+                    {/* زر العودة للرئيسية — يظهر داخل أي صفحة فرعية */}
+                    {activeTab !== 'overview' && (
+                        <div className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur px-4 md:px-8 py-3 border-b border-slate-200 -mt-1">
+                            <button
+                                onClick={() => setActiveTab('overview')}
+                                className="flex items-center gap-2 text-sm font-bold text-[#1a365d] hover:text-teal-600 transition bg-white border border-slate-200 hover:border-teal-500 px-4 py-2 rounded-xl shadow-sm"
+                            >
+                                <ArrowLeft size={16}/> العودة للرئيسية
+                            </button>
+                        </div>
+                    )}
+
+                    {/* --- الصفحة الرئيسية (Overview) — تصميم جديد بالإيقونات والشارات --- */}
+                    {activeTab === 'overview' && (
+                        <div className="p-4 md:p-8 animate-fadeIn max-w-7xl mx-auto">
+                            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+                                <div>
+                                    <h2 className="text-2xl md:text-3xl font-black text-[#1a365d]">مرحباً، {dbUser.name.split(' ')[0]}</h2>
+                                    <p className="text-slate-500 text-sm mt-1">إليك ما يحتاج اهتمامك اليوم</p>
+                                </div>
+                                <button onClick={loadDashboardCounts} className="bg-white border border-slate-200 hover:border-teal-500 text-slate-600 hover:text-teal-600 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
+                                    <RefreshCw size={14} /> تحديث
+                                </button>
+                            </div>
+
+                            {/* قائمة المهام — رؤوس أقلام لما يحتاج اهتمام */}
+                            {dashTasks.length > 0 ? (
+                                <div className="bg-gradient-to-l from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 mb-8 shadow-sm">
+                                    <h3 className="text-sm font-black text-amber-900 mb-3 flex items-center gap-2">
+                                        <AlertTriangle size={16}/> مهام تحتاج إنجاز
+                                    </h3>
+                                    <ul className="space-y-2">
+                                        {dashTasks.map((t, i) => (
+                                            <li key={i} onClick={() => { setActiveTab(t.tab); if (t.tab === 'leads') loadLeads(); }} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/60 cursor-pointer transition">
+                                                <span className={`w-2 h-2 rounded-full bg-${t.color}-500 shrink-0`}/>
+                                                <span className="text-sm text-slate-700 font-bold flex-1">{t.text}</span>
+                                                <ArrowLeft size={14} className="text-slate-400"/>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ) : (
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 mb-8 shadow-sm flex items-center gap-3">
+                                    <CheckCircle2 size={20} className="text-emerald-600 shrink-0"/>
+                                    <div>
+                                        <h3 className="text-sm font-black text-emerald-900">كل شيء تحت السيطرة</h3>
+                                        <p className="text-xs text-emerald-700 mt-0.5">لا توجد مهام معلّقة حالياً</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* شبكة الإيقونات */}
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
+                                {hasPermission('leads') && (
+                                    <IconCard icon={Users} label="المهتمين" badge={dashCounts.leads_new} color="teal"
+                                        onClick={() => { setActiveTab('leads'); loadLeads(); }}/>
+                                )}
+                                {hasPermission('maintenance') && (
+                                    <IconCard icon={Wrench} label="الصيانة" badge={dashCounts.maintenance_open} color="purple"
+                                        onClick={() => setActiveTab('maintenance')}/>
+                                )}
+                                {hasPermission('admin') && (
+                                    <IconCard icon={Bot} label="بوت فهد" badge={dashCounts.bot_customers_today} color="amber" badgeLabel="اليوم"
+                                        onClick={() => setActiveTab('bot')}/>
+                                )}
                                 {hasPermission('inspection') && (
                                     <>
-                                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('inspection')}>
-                                            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><ClipboardCheck size={24}/></div>
-                                            <h3 className="text-slate-500 font-bold text-sm">فحص وتسليم الوحدات</h3>
-                                            <p className="text-2xl font-black text-[#1a365d] mt-2">إدارة المهام</p>
-                                        </div>
-                                        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('snaglist')}>
-                                            <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-red-600 group-hover:text-white transition-colors"><FileWarning size={24}/></div>
-                                            <h3 className="text-slate-500 font-bold text-sm">تقارير الملاحظات</h3>
-                                            <p className="text-2xl font-black text-[#1a365d] mt-2">مراجعة</p>
-                                        </div>
+                                        <IconCard icon={ClipboardCheck} label="فحص الوحدات" badge={dashCounts.inspections_pending} color="indigo"
+                                            onClick={() => setActiveTab('inspection')}/>
+                                        <IconCard icon={FileWarning} label="الملاحظات" color="red"
+                                            onClick={() => setActiveTab('snaglist')}/>
                                     </>
                                 )}
-
-                                {hasPermission('maintenance') && (
-                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('maintenance')}>
-                                        <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors"><Wrench size={24}/></div>
-                                        <h3 className="text-slate-500 font-bold text-sm">طلبات الصيانة</h3>
-                                        <p className="text-2xl font-black text-[#1a365d] mt-2">إدارة التذاكر</p>
-                                    </div>
+                                {hasPermission('admin') && (
+                                    <>
+                                        <IconCard icon={Building} label="المشاريع" color="blue"
+                                            onClick={() => setActiveTab('projects')}/>
+                                        <IconCard icon={Building2} label="الوحدات" color="sky"
+                                            onClick={() => setActiveTab('units')}/>
+                                        <IconCard icon={Edit2} label="تعديل الوحدات" color="cyan"
+                                            onClick={() => setActiveTab('units_edit')}/>
+                                        <IconCard icon={TrendingUp} label="حاسبة الجدوى" color="emerald"
+                                            onClick={() => setActiveTab('feasibility')}/>
+                                        <IconCard icon={MessageCircle} label="صندوق واتساب" color="green"
+                                            onClick={() => setActiveTab('whatsapp')}/>
+                                    </>
                                 )}
-
-                                {hasPermission('leads') && (
-                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => { setActiveTab('leads'); loadLeads(); }}>
-                                        <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-colors"><Users size={24}/></div>
-                                        <h3 className="text-slate-500 font-bold text-sm">سجل المهتمين</h3>
-                                        <p className="text-2xl font-black text-[#1a365d] mt-2">متابعة العملاء</p>
-                                    </div>
-                                )}
-
                                 {hasPermission('qr') && (
-                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('qr')}>
-                                        <div className="w-12 h-12 bg-slate-100 text-slate-800 rounded-full flex items-center justify-center mb-4 group-hover:bg-slate-800 group-hover:text-white transition-colors"><QrCode size={24}/></div>
-                                        <h3 className="text-slate-500 font-bold text-sm">رموز الوحدات (QR)</h3>
-                                        <p className="text-2xl font-black text-[#1a365d] mt-2">توليد للطباعة</p>
-                                    </div>
+                                    <IconCard icon={QrCode} label="رموز QR" color="slate"
+                                        onClick={() => setActiveTab('qr')}/>
                                 )}
-                                
+                                {hasPermission('letters') && (
+                                    <IconCard icon={FilePenLine} label="الخطابات" color="rose"
+                                        onClick={() => window.location.href = '/admin/letter-generator'}/>
+                                )}
                                 {hasPermission('users_manage') && (
-                                    <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 cursor-pointer hover:shadow-md transition group" onClick={() => setActiveTab('users')}>
-                                        <div className="w-12 h-12 bg-blue-50 text-[#1a365d] rounded-full flex items-center justify-center mb-4 group-hover:bg-[#1a365d] group-hover:text-white transition-colors"><UserCircle size={24}/></div>
-                                        <h3 className="text-slate-500 font-bold text-sm">إدارة الموظفين</h3>
-                                        <p className="text-2xl font-black text-[#1a365d] mt-2">تعديل الصلاحيات</p>
-                                    </div>
+                                    <IconCard icon={UserCircle} label="الموظفين" color="blue"
+                                        onClick={() => setActiveTab('users')}/>
                                 )}
-
+                                {hasPermission('accounting') && (
+                                    <IconCard icon={Calculator} label="المحاسبة" color="slate"
+                                        onClick={() => window.open('https://semak.daftra.com/', '_blank')}/>
+                                )}
                             </div>
                         </div>
                     )}
@@ -405,5 +466,44 @@ export default function Dashboard({ onLogout }) {
                 </main>
             </div>
         </div>
+    );
+}
+
+// بطاقة إيقونة مع شارة إشعار
+function IconCard({ icon: Icon, label, badge, badgeLabel, color = 'slate', onClick }) {
+    const palette = {
+        teal:    { bg: 'bg-teal-50',    text: 'text-teal-700',    hover: 'hover:bg-teal-600',    badge: 'bg-teal-600' },
+        purple:  { bg: 'bg-purple-50',  text: 'text-purple-700',  hover: 'hover:bg-purple-600',  badge: 'bg-purple-600' },
+        amber:   { bg: 'bg-amber-50',   text: 'text-amber-700',   hover: 'hover:bg-amber-600',   badge: 'bg-amber-600' },
+        indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-700',  hover: 'hover:bg-indigo-600',  badge: 'bg-indigo-600' },
+        red:     { bg: 'bg-red-50',     text: 'text-red-700',     hover: 'hover:bg-red-600',     badge: 'bg-red-600' },
+        blue:    { bg: 'bg-blue-50',    text: 'text-blue-700',    hover: 'hover:bg-blue-600',    badge: 'bg-blue-600' },
+        sky:     { bg: 'bg-sky-50',     text: 'text-sky-700',     hover: 'hover:bg-sky-600',     badge: 'bg-sky-600' },
+        cyan:    { bg: 'bg-cyan-50',    text: 'text-cyan-700',    hover: 'hover:bg-cyan-600',    badge: 'bg-cyan-600' },
+        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', hover: 'hover:bg-emerald-600', badge: 'bg-emerald-600' },
+        green:   { bg: 'bg-green-50',   text: 'text-green-700',   hover: 'hover:bg-green-600',   badge: 'bg-green-600' },
+        rose:    { bg: 'bg-rose-50',    text: 'text-rose-700',    hover: 'hover:bg-rose-600',    badge: 'bg-rose-600' },
+        slate:   { bg: 'bg-slate-100',  text: 'text-slate-700',   hover: 'hover:bg-slate-700',   badge: 'bg-slate-700' },
+    };
+    const c = palette[color] || palette.slate;
+    const hasBadge = Number(badge) > 0;
+    return (
+        <button
+            onClick={onClick}
+            className="group bg-white rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 hover:border-slate-200 transition-all p-3 md:p-4 flex flex-col items-center justify-center text-center min-h-[110px] md:min-h-[130px] relative"
+        >
+            {hasBadge && (
+                <span className={`absolute -top-1.5 -right-1.5 ${c.badge} text-white text-[10px] md:text-xs font-black rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center shadow-md ring-2 ring-white`}>
+                    {badge}
+                </span>
+            )}
+            {badgeLabel && (
+                <span className="absolute top-1 left-1 text-[9px] font-bold text-slate-400">{badgeLabel}</span>
+            )}
+            <div className={`w-12 h-12 md:w-14 md:h-14 ${c.bg} ${c.text} ${c.hover} group-hover:text-white rounded-2xl flex items-center justify-center mb-2 transition-colors`}>
+                <Icon size={22}/>
+            </div>
+            <div className="text-xs md:text-sm font-black text-[#1a365d] leading-tight">{label}</div>
+        </button>
     );
 }
