@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
     Database, RefreshCw, Search, Eye, X, ExternalLink, Receipt, FileText,
     ShoppingCart, Users, Truck, Package, FolderTree, Building, Wallet,
-    TrendingDown, UserCog, Percent, Filter, ArrowRight, Calendar, DollarSign
+    TrendingDown, UserCog, Percent, Filter, ArrowRight, Calendar, DollarSign, Layers
 } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
@@ -20,6 +20,7 @@ const MODULES = [
     { id: 'expenses',           label: 'المصروفات',         icon: TrendingDown, color: 'red' },
     { id: 'staff',              label: 'الموظفين',          icon: UserCog,      color: 'rose' },
     { id: 'taxes',              label: 'الضرائب',           icon: Percent,      color: 'orange' },
+    { id: 'work_orders',        label: 'دورات العمل',       icon: Layers,       color: 'indigo' },
 ];
 
 const KEY_FIELDS = {
@@ -35,6 +36,7 @@ const KEY_FIELDS = {
     expenses: ['date', 'amount', 'currency_code', 'category', 'vendor', 'note'],
     staff: ['code', 'name', 'last_name', 'mobile', 'business_Phone', 'type'],
     taxes: ['name', 'value', 'description', 'is_active'],
+    work_orders: ['number', 'title', 'start_date', 'delivery_date', 'budget', 'budget_currency', 'status'],
 };
 
 // أي الوحدات تدعم التنقل لتفاصيل المورد/العميل

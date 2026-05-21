@@ -1,55 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Layers, Plus, Edit, Trash2, RefreshCw, X, ChevronLeft, Calendar, DollarSign,
-    TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Receipt, ShoppingCart, FileText
+    Layers, RefreshCw, ChevronLeft, Calendar, DollarSign, ExternalLink,
+    TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Receipt, ShoppingCart, Search
 } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
 export default function WorkCycles() {
-    const [cycles, setCycles] = useState([]);
+    const [workOrders, setWorkOrders] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [showForm, setShowForm] = useState(false);
-    const [editing, setEditing] = useState(null);
-    const [selectedCycle, setSelectedCycle] = useState(null);
+    const [selected, setSelected] = useState(null);
+    const [search, setSearch] = useState('');
 
-    const loadCycles = async () => {
+    const load = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}?action=cycles_list`);
+            const res = await fetch(`${API_URL}?action=daftra_list&module=work_orders`);
             const json = await res.json();
-            if (json.success) setCycles(json.data);
+            if (json.success) setWorkOrders(json.data);
         } finally { setLoading(false); }
     };
 
-    useEffect(() => { loadCycles(); }, []);
+    useEffect(() => { load(); }, []);
 
-    const saveCycle = async (form) => {
-        const res = await fetch(`${API_URL}?action=cycle_save`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(form),
-        });
-        const json = await res.json();
-        if (json.success) {
-            setShowForm(false);
-            setEditing(null);
-            loadCycles();
-        } else alert(json.message);
-    };
+    const fmt = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
-    const deleteCycle = async (id) => {
-        if (!confirm('تأكيد حذف دورة العمل؟')) return;
-        await fetch(`${API_URL}?action=cycle_delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id }),
-        });
-        loadCycles();
-    };
+    const filtered = workOrders.filter(w =>
+        !search || (w.title || '').toLowerCase().includes(search.toLowerCase())
+        || String(w.number || '').includes(search)
+        || (w.description || '').toLowerCase().includes(search.toLowerCase())
+    );
 
-    if (selectedCycle) {
-        return <CycleDetail cycleId={selectedCycle} onBack={() => setSelectedCycle(null)} />;
+    if (selected) {
+        return <WorkOrderDetail id={selected} onBack={() => setSelected(null)} />;
     }
 
     return (
@@ -62,167 +45,117 @@ export default function WorkCycles() {
                             <Layers size={32}/>
                         </div>
                         <div>
-                            <h1 className="text-2xl md:text-3xl font-black">دورات العمل</h1>
-                            <p className="text-sm text-slate-300 mt-1">تجميع المشتريات والمصروفات والإيرادات لكل دورة مشروع</p>
+                            <h1 className="text-2xl md:text-3xl font-black">دورات العمل (Work Orders)</h1>
+                            <p className="text-sm text-slate-300 mt-1">أوامر العمل من دفترة مع تجميع المشتريات والإيرادات لكل دورة</p>
                         </div>
                     </div>
-                    <button onClick={() => { setEditing(null); setShowForm(true); }}
-                        className="bg-[#c5a059] hover:bg-yellow-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md">
-                        <Plus size={18}/> دورة جديدة
-                    </button>
+                    <a href="https://semak.daftra.com/work_orders" target="_blank" rel="noreferrer"
+                        className="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition">
+                        <ExternalLink size={14}/> إدارة في دفترة
+                    </a>
                 </div>
             </div>
 
-            {showForm && (
-                <CycleForm
-                    initial={editing}
-                    onCancel={() => { setShowForm(false); setEditing(null); }}
-                    onSave={saveCycle}
-                />
-            )}
+            {/* البحث */}
+            <div className="bg-white rounded-2xl shadow border border-slate-100 p-4 flex items-center gap-3">
+                <div className="relative flex-1">
+                    <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                    <input type="text" placeholder="بحث بالعنوان / الرقم / الوصف..." value={search} onChange={e=>setSearch(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 pr-9 pl-3 py-2.5 rounded-xl outline-none focus:border-emerald-500"/>
+                </div>
+                <button onClick={load} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-2.5 rounded-xl transition" title="تحديث">
+                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''}/>
+                </button>
+                <span className="text-sm font-bold text-slate-500">{filtered.length} دورة</span>
+            </div>
 
             {loading ? (
-                <div className="bg-white rounded-2xl p-12 text-center"><RefreshCw className="animate-spin inline mr-2"/> جاري التحميل...</div>
-            ) : cycles.length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center"><RefreshCw className="animate-spin inline mr-2 text-emerald-600"/> جاري التحميل من دفترة...</div>
+            ) : filtered.length === 0 ? (
                 <div className="bg-white rounded-2xl p-12 text-center text-slate-400">
                     <Layers size={48} className="mx-auto mb-3 opacity-50"/>
-                    <p className="font-bold">لا توجد دورات عمل بعد</p>
-                    <p className="text-sm mt-2">أنشئ دورة جديدة لتجميع تكاليف وإيرادات مشروع/مرحلة معينة</p>
+                    <p className="font-bold">لا توجد دورات عمل</p>
+                    <p className="text-sm mt-2">أنشئ دورة من دفترة → "دورات العمل" أو "Work Orders"</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {cycles.map(c => (
-                        <CycleCard key={c.id} cycle={c}
-                            onOpen={() => setSelectedCycle(c.id)}
-                            onEdit={() => { setEditing(c); setShowForm(true); }}
-                            onDelete={() => deleteCycle(c.id)}
-                        />
-                    ))}
+                    {filtered.map(w => <WorkOrderCard key={w.id} wo={w} fmt={fmt} onOpen={() => setSelected(w.id)} />)}
                 </div>
             )}
         </div>
     );
 }
 
-function CycleCard({ cycle, onOpen, onEdit, onDelete }) {
-    const statusColors = {
-        active: 'bg-emerald-100 text-emerald-700',
-        paused: 'bg-amber-100 text-amber-700',
-        completed: 'bg-blue-100 text-blue-700',
-        cancelled: 'bg-red-100 text-red-700',
+function WorkOrderCard({ wo, fmt, onOpen }) {
+    const statusMap = {
+        '1': { label: 'مفتوحة', cls: 'bg-emerald-100 text-emerald-700' },
+        '2': { label: 'قيد التنفيذ', cls: 'bg-blue-100 text-blue-700' },
+        '3': { label: 'مكتملة', cls: 'bg-slate-200 text-slate-700' },
+        '4': { label: 'ملغاة', cls: 'bg-red-100 text-red-700' },
     };
-    const statusLabels = { active: 'نشطة', paused: 'متوقفة', completed: 'مكتملة', cancelled: 'ملغاة' };
+    const st = statusMap[String(wo.status)] || { label: wo.status || '—', cls: 'bg-slate-100 text-slate-600' };
+
     return (
-        <div className="bg-white rounded-2xl shadow border border-slate-100 p-5 hover:shadow-md transition">
+        <div className="bg-white rounded-2xl shadow border border-slate-100 p-5 hover:shadow-md transition cursor-pointer" onClick={onOpen}>
             <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                    <h3 className="text-lg font-black text-[#1a365d] mb-1">{cycle.name}</h3>
-                    {cycle.project_name && <p className="text-sm text-slate-500">{cycle.project_name}</p>}
+                <div className="flex-1 min-w-0">
+                    <div className="text-xs font-mono text-slate-400 mb-1">#{wo.number}</div>
+                    <h3 className="text-lg font-black text-[#1a365d] mb-1 truncate" title={wo.title}>{wo.title || '—'}</h3>
                 </div>
-                <span className={`text-xs font-bold px-2 py-1 rounded-lg ${statusColors[cycle.status] || statusColors.active}`}>
-                    {statusLabels[cycle.status] || cycle.status}
-                </span>
+                <span className={`text-xs font-bold px-2 py-1 rounded-lg shrink-0 ${st.cls}`}>{st.label}</span>
             </div>
             <div className="space-y-1 text-xs text-slate-600 mb-3">
-                {cycle.start_date && (
-                    <div className="flex items-center gap-2"><Calendar size={12}/> {cycle.start_date} {cycle.end_date && `إلى ${cycle.end_date}`}</div>
+                {wo.start_date && (
+                    <div className="flex items-center gap-2"><Calendar size={12}/> بدء: {wo.start_date}</div>
                 )}
-                {cycle.budget > 0 && (
-                    <div className="flex items-center gap-2"><DollarSign size={12}/> ميزانية: <strong>{Number(cycle.budget).toLocaleString()}</strong> ريال</div>
+                {wo.delivery_date && (
+                    <div className="flex items-center gap-2"><Calendar size={12}/> تسليم: {wo.delivery_date}</div>
+                )}
+                {wo.budget > 0 && (
+                    <div className="flex items-center gap-2"><DollarSign size={12}/> ميزانية: <strong className="text-[#1a365d]">{fmt(wo.budget)}</strong> {wo.budget_currency || 'SAR'}</div>
                 )}
             </div>
-            <div className="flex gap-2 pt-3 border-t border-slate-100">
-                <button onClick={onOpen} className="flex-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white py-2 rounded-xl text-sm font-bold transition">عرض التفاصيل</button>
-                <button onClick={onEdit}  className="bg-slate-50 text-slate-600 hover:bg-emerald-500 hover:text-white p-2 rounded-xl transition"><Edit size={14}/></button>
-                <button onClick={onDelete} className="bg-red-50 text-red-600 hover:bg-red-500 hover:text-white p-2 rounded-xl transition"><Trash2 size={14}/></button>
+            {wo.description && <p className="text-xs text-slate-500 mt-2 line-clamp-2">{wo.description}</p>}
+            <div className="text-xs font-bold text-emerald-600 mt-3 pt-3 border-t border-slate-100">
+                عرض التفاصيل المالية ←
             </div>
         </div>
     );
 }
 
-function CycleForm({ initial, onCancel, onSave }) {
-    const [form, setForm] = useState({
-        id: initial?.id || null,
-        name: initial?.name || '',
-        description: initial?.description || '',
-        project_name: initial?.project_name || '',
-        start_date: initial?.start_date || '',
-        end_date: initial?.end_date || '',
-        budget: initial?.budget || 0,
-        supplier_ids: initial?.supplier_ids || '',
-        categories: initial?.categories || '',
-        status: initial?.status || 'active',
-    });
-
-    return (
-        <div className="bg-white rounded-2xl shadow border border-slate-100 p-6">
-            <h3 className="font-black text-[#1a365d] mb-4">{initial ? 'تعديل دورة العمل' : 'دورة عمل جديدة'}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="اسم الدورة *"><input type="text" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} className="input" /></Field>
-                <Field label="المشروع المرتبط"><input type="text" value={form.project_name} onChange={e=>setForm({...form, project_name:e.target.value})} className="input" placeholder="مثل: سماك البوابة 1" /></Field>
-                <Field label="تاريخ البداية"><input type="date" value={form.start_date} onChange={e=>setForm({...form, start_date:e.target.value})} className="input" /></Field>
-                <Field label="تاريخ النهاية"><input type="date" value={form.end_date} onChange={e=>setForm({...form, end_date:e.target.value})} className="input" /></Field>
-                <Field label="الميزانية المخصصة (ريال)"><input type="number" value={form.budget} onChange={e=>setForm({...form, budget:e.target.value})} className="input" /></Field>
-                <Field label="الحالة">
-                    <select value={form.status} onChange={e=>setForm({...form, status:e.target.value})} className="input">
-                        <option value="active">نشطة</option>
-                        <option value="paused">متوقفة</option>
-                        <option value="completed">مكتملة</option>
-                        <option value="cancelled">ملغاة</option>
-                    </select>
-                </Field>
-                <Field label="معرّفات الموردين (مفصولة بفاصلة)" full><input type="text" value={form.supplier_ids} onChange={e=>setForm({...form, supplier_ids:e.target.value})} className="input" placeholder="مثل: 3,5,7 — أو اتركه فارغ لكل الموردين"/></Field>
-                <Field label="تصنيفات المصروفات (مفصولة بفاصلة)" full><input type="text" value={form.categories} onChange={e=>setForm({...form, categories:e.target.value})} className="input" placeholder="مثل: نثرية,تخريم — أو اتركه فارغ لكل التصنيفات"/></Field>
-                <Field label="وصف" full><textarea value={form.description} onChange={e=>setForm({...form, description:e.target.value})} className="input" rows={2}/></Field>
-            </div>
-            <div className="flex gap-2 mt-4">
-                <button onClick={()=>onSave(form)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold">حفظ</button>
-                <button onClick={onCancel} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold">إلغاء</button>
-            </div>
-            <style>{`.input { width: 100%; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px 12px; font-weight: 600; color: #1a365d; outline: none; } .input:focus { border-color: #c5a059; }`}</style>
-        </div>
-    );
-}
-
-function Field({ label, children, full }) {
-    return (
-        <div className={full ? 'md:col-span-2' : ''}>
-            <label className="text-xs font-bold text-slate-600 block mb-1">{label}</label>
-            {children}
-        </div>
-    );
-}
-
-function CycleDetail({ cycleId, onBack }) {
+function WorkOrderDetail({ id, onBack }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch(`${API_URL}?action=cycle_summary&id=${cycleId}`)
+        fetch(`${API_URL}?action=daftra_work_order_summary&id=${id}`)
             .then(r => r.json())
             .then(j => { if (j.success) setData(j); setLoading(false); });
-    }, [cycleId]);
+    }, [id]);
 
     const fmt = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
     if (loading) return <div className="bg-white rounded-2xl p-12 text-center"><RefreshCw className="animate-spin inline mr-2"/> جاري حساب البيانات...</div>;
-    if (!data) return <div>خطأ</div>;
-    const { cycle, summary, purchases, expenses, invoices } = data;
+    if (!data || !data.work_order) return <div className="p-6">لم يتم العثور على بيانات</div>;
+
+    const { work_order: wo, summary, purchases, expenses, invoices } = data;
     const overBudget = summary.budget_used_pct > 100;
 
     return (
         <div className="space-y-6 p-4 md:p-6">
             <button onClick={onBack} className="flex items-center gap-2 text-[#1a365d] font-bold hover:text-emerald-600 transition">
-                <ChevronLeft size={18}/> رجوع لقائمة الدورات
+                <ChevronLeft size={18}/> رجوع لقائمة دورات العمل
             </button>
 
             {/* رأس الدورة */}
             <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] rounded-[2rem] p-6 text-white shadow-xl">
-                <h2 className="text-2xl font-black mb-1">{cycle.name}</h2>
-                {cycle.project_name && <p className="text-slate-300">{cycle.project_name}</p>}
-                {(cycle.start_date || cycle.end_date) && (
-                    <p className="text-xs text-slate-400 mt-2">{cycle.start_date || '—'} → {cycle.end_date || 'الآن'}</p>
-                )}
+                <div className="text-xs font-mono text-slate-400 mb-1">دورة عمل #{wo.number}</div>
+                <h2 className="text-2xl font-black mb-2">{wo.title}</h2>
+                {wo.description && <p className="text-slate-300 text-sm mb-3">{wo.description}</p>}
+                <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+                    {wo.start_date && <span>📅 بدء: {wo.start_date}</span>}
+                    {wo.delivery_date && <span>🏁 تسليم: {wo.delivery_date}</span>}
+                </div>
             </div>
 
             {/* المؤشرات الكبيرة */}
@@ -257,16 +190,15 @@ function CycleDetail({ cycleId, onBack }) {
                 </div>
             )}
 
-            {/* الجداول */}
-            <DataSection title="المشتريات" icon={ShoppingCart} color="purple" items={purchases} columns={[
+            <Section title="المشتريات" icon={ShoppingCart} color="purple" items={purchases} columns={[
                 {key:'no', label:'رقم'}, {key:'date', label:'التاريخ'}, {key:'supplier', label:'المورد'},
                 {key:'total', label:'الإجمالي', fmt:true}, {key:'paid', label:'المسدد', fmt:true}
             ]}/>
-            <DataSection title="المصروفات" icon={TrendingDown} color="red" items={expenses} columns={[
-                {key:'date', label:'التاريخ'}, {key:'category', label:'التصنيف'},
+            <Section title="المصروفات" icon={TrendingDown} color="red" items={expenses} columns={[
+                {key:'date', label:'التاريخ'}, {key:'category', label:'التصنيف'}, {key:'vendor', label:'البائع'},
                 {key:'amount', label:'المبلغ', fmt:true}, {key:'note', label:'ملاحظات'}
             ]}/>
-            <DataSection title="الفواتير الصادرة" icon={Receipt} color="blue" items={invoices} columns={[
+            <Section title="الفواتير الصادرة" icon={Receipt} color="blue" items={invoices} columns={[
                 {key:'no', label:'رقم'}, {key:'date', label:'التاريخ'}, {key:'client', label:'العميل'},
                 {key:'total', label:'الإجمالي', fmt:true}, {key:'paid', label:'المسدد', fmt:true}
             ]}/>
@@ -290,7 +222,7 @@ function Big({ label, value, color, icon:Icon }) {
     );
 }
 
-function DataSection({ title, icon:Icon, color, items, columns }) {
+function Section({ title, icon:Icon, color, items, columns }) {
     const fmt = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
     return (
         <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
@@ -299,7 +231,7 @@ function DataSection({ title, icon:Icon, color, items, columns }) {
                 <h3 className="font-black text-[#1a365d]">{title} ({items.length})</h3>
             </div>
             {items.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-sm">لا توجد سجلات في هذه الدورة</div>
+                <div className="p-6 text-center text-slate-400 text-sm">لا توجد سجلات مرتبطة بهذه الدورة</div>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-right text-sm">

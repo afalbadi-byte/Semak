@@ -1041,6 +1041,113 @@ switch ($action) {
         echo json_encode(["success" => true]);
         break;
 
+    case 'daftra_work_order_summary':
+        // ملخّص شامل لـ Work Order (دورة عمل) من دفترة مع كل البنود المرتبطة
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+        $wo_id = (int)($_GET['id'] ?? 0);
+        if (!$wo_id) { echo json_encode(["success" => false, "message" => "id مطلوب"]); break; }
+
+        $fetch_all = function($endpoint) use ($base, $headers) {
+            $all = []; $page = 1;
+            while ($page <= 50) {
+                $ch = curl_init("$base/$endpoint.json?page=$page&limit=100");
+                curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers, CURLOPT_TIMEOUT => 15]);
+                $res = curl_exec($ch); curl_close($ch);
+                $data = json_decode($res, true);
+                if (!isset($data['data']) || count($data['data']) === 0) break;
+                $all = array_merge($all, $data['data']);
+                if (count($data['data']) < 100) break;
+                $page++;
+            }
+            return $all;
+        };
+
+        // جلب الدورة بحد ذاتها
+        $ch = curl_init("$base/work_orders/$wo_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers, CURLOPT_TIMEOUT => 15]);
+        $wo_raw = curl_exec($ch); curl_close($ch);
+        $wo_data = json_decode($wo_raw, true);
+        $wo = $wo_data['WorkOrder'] ?? $wo_data['data']['WorkOrder'] ?? null;
+
+        // جلب الكل وفلترة بـ work_order_id
+        $invoices  = $fetch_all("invoices");
+        $purchases = $fetch_all("purchase_invoices");
+        $expenses  = $fetch_all("expenses");
+
+        $matched_invoices = [];
+        $total_revenue = 0; $paid_revenue = 0;
+        foreach ($invoices as $r) {
+            $i = $r['Invoice'] ?? [];
+            if ((int)($i['work_order_id'] ?? 0) !== $wo_id) continue;
+            $matched_invoices[] = [
+                'id' => $i['id'], 'no' => $i['no'], 'date' => $i['date'],
+                'client' => $i['client_business_name'] ?? '',
+                'total' => (float)($i['summary_total'] ?? 0),
+                'paid' => (float)($i['summary_paid'] ?? 0),
+            ];
+            $total_revenue += (float)($i['summary_total'] ?? 0);
+            $paid_revenue  += (float)($i['summary_paid'] ?? 0);
+        }
+
+        $matched_purchases = [];
+        $total_purchases = 0; $paid_purchases = 0;
+        foreach ($purchases as $r) {
+            $p = $r['PurchaseOrder'] ?? [];
+            if ((int)($p['work_order_id'] ?? 0) !== $wo_id) continue;
+            $matched_purchases[] = [
+                'id' => $p['id'], 'no' => $p['no'], 'date' => $p['date'],
+                'supplier' => $p['supplier_business_name'] ?? '',
+                'total' => (float)($p['summary_total'] ?? 0),
+                'paid' => (float)($p['summary_paid'] ?? 0),
+            ];
+            $total_purchases += (float)($p['summary_total'] ?? 0);
+            $paid_purchases  += (float)($p['summary_paid'] ?? 0);
+        }
+
+        $matched_expenses = [];
+        $total_expenses = 0;
+        foreach ($expenses as $r) {
+            $e = $r['Expense'] ?? [];
+            if ((int)($e['work_order_id'] ?? 0) !== $wo_id) continue;
+            $matched_expenses[] = [
+                'id' => $e['id'], 'date' => $e['date'],
+                'amount' => (float)($e['amount'] ?? 0),
+                'category' => $e['category'] ?? '',
+                'note' => $e['note'] ?? '',
+                'vendor' => $e['vendor'] ?? '',
+            ];
+            $total_expenses += (float)($e['amount'] ?? 0);
+        }
+
+        $total_cost = $total_purchases + $total_expenses;
+        $net_profit = $total_revenue - $total_cost;
+        $budget = (float)($wo['budget'] ?? 0);
+        $budget_left = $budget - $total_cost;
+        $budget_used_pct = $budget > 0 ? round(($total_cost / $budget) * 100, 1) : 0;
+
+        echo json_encode([
+            "success" => true,
+            "work_order" => $wo,
+            "summary" => [
+                "budget" => $budget,
+                "total_revenue" => $total_revenue,
+                "paid_revenue" => $paid_revenue,
+                "total_purchases" => $total_purchases,
+                "paid_purchases" => $paid_purchases,
+                "total_expenses" => $total_expenses,
+                "total_cost" => $total_cost,
+                "net_profit" => $net_profit,
+                "budget_left" => $budget_left,
+                "budget_used_pct" => $budget_used_pct,
+            ],
+            "invoices" => $matched_invoices,
+            "purchases" => $matched_purchases,
+            "expenses" => $matched_expenses,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'cycle_summary':
         // إحصائيات دورة عمل: المصروفات + المشتريات + الفواتير الصادرة خلال الفترة
         $id = (int)($_GET['id'] ?? 0);
