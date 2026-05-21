@@ -298,8 +298,8 @@ export default function FeasibilityCalc({ showToast }) {
                 </div>
             </div>
             
-            {/* قوالب الطباعة (مخفية عن الشاشة وتظهر فقط عند الطباعة) */}
-            <div style={{ position: 'absolute', left: '-99999px', top: 0, width: '210mm' }}>
+            {/* قوالب الطباعة - مرئية لكنها خارج الشاشة (تضمن تحميل الصور وعمل react-to-print) */}
+            <div style={{ position: 'fixed', top: 0, left: '-210mm', width: '210mm', visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }} aria-hidden="true">
 
                 {/* Teaser Print Template — العرض الاستثماري المختصر */}
                 <PrintableLetterhead ref={teaserPrintRef} documentLabel="عرض استثماري" subtitle={projectName || 'مشروع سماك'} date={new Date().toLocaleDateString('en-GB')}>

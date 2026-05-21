@@ -374,8 +374,8 @@ export default function LetterGenerator() {
         </div>
       </div>
 
-      {/* نسخة الطباعة الاحترافية (مخفية، تستخدم ترويسة سماك المشتركة) */}
-      <div style={{ position: 'absolute', left: '-99999px', top: 0, width: '210mm' }}>
+      {/* نسخة الطباعة - مرئية لكنها خارج الشاشة (تضمن تحميل الصور وعمل react-to-print) */}
+      <div style={{ position: 'fixed', top: 0, left: '-210mm', width: '210mm', visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }} aria-hidden="true">
         <PrintableLetterhead ref={printRef} documentLabel="خطاب رسمي" date={data.date}>
           <div className="font-amiri" style={{ fontSize: '15px', lineHeight: 2.2, color: '#1e293b' }}>
             {/* المُرسل إليه */}
