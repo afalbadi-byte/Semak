@@ -56,22 +56,21 @@ export default function LeadsManage({ showToast }) {
         }
     };
 
-    // حذف مهتم
+    // حذف مهتم (يحذف كل السجلات المُجمَّعة بنفس الجوال)
     const deleteLead = async (lead) => {
-        if (!confirm(`تأكيد حذف ${lead.name} (${lead.phone})؟\n\nسيتم حذف السجل نهائياً.`)) return;
+        const ids = lead.merged_ids || [lead.id];
+        const extra = ids.length > 1 ? `\n\nسيتم حذف ${ids.length} سجلات مرتبطة بنفس الجوال.` : '';
+        if (!confirm(`تأكيد حذف ${lead.name} (${lead.phone})؟${extra}\nالحذف نهائي.`)) return;
         try {
-            const res = await fetch(`${API_URL}?action=delete_lead`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: lead.id })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setLeads(prev => prev.filter(l => l.id !== lead.id));
-                if (showToast) showToast("تم الحذف", `حُذف سجل ${lead.name}`);
-            } else if (showToast) {
-                showToast("فشل الحذف", data.message || "خطأ", "error");
-            }
+            await Promise.all(ids.map(id =>
+                fetch(`${API_URL}?action=delete_lead`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                })
+            ));
+            setLeads(prev => prev.filter(l => !ids.includes(l.id)));
+            if (showToast) showToast("تم الحذف", `حُذف سجل ${lead.name}`);
         } catch (e) {
             if (showToast) showToast("فشل الحذف", e.message, "error");
         }
@@ -159,7 +158,41 @@ export default function LeadsManage({ showToast }) {
         }
     };
 
-    const filteredLeads = leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery));
+    // مفتاح تجميع موحّد للجوال (يلغي الفروق بين 05.., 9665.., +9665.., 5..)
+    const phoneKey = (p) => {
+        const digits = String(p || '').replace(/\D/g, '');
+        return digits.replace(/^(966|0)/, '').replace(/^/, ''); // النسخة المختصرة (بدون 0 أو 966)
+    };
+
+    // دمج كل المهتمين بنفس الجوال في سجل واحد، مع تجميع الاهتمامات والملاحظات
+    const groupedLeads = (() => {
+        const groups = {};
+        for (const l of leads) {
+            const key = phoneKey(l.phone) || `id:${l.id}`;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(l);
+        }
+        return Object.values(groups).map(arr => {
+            const sorted = [...arr].sort((a, b) => (b.id || 0) - (a.id || 0)); // الأحدث أولاً
+            const primary = sorted[0];
+            const interests = Array.from(new Set(sorted.map(x => x.interest).filter(Boolean))).join('، ');
+            const allNotes = sorted
+                .map(x => x.notes)
+                .filter(Boolean)
+                .join('\n');
+            return {
+                ...primary,
+                interest: interests || primary.interest,
+                notes: allNotes || primary.notes,
+                merged_ids: sorted.map(x => x.id),
+                merged_count: sorted.length,
+            };
+        });
+    })();
+
+    const filteredLeads = groupedLeads.filter(l =>
+        String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)
+    );
 
     return (
         <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up relative">
@@ -249,7 +282,14 @@ export default function LeadsManage({ showToast }) {
                         ) : filteredLeads.map((lead) => (
                             <tr key={lead.id} className="hover:bg-teal-50/30 transition-colors duration-200">
                                 <td className="px-6 py-4">
-                                    <div className="font-bold text-[#1a365d] text-base">{lead.name}</div>
+                                    <div className="font-bold text-[#1a365d] text-base flex items-center gap-2">
+                                        {lead.name}
+                                        {lead.merged_count > 1 && (
+                                            <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full" title={`${lead.merged_count} اهتمامات بنفس الجوال`}>
+                                                {lead.merged_count} اهتمامات
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="text-sm text-slate-500 font-mono mt-1" dir="ltr">{lead.phone}</div>
                                 </td>
                                 <td className="px-6 py-4">
