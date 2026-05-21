@@ -1,474 +1,466 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
-import DOMPurify from 'dompurify';
-import { useNavigate } from 'react-router-dom';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
-import { FilePenLine, Printer, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
-import { AppContext } from '../../context/AppContext';
-import { API_URL } from '../../utils/helpers';
-import { useReactToPrint } from 'react-to-print'; // 🔥 المكتبة السحرية للطباعة
+import React, { useState, useEffect, useRef } from 'react';
+import { Calculator, Save, CloudDownload, RefreshCw, Printer, Plus, Trash2, Users, FileSpreadsheet, Presentation } from 'lucide-react';
+import { useReactToPrint } from 'react-to-print';
+import { API_URL, getImg } from '../../utils/helpers';
 
-export default function FeasibilityCalc() {
-  const { user: contextUser, showToast } = useContext(AppContext);
-  const navigate = useNavigate();
+export default function FeasibilityCalc({ showToast }) {
+    const [loading, setLoading] = useState(false);
+    const [savedProjects, setSavedProjects] = useState([]);
+    const [currentProjectId, setCurrentProjectId] = useState("");
+    const [projectName, setProjectName] = useState("");
 
-  // 🔥 مرجع (Ref) لربط الورقة المخفية بالطابعة
-  const printRef = useRef();
+    const teaserPrintRef = useRef();
+    const detailedPrintRef = useRef();
 
-  const [dbUser, setDbUser] = useState(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+    // خيارات الطباعة
+    const [printMode, setPrintMode] = useState("all");
+    const [selectedInvestorIndex, setSelectedInvestorIndex] = useState(0);
+    const [showDevInPrint, setShowDevInPrint] = useState(true);
 
-  const [data, setData] = useState({
-    date: new Date().toISOString().split("T")[0],
-    recipient: "شركاء النجاح",
-    subject: "",
-    body: "", 
-    signName: "", 
-    signTitle: "", 
-    showStamp: false
-  });
+    const [inputs, setInputs] = useState({
+        archLandArea: 1139.35, archCommonArea: 60, archFloorsCount: 2, archRoofPct: 50,
+        archGroundPct: 65, uGround: 4, archTypicalPct: 75, uTypical: 5, uRoof: 3,
+        finSellPrice: 3170, finBuildCost: 1800, inServiceCostPerUnit: 17000, finLandPrice: 1837201,
+        sWafi: 50000, sEng: 95000, sMunicipality: 40000, sSupervision: 80000, sAcc: 99000, sOther: 10000,
+        sInsurancePct: 1, sTestingPct: 0.5, inInvBonusPct: 0, sMarkPct: 2.5, sDuration: 18
+    });
 
-  const [dbTemplates, setDbTemplates] = useState([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(true);
-  
-  const [showSaveForm, setShowSaveForm] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [newTempMeta, setNewTempMeta] = useState({ category: "إدارية عامة", title: "" });
+    const [investors, setInvestors] = useState([{ name: "الشريك الاستراتيجي", amount: 1837201 }]);
 
-  // 🔥 دالة الطباعة السحرية
-  const handlePrint = useReactToPrint({
-    content: () => printRef.current,
-    documentTitle: `خطاب_${data.recipient || 'سماك'}`,
-    pageStyle: `
-      @page { size: A4; margin: 10mm; }
-      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-    `
-  });
-
-  useEffect(() => {
-    const fetchUserFromDB = async () => {
-      const currentId = contextUser?.id || JSON.parse(localStorage.getItem("semak_current_user"))?.id;
-      
-      if (!currentId) {
-        navigate("/login");
-        return;
-      }
-
-      try {
-        const res = await fetch(`${API_URL}?action=get_users`);
-        const result = await res.json();
-        const usersArray = result.success ? result.data : [];
-        const freshUser = usersArray.find(u => u.id.toString() === currentId.toString());
-
-        if (freshUser) {
-          setDbUser(freshUser);
-          setData(prev => ({
-            ...prev,
-            signName: freshUser.name || "",
-            signTitle: freshUser.job || (freshUser.role === 'admin' ? "المدير العام" : "موظف"),
-            showStamp: false
-          }));
-        } else {
-          navigate("/login");
-        }
-      } catch (error) {
-        if(showToast) showToast("خطأ", "فشل التحقق من بيانات المستخدم", "error");
-      } finally {
-        setLoadingAuth(false);
-      }
+    const handleChange = (e) => {
+        setInputs({ ...inputs, [e.target.name]: parseFloat(e.target.value) || 0 });
     };
 
-    fetchUserFromDB();
-  }, [contextUser, navigate]);
+    const handleInvestorChange = (index, field, value) => {
+        const newInvestors = [...investors];
+        newInvestors[index][field] = field === 'amount' ? (parseFloat(value) || 0) : value;
+        setInvestors(newInvestors);
+    };
 
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'color': [] }, { 'background': [] }],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      [{ 'align': [] }],
-      ['link', 'image'],
-      ['clean']
-    ],
-  };
+    const addInvestorRow = () => setInvestors([...investors, { name: "", amount: 0 }]);
+    const removeInvestor = (index) => setInvestors(investors.filter((_, i) => i !== index));
 
-  const fetchTemplates = async () => {
-    setLoadingTemplates(true);
-    try {
-      const res = await fetch(`${API_URL}?action=get_templates`);
-      const result = await res.json();
-      // 🔥 استخراج النماذج بشكل صحيح سواء كانت مغلفة أو مصفوفة مباشرة
-      setDbTemplates(Array.isArray(result) ? result : (result.success ? result.data : []));
-    } catch (error) {
-      console.error("تعذر جلب النماذج", error);
-    } finally {
-      setLoadingTemplates(false);
-    }
-  };
+    const formatMoney = (n) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n || 0);
 
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
+    // --- العمليات الحسابية المباشرة ---
+    const groundBuilt = inputs.archLandArea * (inputs.archGroundPct / 100);
+    const typicalBuilt = inputs.archLandArea * (inputs.archTypicalPct / 100);
+    const roofBuilt = typicalBuilt * (inputs.archRoofPct / 100);
+    const totalBuilt = groundBuilt + (typicalBuilt * inputs.archFloorsCount) + roofBuilt;
+    const floorCountTotal = 1 + inputs.archFloorsCount + (roofBuilt > 0 ? 1 : 0);
+    const totalNet = Math.max(0, totalBuilt - (inputs.archCommonArea * floorCountTotal));
+    const totalUnits = inputs.uGround + (inputs.uTypical * inputs.archFloorsCount) + inputs.uRoof;
 
-  const groupedTemplates = (Array.isArray(dbTemplates) ? dbTemplates : []).reduce((acc, curr) => {
-    if (!acc[curr.category]) acc[curr.category] = [];
-    acc[curr.category].push(curr);
-    return acc;
-  }, {});
+    const totalSales = totalNet * inputs.finSellPrice;
+    const marketingCost = totalSales * (inputs.sMarkPct / 100);
+    const buildCost = (totalNet * inputs.finBuildCost) + (totalUnits * inputs.inServiceCostPerUnit);
+    const insCost = buildCost * (inputs.sInsurancePct / 100);
+    const testCost = buildCost * (inputs.sTestingPct / 100);
+    const softCosts = inputs.sWafi + inputs.sEng + inputs.sMunicipality + inputs.sSupervision + inputs.sAcc + inputs.sOther + insCost + testCost;
 
-  const handleTemplateChange = (e) => {
-    const val = e.target.value;
-    if (val === "custom") {
-      setData({ ...data, subject: "", body: "" });
-      setNewTempMeta({ category: "إدارية عامة", title: "" });
-      setShowSaveForm(false);
-      return;
-    }
-    const selected = dbTemplates.find(t => t.id.toString() === val);
-    if (selected) {
-      setData({ ...data, subject: selected.subject, body: selected.body });
-      setNewTempMeta({ category: selected.category, title: selected.title + " - معدل" });
-      setShowSaveForm(false);
-    }
-  };
+    const totalProjectCosts = inputs.finLandPrice + buildCost + softCosts + marketingCost;
+    const netProfit = totalSales - totalProjectCosts;
 
-  const saveTemplateToDB = async () => {
-    if (!newTempMeta.title.trim()) {
-      if(showToast) showToast("تنبيه", "يرجى كتابة اسم للنموذج الجديد", "error");
-      return;
-    }
-    if (!data.subject.trim() || data.body.replace(/<[^>]*>?/gm, '').trim() === '') {
-      if(showToast) showToast("تنبيه", "محتوى الخطاب (الموضوع والنص) فارغ!", "error");
-      return;
-    }
+    const investorCapitalPool = inputs.finLandPrice + softCosts;
+    const baseInvPct = totalProjectCosts > 0 ? (investorCapitalPool / totalProjectCosts) * 100 : 0;
+    const finalInvPct = Math.min(100, Math.max(0, baseInvPct + inputs.inInvBonusPct));
+    const finalDevPct = 100 - finalInvPct;
 
-    setIsSaving(true);
-    try {
-      const res = await fetch(`${API_URL}?action=add_template`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: newTempMeta.category,
-          title: newTempMeta.title,
-          subject: data.subject,
-          body: data.body
-        })
-      });
-      const result = await res.json();
-      if (result.success) {
-        if(showToast) showToast("تم بنجاح", "تم حفظ النموذج كنسخة جديدة في قاعدة البيانات.");
-        setShowSaveForm(false);
-        fetchTemplates();
-      } else {
-        if(showToast) showToast("خطأ", "حدث خطأ أثناء الحفظ", "error");
-      }
-    } catch (error) {
-      if(showToast) showToast("خطأ اتصال", "فشل الاتصال بالسيرفر", "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    const invProfitPool = netProfit * (finalInvPct / 100);
+    const devProfit = netProfit * (finalDevPct / 100);
 
-  if (loadingAuth) {
+    const overAllROI = investorCapitalPool > 0 ? (invProfitPool / investorCapitalPool) * 100 : 0;
+    const annualROI = inputs.sDuration > 0 ? overAllROI / (inputs.sDuration / 12) : 0;
+
+    const landCostPerSqm = totalNet > 0 ? (inputs.finLandPrice / totalNet) : 0;
+    const totalCostPerSqm = totalNet > 0 ? (totalProjectCosts / totalNet) : 0;
+
+    const totalInvestedVal = investors.reduce((sum, inv) => sum + inv.amount, 0);
+    const totalInvestedPct = investorCapitalPool > 0 ? (totalInvestedVal / investorCapitalPool) * 100 : 0;
+
+    // --- الاتصال بقاعدة البيانات ---
+    useEffect(() => { loadProjectsList(); }, []);
+
+    const loadProjectsList = async () => {
+        try {
+            const res = await fetch(`${API_URL}?action=get_feasibilities`);
+            const data = await res.json();
+            if(data.success) setSavedProjects(data.data);
+        } catch(e) {}
+    };
+
+    const handleSaveCloud = async () => {
+        if(!projectName.trim()) return showToast?.("تنبيه", "يرجى كتابة اسم المشروع", "error") || alert("يرجى كتابة اسم المشروع");
+        setLoading(true);
+        const payload = {
+            id: currentProjectId || null,
+            project_name: projectName,
+            data: { inputs, investors }
+        };
+        try {
+            const res = await fetch(`${API_URL}?action=save_feasibility`, {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if(data.success) {
+                showToast?.("نجاح", "تم حفظ المشروع في السحابة!") || alert("تم حفظ المشروع بنجاح");
+                setCurrentProjectId(data.id);
+                loadProjectsList();
+            }
+        } catch(e) { showToast?.("خطأ", "فشل الاتصال", "error"); }
+        finally { setLoading(false); }
+    };
+
+    const handleLoadCloud = async (id) => {
+        if(!id) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_URL}?action=get_feasibility_data&id=${id}`);
+            const data = await res.json();
+            if(data.success) {
+                setInputs(data.data.inputs);
+                setInvestors(data.data.investors);
+                setCurrentProjectId(id);
+                setProjectName(savedProjects.find(p=>p.id==id)?.project_name || "");
+                showToast?.("نجاح", "تم استدعاء بيانات المشروع");
+            }
+        } catch(e) {} finally { setLoading(false); }
+    };
+
+    // --- دوال الطباعة ---
+    const handlePrintTeaser = useReactToPrint({ content: () => teaserPrintRef.current, documentTitle: `عرض_استثماري_${projectName || 'سماك'}` });
+    const handlePrintDetailed = useReactToPrint({ content: () => detailedPrintRef.current, documentTitle: `الملحق_المالي_${projectName || 'سماك'}` });
+
     return (
-      <div className="w-full h-64 flex flex-col items-center justify-center bg-white rounded-[2rem] shadow-sm font-cairo">
-        <Loader2 className="animate-spin text-[#c5a059] mb-4" size={48} />
-        <p className="font-bold text-lg text-[#1a365d]">جاري تجهيز صانع الخطابات...</p>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <style>{`
-        .quill-content p { margin-bottom: 0.8rem; }
-        .quill-content li { margin-bottom: 0.5rem; }
-      `}</style>
-      
-      {/* ========================================================= */}
-      {/* 1. نسخة العرض على الشاشة (الداشبورد) */}
-      {/* ========================================================= */}
-      <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px]">
-        
-        {/* اللوحة الجانبية (أدوات التحكم) */}
-        <div className="w-full md:w-[350px] bg-gradient-to-b from-[#112240] to-[#0a192f] text-white flex flex-col rounded-[2rem] shadow-2xl overflow-hidden border border-white/5">
-          <div className="p-6 bg-[#0f172a]/50 flex flex-col gap-4 border-b border-white/10 relative">
-            <button onClick={() => navigate(-1)} className="self-start flex items-center gap-2 text-slate-400 hover:text-[#c5a059] transition-colors text-sm font-bold group">
-              <ArrowRight size={18} className="transform group-hover:-translate-x-1 transition-transform" />
-              العودة للوحة التحكم
-            </button>
-            <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-l from-[#c5a059] to-yellow-200 flex items-center gap-2">
-              <FilePenLine className="text-[#c5a059]" /> صانع الخطابات
-            </h2>
-          </div>
-          
-          <div className="p-6 space-y-5 flex-grow overflow-y-auto custom-scrollbar">
-            <div>
-              <label className="text-xs font-bold text-[#c5a059] block mb-2 uppercase tracking-wider">اختر نموذجاً للبدء</label>
-              <select onChange={handleTemplateChange} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm outline-none text-white focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/50 transition cursor-pointer hover:bg-white/10">
-                <option value="custom" className="text-black">✨ -- خطاب جديد (فارغ) --</option>
-                {loadingTemplates ? (
-                  <option disabled>جاري تحميل النماذج...</option>
-                ) : (
-                  Object.keys(groupedTemplates).map(category => (
-                    <optgroup key={category} label={category} className="text-[#c5a059] font-bold bg-[#112240]">
-                      {groupedTemplates[category].map(temp => (
-                        <option key={temp.id} value={temp.id} className="text-white font-normal bg-[#0a192f]">{temp.title}</option>
-                      ))}
-                    </optgroup>
-                  ))
-                )}
-              </select>
-            </div>
+        <div className="animate-fadeIn pb-10 font-cairo" dir="rtl">
             
-            <div className="w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent my-2" />
-            
-            <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 block mb-1">التاريخ</label><input type="date" value={data.date} onChange={e => setData({ ...data, date: e.target.value })} className="w-full bg-white/5 rounded-xl p-3 text-sm outline-none border border-white/10 focus:border-[#c5a059] transition text-white hover:bg-white/10" style={{ colorScheme: "dark" }} /></div>
-              <div><label className="text-xs text-slate-400 block mb-1">المستلم</label><input type="text" value={data.recipient} onChange={e => setData({ ...data, recipient: e.target.value })} className="w-full bg-white/5 rounded-xl p-3 text-sm outline-none border border-white/10 focus:border-[#c5a059] transition text-white hover:bg-white/10" /></div>
-              <div><label className="text-xs text-slate-400 block mb-1">الموضوع</label><input type="text" value={data.subject} onChange={e => setData({ ...data, subject: e.target.value })} className="w-full bg-white/5 rounded-xl p-3 text-sm outline-none font-bold border border-white/10 focus:border-[#c5a059] transition text-white hover:bg-white/10" /></div>
-            </div>
-            
-            <div className="mb-4">
-              <label className="text-xs text-slate-400 block mb-1">نص الخطاب (المحرر الذكي)</label>
-              <div className="bg-white rounded-xl text-black overflow-hidden border-2 border-transparent focus-within:border-[#c5a059]/50 transition-all shadow-inner">
-                <ReactQuill theme="snow" value={data.body} onChange={(content) => setData({ ...data, body: content })} modules={quillModules} placeholder="ابدأ بكتابة إبداعك هنا..." />
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs text-slate-400 block mb-1">اسم الموقع</label><input type="text" value={data.signName} onChange={e => setData({ ...data, signName: e.target.value })} className="w-full bg-white/5 rounded-xl p-3 text-sm outline-none border border-white/10 focus:border-[#c5a059] transition text-white hover:bg-white/10" /></div>
-              <div><label className="text-xs text-slate-400 block mb-1">المنصب</label><input type="text" value={data.signTitle} onChange={e => setData({ ...data, signTitle: e.target.value })} className="w-full bg-white/5 rounded-xl p-3 text-sm outline-none border border-white/10 focus:border-[#c5a059] transition text-white hover:bg-white/10" /></div>
-            </div>
-            
-            {dbUser?.role === "admin" && (
-              <div className="flex justify-between items-center p-4 bg-white/5 rounded-xl border border-white/10 mt-2 hover:bg-white/10 transition-colors cursor-pointer" onClick={() => setData({ ...data, showStamp: !data.showStamp })}>
-                <span className="text-sm font-bold text-slate-300">تفعيل الختم الرسمي</span>
-                <div className={`w-12 h-6 rounded-full transition-colors flex items-center px-1 ${data.showStamp ? 'bg-[#c5a059]' : 'bg-slate-600'}`}>
-                  <div className={`w-4 h-4 rounded-full bg-white transition-transform transform ${data.showStamp ? 'translate-x-0' : '-translate-x-6'}`} />
+            {/* شريط الإدارة السحابية */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 mb-8 flex flex-col md:flex-row items-end gap-4">
+                <div className="flex-1 w-full">
+                    <label className="block text-xs font-bold text-[#1a365d] mb-2">اسم المشروع الحالي</label>
+                    <input type="text" value={projectName} onChange={e=>setProjectName(e.target.value)} placeholder="اكتب اسم المشروع للحفظ..." className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-[#1a365d] outline-none focus:border-[#c5a059]" />
                 </div>
-              </div>
-            )}
-
-            <div className="bg-white/5 p-4 rounded-xl mt-4 border border-white/10 border-dashed">
-              {!showSaveForm ? (
-                <button onClick={() => setShowSaveForm(true)} className="w-full text-sm font-bold text-teal-400 hover:text-teal-300 transition flex items-center justify-center gap-2 py-2">
-                  <FilePenLine size={16} /> حفظ الخطاب كنموذج جديد
+                <button onClick={handleSaveCloud} disabled={loading} className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-emerald-700 transition flex items-center gap-2 shadow-md w-full md:w-auto justify-center">
+                    {loading ? <RefreshCw size={18} className="animate-spin"/> : <Save size={18}/>} حفظ المشروع
                 </button>
-              ) : (
-                <div className="space-y-3 animate-fadeIn">
-                  <div className="text-xs text-slate-400 mb-2 text-center bg-[#0f172a] p-2 rounded-lg">سيتم حفظ هذا النص كقالب لاستخدامه لاحقاً.</div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-300 block mb-1">تصنيف النموذج</label>
-                    <select value={newTempMeta.category} onChange={e => setNewTempMeta({...newTempMeta, category: e.target.value})} className="w-full bg-white/10 rounded-lg p-2 text-sm outline-none border border-white/20 focus:border-teal-500 text-white">
-                      <option className="text-black" value="إدارية عامة">إدارية عامة</option>
-                      <option className="text-black" value="النماذج المالية">النماذج المالية</option>
-                      <option className="text-black" value="نماذج العملاء والمبيعات">نماذج العملاء والمبيعات</option>
-                      <option className="text-black" value="إدارة الأملاك والصيانة">إدارة الأملاك والصيانة</option>
-                      <option className="text-black" value="الشؤون القانونية وإدارة الأملاك">الشؤون القانونية وإدارة الأملاك</option>
-                      <option className="text-black" value="الموارد البشرية والموظفين">الموارد البشرية والموظفين</option>
-                      <option className="text-black" value="خدمة العملاء">خدمة العملاء</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-300 block mb-1">الاسم المقترح للنموذج</label>
-                    <input type="text" value={newTempMeta.title} onChange={e => setNewTempMeta({...newTempMeta, title: e.target.value})} className="w-full bg-white/10 rounded-lg p-2 text-sm outline-none border border-white/20 focus:border-teal-500 text-white font-bold" />
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <button onClick={saveTemplateToDB} disabled={isSaving} className="flex-1 bg-gradient-to-r from-teal-600 to-emerald-500 text-white py-2 rounded-lg font-bold text-sm hover:opacity-90 transition flex items-center justify-center shadow-lg">
-                      {isSaving ? <RefreshCw className="animate-spin" size={16} /> : "تأكيد"}
-                    </button>
-                    <button onClick={() => setShowSaveForm(false)} className="px-4 bg-slate-700 text-white py-2 rounded-lg font-bold text-sm hover:bg-slate-600 transition">إلغاء</button>
-                  </div>
+                <div className="w-px bg-slate-200 hidden md:block h-12 mx-2"></div>
+                <div className="flex-1 w-full flex items-end gap-2">
+                    <div className="w-full">
+                        <label className="block text-xs font-bold text-slate-500 mb-2">المشاريع المحفوظة</label>
+                        <select onChange={(e) => handleLoadCloud(e.target.value)} value={currentProjectId} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-[#1a365d] outline-none cursor-pointer">
+                            <option value="">-- استدعاء مشروع محفوظ --</option>
+                            {savedProjects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+                        </select>
+                    </div>
                 </div>
-              )}
             </div>
-          </div>
-          
-          <div className="p-4 bg-[#0f172a] border-t border-white/10">
-            {/* 🔥 الزر السحري للطباعة بعد ربطه */}
-            <button onClick={handlePrint} className="w-full bg-gradient-to-r from-[#c5a059] to-yellow-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition shadow-[0_0_20px_rgba(197,160,89,0.3)] transform hover:-translate-y-1">
-              <Printer size={20} /> طباعة أو تصدير PDF
-            </button>
-          </div>
-        </div>
 
-        {/* 📄 مساحة عرض الورقة الفخمة على الشاشة */}
-        <div className="flex-1 bg-gradient-to-br from-slate-200 to-slate-300 rounded-[2rem] overflow-y-auto p-4 md:p-10 flex justify-center items-start shadow-inner border border-slate-300 relative">
-          <div className="a4-page bg-white text-black shadow-[0_20px_50px_rgba(0,0,0,0.15)] relative overflow-hidden flex flex-col transition-all duration-500 ring-1 ring-slate-900/5" style={{ width: '210mm', minHeight: '297mm', padding: '0', margin: '0' }}>
-            
-            {/* 🌟 Header الفخم */}
-            <div className="h-3 w-full flex">
-              <div className="h-full bg-[#1a365d] w-3/4"></div>
-              <div className="h-full bg-[#c5a059] w-1/4"></div>
-            </div>
-            <div className="px-12 pt-10 pb-6 flex justify-between items-center relative border-b border-slate-100">
-              <img src={"/images/logo-main.png"} alt="شعار" className="h-28 object-contain drop-shadow-sm z-10" />
-              <div className="text-left border-l-4 border-[#c5a059] pl-6 z-10">
-                <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
-                <p className="text-[#c5a059] font-bold text-sm mt-2 tracking-wider">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-                <p className="text-slate-400 text-xs mt-1 font-sans tracking-widest">CR: 7051031099</p>
-              </div>
-              <div className="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-[#1a365d]/5 to-transparent rounded-br-full -z-0"></div>
-            </div>
-            
-            <div className="font-amiri text-lg relative z-10 flex-grow pt-8 px-12 pb-12 w-full break-words overflow-hidden">
-              <img src={"/images/logo-main.png"} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
-              
-              <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
-                <div className="flex items-center gap-2 text-sm font-cairo">
-                  <span className="w-2 h-2 rounded-full bg-[#1a365d]"></span>
-                  <strong className="text-[#1a365d]">التاريخ:</strong>
-                  <span className="text-slate-700">{data.date}</span>
-                </div>
-              </div>
-              
-              <div className="mb-10 border-r-4 border-[#c5a059] pr-5 py-2 bg-gradient-to-l from-slate-50 to-transparent rounded-l-2xl">
-                <h3 className="font-bold text-2xl text-[#1a365d] font-cairo leading-relaxed">
-                  السادة / {data.recipient} <br/>
-                  <span className="text-[#c5a059] text-xl mt-1 inline-block">المحترمين،،</span>
-                </h3>
-              </div>
-              
-              {data.subject && (
-                <div className="flex justify-center mb-12">
-                  <div className="bg-white border-2 border-[#1a365d]/10 px-12 py-3 rounded-full shadow-sm relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#1a365d]/5 via-transparent to-[#c5a059]/5 opacity-50"></div>
-                    <span className="font-black text-xl text-[#1a365d] font-cairo relative z-10">الموضوع: {data.subject}</span>
-                  </div>
-                </div>
-              )}
-              
-              <div className="text-justify leading-[2.4] flex-grow quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.body) }}></div>
-              
-              <div className="mt-24 mb-4 flex justify-between items-end px-8 relative min-h-[160px]">
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-50 to-transparent rounded-b-3xl -z-10"></div>
-                <div className="relative w-48 flex justify-center">
-                  {data.showStamp && dbUser?.role === "admin" && (
-                    <img src={"/images/stamp.png"} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0 drop-shadow-md" alt="ختم" />
-                  )}
-                </div>
-                <div className="text-center font-cairo relative z-10 pb-2">
-                  <p className="font-bold text-[#c5a059] mb-3 text-lg uppercase tracking-wider">{data.signTitle}</p>
-                  <p className="font-black text-2xl text-[#1a365d] border-t-2 border-slate-200 pt-4 min-w-[220px]">{data.signName}</p>
-                </div>
-              </div>
-            </div>
-            
-            {/* 🌟 Footer الفخم */}
-            <div className="mt-auto px-10 pb-8">
-              <div className="bg-[#1a365d] rounded-2xl p-5 flex justify-between items-center text-white shadow-lg relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl"></div>
-                <div className="absolute bottom-0 left-0 w-24 h-24 bg-[#c5a059]/20 rounded-full -ml-8 -mb-8 blur-xl"></div>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                 
-                <div className="relative z-10">
-                  <p className="font-bold text-base tracking-wide text-[#c5a059]">سماك العقارية</p>
-                  <p className="text-white/80 text-xs mt-1">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
-                </div>
-                <div className="flex flex-col items-end gap-1.5 relative z-10 font-sans tracking-wide" dir="ltr">
-                  <span className="text-white font-bold text-sm flex items-center gap-2">920032842 <span className="text-[#c5a059]">📞</span></span>
-                  <span className="text-white/80 text-xs flex items-center gap-2">semak.sa <span className="text-[#c5a059]">🌐</span></span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* 2. نسخة الطباعة الاحترافية (مخفية، وتظهر فقط في نافذة الطباعة) */}
-      {/* ========================================================= */}
-      <div style={{ display: 'none' }}>
-        <div ref={printRef} className="font-cairo bg-white text-black w-full" style={{ padding: 0, margin: 0 }}>
-          <table className="w-full border-collapse">
-            <thead className="table-header-group">
-              <tr>
-                <td>
-                  <div className="h-3 w-full flex">
-                    <div className="h-full bg-[#1a365d] w-3/4"></div>
-                    <div className="h-full bg-[#c5a059] w-1/4"></div>
-                  </div>
-                  <div className="px-12 pt-8 pb-6 flex justify-between items-center relative border-b border-slate-100 bg-white">
-                    <img src={"/images/logo-main.png"} alt="شعار" className="h-28 object-contain" />
-                    <div className="text-left border-l-4 border-[#c5a059] pl-6 z-10">
-                      <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
-                      <p className="text-[#c5a059] font-bold text-sm mt-2 tracking-wider">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
-                      <p className="text-slate-400 text-xs mt-1 font-sans tracking-widest">CR: 7051031099</p>
-                    </div>
-                  </div>
-                  <div className="h-4"></div>
-                </td>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>
-                  <div className="font-amiri text-lg relative z-10 px-12 pb-4 w-full break-words overflow-hidden">
-                    <img src={"/images/logo-main.png"} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
-                    
-                    <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
-                      <div className="flex items-center gap-2 text-sm font-cairo">
-                        <span className="w-2 h-2 rounded-full bg-[#1a365d]"></span>
-                        <strong className="text-[#1a365d]">التاريخ:</strong>
-                        <span className="text-slate-700">{data.date}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="mb-10 border-r-4 border-[#c5a059] pr-5 py-2 bg-slate-50/50 rounded-l-2xl">
-                      <h3 className="font-bold text-2xl text-[#1a365d] font-cairo leading-relaxed">
-                        السادة / {data.recipient} <br/>
-                        <span className="text-[#c5a059] text-xl mt-1 inline-block">المحترمين،،</span>
-                      </h3>
-                    </div>
-                    
-                    {data.subject && (
-                      <div className="flex justify-center mb-12">
-                        <div className="bg-white border-2 border-[#1a365d]/10 px-12 py-3 rounded-full shadow-sm">
-                          <span className="font-black text-xl text-[#1a365d] font-cairo relative z-10">الموضوع: {data.subject}</span>
+                <div className="xl:col-span-8 space-y-8">
+                    {/* 1. المعماري */}
+                    <div className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden">
+                        <div className="bg-indigo-900 p-4 text-white flex items-center gap-3">
+                            <Calculator className="text-[#c5a059]" /> <h2 className="text-lg font-black">1. الموجه المعماري والمالي الأساسي</h2>
                         </div>
-                      </div>
-                    )}
-                    
-                    <div className="text-justify leading-[2.4] quill-content whitespace-pre-wrap break-words text-slate-800 text-[1.15rem]" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.body) }}></div>
-                    
-                    <div className="mt-24 mb-4 flex justify-between items-end px-8 relative min-h-[160px]" style={{ pageBreakInside: 'avoid' }}>
-                      <div className="relative w-48 flex justify-center">
-                        {data.showStamp && dbUser?.role === "admin" && (
-                          <img src={"/images/stamp.png"} className="w-full object-contain opacity-95 mix-blend-multiply absolute bottom-0" alt="ختم" />
-                        )}
-                      </div>
-                      <div className="text-center font-cairo relative z-10 pb-2">
-                        <p className="font-bold text-[#c5a059] mb-3 text-lg uppercase tracking-wider">{data.signTitle}</p>
-                        <p className="font-black text-2xl text-[#1a365d] border-t-2 border-slate-200 pt-4 min-w-[220px]">{data.signName}</p>
-                      </div>
+                        <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 border-b border-slate-100">
+                            <div><label className="text-[10px] font-bold block mb-1">مساحة الأرض</label><input type="number" name="archLandArea" value={inputs.archLandArea} onChange={handleChange} className="w-full p-2 rounded border" /></div>
+                            <div><label className="text-[10px] font-bold block mb-1">خدمات الدور</label><input type="number" name="archCommonArea" value={inputs.archCommonArea} onChange={handleChange} className="w-full p-2 rounded border" /></div>
+                            <div><label className="text-[10px] font-bold block mb-1">الأدوار المتكررة</label><input type="number" name="archFloorsCount" value={inputs.archFloorsCount} onChange={handleChange} className="w-full p-2 rounded border" /></div>
+                            <div><label className="text-[10px] font-bold block mb-1">نسبة الملحق %</label><input type="number" name="archRoofPct" value={inputs.archRoofPct} onChange={handleChange} className="w-full p-2 rounded border" /></div>
+                        </div>
+                        <div className="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="border p-3 rounded-xl"><label className="text-xs text-slate-500 block">بناء الأرضي %</label><input type="number" name="archGroundPct" value={inputs.archGroundPct} onChange={handleChange} className="w-full border-b mb-2" /><label className="text-xs text-[#c5a059] font-bold block">وحدات الأرضي</label><input type="number" name="uGround" value={inputs.uGround} onChange={handleChange} className="w-full font-bold text-navy" /></div>
+                            <div className="border p-3 rounded-xl"><label className="text-xs text-slate-500 block">بناء المتكرر %</label><input type="number" name="archTypicalPct" value={inputs.archTypicalPct} onChange={handleChange} className="w-full border-b mb-2" /><label className="text-xs text-[#c5a059] font-bold block">وحدات المتكرر</label><input type="number" name="uTypical" value={inputs.uTypical} onChange={handleChange} className="w-full font-bold text-navy" /></div>
+                            <div className="border p-3 rounded-xl flex flex-col justify-end"><label className="text-xs text-[#c5a059] font-bold block mb-2">وحدات الملحق</label><input type="number" name="uRoof" value={inputs.uRoof} onChange={handleChange} className="w-full font-bold text-navy" /></div>
+                        </div>
                     </div>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot className="table-footer-group">
-              <tr>
-                <td>
-                  <div className="h-6"></div>
-                  <div className="px-10 pb-8 bg-white w-full">
-                    <div className="bg-[#1a365d] rounded-2xl p-5 flex justify-between items-center text-white relative overflow-hidden" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                      <div className="relative z-10">
-                        <p className="font-bold text-base tracking-wide text-[#c5a059]">سماك العقارية</p>
-                        <p className="text-white/80 text-xs mt-1">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1.5 relative z-10 font-sans tracking-wide" dir="ltr">
-                        <span className="text-white font-bold text-sm flex items-center gap-2">920032842 <span className="text-[#c5a059]">📞</span></span>
-                        <span className="text-white/80 text-xs flex items-center gap-2">semak.sa <span className="text-[#c5a059]">🌐</span></span>
-                      </div>
+
+                    {/* 2. المالي */}
+                    <div className="bg-white rounded-3xl shadow-md border border-slate-200 p-6">
+                        <h2 className="text-xl font-black text-[#1a365d] mb-4 border-b pb-4">2. التكاليف والرخص والمحاصة</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="bg-slate-50 p-4 rounded-xl border flex gap-2">
+                                <div className="flex-1"><label className="text-[10px] font-bold">سعر البيع</label><input type="number" name="finSellPrice" value={inputs.finSellPrice} onChange={handleChange} className="w-full p-2 rounded border" /></div>
+                                <div className="flex-1"><label className="text-[10px] font-bold text-orange-600">تكلفة البناء</label><input type="number" name="finBuildCost" value={inputs.finBuildCost} onChange={handleChange} className="w-full p-2 rounded border text-orange-600" /></div>
+                                <div className="flex-1"><label className="text-[10px] font-bold">قيمة الأرض</label><input type="number" name="finLandPrice" value={inputs.finLandPrice} onChange={handleChange} className="w-full p-2 rounded border" /></div>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 grid grid-cols-3 gap-2">
+                                <div><label className="text-[9px]">وافي</label><input type="number" name="sWafi" value={inputs.sWafi} onChange={handleChange} className="w-full p-1 border text-xs rounded"/></div>
+                                <div><label className="text-[9px]">هندسي</label><input type="number" name="sEng" value={inputs.sEng} onChange={handleChange} className="w-full p-1 border text-xs rounded"/></div>
+                                <div><label className="text-[9px]">البلدية</label><input type="number" name="sMunicipality" value={inputs.sMunicipality} onChange={handleChange} className="w-full p-1 border text-xs rounded"/></div>
+                                <div><label className="text-[9px]">مشرف</label><input type="number" name="sSupervision" value={inputs.sSupervision} onChange={handleChange} className="w-full p-1 border text-xs rounded"/></div>
+                                <div><label className="text-[9px]">محاسب</label><input type="number" name="sAcc" value={inputs.sAcc} onChange={handleChange} className="w-full p-1 border text-xs rounded"/></div>
+                                <div><label className="text-[9px]">أخرى</label><input type="number" name="sOther" value={inputs.sOther} onChange={handleChange} className="w-full p-1 border text-xs rounded"/></div>
+                            </div>
+                        </div>
+                        <div className="bg-orange-50 p-4 rounded-2xl flex items-center gap-4 border border-orange-100">
+                            <div className="flex-1 flex gap-2">
+                                <div className="flex-1"><label className="text-[10px] font-bold text-orange-800 mb-1 block">علاوة مستثمر %</label><input type="number" name="inInvBonusPct" value={inputs.inInvBonusPct} onChange={handleChange} className="w-full p-2 rounded border border-orange-200 text-orange-700 font-bold" /></div>
+                                <div className="flex-1"><label className="text-[10px] font-bold text-emerald-800 mb-1 block">تسويق وسعي %</label><input type="number" name="sMarkPct" value={inputs.sMarkPct} onChange={handleChange} className="w-full p-2 rounded border border-emerald-200 text-emerald-700 font-bold" /></div>
+                                <div className="flex-1"><label className="text-[10px] font-bold text-slate-800 mb-1 block">مدة المشروع</label><input type="number" name="sDuration" value={inputs.sDuration} onChange={handleChange} className="w-full p-2 rounded border border-slate-200 font-bold" /></div>
+                            </div>
+                            <div className="w-32 text-center bg-white p-2 rounded-xl border shadow-sm"><span className="block text-[9px] text-slate-400">حصة المستثمر</span><span className="text-xl font-black text-emerald-600">{finalInvPct.toFixed(1)}%</span></div>
+                        </div>
                     </div>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+
+                    {/* 3. قائمة المستثمرين */}
+                    <div className="bg-white rounded-3xl shadow-md border border-slate-200 p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-[#1a365d]"><Users className="inline text-[#c5a059] mr-2"/>قائمة المستثمرين</h2>
+                            <button onClick={addInvestorRow} className="bg-[#1a365d] text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 transition flex items-center gap-1 shadow-sm"><Plus size={14}/> إضافة مستثمر</button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right text-sm">
+                                <thead className="bg-slate-50 border-b border-slate-100">
+                                    <tr className="text-slate-600">
+                                        <th className="p-3">الاسم</th><th className="p-3">المبلغ المستثمر</th><th className="p-3 text-center">الربح المتوقع</th><th className="p-3 text-center">إجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {investors.map((inv, i) => {
+                                        const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
+                                        const prof = invProfitPool * (pct / 100);
+                                        return (
+                                            <tr key={i} className="hover:bg-slate-50 transition">
+                                                <td className="p-2"><input type="text" value={inv.name} onChange={e=>handleInvestorChange(i, 'name', e.target.value)} className="border border-slate-200 p-2 rounded-lg w-full text-sm outline-none focus:border-gold" placeholder="اسم المستثمر..." /></td>
+                                                <td className="p-2"><input type="number" value={inv.amount} onChange={e=>handleInvestorChange(i, 'amount', e.target.value)} className="border border-slate-200 p-2 rounded-lg w-full text-sm font-black text-[#1a365d] outline-none focus:border-gold" /></td>
+                                                <td className="p-2 text-emerald-600 font-black text-center bg-slate-50/50">{formatMoney(prof)}</td>
+                                                <td className="p-2 text-center"><button onClick={() => removeInvestor(i)} className="text-red-400 hover:text-red-600 bg-white border border-slate-200 p-1.5 rounded shadow-sm transition"><Trash2 size={16}/></button></td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                                <tfoot className="bg-slate-50 font-black border-t-2 border-slate-200">
+                                    <tr>
+                                        <td className="p-3 text-[#1a365d]">الإجمالي المجمع</td>
+                                        <td className="p-3 text-[#1a365d]">{formatMoney(totalInvestedVal)}</td>
+                                        <td className="p-3 text-center text-emerald-600">{formatMoney(invProfitPool * (totalInvestedPct/100))}</td>
+                                        <td className="p-3 text-center text-xs text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="xl:col-span-4 space-y-6">
+                    {/* ملخص اقتصاديات المشروع */}
+                    <div className="bg-[#1a365d] text-white rounded-3xl shadow-xl p-6 border-b-8 border-[#c5a059] relative overflow-hidden">
+                         <h3 className="text-base font-black text-[#c5a059] mb-6 border-b border-white/10 pb-3">ملخص اقتصاديات المشروع</h3>
+                         <div className="space-y-3 text-sm font-bold relative z-10">
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>إجمالي المبيعات</span> <span className="text-emerald-400 font-black">{formatMoney(totalSales)}</span></div>
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>تكلفة البناء</span> <span className="text-red-300 font-black">{formatMoney(buildCost)}</span></div>
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>التأسيس والرخص</span> <span className="text-red-300 font-black">{formatMoney(softCosts)}</span></div>
+                             <div className="flex justify-between border-b border-white/5 pb-2"><span>السعي والتسويق</span> <span className="text-orange-400 font-black">{formatMoney(marketingCost)}</span></div>
+                             <div className="flex justify-between pt-2 border-t border-white/20 text-lg"><span>صافي الربح الكلي</span> <span className="text-emerald-400 font-black">{formatMoney(netProfit)}</span></div>
+                         </div>
+                    </div>
+
+                    {/* إعدادات وتوليد الطباعة */}
+                    <div className="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200">
+                        <label className="block text-sm font-black text-[#1a365d] mb-4 border-b border-slate-100 pb-3">خيارات العروض والطباعة</label>
+                        
+                        <div className="mb-4">
+                            <label className="block text-[11px] font-bold text-slate-500 mb-2">طريقة عرض المستثمرين في التقرير:</label>
+                            <select value={printMode} onChange={e=>setPrintMode(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-lg mb-2 text-sm font-bold bg-slate-50 text-navy outline-none focus:border-[#c5a059]">
+                                <option value="all">إظهار كافة المستثمرين (قائمة مفصلة)</option>
+                                <option value="summary">إظهار الإجمالي فقط (ملخص بدون أسماء)</option>
+                                <option value="single">تخصيص التقرير لمستثمر محدد</option>
+                            </select>
+                            
+                            {printMode === 'single' && (
+                                <select value={selectedInvestorIndex} onChange={e=>setSelectedInvestorIndex(e.target.value)} className="w-full p-2.5 border border-[#c5a059] rounded-lg mb-2 text-sm font-black bg-orange-50 text-orange-800 outline-none">
+                                    {investors.map((inv, i) => <option key={i} value={i}>{inv.name || `مستثمر ${i+1}`}</option>)}
+                                </select>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-5 cursor-pointer">
+                            <input type="checkbox" id="devToggle" checked={showDevInPrint} onChange={e=>setShowDevInPrint(e.target.checked)} className="w-4 h-4 accent-[#c5a059] cursor-pointer" /> 
+                            <label htmlFor="devToggle" className="text-xs font-bold text-navy cursor-pointer select-none">إظهار تفاصيل المطور في الملحق</label>
+                        </div>
+
+                        <div className="flex flex-col gap-3 border-t border-slate-100 pt-5">
+                            <button onClick={handlePrintTeaser} className="w-full bg-[#c5a059] text-white py-3.5 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-yellow-600 transition shadow-lg"><Presentation size={18}/> العرض الاستثماري (الملخص)</button>
+                            <button onClick={handlePrintDetailed} className="w-full bg-[#1a365d] text-white py-3.5 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-blue-900 transition shadow-lg"><FileSpreadsheet size={18}/> الملحق المالي التفصيلي</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* قوالب الطباعة (مخفية عن الشاشة وتظهر فقط عند الطباعة) */}
+            <div style={{ display: "none" }}>
+                
+                {/* Teaser Print Template */}
+                <div ref={teaserPrintRef} className="font-cairo bg-white p-10 flex flex-col justify-between" style={{ height: "297mm", width: "210mm" }}>
+                    <div>
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-8">
+                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-16" alt="Logo" />
+                            <div className="text-left border-l-4 border-[#c5a059] pl-4"><h1 className="text-xl font-black text-[#1a365d]">سماك العقارية</h1><p className="text-[#c5a059] font-bold text-xs mt-1">سقف يعلو برؤيتك ومسكن يحكي قصتك</p></div>
+                        </div>
+                        
+                        <div className="text-center mb-10 relative">
+                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="absolute top-0 left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[60%] pointer-events-none grayscale z-0" />
+                            <div className="relative z-10">
+                                <div className="inline-block px-4 py-1.5 rounded-full bg-[#c5a059]/10 border border-[#c5a059]/20 text-[#c5a059] font-bold text-xs mb-3">ملخص تنفيذي - فرصة استثمارية</div>
+                                <h2 className="text-4xl font-black text-[#1a365d] mb-2">{projectName || "مشروع سماك الصفوة 2"}</h2>
+                                <p className="text-sm text-slate-500 font-bold">بناء شراكة استراتيجية بتمويل (وافي)</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-8 mb-8 relative z-10">
+                            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200 text-center">
+                                <p className="text-slate-500 font-bold text-sm mb-2">رأس المال الاستثماري المستهدف</p>
+                                <p className="text-3xl font-black text-[#1a365d] mb-1">{printMode === 'single' ? formatMoney(investors[selectedInvestorIndex]?.amount) : formatMoney(investorCapitalPool)}</p>
+                                <p className="text-[10px] text-[#c5a059] font-bold">يغطى بتوفير الأرض والمصاريف التأسيسية</p>
+                            </div>
+                            <div className="bg-emerald-50 p-8 rounded-3xl border border-emerald-100 text-center">
+                                <p className="text-emerald-800 font-bold text-sm mb-2">المبيعات المتوقعة للمشروع</p>
+                                <p className="text-3xl font-black text-emerald-600 mb-1">{formatMoney(totalSales)}</p>
+                                <p className="text-[10px] text-emerald-600 font-bold">يتم تمويل البناء من التدفقات النقدية</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-[#1a365d] text-white p-8 rounded-3xl grid grid-cols-2 text-center mb-8 relative z-10" style={{WebkitPrintColorAdjust:"exact", printColorAdjust:"exact", backgroundColor:"#1a365d", color:"white"}}>
+                            <div className="border-l border-white/20">
+                                <p className="text-slate-300 font-bold mb-2 text-sm">العائد المتوقع (ROI)</p>
+                                <p className="text-4xl font-black text-[#c5a059]" style={{color:"#c5a059"}}>
+                                    {printMode === 'single' ? (investors[selectedInvestorIndex]?.amount > 0 ? (invProfitPool * (investors[selectedInvestorIndex].amount / investorCapitalPool) / investors[selectedInvestorIndex].amount * 100).toFixed(1) : 0) + "%" : overAllROI.toFixed(1) + "%"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-slate-300 font-bold mb-2 text-sm">دورة المشروع المستهدفة</p>
+                                <p className="text-4xl font-black">{inputs.sDuration} شهر</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white border-2 border-[#c5a059]/20 p-6 rounded-3xl relative z-10">
+                            <h3 className="text-lg font-black text-[#1a365d] mb-4 border-b border-slate-100 pb-2">التفاصيل المعمارية</h3>
+                            <div className="grid grid-cols-3 gap-4 text-center">
+                                <div><span className="block text-2xl font-black text-[#1a365d]">{totalUnits}</span><span className="text-[11px] font-bold text-slate-500">وحدة سكنية</span></div>
+                                <div><span className="block text-2xl font-black text-[#1a365d]">{formatMoney(totalBuilt)}</span><span className="text-[11px] font-bold text-slate-500">متر مربع بناء</span></div>
+                                <div><span className="block text-2xl font-black text-[#1a365d]">{formatMoney(totalNet)}</span><span className="text-[11px] font-bold text-slate-500">متر مساحة للبيع</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-auto pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
+                        <div className="bg-slate-100 px-4 py-2 rounded-lg w-full flex justify-between items-center" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f1f5f9"}}>
+                            <span>إدارة التطوير والاستثمار - وثيقة سرية</span>
+                            <span dir="ltr">info@semak.sa | semak.sa | 920032842</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Detailed Print Template */}
+                <div ref={detailedPrintRef} className="a4-page font-cairo bg-white p-10 flex flex-col justify-between" style={{ height: "297mm", width: "210mm" }}>
+                    <div>
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
+                            <img src={getImg("1I5KIPkeuwJ0CawpWJLpiHdmofSKLQglN")} className="h-14" alt="Logo" />
+                            <div className="text-left border-l-4 border-[#c5a059] pl-4"><h1 className="text-xl font-black text-[#1a365d]">الملحق المالي التفصيلي</h1><p className="text-[#c5a059] font-bold text-[10px] mt-1">{projectName || "مشروع سماك الصفوة 2"}</p></div>
+                        </div>
+                        
+                        <div className="bg-white rounded-2xl border-2 border-slate-200 overflow-hidden mb-6">
+                            <table className="w-full text-right text-xs">
+                                <tbody className="divide-y divide-slate-100 font-bold">
+                                    <tr><td className="p-3 bg-slate-50 text-slate-500 w-2/3" style={{backgroundColor:"#f8fafc"}}>رأس المال التأسيسي (الأرض + التأسيس والرخص)</td><td className="p-3 text-[#1a365d] text-sm font-black">{formatMoney(investorCapitalPool)}</td></tr>
+                                    <tr><td className="p-3 bg-white text-slate-500">تكلفة البناء والخدمات الإجمالية (ممول من المبيعات)</td><td className="p-3 text-[#1a365d] text-sm font-black">{formatMoney(buildCost)}</td></tr>
+                                    <tr><td className="p-3 bg-slate-50 text-slate-500" style={{backgroundColor:"#f8fafc"}}>ميزانية التسويق والسعي</td><td className="p-3 text-[#1a365d] text-sm font-black">{formatMoney(marketingCost)}</td></tr>
+                                    <tr className="bg-red-50 border-t-2 border-red-200" style={{backgroundColor:"#fef2f2", WebkitPrintColorAdjust:"exact"}}><td className="p-3 font-black text-red-900">إجمالي التكاليف المتوقعة للمشروع</td><td className="p-3 text-red-700 font-black text-sm">{formatMoney(totalProjectCosts)}</td></tr>
+                                    <tr className="bg-emerald-50 border-t-2 border-emerald-200" style={{backgroundColor:"#ecfdf5", WebkitPrintColorAdjust:"exact"}}><td className="p-3 font-black text-emerald-900">إجمالي المبيعات المتوقعة للمشروع</td><td className="p-3 text-emerald-700 font-black text-sm">{formatMoney(totalSales)}</td></tr>
+                                    <tr className="bg-[#1a365d] text-white" style={{backgroundColor:"#1a365d", color:"white", WebkitPrintColorAdjust:"exact"}}><td className="p-3 font-black">صافي الربح الكلي للمشروع</td><td className="p-3 text-[#c5a059] font-black text-lg" style={{color:"#c5a059"}}>{formatMoney(netProfit)}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h3 className="text-sm font-black text-[#1a365d] mb-2">توزيع حصص التمويل والأرباح على المستثمرين</h3>
+                        <div className="rounded-xl border border-slate-200 overflow-hidden mb-6">
+                            <table className="w-full text-right text-[10px]">
+                                <thead className="bg-slate-100 border-b border-slate-200" style={{backgroundColor:"#f1f5f9", WebkitPrintColorAdjust:"exact"}}>
+                                    <tr>
+                                        <th className="p-2.5 text-[#1a365d] font-black">المستثمر</th>
+                                        <th className="p-2.5 text-center text-[#1a365d] font-black">المبلغ المستثمر</th>
+                                        <th className="p-2.5 text-center text-[#1a365d] font-black">الحصة %</th>
+                                        <th className="p-2.5 text-center text-[#1a365d] font-black">الربح المتوقع</th>
+                                        <th className="p-2.5 text-center text-[#1a365d] font-black">إجمالي الاسترداد</th>
+                                        <th className="p-2.5 text-center text-[#1a365d] font-black">ROI</th>
+                                        <th className="p-2.5 text-center text-[#1a365d] font-black">سنوي</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-bold bg-white">
+                                    {printMode === 'single' ? (
+                                        <tr>
+                                            <td className="p-2.5 border-r border-slate-100">{investors[selectedInvestorIndex]?.name}</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100">{formatMoney(investors[selectedInvestorIndex]?.amount)}</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100 text-slate-500">{investorCapitalPool > 0 ? ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool*100).toFixed(1) : 0}%</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100 text-emerald-600">{formatMoney(invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney((investors[selectedInvestorIndex]?.amount||0) + invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool))}</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100">{((invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool)) / (investors[selectedInvestorIndex]?.amount||1) * 100).toFixed(1)}%</td>
+                                            <td className="p-2.5 text-center text-blue-600">{(((invProfitPool * ((investors[selectedInvestorIndex]?.amount||0)/investorCapitalPool)) / (investors[selectedInvestorIndex]?.amount||1) * 100) / (inputs.sDuration/12)).toFixed(1)}%</td>
+                                        </tr>
+                                    ) : printMode === 'summary' ? (
+                                        <tr>
+                                            <td className="p-2.5 border-r border-slate-100">إجمالي المستثمرين</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100">{formatMoney(totalInvestedVal)}</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100 text-slate-500">{totalInvestedPct.toFixed(1)}%</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100 text-emerald-600">{formatMoney(invProfitPool * (totalInvestedVal/investorCapitalPool))}</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney(totalInvestedVal + (invProfitPool * (totalInvestedVal/investorCapitalPool)))}</td>
+                                            <td className="p-2.5 text-center border-r border-slate-100">{overAllROI.toFixed(1)}%</td>
+                                            <td className="p-2.5 text-center text-blue-600">{annualROI.toFixed(1)}%</td>
+                                        </tr>
+                                    ) : (
+                                        investors.map((inv, i) => {
+                                            const pct = investorCapitalPool > 0 ? (inv.amount / investorCapitalPool) * 100 : 0;
+                                            const prof = invProfitPool * (pct / 100);
+                                            const r = inv.amount > 0 ? (prof / inv.amount * 100) : 0;
+                                            return (
+                                                <tr key={i}>
+                                                    <td className="p-2.5 border-r border-slate-100">{inv.name || '---'}</td>
+                                                    <td className="p-2.5 text-center border-r border-slate-100">{formatMoney(inv.amount)}</td>
+                                                    <td className="p-2.5 text-center border-r border-slate-100 text-slate-500">{pct.toFixed(1)}%</td>
+                                                    <td className="p-2.5 text-center border-r border-slate-100 text-emerald-600">{formatMoney(prof)}</td>
+                                                    <td className="p-2.5 text-center border-r border-slate-100 text-[#c5a059] font-black">{formatMoney(inv.amount + prof)}</td>
+                                                    <td className="p-2.5 text-center border-r border-slate-100">{r.toFixed(1)}%</td>
+                                                    <td className="p-2.5 text-center text-blue-600">{(r / (inputs.sDuration/12)).toFixed(1)}%</td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            {showDevInPrint && (
+                                <div className="border-t-4 border-[#1a365d] bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                                    <h4 className="text-xs font-black text-[#1a365d] mb-1">حصة المطور العقاري (أتعاب التطوير)</h4>
+                                    <p className="text-xl font-black text-[#1a365d] mb-1">{formatMoney(devProfit)} SAR</p>
+                                    <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">يمثل العائد أتعاب التطوير، الإدارة، وتغطية المخاطر حتى تسليم المفتاح عبر نظام وتراخيص وافي.</p>
+                                </div>
+                            )}
+                            
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center gap-3" style={{backgroundColor:"#f8fafc", WebkitPrintColorAdjust:"exact"}}>
+                                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                                    <span className="text-[10px] font-bold text-slate-600">تكلفة الأرض للمتر المباع</span>
+                                    <span className="text-sm font-black text-[#1a365d]">{formatMoney(landCostPerSqm)} SAR</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-slate-600">إجمالي التكلفة للمتر المباع</span>
+                                    <span className="text-sm font-black text-red-600">{formatMoney(totalCostPerSqm)} SAR</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-auto border-t pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
+                        <div className="bg-slate-100 px-4 py-2 rounded-lg w-full flex justify-between items-center" style={{WebkitPrintColorAdjust:"exact", backgroundColor:"#f1f5f9"}}>
+                            <span>إدارة التطوير والاستثمار - وثيقة سرية</span>
+                            <span dir="ltr">info@semak.sa | semak.sa | 920032842</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </>
-  );
+    );
 }
