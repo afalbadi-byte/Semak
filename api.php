@@ -783,6 +783,22 @@ switch ($action) {
     // تكامل دفترة (سماك الخير - المقاول الداخلي)
     // ═══════════════════════════════════════════════════════════════════════
 
+    case 'daftra_check_key':
+        // التحقق من أن المفتاح وصل بشكل صحيح (إظهار أول وآخر 4 حروف فقط)
+        $daftra_key = "__DAFTRA_KEY__";
+        $is_placeholder = strpos($daftra_key, '__DAFTRA') !== false;
+        echo json_encode([
+            "is_placeholder_not_replaced" => $is_placeholder,
+            "key_length" => strlen($daftra_key),
+            "key_first4" => substr($daftra_key, 0, 4),
+            "key_last4"  => substr($daftra_key, -4),
+            "expected_length" => 40,
+            "hint" => $is_placeholder
+                ? "GitHub Secret لم يُحقن — تأكد إن اسم السر بالضبط DAFTRA_API_KEY"
+                : "المفتاح موجود، إذا الطول 40 والـ 5c98...bbf4 موجودة، يعني المفتاح وصل تمام والمشكلة في صلاحيات API في دفترة",
+        ]);
+        break;
+
     case 'daftra_test':
         // اختبار شامل — يجرّب عدة subdomains وأشكال headers
         $daftra_key = "__DAFTRA_KEY__";
