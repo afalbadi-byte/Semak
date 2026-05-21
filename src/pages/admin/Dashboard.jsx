@@ -3,7 +3,7 @@ import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Menu, X, Building,
     UserCircle, Bell, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
     ExternalLink, Search, Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle, Bot,
-    AlertTriangle, DollarSign, ArrowLeft, CheckCircle2
+    AlertTriangle, DollarSign, ArrowLeft, CheckCircle2, Coins
 } from 'lucide-react';
 
 // استدعاء الأدوات والمكونات الخارجية
@@ -13,6 +13,7 @@ import UsersManage from './UsersManage';
 import MaintenanceManage from './MaintenanceManage';
 import LeadsManage from './LeadsManage';
 import BotSettings from './BotSettings';
+import Finance from './Finance';
 import FeasibilityCalc from './FeasibilityCalc';
 import UnitsOverview from './UnitsOverview';
 import ProjectsManage from './ProjectsManage';
@@ -183,7 +184,8 @@ export default function Dashboard({ onLogout }) {
         { id: 'whatsapp',    title: 'صندوق واتساب',             icon: MessageCircle,   permKey: 'whatsapp' },
         { id: 'qr',          title: 'رموز الوحدات (QR)',        icon: QrCode,          permKey: 'qr' },
         { id: 'letters',     title: 'منشئ الخطابات',            icon: FilePenLine,     permKey: 'letters', isLink: true, path: '/admin/letter-generator' },
-        { id: 'accounting',  title: 'النظام المحاسبي',          icon: Calculator,      permKey: 'accounting', isExternal: true, path: 'https://semak.daftra.com/' },
+        { id: 'finance',     title: 'الإدارة المالية',          icon: DollarSign,      permKey: 'finance' },
+        { id: 'accounting',  title: 'النظام المحاسبي (دفترة)',  icon: Calculator,      permKey: 'accounting', isExternal: true, path: 'https://semak.daftra.com/' },
         { id: 'users',       title: 'إدارة الموظفين',           icon: UserCircle,      permKey: 'users_manage' },
     ];
 
@@ -332,6 +334,10 @@ export default function Dashboard({ onLogout }) {
                                     <IconCard icon={Bot} label="بوت فهد" badge={dashCounts.bot_customers_today} color="amber" badgeLabel="اليوم"
                                         onClick={() => setActiveTab('bot')}/>
                                 )}
+                                {hasPermission('finance') && (
+                                    <IconCard icon={DollarSign} label="الإدارة المالية" color="emerald"
+                                        onClick={() => setActiveTab('finance')}/>
+                                )}
                                 {hasPermission('inspection') && (
                                     <IconCard icon={ClipboardCheck} label="فحص الوحدات" badge={dashCounts.inspections_pending} color="indigo"
                                         onClick={() => setActiveTab('inspection')}/>
@@ -438,6 +444,13 @@ export default function Dashboard({ onLogout }) {
                     {activeTab === 'bot' && hasPermission('bot') && (
                         <div className="animate-fadeIn">
                             <BotSettings />
+                        </div>
+                    )}
+
+                    {/* --- قسم الإدارة المالية (دفترة) --- */}
+                    {activeTab === 'finance' && hasPermission('finance') && (
+                        <div className="animate-fadeIn">
+                            <Finance />
                         </div>
                     )}
 

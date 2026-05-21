@@ -871,8 +871,11 @@ switch ($action) {
         if (isset($invoices_data['data'])) {
             foreach ($invoices_data['data'] as $row) {
                 $i = $row['Invoice'] ?? [];
-                $total = (float)($i['total'] ?? 0);
-                $paid  = (float)($i['payments_total'] ?? $i['amount_paid'] ?? 0);
+                // جرّب عدة أسماء حقول للمبلغ الإجمالي
+                $total = (float)($i['summary_total'] ?? $i['grand_total'] ?? $i['total'] ?? $i['amount'] ?? $i['final_total'] ?? $i['invoice_total'] ?? 0);
+                $paid  = (float)($i['payments_total'] ?? $i['paid_amount'] ?? $i['amount_paid'] ?? 0);
+                // إذا paid_status موجود
+                $status = $i['payment_status'] ?? $i['status'] ?? '';
                 $total_invoiced += $total;
                 $total_paid     += $paid;
                 $invoice_count++;
@@ -962,6 +965,22 @@ switch ($action) {
         $res = curl_exec($ch);
         curl_close($ch);
         echo $res;
+        break;
+
+    case 'daftra_invoice_sample':
+        // إظهار أول فاتورة كاملةً لمعرفة أسماء الحقول
+        $daftra_key = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/invoices.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        $res = curl_exec($ch);
+        curl_close($ch);
+        $data = json_decode($res, true);
+        $first = $data['data'][0] ?? null;
+        echo json_encode(["first_invoice" => $first], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
 
     // ─── إحصائيات بوت فهد ─────────────────────────────────────────────────────

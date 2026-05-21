@@ -18,6 +18,7 @@ const APP_MODULES = [
   { id: "maintenance", label: "إدارة طلبات الصيانة",     icon: Wrench,          color: "text-purple-600",  bg: "bg-purple-50" },
   { id: "leads",       label: "سجل المهتمين",            icon: Users,           color: "text-teal-600",    bg: "bg-teal-50" },
   { id: "bot",         label: "بوت فهد (إعدادات وإحصائيات)", icon: Bot,         color: "text-amber-600",   bg: "bg-amber-50" },
+  { id: "finance",     label: "الإدارة المالية (دفترة)",   icon: Calculator,      color: "text-emerald-600", bg: "bg-emerald-50" },
   { id: "whatsapp",    label: "صندوق واتساب",            icon: MessageCircle,   color: "text-green-600",   bg: "bg-green-50" },
   { id: "qr",          label: "رموز الوحدات (QR)",       icon: QrCode,          color: "text-slate-700",   bg: "bg-slate-100" },
   { id: "letters",     label: "منشئ الخطابات",           icon: FilePenLine,     color: "text-rose-600",    bg: "bg-rose-50" },
