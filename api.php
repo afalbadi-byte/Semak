@@ -1515,6 +1515,64 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_probe_workflows':
+        // V2 API: workflows / workflow_types / entities
+        $daftra_key = "__DAFTRA_KEY__";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $bases = [
+            "https://semak.daftra.com/api2",
+            "https://semak.daftra.com/v2/api",
+            "https://semak.daftra.com/api/v2",
+            "https://semak.daftra.com/api",
+        ];
+        $endpoints = [
+            "workflow_types", "workflow-types", "workflowtypes",
+            "workflow_entities", "workflow-entities",
+            "workflows/1/entities", "workflow-types/1/entities",
+            "workflow_types/1", "workflow_types/list",
+            "entities", "entity/workflow",
+            "v2/owner/entity/workflow/le_workflow-type-entity-1/list",
+            "owner/entity/workflow/le_workflow-type-entity-1/list",
+        ];
+
+        $results = [];
+        foreach ($bases as $base) {
+            foreach ($endpoints as $ep) {
+                $url_json = "$base/$ep" . (strpos($ep, '.json') !== false ? '' : '.json') . "?limit=1";
+                $url_plain = "$base/$ep";
+                foreach ([$url_json, $url_plain] as $url) {
+                    $ch = curl_init($url);
+                    curl_setopt_array($ch, [
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_HTTPHEADER => $headers,
+                        CURLOPT_TIMEOUT => 6,
+                        CURLOPT_FOLLOWLOCATION => false,
+                    ]);
+                    $res = curl_exec($ch);
+                    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+                    if ($http === 200) {
+                        $data = json_decode($res, true);
+                        $key = $base . '/' . $ep;
+                        $count = isset($data['data']) ? count($data['data']) : 0;
+                        $results[$key] = [
+                            "status" => "✅ متاح",
+                            "url" => $url,
+                            "count" => $count,
+                            "preview" => substr($res, 0, 200),
+                        ];
+                        break 2; // وجدنا — انتقل للـ endpoint التالي
+                    }
+                }
+            }
+        }
+        if (empty($results)) {
+            $results['_hint'] = 'لا يوجد endpoint مطابق - النظام v2 قد لا يكون له API عام';
+        }
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_probe_projects':
         // اكتشاف endpoint إدارة المشاريع تحت دورات العمل
         $daftra_key = "__DAFTRA_KEY__";
