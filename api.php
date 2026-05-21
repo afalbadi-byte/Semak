@@ -800,42 +800,43 @@ switch ($action) {
         break;
 
     case 'daftra_test':
-        // اختبار شامل — يجرّب عدة subdomains وأشكال headers
+        // اختبار endpoints مختلفة (الـ auth نجح، نبحث عن endpoint صحيح)
         $daftra_key = "__DAFTRA_KEY__";
-        $sub = $_GET['sub'] ?? 'semak';   // مرّر ?sub=xxx لتجريب نطاق ثاني
-        $base = "https://$sub.daftra.com/api2";
+        $base = "https://semak.daftra.com/api2";
 
-        $attempts = [
-            "APIKEY uppercase"        => ["APIKEY: $daftra_key"],
-            "apikey lowercase"        => ["apikey: $daftra_key"],
-            "Authorization Bearer"    => ["Authorization: Bearer $daftra_key"],
-            "X-API-KEY"               => ["X-API-KEY: $daftra_key"],
-            "Daftra-Apikey"           => ["Daftra-Apikey: $daftra_key"],
+        $endpoints = [
+            "projects/list/1.json",
+            "projects/list.json",
+            "projects.json",
+            "clients/list/1.json",
+            "clients.json",
+            "invoices/list/1.json",
+            "invoices.json",
+            "expenses/list/1.json",
+            "expenses.json",
+            "products/list/1.json",
         ];
 
         $results = [];
-        foreach ($attempts as $label => $headers) {
-            $headers[] = "Accept: application/json";
-            $ch = curl_init("$base/users/list/1.json");
+        foreach ($endpoints as $ep) {
+            $ch = curl_init("$base/$ep");
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
                 CURLOPT_TIMEOUT => 10,
             ]);
             $res = curl_exec($ch);
             $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            $results[$label] = [
+            $results[$ep] = [
                 "http" => $http,
-                "body_preview" => substr($res ?: '', 0, 200),
+                "preview" => substr($res ?: '', 0, 150),
             ];
         }
 
         echo json_encode([
-            "subdomain_tested" => $sub,
             "base_url" => $base,
-            "attempts" => $results,
-            "hint" => "إذا كل المحاولات 401، الـ subdomain خطأ. جرّب ?sub=NAME"
+            "results" => $results,
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
 
