@@ -81,8 +81,7 @@ function QrSection() {
 
 export default function Dashboard({ onLogout }) {
     const [activeTab, setActiveTab] = useState('overview');
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    
+
     // حالات التحقق من السيرفر (حارس البوابة)
     const [dbUser, setDbUser] = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
@@ -197,7 +196,6 @@ export default function Dashboard({ onLogout }) {
             window.location.href = item.path;
         } else {
             setActiveTab(item.id);
-            setIsMobileMenuOpen(false);
             if (item.id === 'leads') loadLeads();
         }
     };
