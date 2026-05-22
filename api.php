@@ -1797,37 +1797,17 @@ switch ($action) {
         // ── 2) جلب قائمة دورات العمل بـ Bearer token ──
         $base_v2 = "https://semak.daftra.com";
 
-        // أولاً: نجرب اكتشاف أسماء الـ entities المتاحة
-        $discover_urls = [
-            "$base_v2/v2/api/entities",
-            "$base_v2/v2/api/entity",
-            "$base_v2/v2/api/entity/types",
-            "$base_v2/v2/api/entity/list",
+        // أسماء الـ entity المحتملة في /v2/api/entity/{name}/list/1
+        // (le_work_cycle لم يعمل — نجرب بدائل)
+        $entity_candidates = [
+            "$base_v2/v2/api/entity/work_cycle/list/1",
+            "$base_v2/v2/api/entity/work_cycles/list/1",
+            "$base_v2/v2/api/entity/le_work_cycle/list/1",
+            "$base_v2/v2/api/entity/project/list/1",
+            "$base_v2/v2/api/entity/projects/list/1",
+            "$base_v2/v2/api/entity/le_project/list/1",
         ];
         $discovered_entities = null;
-        foreach ($discover_urls as $du) {
-            $ch = curl_init($du);
-            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$bearer_headers, CURLOPT_TIMEOUT=>8]);
-            $r = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-            if ($c === 200 && json_decode($r)) { $discovered_entities = ['url'=>$du, 'data'=>json_decode($r, true)]; break; }
-        }
-
-        // ثانياً: نجرب أسماء entity متعددة على المسار الصحيح
-        $entity_name_variants = [
-            'work_cycle', 'work_cycles', 'WorkCycle', 'workcycle',
-            'project', 'projects', 'Project',
-            'le_work_cycle', 'le_project',
-            // ربما اسم مختلف في نظام دفترة
-            'task', 'tasks', 'job', 'jobs',
-        ];
-        $entity_candidates = [];
-        foreach ($entity_name_variants as $en) {
-            $entity_candidates[] = "$base_v2/v2/api/entity/$en/list/1";
-        }
-        // أضف أيضاً مسار AJAX الذي تستخدمه الصفحة (CakePHP style)
-        $entity_candidates[] = "$base_v2/v2/owner/entity/le_work_cycle/index.json";
-        $entity_candidates[] = "$base_v2/v2/owner/le_work_cycle/data";
-        $entity_candidates[] = "$base_v2/v2/owner/le_work_cycle/list";
 
         $found_data   = null;
         $entity_debug = [];
@@ -1842,9 +1822,10 @@ switch ($action) {
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HTTPHEADER     => $bearer_headers,
-                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_TIMEOUT        => 7,
+                CURLOPT_CONNECTTIMEOUT => 4,
                 CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 3,
+                CURLOPT_MAXREDIRS      => 2,
             ]);
             $res  = curl_exec($ch);
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
