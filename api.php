@@ -1896,57 +1896,59 @@ switch ($action) {
         }
         if (!$access_token) { echo json_encode(['success'=>false,'message'=>'فشل التوكن']); break; }
 
-        // اجلب HTML الصفحة
-        $page_url = "https://semak.daftra.com/v2/owner/entity/le_work_cycle/list";
-        $ch = curl_init($page_url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $access_token", 'Accept: text/html'],
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_FOLLOWLOCATION => true,
-        ]);
-        $html = curl_exec($ch);
-        $html_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $base_daftra = "https://semak.daftra.com";
+        $bh = ["Authorization: Bearer $access_token", 'Accept: application/json', 'X-Requested-With: XMLHttpRequest'];
 
-        // استخرج مسارات API من HTML
-        $patterns_found = [];
-        if (preg_match_all('/["\']([^"\']*\/entity[^"\']+)["\']/', $html, $m)) {
-            $patterns_found['entity_urls'] = array_slice(array_unique($m[1]), 0, 30);
-        }
-        if (preg_match_all('/["\']([^"\']*\/api[^"\']+)["\']/', $html, $m)) {
-            $patterns_found['api_urls'] = array_slice(array_unique($m[1]), 0, 20);
-        }
-        // استخرج script tags التي تحتوي entity أو ajax
-        preg_match_all('/<script[^>]*>(.*?)<\/script>/si', $html, $sm);
-        $scripts = [];
-        foreach ($sm[1] as $s) {
-            if (stripos($s,'entity')!==false || stripos($s,'ajax')!==false || stripos($s,'datatable')!==false) {
-                $scripts[] = substr(trim($s), 0, 800);
-            }
-        }
-        $patterns_found['scripts'] = array_slice($scripts, 0, 4);
+        // الاكتشاف الرئيسي: جرب كل variants مع ?ajax=1
+        // الـ token يعطي dashboard HTML بدون ajax=1, نجرب مع ajax=1
+        $ajax_candidates = [
+            // مع ?ajax=1 — نفس pattern activities_url في الـ dashboard JS
+            "$base_daftra/v2/owner/entity/le_work_cycle/list?ajax=1",
+            "$base_daftra/v2/owner/entity/le_project/list?ajax=1",
+            // workflow sub-path (رأيناها في HTML: /entity/workflow/le_workflow-type-entity-X)
+            "$base_daftra/v2/owner/entity/workflow/le_work_cycle/list",
+            "$base_daftra/v2/owner/entity/workflow/le_work_cycle/list?ajax=1",
+            // entity IDs الرقمية من workflow (1,2,3,4)
+            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-1/list?ajax=1",
+            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-2/list?ajax=1",
+            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-3/list?ajax=1",
+            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-4/list?ajax=1",
+            // API endpoint بدون followlocation لنرى final URL
+        ];
 
-        // جرب POST على نفس الـ URL (DataTables AJAX)
-        $ch = curl_init($page_url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query(['draw'=>1,'start'=>0,'length'=>50]),
-            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $access_token", 'Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'],
-            CURLOPT_TIMEOUT        => 10,
-        ]);
-        $post_res  = curl_exec($ch);
-        $post_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $post_json = json_decode($post_res, true);
+        $ajax_results = [];
+        foreach ($ajax_candidates as $aurl) {
+            $ch = curl_init($aurl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $bh,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_FOLLOWLOCATION => false, // لا نتبع redirect — نرى الـ 302 مباشرة
+            ]);
+            $r = curl_exec($ch);
+            $c = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $final = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+            curl_close($ch);
+            $j = json_decode($r, true);
+            $ajax_results[] = [
+                'url'     => $aurl,
+                'code'    => $c,
+                'is_json' => $j !== null,
+                'preview' => substr($r, 0, 300),
+            ];
+            if ($c === 200 && $j !== null) break; // وجدنا البيانات
+        }
+
+        // هل أي منها أعطى JSON؟
+        $found_json = null;
+        foreach ($ajax_results as $ar) {
+            if ($ar['is_json'] && $ar['code'] === 200) { $found_json = $ar; break; }
+        }
 
         echo json_encode([
-            'success'      => true,
-            'html_code'    => $html_code,
-            'html_length'  => strlen($html),
-            'patterns'     => $patterns_found,
-            'post_attempt' => ['code'=>$post_code, 'is_json'=>$post_json!==null, 'preview'=>substr($post_res,0,400)],
+            'success'      => $found_json !== null,
+            'found'        => $found_json,
+            'ajax_results' => $ajax_results,
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
 
