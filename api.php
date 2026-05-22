@@ -1678,6 +1678,72 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_debug_work_orders':
+        // تشخيص: ماذا يرجع api2/work_orders.json بالضبط؟
+        $daftra_key = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $results = [];
+        // جرب page 1 و 2
+        foreach ([1, 2] as $pg) {
+            $ch = curl_init("$base/work_orders.json?page=$pg&limit=100");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HEADER => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 15,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
+            ]);
+            $raw = curl_exec($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $hsize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+            curl_close($ch);
+
+            $body = substr($raw, $hsize);
+            $data = json_decode($body, true);
+            $items = $data['data'] ?? [];
+            $wo_list = [];
+            foreach ($items as $r) {
+                $w = $r['WorkOrder'] ?? $r;
+                $wo_list[] = [
+                    'id'     => $w['id'] ?? '?',
+                    'number' => $w['number'] ?? '?',
+                    'title'  => $w['title'] ?? $w['name'] ?? '?',
+                    'status' => $w['status'] ?? '?',
+                    'budget' => $w['budget'] ?? '?',
+                    'start_date' => $w['start_date'] ?? '?',
+                ];
+            }
+            $results["page_$pg"] = [
+                'http'       => $http,
+                'count'      => count($items),
+                'entity_key' => count($items) > 0 ? (array_keys($items[0])[0] ?? null) : null,
+                'work_orders'=> $wo_list,
+                'raw_first_300' => substr($body, 0, 300),
+            ];
+        }
+
+        // جرب أيضاً بدون pagination
+        $ch = curl_init("$base/work_orders.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+        ]);
+        $raw2 = curl_exec($ch);
+        $http2 = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $data2 = json_decode($raw2, true);
+        $results['no_pagination'] = [
+            'http' => $http2,
+            'count' => count($data2['data'] ?? []),
+            'raw_first_300' => substr($raw2, 0, 300),
+        ];
+
+        echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_follow_redirect':
         // تتبع redirect لـ ID 5 لمعرفة الـ endpoint الجديد
         $daftra_key = "__DAFTRA_KEY__";
