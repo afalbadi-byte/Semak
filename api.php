@@ -1652,102 +1652,164 @@ switch ($action) {
         break;
 
     case 'daftra_v2_work_cycles':
-        // جلب "إدارة المشاريع" من دفترة عبر OAuth2 (حل دائم ومستدام)
+        // جلب "إدارة المشاريع" من دفترة عبر OAuth2 — الحل الدائم
+        // وثّق دفترة: POST /api2/v2/oauth/token بـ grant_type=password
         set_time_limit(60);
-        $d_email    = "__DAFTRA_EMAIL__";
-        $d_password = "__DAFTRA_PASSWORD__";
-        $d_client_id     = "__DAFTRA_CLIENT_ID__";
-        $d_client_secret = "__DAFTRA_CLIENT_SECRET__";
-        $d_api_base = "https://semak.daftra.com/api2";
+        $d_email         = "__DAFTRA_EMAIL__";
+        $d_password      = "__DAFTRA_PASSWORD__";
+        $d_client_id     = "__DAFTRA_CLIENT_ID__";    // يجب أن يكون "1"
+        $d_client_secret = "__DAFTRA_CLIENT_SECRET__"; // السر الطويل
+        $d_api_base      = "https://semak.daftra.com/api2";
+        $daftra_apikey   = "__DAFTRA_KEY__";
 
-        // ── 1) الحصول على OAuth2 access_token — نجرب كل التركيبات ──
-        $token_url = "https://semak.daftra.com/v2/oauth/token";
-        $daftra_apikey = "__DAFTRA_KEY__";
+        // الـ URL الصحيح حسب توثيق دفترة (api2 prefix!)
+        $token_url = "https://semak.daftra.com/api2/v2/oauth/token";
 
-        // تركيبات مختلفة: grant_type × client_id المحتملة
+        // ── معلومات تشخيصية: هل السرائن مقلوبتين؟ ──
+        $cred_debug = [
+            'client_id_len'     => strlen($d_client_id),
+            'client_id_start'   => substr($d_client_id, 0, 3),      // يجب أن يكون "1" أو "1  "
+            'client_sec_len'    => strlen($d_client_secret),
+            'client_sec_start'  => substr($d_client_secret, 0, 4),  // يجب jCfy
+            'token_url'         => $token_url,
+        ];
+
+        // ── المحاولات: password grant (كما وثّق دفترة) ──
+        // نجرب مع كلا الـ content-type: form-urlencoded وmultipart/form-data
         $attempts = [
-            // client_credentials (بدون email/password — الأمثل للسيرفر)
-            ['grant_type'=>'client_credentials', 'client_id'=>$d_client_id,   'client_secret'=>$d_client_secret],
-            // password grant مع client_id=1
-            ['grant_type'=>'password', 'client_id'=>$d_client_id, 'client_secret'=>$d_client_secret, 'username'=>$d_email, 'password'=>$d_password],
-            // جرب بـ APIKEY كـ client_id
-            ['grant_type'=>'client_credentials', 'client_id'=>$daftra_apikey, 'client_secret'=>$d_client_secret],
-            ['grant_type'=>'password', 'client_id'=>$daftra_apikey, 'client_secret'=>$d_client_secret, 'username'=>$d_email, 'password'=>$d_password],
-            // بدون client credentials (public client)
-            ['grant_type'=>'password', 'username'=>$d_email, 'password'=>$d_password],
+            // محاولة 1: password grant — form-urlencoded (الأكثر شيوعاً)
+            [
+                'label'   => 'password/urlencoded/client_id',
+                'headers' => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
+                'body'    => http_build_query([
+                    'grant_type'    => 'password',
+                    'client_id'     => $d_client_id,
+                    'client_secret' => $d_client_secret,
+                    'username'      => $d_email,
+                    'password'      => $d_password,
+                ]),
+                'multipart' => false,
+            ],
+            // محاولة 2: نفس الشيء لكن بـ multipart/form-data (كما ذكر التوثيق)
+            [
+                'label'   => 'password/multipart/client_id',
+                'headers' => ['Accept: application/json'],
+                'body'    => [
+                    'grant_type'    => 'password',
+                    'client_id'     => $d_client_id,
+                    'client_secret' => $d_client_secret,
+                    'username'      => $d_email,
+                    'password'      => $d_password,
+                ],
+                'multipart' => true,
+            ],
+            // محاولة 3: Basic Auth header + password grant
+            [
+                'label'   => 'password/basic_auth',
+                'headers' => [
+                    'Content-Type: application/x-www-form-urlencoded',
+                    'Accept: application/json',
+                    'Authorization: Basic ' . base64_encode($d_client_id . ':' . $d_client_secret),
+                ],
+                'body'    => http_build_query([
+                    'grant_type' => 'password',
+                    'username'   => $d_email,
+                    'password'   => $d_password,
+                ]),
+                'multipart' => false,
+            ],
+            // محاولة 4: client_credentials (بدون username/password)
+            [
+                'label'   => 'client_credentials/urlencoded',
+                'headers' => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
+                'body'    => http_build_query([
+                    'grant_type'    => 'client_credentials',
+                    'client_id'     => $d_client_id,
+                    'client_secret' => $d_client_secret,
+                ]),
+                'multipart' => false,
+            ],
+            // محاولة 5: APIKEY كـ client_id (احتياطي)
+            [
+                'label'   => 'password/apikey_as_client_id',
+                'headers' => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
+                'body'    => http_build_query([
+                    'grant_type'    => 'password',
+                    'client_id'     => $daftra_apikey,
+                    'client_secret' => $d_client_secret,
+                    'username'      => $d_email,
+                    'password'      => $d_password,
+                ]),
+                'multipart' => false,
+            ],
         ];
 
         $access_token = null;
         $token_debug  = [];
 
         foreach ($attempts as $attempt) {
-            // جرب مرتين: مرة بـ body عادي، مرة بـ Basic Auth header
-            $variations = [null, base64_encode($d_client_id.':'.$d_client_secret)];
-            foreach ($variations as $basic_auth) {
-                $headers = ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'];
-                if ($basic_auth) {
-                    $headers[] = "Authorization: Basic $basic_auth";
-                    $attempt_body = $attempt;
-                    unset($attempt_body['client_id'], $attempt_body['client_secret']);
-                } else {
-                    $attempt_body = $attempt;
-                }
+            $ch = curl_init($token_url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $attempt['body'],
+                CURLOPT_HTTPHEADER     => $attempt['headers'],
+                CURLOPT_TIMEOUT        => 12,
+                CURLOPT_SSL_VERIFYPEER => true,
+            ]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_err = curl_error($ch);
+            curl_close($ch);
 
-                $ch = curl_init($token_url);
-                curl_setopt_array($ch, [
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_POST           => true,
-                    CURLOPT_POSTFIELDS     => http_build_query($attempt_body),
-                    CURLOPT_HTTPHEADER     => $headers,
-                    CURLOPT_TIMEOUT        => 10,
-                ]);
-                $res  = curl_exec($ch);
-                $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
+            $json = json_decode($res, true);
+            $token_debug[] = [
+                'label'   => $attempt['label'],
+                'code'    => $code,
+                'preview' => substr($res, 0, 200),
+                'curl_err'=> $curl_err ?: null,
+            ];
 
-                $json = json_decode($res, true);
-                $label = ($basic_auth ? 'basic_auth+' : '') . ($attempt['grant_type']) . '/' . ($attempt['client_id'] ?? 'no_client');
-                $token_debug[] = ['label'=>$label, 'code'=>$code, 'preview'=>substr($res,0,150)];
-
-                if ($code === 200 && !empty($json['access_token'])) {
-                    $access_token = $json['access_token'];
-                    break 2;
-                }
+            if ($code === 200 && !empty($json['access_token'])) {
+                $access_token = $json['access_token'];
+                break;
             }
         }
 
         if (!$access_token) {
             echo json_encode([
-                'success' => false,
-                'message' => 'فشل الحصول على OAuth2 token — جربنا كل التركيبات',
-                'debug'   => $token_debug,
-            ], JSON_UNESCAPED_UNICODE);
+                'success'    => false,
+                'message'    => 'فشل الحصول على OAuth2 token',
+                'cred_debug' => $cred_debug,
+                'attempts'   => $token_debug,
+            ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
             break;
         }
 
-        // ── 2) جلب قائمة المشاريع بـ Bearer token ──
-        // نجرب عدة مسارات بناءً على توثيق دفترة
-        $entity_urls = [
+        // ── 2) جلب قائمة دورات العمل بـ Bearer token ──
+        // المسارات حسب توثيق دفترة: /api2/v2/api/entity/{entity}/list/1
+        $entity_candidates = [
             "$d_api_base/v2/api/entity/le_work_cycle/list/1",
             "$d_api_base/v2/api/entity/le_project/list/1",
-            "https://semak.daftra.com/v2/owner/entity/le_work_cycle/list",
-            "https://semak.daftra.com/v2/owner/entity/le_project/list",
+            "$d_api_base/v2/api/entity/le_work_cycles/list/1",
+            "$d_api_base/v2/api/entity/le_projects/list/1",
         ];
 
-        $found_data = null;
+        $found_data   = null;
         $entity_debug = [];
+        $bearer_headers = [
+            "Authorization: Bearer $access_token",
+            'Accept: application/json',
+            'X-Requested-With: XMLHttpRequest',
+        ];
 
-        foreach ($entity_urls as $eurl) {
+        foreach ($entity_candidates as $eurl) {
             $ch = curl_init($eurl);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER     => [
-                    "Authorization: Bearer $access_token",
-                    'Accept: application/json',
-                    'X-Requested-With: XMLHttpRequest',
-                ],
+                CURLOPT_HTTPHEADER     => $bearer_headers,
                 CURLOPT_TIMEOUT        => 15,
-                CURLOPT_FOLLOWLOCATION => false, // لا نتبع redirects هنا
+                CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_MAXREDIRS      => 3,
             ]);
             $res  = curl_exec($ch);
@@ -1755,7 +1817,12 @@ switch ($action) {
             curl_close($ch);
 
             $json = json_decode($res, true);
-            $entity_debug[] = ['url' => $eurl, 'code' => $code, 'is_json' => $json !== null, 'preview' => substr($res, 0, 300)];
+            $entity_debug[] = [
+                'url'     => $eurl,
+                'code'    => $code,
+                'is_json' => $json !== null,
+                'preview' => substr($res, 0, 300),
+            ];
 
             if ($code === 200 && $json !== null) {
                 $found_data = $json;
@@ -1764,7 +1831,7 @@ switch ($action) {
         }
 
         if ($found_data !== null) {
-            $items = $found_data['data'] ?? ($found_data['items'] ?? ($found_data['rows'] ?? $found_data));
+            $items = $found_data['data'] ?? ($found_data['items'] ?? ($found_data['rows'] ?? (is_array($found_data) ? $found_data : [])));
             echo json_encode([
                 'success' => true,
                 'count'   => is_array($items) ? count($items) : 0,
@@ -1773,11 +1840,12 @@ switch ($action) {
             ], JSON_UNESCAPED_UNICODE);
         } else {
             echo json_encode([
-                'success' => false,
-                'message' => 'تم الحصول على token لكن فشل جلب البيانات',
-                'token_ok' => true,
-                'debug'   => $entity_debug,
-            ], JSON_UNESCAPED_UNICODE);
+                'success'      => false,
+                'message'      => 'تم الحصول على token لكن فشل جلب البيانات',
+                'token_ok'     => true,
+                'cred_debug'   => $cred_debug,
+                'entity_debug' => $entity_debug,
+            ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         }
         break;
 
