@@ -1661,14 +1661,11 @@ switch ($action) {
         // ── 1) تسجيل الدخول — نجرب عدة endpoints ──
         $cookie_jar = tempnam(sys_get_temp_dir(), 'daftra_cookie_');
 
+        // دفترة: تسجيل الدخول يتم على www.daftra.com ثم يُعاد التوجيه للـ subdomain
         $login_endpoints = [
-            // (url, post_fields, content_type)
-            ["$d_base/login",              http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password]), 'application/x-www-form-urlencoded'],
-            ["$d_base/users/login",        http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password]), 'application/x-www-form-urlencoded'],
-            ["$d_base/account/login",      http_build_query(['email'=>$d_email,'password'=>$d_password]), 'application/x-www-form-urlencoded'],
-            ["$d_base/auth/login",         json_encode(['email'=>$d_email,'password'=>$d_password]), 'application/json'],
-            ["$d_base/api2/users/login.json", http_build_query(['User[email]'=>$d_email,'User[password]'=>$d_password]), 'application/x-www-form-urlencoded'],
-            ["$d_base/api/auth/login",     json_encode(['email'=>$d_email,'password'=>$d_password]), 'application/json'],
+            ["https://www.daftra.com/users/login",  http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password,'data[User][remember_me]'=>'1']), 'application/x-www-form-urlencoded'],
+            ["https://www.daftra.com/users/login",  http_build_query(['email'=>$d_email,'password'=>$d_password]), 'application/x-www-form-urlencoded'],
+            ["https://www.daftra.com/login",        http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password]), 'application/x-www-form-urlencoded'],
         ];
 
         $login_ok   = false;
@@ -1682,12 +1679,16 @@ switch ($action) {
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_POST           => true,
                 CURLOPT_POSTFIELDS     => $ep_body,
-                CURLOPT_HTTPHEADER     => ["Content-Type: $ep_ct", 'Accept: application/json,text/html'],
+                CURLOPT_HTTPHEADER     => [
+                    "Content-Type: $ep_ct",
+                    'Accept: text/html,application/xhtml+xml,application/json,*/*',
+                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+                ],
                 CURLOPT_COOKIEJAR      => $cookie_jar,
                 CURLOPT_COOKIEFILE     => $cookie_jar,
                 CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 5,
-                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_MAXREDIRS      => 10,
+                CURLOPT_TIMEOUT        => 15,
             ]);
             $login_res  = curl_exec($login_ch);
             $login_code = curl_getinfo($login_ch, CURLINFO_HTTP_CODE);
@@ -1696,11 +1697,10 @@ switch ($action) {
 
             $tried[] = ['ep' => $ep_url, 'code' => $login_code, 'final' => $login_url];
 
-            // نجح لو: 200 ولا رجع لصفحة login أو homepage فارغة
+            // نجح لو: 200 ووصل لـ semak.daftra.com (الـ subdomain بعد الـ redirect)
             $login_ok = $login_code === 200
-                && !str_contains($login_url, '/login')
-                && !str_contains($login_url, '/auth')
-                && strlen($login_res) > 200;
+                && str_contains($login_url, 'semak.daftra.com')
+                && !str_contains($login_url, '/login');
 
             if ($login_ok) break;
         }
