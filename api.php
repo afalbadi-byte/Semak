@@ -52,6 +52,23 @@ $conn->query("CREATE TABLE IF NOT EXISTS daftra_tokens (
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ─── auto-migrate: Daftra work cycles cache (bookmarklet sync) ───────────────
+$conn->query("CREATE TABLE IF NOT EXISTS daftra_wc_cache (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    daftra_id  VARCHAR(64),
+    name       VARCHAR(512),
+    raw_json   LONGTEXT,
+    synced_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_did (daftra_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("CREATE TABLE IF NOT EXISTS daftra_sync_log (
+    entity      VARCHAR(64) PRIMARY KEY,
+    count       INT DEFAULT 0,
+    synced_at   DATETIME,
+    synced_by   VARCHAR(128)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // ─── auto-migrate: WhatsApp bot conversation history ────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -1753,62 +1770,73 @@ switch ($action) {
         exit;
 
     case 'daftra_v2_work_cycles':
-        // ─── الحل الدائم: session cookie → AJAX endpoint ─────────────────────
-        set_time_limit(30);
+        // ─── يقرأ من الكاش المحلي (يُملأ عبر Bookmarklet) ───────────────────
+        $rows = [];
+        $res2 = $conn->query("SELECT daftra_id, name, raw_json FROM daftra_wc_cache ORDER BY daftra_id ASC");
+        if ($res2) while ($r = $res2->fetch_assoc()) {
+            $decoded = json_decode($r['raw_json'], true);
+            $rows[] = $decoded ?: ['id' => $r['daftra_id'], 'name' => $r['name']];
+        }
 
-        // Cookie محقون من GitHub Secret عبر CI/CD
-        $session_cookie = urldecode("__DAFTRA_SESSION__");
-        $ajax_url       = "https://semak.daftra.com/v2/owner/entity/le_work_cycle/list?ajax=1";
+        $log   = $conn->query("SELECT synced_at, count FROM daftra_sync_log WHERE entity='work_cycles' LIMIT 1");
+        $lrow  = ($log && $log->num_rows > 0) ? $log->fetch_assoc() : null;
 
-        $ch = curl_init($ajax_url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_HTTPHEADER     => [
-                "Cookie: laravel_session=$session_cookie",
-                'Accept: application/json, text/javascript, */*; q=0.01',
-                'X-Requested-With: XMLHttpRequest',
-                'Referer: https://semak.daftra.com/v2/owner/entity/le_work_cycle/list',
-                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
-            ],
-        ]);
-        $res  = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err  = curl_error($ch);
-        curl_close($ch);
+        echo json_encode([
+            'success'     => true,
+            'source'      => 'local_cache',
+            'last_synced' => $lrow ? $lrow['synced_at'] : null,
+            'count'       => count($rows),
+            'data'        => $rows,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
 
-        $json = json_decode($res, true);
+    case 'sync_daftra_work_cycles':
+        // ─── استقبال بيانات من Bookmarklet في المتصفح ────────────────────────
+        $payload = $input_data['data'] ?? null;
+        if (!$payload) {
+            echo json_encode(['success' => false, 'message' => 'لا بيانات مُرسَلة'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
 
-        // فحص انتهاء الجلسة
-        if ($code === 401 || (isset($json['message']) && stripos($json['message'], 'Unauthenticated') !== false)) {
+        // استخرج صفوف الدورات من أي شكل رد
+        $items = [];
+        if (isset($payload['data']) && is_array($payload['data']))       $items = $payload['data'];
+        elseif (isset($payload['rows']) && is_array($payload['rows']))   $items = $payload['rows'];
+        elseif (isset($payload['items']) && is_array($payload['items'])) $items = $payload['items'];
+        elseif (is_array($payload) && isset($payload[0]))                $items = $payload;
+
+        // حفظ البيانات الخام للتشخيص إذا كانت فارغة
+        if (empty($items)) {
             echo json_encode([
-                'success' => false,
-                'message' => 'انتهت جلسة دفترة — يرجى تحديث DAFTRA_SESSION_COOKIE في GitHub Secrets',
-                'code'    => $code,
-                'preview' => substr($res, 0, 200),
+                'success'  => false,
+                'message'  => 'البيانات المُستلَمة فارغة أو بتنسيق غير متوقع',
+                'received' => array_keys((array)$payload),
+                'preview'  => substr(json_encode($payload), 0, 500),
             ], JSON_UNESCAPED_UNICODE);
             break;
         }
 
-        if ($code !== 200 || $json === null) {
-            echo json_encode([
-                'success' => false,
-                'message' => "فشل الاتصال بدفترة (HTTP $code)",
-                'curl_error' => $err,
-                'preview' => substr($res, 0, 300),
-            ], JSON_UNESCAPED_UNICODE);
-            break;
+        // امسح الكاش القديم واحفظ الجديد
+        $conn->query("DELETE FROM daftra_wc_cache");
+        $count = 0;
+        foreach ($items as $item) {
+            $did  = $conn->real_escape_string((string)($item['id'] ?? $item['Id'] ?? $count + 1));
+            $name = $conn->real_escape_string(
+                $item['name'] ?? $item['Name'] ?? $item['title'] ?? $item['Title'] ?? "دورة $did"
+            );
+            $json_s = $conn->real_escape_string(json_encode($item, JSON_UNESCAPED_UNICODE));
+            $conn->query("INSERT INTO daftra_wc_cache (daftra_id, name, raw_json) VALUES ('$did','$name','$json_s')");
+            $count++;
         }
 
-        // استخرج الصفوف من أي شكل للرد
-        $items = $json['data'] ?? ($json['rows'] ?? ($json['items'] ?? (isset($json[0]) ? $json : [])));
+        // سجّل وقت المزامنة
+        $conn->query("INSERT INTO daftra_sync_log (entity, count, synced_at) VALUES ('work_cycles', $count, NOW())
+                      ON DUPLICATE KEY UPDATE count=$count, synced_at=NOW()");
 
         echo json_encode([
             'success' => true,
-            'source'  => 'daftra_session',
-            'count'   => is_array($items) ? count($items) : 0,
-            'data'    => $items,
+            'count'   => $count,
+            'message' => "تم حفظ $count دورة عمل بنجاح",
         ], JSON_UNESCAPED_UNICODE);
         break;
 
