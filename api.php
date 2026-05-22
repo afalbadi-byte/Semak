@@ -1518,29 +1518,88 @@ switch ($action) {
         break;
 
     case 'daftra_probe_modules':
-        // اكتشاف اسم endpoint صحيح لـ "إدارة المشاريع" تحت "دورات العمل" في دفترة
+        set_time_limit(90);
         $daftra_key = "__DAFTRA_KEY__";
-        $hdrs = ["APIKEY: $daftra_key", "Accept: application/json"];
-        $candidates = [
-            'projects', 'le_projects', 'work_cycle_projects', 'project_phases',
-            'work_cycles', 'cycle_projects', 'project_management', 'project_orders',
-        ];
-        $results = [];
-        foreach ($candidates as $mod) {
-            $ch = curl_init("https://semak.daftra.com/api2/$mod.json?limit=5");
-            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hdrs, CURLOPT_TIMEOUT=>8, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_MAXREDIRS=>5]);
+        $base_domain = "https://semak.daftra.com";
+
+        $try = function($url, $extra_headers = []) use ($daftra_key) {
+            $hdrs = array_merge(
+                ["APIKEY: $daftra_key", "Accept: application/json", "Content-Type: application/json"],
+                $extra_headers
+            );
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $hdrs,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 5,
+            ]);
             $res  = curl_exec($ch);
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $final_url = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
             curl_close($ch);
-            $decoded = json_decode($res, true);
-            $results[$mod] = [
-                'http' => $code,
-                'has_data' => isset($decoded['data']) && count($decoded['data']) > 0,
-                'count' => isset($decoded['data']) ? count($decoded['data']) : 0,
-                'sample_keys' => isset($decoded['data'][0]) ? array_keys($decoded['data'][0]) : [],
+            $decoded = @json_decode($res, true);
+            return [
+                'http'        => $code,
+                'final_url'   => $final_url,
+                'has_data'    => isset($decoded['data']) && !empty($decoded['data']),
+                'count'       => isset($decoded['data']) ? (is_array($decoded['data']) ? count($decoded['data']) : 1) : 0,
+                'top_keys'    => is_array($decoded) ? array_keys($decoded) : [],
+                'raw_preview' => substr($res ?? '', 0, 200),
             ];
+        };
+
+        $results = [];
+
+        // 1) api2 — أسماء le_ المحتملة
+        foreach (['le_work_cycle','le_work_cycles','le_project','le_projects_management',
+                  'le_work_cycle_project','le_phase','le_milestone','le_stages'] as $m) {
+            $results["api2/$m"] = $try("$base_domain/api2/$m.json?limit=5");
         }
-        echo json_encode(['success'=>true, 'results'=>$results], JSON_UNESCAPED_UNICODE);
+
+        // 2) v2 REST API — أنماط مختلفة
+        $v2_paths = [
+            'v2/work_cycles',
+            'v2/projects',
+            'v2/le_projects',
+            'v2/work_cycle_projects',
+            'v2/owner/work_cycles',
+            'v2/owner/projects',
+        ];
+        foreach ($v2_paths as $p) {
+            $results[$p] = $try("$base_domain/$p");
+        }
+
+        // 3) v2 entity/workflow (النمط المعروف لـ دفترة الجديد)
+        $entity_paths = [
+            'v2/owner/entity/workflow/le_workflow_type-entity-1/list',
+            'v2/owner/entity/workflow/le_workflow_type-entity-2/list',
+            'v2/owner/entity/le_work_cycle/list',
+            'v2/owner/entity/le_project/list',
+        ];
+        foreach ($entity_paths as $p) {
+            $results[$p] = $try("$base_domain/$p");
+        }
+
+        // 4) جرب مع Authorization: Bearer بدل APIKEY header
+        $results['v2_bearer/work_cycles'] = $try(
+            "$base_domain/v2/work_cycles",
+            ["Authorization: Bearer $daftra_key"]
+        );
+        $results['v2_bearer/projects'] = $try(
+            "$base_domain/v2/projects",
+            ["Authorization: Bearer $daftra_key"]
+        );
+
+        // فلتر: أظهر فقط اللي ما راحت 404
+        $non404 = array_filter($results, fn($r) => $r['http'] !== 404);
+
+        echo json_encode([
+            'success'   => true,
+            'non_404'   => $non404,
+            'all_codes' => array_map(fn($r) => $r['http'], $results),
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
 
     case 'daftra_work_orders_all':
