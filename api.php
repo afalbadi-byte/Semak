@@ -1651,6 +1651,90 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
 
+    case 'daftra_v2_work_cycles':
+        // جلب "إدارة المشاريع" من قسم "دورات العمل" في دفترة (v2 session-based API)
+        set_time_limit(60);
+        $d_email    = "__DAFTRA_EMAIL__";
+        $d_password = "__DAFTRA_PASSWORD__";
+        $d_base     = "https://semak.daftra.com";
+
+        // ── 1) تسجيل الدخول للحصول على session cookie ──
+        $cookie_jar = tempnam(sys_get_temp_dir(), 'daftra_cookie_');
+
+        $login_ch = curl_init("$d_base/users/login");
+        curl_setopt_array($login_ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query([
+                'data[User][email]'    => $d_email,
+                'data[User][password]' => $d_password,
+                'data[User][remember]' => '1',
+            ]),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_COOKIEJAR      => $cookie_jar,
+            CURLOPT_COOKIEFILE     => $cookie_jar,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_TIMEOUT        => 15,
+        ]);
+        $login_res  = curl_exec($login_ch);
+        $login_code = curl_getinfo($login_ch, CURLINFO_HTTP_CODE);
+        $login_url  = curl_getinfo($login_ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($login_ch);
+
+        // تحقق أن تسجيل الدخول نجح (يجب أن لا يعود للصفحة الرئيسية أو login)
+        $login_ok = $login_code === 200 && !str_contains($login_url, '/users/login');
+        if (!$login_ok) {
+            @unlink($cookie_jar);
+            echo json_encode([
+                'success' => false,
+                'message' => 'فشل تسجيل الدخول لدفترة',
+                'debug'   => ['code' => $login_code, 'url' => $login_url],
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        // ── 2) جلب قائمة دورات العمل (le_work_cycle) ──
+        $api_ch = curl_init("$d_base/v2/owner/entity/le_work_cycle/list");
+        curl_setopt_array($api_ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => ['Accept: application/json', 'X-Requested-With: XMLHttpRequest'],
+            CURLOPT_COOKIEFILE     => $cookie_jar,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_TIMEOUT        => 20,
+        ]);
+        $api_res  = curl_exec($api_ch);
+        $api_code = curl_getinfo($api_ch, CURLINFO_HTTP_CODE);
+        $api_url  = curl_getinfo($api_ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($api_ch);
+        @unlink($cookie_jar);
+
+        $data = json_decode($api_res, true);
+
+        // إذا رجع JSON → نجح
+        if ($data !== null) {
+            $items = $data['data'] ?? ($data['items'] ?? ($data['rows'] ?? $data));
+            echo json_encode([
+                'success' => true,
+                'count'   => is_array($items) ? count($items) : 0,
+                'data'    => $items,
+                '_raw'    => $data, // للديباق
+            ], JSON_UNESCAPED_UNICODE);
+        } else {
+            // رجع HTML → الـ session لم يُقبل، نرسل أول 500 حرف للديباق
+            echo json_encode([
+                'success' => false,
+                'message' => 'تم تسجيل الدخول لكن رجع HTML بدل JSON',
+                'debug'   => [
+                    'api_code' => $api_code,
+                    'api_url'  => $api_url,
+                    'preview'  => substr($api_res, 0, 500),
+                ],
+            ], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
     case 'daftra_work_orders_all':
         // جلب كل دورات العمل من دفترة: القائمة العامة + محاولة IDs فردية للوصول للدورات المخفية
         set_time_limit(60);

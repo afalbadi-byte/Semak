@@ -40,6 +40,11 @@ jobs:
       - name: Inject Daftra API key
         run: sed -i "s|__DAFTRA_KEY__|${{ secrets.DAFTRA_API_KEY }}|g" dist/api.php
 
+      - name: Inject Daftra credentials
+        run: |
+          sed -i "s|__DAFTRA_EMAIL__|${{ secrets.DAFTRA_EMAIL }}|g" dist/api.php
+          sed -i "s|__DAFTRA_PASSWORD__|${{ secrets.DAFTRA_PASSWORD }}|g" dist/api.php
+
       - name: Deploy to server via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
