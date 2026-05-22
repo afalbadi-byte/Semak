@@ -1592,6 +1592,55 @@ switch ($action) {
             ["Authorization: Bearer $daftra_key"]
         );
 
+        // ──── مرحلة 2: نفس الـ v2 endpoints مع APIKEY كـ query param وبدون FOLLOWLOCATION ────
+        $try_nofollow = function($url, $extra_headers = []) use ($daftra_key) {
+            $hdrs = array_merge(
+                ["APIKEY: $daftra_key", "Accept: application/json"],
+                $extra_headers
+            );
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $hdrs,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_FOLLOWLOCATION => false, // لا نتبع الـ redirect
+                CURLOPT_HEADER         => true,  // نشوف الهيدرز
+            ]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            // نستخرج Location header
+            preg_match('/Location:\s*(.+)/i', $res, $loc);
+            $decoded = @json_decode($res, true);
+            return [
+                'http'     => $code,
+                'location' => trim($loc[1] ?? ''),
+                'is_json'  => $decoded !== null,
+                'preview'  => substr($res, 0, 300),
+            ];
+        };
+
+        $v2_base = "v2/owner/entity";
+        $candidates2 = [
+            "nofollow/{$v2_base}/le_work_cycle/list"    => "$base_domain/{$v2_base}/le_work_cycle/list",
+            "nofollow/{$v2_base}/le_project/list"       => "$base_domain/{$v2_base}/le_project/list",
+            "queryparam/le_work_cycle?APIKEY"           => "$base_domain/{$v2_base}/le_work_cycle/list?APIKEY=$daftra_key",
+            "queryparam/le_work_cycle?api_key"          => "$base_domain/{$v2_base}/le_work_cycle/list?api_key=$daftra_key",
+            "queryparam/le_work_cycle?apikey"           => "$base_domain/{$v2_base}/le_work_cycle/list?apikey=$daftra_key",
+            "queryparam/le_project?APIKEY"              => "$base_domain/{$v2_base}/le_project/list?APIKEY=$daftra_key",
+            "bearer/le_work_cycle"                      => "$base_domain/{$v2_base}/le_work_cycle/list",
+            "bearer/le_project"                         => "$base_domain/{$v2_base}/le_project/list",
+        ];
+
+        $extra_headers_map = [
+            "bearer/le_work_cycle" => ["Authorization: Bearer $daftra_key"],
+            "bearer/le_project"    => ["Authorization: Bearer $daftra_key"],
+        ];
+
+        foreach ($candidates2 as $label => $url) {
+            $results["phase2/$label"] = $try_nofollow($url, $extra_headers_map[$label] ?? []);
+        }
+
         // فلتر: أظهر فقط اللي ما راحت 404
         $non404 = array_filter($results, fn($r) => $r['http'] !== 404);
 
