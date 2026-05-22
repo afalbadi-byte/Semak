@@ -1897,57 +1897,76 @@ switch ($action) {
         if (!$access_token) { echo json_encode(['success'=>false,'message'=>'فشل التوكن']); break; }
 
         $base_daftra = "https://semak.daftra.com";
-        $bh = ["Authorization: Bearer $access_token", 'Accept: application/json', 'X-Requested-With: XMLHttpRequest'];
 
-        // الاكتشاف الرئيسي: جرب كل variants مع ?ajax=1
-        // الـ token يعطي dashboard HTML بدون ajax=1, نجرب مع ajax=1
-        $ajax_candidates = [
-            // مع ?ajax=1 — نفس pattern activities_url في الـ dashboard JS
+        // ── الخطوة 2: استخدم Bearer token لتسجيل دخول وكسب session cookie ──
+        // نرسل Bearer token إلى صفحة الـ HTML (GET) ونلتقط الـ Set-Cookie headers
+        $cookie_jar = tempnam(sys_get_temp_dir(), 'daftra_cookies_');
+        $ch = curl_init("$base_daftra/v2/owner/entity/le_work_cycle/list");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $access_token", 'Accept: text/html,application/xhtml+xml'],
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_COOKIEJAR      => $cookie_jar,  // احفظ الـ cookies
+            CURLOPT_COOKIEFILE     => $cookie_jar,
+        ]);
+        curl_exec($ch);
+        $login_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $final_url  = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($ch);
+
+        // اقرأ الـ cookies المحفوظة
+        $cookie_content = file_exists($cookie_jar) ? file_get_contents($cookie_jar) : '';
+
+        // ── الخطوة 3: استخدم الـ session cookies لطلب البيانات بـ ?ajax=1 ──
+        $ajax_targets = [
             "$base_daftra/v2/owner/entity/le_work_cycle/list?ajax=1",
             "$base_daftra/v2/owner/entity/le_project/list?ajax=1",
-            // workflow sub-path (رأيناها في HTML: /entity/workflow/le_workflow-type-entity-X)
-            "$base_daftra/v2/owner/entity/workflow/le_work_cycle/list",
-            "$base_daftra/v2/owner/entity/workflow/le_work_cycle/list?ajax=1",
-            // entity IDs الرقمية من workflow (1,2,3,4)
             "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-1/list?ajax=1",
-            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-2/list?ajax=1",
             "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-3/list?ajax=1",
-            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-4/list?ajax=1",
-            // API endpoint بدون followlocation لنرى final URL
         ];
 
         $ajax_results = [];
-        foreach ($ajax_candidates as $aurl) {
+        foreach ($ajax_targets as $aurl) {
             $ch = curl_init($aurl);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER     => $bh,
+                CURLOPT_HTTPHEADER     => [
+                    'Accept: application/json, text/javascript, */*',
+                    'X-Requested-With: XMLHttpRequest',
+                ],
                 CURLOPT_TIMEOUT        => 8,
-                CURLOPT_FOLLOWLOCATION => false, // لا نتبع redirect — نرى الـ 302 مباشرة
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_COOKIEFILE     => $cookie_jar,  // استخدم الـ cookies المحفوظة
             ]);
             $r = curl_exec($ch);
             $c = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $final = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
             curl_close($ch);
             $j = json_decode($r, true);
             $ajax_results[] = [
                 'url'     => $aurl,
                 'code'    => $c,
                 'is_json' => $j !== null,
-                'preview' => substr($r, 0, 300),
+                'preview' => substr($r, 0, 500),
             ];
-            if ($c === 200 && $j !== null) break; // وجدنا البيانات
+            if ($c === 200 && $j !== null) break;
         }
 
-        // هل أي منها أعطى JSON؟
-        $found_json = null;
+        if (file_exists($cookie_jar)) @unlink($cookie_jar);
+
+        $found = null;
         foreach ($ajax_results as $ar) {
-            if ($ar['is_json'] && $ar['code'] === 200) { $found_json = $ar; break; }
+            if ($ar['is_json'] && $ar['code'] === 200) { $found = $ar; break; }
         }
 
         echo json_encode([
-            'success'      => $found_json !== null,
-            'found'        => $found_json,
+            'success'      => $found !== null,
+            'login_code'   => $login_code,
+            'final_url'    => $final_url,
+            'has_cookies'  => strlen($cookie_content) > 100,
+            'cookie_preview' => substr($cookie_content, 0, 200),
+            'found'        => $found,
             'ajax_results' => $ajax_results,
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
