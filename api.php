@@ -1658,38 +1658,59 @@ switch ($action) {
         $d_password = "__DAFTRA_PASSWORD__";
         $d_base     = "https://semak.daftra.com";
 
-        // ── 1) تسجيل الدخول للحصول على session cookie ──
+        // ── 1) تسجيل الدخول — نجرب عدة endpoints ──
         $cookie_jar = tempnam(sys_get_temp_dir(), 'daftra_cookie_');
 
-        $login_ch = curl_init("$d_base/users/login");
-        curl_setopt_array($login_ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query([
-                'data[User][email]'    => $d_email,
-                'data[User][password]' => $d_password,
-                'data[User][remember]' => '1',
-            ]),
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-            CURLOPT_COOKIEJAR      => $cookie_jar,
-            CURLOPT_COOKIEFILE     => $cookie_jar,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_TIMEOUT        => 15,
-        ]);
-        $login_res  = curl_exec($login_ch);
-        $login_code = curl_getinfo($login_ch, CURLINFO_HTTP_CODE);
-        $login_url  = curl_getinfo($login_ch, CURLINFO_EFFECTIVE_URL);
-        curl_close($login_ch);
+        $login_endpoints = [
+            // (url, post_fields, content_type)
+            ["$d_base/login",              http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password]), 'application/x-www-form-urlencoded'],
+            ["$d_base/users/login",        http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password]), 'application/x-www-form-urlencoded'],
+            ["$d_base/account/login",      http_build_query(['email'=>$d_email,'password'=>$d_password]), 'application/x-www-form-urlencoded'],
+            ["$d_base/auth/login",         json_encode(['email'=>$d_email,'password'=>$d_password]), 'application/json'],
+            ["$d_base/api2/users/login.json", http_build_query(['User[email]'=>$d_email,'User[password]'=>$d_password]), 'application/x-www-form-urlencoded'],
+            ["$d_base/api/auth/login",     json_encode(['email'=>$d_email,'password'=>$d_password]), 'application/json'],
+        ];
 
-        // تحقق أن تسجيل الدخول نجح (يجب أن لا يعود للصفحة الرئيسية أو login)
-        $login_ok = $login_code === 200 && !str_contains($login_url, '/users/login');
+        $login_ok   = false;
+        $login_url  = '';
+        $login_code = 0;
+        $tried      = [];
+
+        foreach ($login_endpoints as [$ep_url, $ep_body, $ep_ct]) {
+            $login_ch = curl_init($ep_url);
+            curl_setopt_array($login_ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $ep_body,
+                CURLOPT_HTTPHEADER     => ["Content-Type: $ep_ct", 'Accept: application/json,text/html'],
+                CURLOPT_COOKIEJAR      => $cookie_jar,
+                CURLOPT_COOKIEFILE     => $cookie_jar,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 5,
+                CURLOPT_TIMEOUT        => 10,
+            ]);
+            $login_res  = curl_exec($login_ch);
+            $login_code = curl_getinfo($login_ch, CURLINFO_HTTP_CODE);
+            $login_url  = curl_getinfo($login_ch, CURLINFO_EFFECTIVE_URL);
+            curl_close($login_ch);
+
+            $tried[] = ['ep' => $ep_url, 'code' => $login_code, 'final' => $login_url];
+
+            // نجح لو: 200 ولا رجع لصفحة login أو homepage فارغة
+            $login_ok = $login_code === 200
+                && !str_contains($login_url, '/login')
+                && !str_contains($login_url, '/auth')
+                && strlen($login_res) > 200;
+
+            if ($login_ok) break;
+        }
+
         if (!$login_ok) {
             @unlink($cookie_jar);
             echo json_encode([
                 'success' => false,
-                'message' => 'فشل تسجيل الدخول لدفترة',
-                'debug'   => ['code' => $login_code, 'url' => $login_url],
+                'message' => 'فشل تسجيل الدخول لدفترة — جرّبنا كل المسارات',
+                'debug'   => $tried,
             ], JSON_UNESCAPED_UNICODE);
             break;
         }
