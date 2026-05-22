@@ -9,7 +9,7 @@ import {
 const API_URL = "https://semak.sa/api.php";
 
 // ── مطابقة اسم المشروع مع work_order بدفترة ──────────────────────────────
-// يزيل الأرقام والأقواس ويقارن النص الجوهري
+// يزيل الأرقام والأقواس ويقارن النص الجوهري مع اشتراط تشابه كافٍ
 function normName(s = '') {
     return s.replace(/[\d()\[\]#؟?.,،\-_]/g, '').replace(/\s+/g, ' ').trim();
 }
@@ -17,7 +17,11 @@ function matchByName(projectName, woTitle) {
     const pn = normName(projectName);
     const wn = normName(woTitle);
     if (!pn || !wn) return false;
-    return pn === wn || pn.includes(wn) || wn.includes(pn);
+    if (pn === wn) return true;
+    // تطابق جزئي فقط إذا كان الجزء الأقصر ≥ 70% من طول الأطول (لتفادي تطابقات واسعة مثل "سماك" مع "سماك الزايدي")
+    const shorter = pn.length <= wn.length ? pn : wn;
+    const longer  = pn.length <= wn.length ? wn : pn;
+    return longer.includes(shorter) && shorter.length / longer.length >= 0.7;
 }
 
 export default function WorkCycles() {
@@ -169,8 +173,10 @@ function CycleCard({ item, onOpen }) {
                 <div className="flex flex-col items-end gap-1 shrink-0">
                     {st && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${st.cls}`}>{st.label}</span>}
                     {linked
-                        ? <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Link2 size={9}/>مرتبط</span>
-                        : <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg">دفترة فقط</span>
+                        ? <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Link2 size={9}/>مرتبط بدفترة</span>
+                        : p
+                            ? <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg">محلي</span>
+                            : <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg">دفترة فقط</span>
                     }
                 </div>
             </div>
@@ -205,7 +211,7 @@ function CycleCard({ item, onOpen }) {
             )}
 
             <div className="text-xs font-bold text-emerald-600 mt-3 pt-3 border-t border-slate-100">
-                {linked ? 'عرض الملخص المالي ←' : 'عرض التفاصيل ←'}
+                {linked ? 'عرض الملخص المالي ←' : p ? 'عرض الوحدات ←' : 'عرض التفاصيل ←'}
             </div>
         </div>
     );
