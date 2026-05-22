@@ -1897,77 +1897,68 @@ switch ($action) {
         if (!$access_token) { echo json_encode(['success'=>false,'message'=>'فشل التوكن']); break; }
 
         $base_daftra = "https://semak.daftra.com";
+        $daftra_apikey2 = "__DAFTRA_KEY__";
+        $bh_bearer = ["Authorization: Bearer $access_token", 'Accept: application/json'];
+        $bh_apikey = ["APIKEY: $daftra_apikey2", 'Accept: application/json'];
 
-        // ── الخطوة 2: استخدم Bearer token لتسجيل دخول وكسب session cookie ──
-        // نرسل Bearer token إلى صفحة الـ HTML (GET) ونلتقط الـ Set-Cookie headers
-        $cookie_jar = tempnam(sys_get_temp_dir(), 'daftra_cookies_');
-        $ch = curl_init("$base_daftra/v2/owner/entity/le_work_cycle/list");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $access_token", 'Accept: text/html,application/xhtml+xml'],
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_COOKIEJAR      => $cookie_jar,  // احفظ الـ cookies
-            CURLOPT_COOKIEFILE     => $cookie_jar,
-        ]);
-        curl_exec($ch);
-        $login_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $final_url  = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
-        curl_close($ch);
-
-        // اقرأ الـ cookies المحفوظة
-        $cookie_content = file_exists($cookie_jar) ? file_get_contents($cookie_jar) : '';
-
-        // ── الخطوة 3: استخدم الـ session cookies لطلب البيانات بـ ?ajax=1 ──
-        $ajax_targets = [
-            "$base_daftra/v2/owner/entity/le_work_cycle/list?ajax=1",
-            "$base_daftra/v2/owner/entity/le_project/list?ajax=1",
-            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-1/list?ajax=1",
-            "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-3/list?ajax=1",
-        ];
-
-        $ajax_results = [];
-        foreach ($ajax_targets as $aurl) {
-            $ch = curl_init($aurl);
+        $quick_get = function($url, $headers, $nofollow=true) {
+            $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER     => [
-                    'Accept: application/json, text/javascript, */*',
-                    'X-Requested-With: XMLHttpRequest',
-                ],
-                CURLOPT_TIMEOUT        => 8,
-                CURLOPT_FOLLOWLOCATION => false,
-                CURLOPT_COOKIEFILE     => $cookie_jar,  // استخدم الـ cookies المحفوظة
+                CURLOPT_HTTPHEADER     => $headers,
+                CURLOPT_TIMEOUT        => 6,
+                CURLOPT_FOLLOWLOCATION => !$nofollow,
             ]);
             $r = curl_exec($ch);
             $c = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            $j = json_decode($r, true);
-            $ajax_results[] = [
-                'url'     => $aurl,
-                'code'    => $c,
-                'is_json' => $j !== null,
-                'preview' => substr($r, 0, 500),
-            ];
-            if ($c === 200 && $j !== null) break;
+            return [$c, $r, json_decode($r,true)];
+        };
+
+        $results = [];
+
+        // ── A) Bearer token مع /v2/api/owner/ endpoints (مثل notifications) ──
+        $api_paths = [
+            "$base_daftra/v2/api/owner/le_work_cycle",
+            "$base_daftra/v2/api/owner/le_work_cycle/list",
+            "$base_daftra/v2/api/owner/entity/le_work_cycle",
+            "$base_daftra/v2/api/owner/entity/le_work_cycle/list",
+            "$base_daftra/v2/api/owner/workflow_cycles",
+            "$base_daftra/v2/api/owner/work_cycles",
+        ];
+        foreach ($api_paths as $p) {
+            [$c, $r, $j] = $quick_get($p, $bh_bearer);
+            $results["bearer:$p"] = ['code'=>$c,'is_json'=>$j!==null,'preview'=>substr($r,0,200)];
         }
 
-        if (file_exists($cookie_jar)) @unlink($cookie_jar);
+        // ── B) APIKEY مع /v2/ entity endpoints ──
+        $api_paths2 = [
+            "$base_daftra/v2/owner/entity/le_work_cycle/list",
+            "$base_daftra/v2/owner/entity/le_work_cycle/list?ajax=1",
+            "$base_daftra/api2/v2/owner/entity/le_work_cycle/list",
+        ];
+        foreach ($api_paths2 as $p) {
+            [$c, $r, $j] = $quick_get($p, $bh_apikey);
+            $results["apikey:$p"] = ['code'=>$c,'is_json'=>$j!==null,'preview'=>substr($r,0,200)];
+        }
 
-        $found = null;
-        foreach ($ajax_results as $ar) {
-            if ($ar['is_json'] && $ar['code'] === 200) { $found = $ar; break; }
+        // ── C) ابحث عن entity "دورات العمل" بين le_workflow-type-entity-X ──
+        // نجرب 2 و 4 و 5 (1=المشاريع, 3=تسليم الوحدات من نتائج سابقة)
+        $workflow_titles = [];
+        foreach ([2, 4, 5, 6] as $n) {
+            $url = "$base_daftra/v2/owner/entity/workflow/le_workflow-type-entity-$n/list";
+            [$c, $r, $j] = $quick_get($url, [], false);
+            if ($c === 200 && preg_match('/<title>([^<]+)<\/title>/', $r, $mt)) {
+                $workflow_titles["entity_$n"] = ['title'=>trim($mt[1]), 'code'=>$c];
+            } else {
+                $workflow_titles["entity_$n"] = ['code'=>$c, 'preview'=>substr($r,0,100)];
+            }
         }
 
         echo json_encode([
-            'success'      => $found !== null,
-            'login_code'   => $login_code,
-            'final_url'    => $final_url,
-            'has_cookies'  => strlen($cookie_content) > 100,
-            'cookie_preview' => substr($cookie_content, 0, 200),
-            'found'        => $found,
-            'ajax_results' => $ajax_results,
+            'success'         => false,
+            'api_results'     => $results,
+            'workflow_titles' => $workflow_titles,
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         break;
 
