@@ -1662,8 +1662,11 @@ switch ($action) {
         $d_api_base      = "https://semak.daftra.com/api2";
         $daftra_apikey   = "__DAFTRA_KEY__";
 
-        // الـ URL الصحيح حسب توثيق دفترة (api2 prefix!)
-        $token_url = "https://semak.daftra.com/api2/v2/oauth/token";
+        // نجرب كلا الـ URL: الموثّق في docs (/api2/) والقديم (/v2/ مباشرة)
+        $token_urls = [
+            "https://semak.daftra.com/api2/v2/oauth/token",  // كما في docs.daftara.dev
+            "https://semak.daftra.com/v2/oauth/token",        // الأصلي — كان يعطي OAuth2 errors
+        ];
 
         // ── معلومات تشخيصية: هل السرائن مقلوبتين؟ ──
         $cred_debug = [
@@ -1744,35 +1747,40 @@ switch ($action) {
             ],
         ];
 
-        $access_token = null;
-        $token_debug  = [];
+        $access_token      = null;
+        $winning_token_url = null;
+        $token_debug       = [];
 
-        foreach ($attempts as $attempt) {
-            $ch = curl_init($token_url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => $attempt['body'],
-                CURLOPT_HTTPHEADER     => $attempt['headers'],
-                CURLOPT_TIMEOUT        => 12,
-                CURLOPT_SSL_VERIFYPEER => true,
-            ]);
-            $res  = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curl_err = curl_error($ch);
-            curl_close($ch);
+        foreach ($token_urls as $t_url) {
+            foreach ($attempts as $attempt) {
+                $ch = curl_init($t_url);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_POST           => true,
+                    CURLOPT_POSTFIELDS     => $attempt['body'],
+                    CURLOPT_HTTPHEADER     => $attempt['headers'],
+                    CURLOPT_TIMEOUT        => 12,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                ]);
+                $res      = curl_exec($ch);
+                $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curl_err = curl_error($ch);
+                curl_close($ch);
 
-            $json = json_decode($res, true);
-            $token_debug[] = [
-                'label'   => $attempt['label'],
-                'code'    => $code,
-                'preview' => substr($res, 0, 200),
-                'curl_err'=> $curl_err ?: null,
-            ];
+                $json = json_decode($res, true);
+                $token_debug[] = [
+                    'url'      => $t_url,
+                    'label'    => $attempt['label'],
+                    'code'     => $code,
+                    'preview'  => substr($res, 0, 200),
+                    'curl_err' => $curl_err ?: null,
+                ];
 
-            if ($code === 200 && !empty($json['access_token'])) {
-                $access_token = $json['access_token'];
-                break;
+                if ($code === 200 && !empty($json['access_token'])) {
+                    $access_token      = $json['access_token'];
+                    $winning_token_url = $t_url;
+                    break 2;
+                }
             }
         }
 
