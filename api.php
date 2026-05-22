@@ -1795,12 +1795,24 @@ switch ($action) {
         }
 
         // ── 2) جلب قائمة دورات العمل بـ Bearer token ──
-        // المسارات حسب توثيق دفترة: /api2/v2/api/entity/{entity}/list/1
+        // نجرب كل المسارات المحتملة: api2 prefix / بدون prefix / مع /1 / بدون
+        $base_v2 = "https://semak.daftra.com";
         $entity_candidates = [
+            // المسار الذي رجع 302 سابقاً (الآن مع token يجب أن يعمل)
+            "$base_v2/v2/owner/entity/le_work_cycle/list",
+            "$base_v2/v2/owner/entity/le_project/list",
+            // نفس المسار لكن مع api2 prefix
+            "$d_api_base/v2/owner/entity/le_work_cycle/list",
+            "$d_api_base/v2/owner/entity/le_project/list",
+            // المسار الموثّق في docs /v2/api/entity/
             "$d_api_base/v2/api/entity/le_work_cycle/list/1",
             "$d_api_base/v2/api/entity/le_project/list/1",
-            "$d_api_base/v2/api/entity/le_work_cycles/list/1",
-            "$d_api_base/v2/api/entity/le_projects/list/1",
+            // بدون /1 في النهاية
+            "$d_api_base/v2/api/entity/le_work_cycle/list",
+            "$d_api_base/v2/api/entity/le_project/list",
+            // أسماء بديلة
+            "$base_v2/v2/owner/entity/le_work_cycles/list",
+            "$base_v2/v2/owner/entity/le_projects/list",
         ];
 
         $found_data   = null;
