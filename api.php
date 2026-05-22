@@ -1652,134 +1652,118 @@ switch ($action) {
         break;
 
     case 'daftra_v2_work_cycles':
-        // جلب "إدارة المشاريع" من قسم "دورات العمل" في دفترة (v2 session-based API)
+        // جلب "إدارة المشاريع" من دفترة عبر OAuth2 (حل دائم ومستدام)
         set_time_limit(60);
         $d_email    = "__DAFTRA_EMAIL__";
         $d_password = "__DAFTRA_PASSWORD__";
-        $d_base     = "https://semak.daftra.com";
-        // ── 1) تسجيل الدخول — نقرأ صفحة اللوجن أولاً ثم نرسل الفورم ──
-        $cookie_jar = tempnam(sys_get_temp_dir(), 'daftra_cookie_');
-        $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
+        $d_client_id     = "__DAFTRA_CLIENT_ID__";
+        $d_client_secret = "__DAFTRA_CLIENT_SECRET__";
+        $d_api_base = "https://semak.daftra.com/api2";
 
-        // خطوة أ: GET صفحة اللوجن
-        $get_ch = curl_init("https://www.daftra.com/users/login");
-        curl_setopt_array($get_ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ["Accept: text/html", "User-Agent: $ua"],
-            CURLOPT_COOKIEJAR      => $cookie_jar,
-            CURLOPT_COOKIEFILE     => $cookie_jar,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 10,
-            CURLOPT_TIMEOUT        => 15,
-        ]);
-        $login_page_html = curl_exec($get_ch);
-        $login_page_url  = curl_getinfo($get_ch, CURLINFO_EFFECTIVE_URL);
-        curl_close($get_ch);
+        // ── 1) الحصول على OAuth2 access_token ──
+        $token_urls = [
+            "$d_api_base/v2/oauth/token",
+            "https://semak.daftra.com/v2/oauth/token",
+            "$d_api_base/oauth/token",
+        ];
 
-        // استخرج form action
-        preg_match('/<form[^>]+action=["\']([^"\']+)["\'][^>]*>/i', $login_page_html, $fm);
-        $form_action = trim($fm[1] ?? '');
-        if ($form_action && !str_starts_with($form_action, 'http')) {
-            $p = parse_url($login_page_url);
-            $form_action = $p['scheme'].'://'.$p['host'].$form_action;
+        $access_token = null;
+        $token_debug  = [];
+
+        foreach ($token_urls as $token_url) {
+            $ch = curl_init($token_url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => http_build_query([
+                    'grant_type'    => 'password',
+                    'client_id'     => $d_client_id,
+                    'client_secret' => $d_client_secret,
+                    'username'      => $d_email,
+                    'password'      => $d_password,
+                ]),
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/x-www-form-urlencoded',
+                    'Accept: application/json',
+                ],
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 5,
+            ]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            $json = json_decode($res, true);
+            $token_debug[] = ['url' => $token_url, 'code' => $code, 'keys' => array_keys($json ?? []), 'preview' => substr($res, 0, 200)];
+
+            if ($code === 200 && !empty($json['access_token'])) {
+                $access_token = $json['access_token'];
+                break;
+            }
         }
-        if (!$form_action) $form_action = $login_page_url;
 
-        // استخرج hidden fields (CSRF وغيره)
-        preg_match_all('/<input[^>]+type=["\']hidden["\'][^>]*>/i', $login_page_html, $hm);
-        $hidden = [];
-        foreach ($hm[0] as $tag) {
-            preg_match('/name=["\']([^"\']+)["\']/i',  $tag, $nm);
-            preg_match('/value=["\']([^"\']*)["\']?/i', $tag, $vm);
-            if (!empty($nm[1])) $hidden[$nm[1]] = $vm[1] ?? '';
-        }
-
-        // خطوة ب: POST بيانات الدخول
-        $post_data = array_merge($hidden, [
-            'data[User][email]'       => $d_email,
-            'data[User][password]'    => $d_password,
-            'data[User][remember_me]' => '1',
-        ]);
-        $post_ch = curl_init($form_action);
-        curl_setopt_array($post_ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query($post_data),
-            CURLOPT_HTTPHEADER     => [
-                'Content-Type: application/x-www-form-urlencoded',
-                'Accept: text/html,application/xhtml+xml,*/*',
-                "User-Agent: $ua",
-                "Referer: $login_page_url",
-            ],
-            CURLOPT_COOKIEJAR      => $cookie_jar,
-            CURLOPT_COOKIEFILE     => $cookie_jar,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 10,
-            CURLOPT_TIMEOUT        => 20,
-        ]);
-        $login_res  = curl_exec($post_ch);
-        $login_code = curl_getinfo($post_ch, CURLINFO_HTTP_CODE);
-        $login_url  = curl_getinfo($post_ch, CURLINFO_EFFECTIVE_URL);
-        curl_close($post_ch);
-
-        $login_ok = $login_code === 200
-            && str_contains($login_url, 'semak.daftra.com')
-            && !str_contains($login_url, '/login');
-
-        if (!$login_ok) {
-            @unlink($cookie_jar);
+        if (!$access_token) {
             echo json_encode([
                 'success' => false,
-                'message' => 'فشل تسجيل الدخول لدفترة',
-                'debug'   => [
-                    'login_page_url' => $login_page_url,
-                    'form_action'    => $form_action,
-                    'hidden_keys'    => array_keys($hidden),
-                    'post_code'      => $login_code,
-                    'post_final_url' => $login_url,
-                    'preview'        => substr($login_res, 0, 400),
-                ],
+                'message' => 'فشل الحصول على OAuth2 token',
+                'debug'   => $token_debug,
             ], JSON_UNESCAPED_UNICODE);
             break;
         }
 
-        // ── 2) جلب قائمة دورات العمل (le_work_cycle) ──
-        $api_ch = curl_init("$d_base/v2/owner/entity/le_work_cycle/list");
-        curl_setopt_array($api_ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ['Accept: application/json', 'X-Requested-With: XMLHttpRequest'],
-            CURLOPT_COOKIEFILE     => $cookie_jar,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_TIMEOUT        => 20,
-        ]);
-        $api_res  = curl_exec($api_ch);
-        $api_code = curl_getinfo($api_ch, CURLINFO_HTTP_CODE);
-        $api_url  = curl_getinfo($api_ch, CURLINFO_EFFECTIVE_URL);
-        curl_close($api_ch);
-        @unlink($cookie_jar);
+        // ── 2) جلب قائمة المشاريع بـ Bearer token ──
+        // نجرب عدة مسارات بناءً على توثيق دفترة
+        $entity_urls = [
+            "$d_api_base/v2/api/entity/le_work_cycle/list/1",
+            "$d_api_base/v2/api/entity/le_project/list/1",
+            "https://semak.daftra.com/v2/owner/entity/le_work_cycle/list",
+            "https://semak.daftra.com/v2/owner/entity/le_project/list",
+        ];
 
-        $data = json_decode($api_res, true);
+        $found_data = null;
+        $entity_debug = [];
 
-        // إذا رجع JSON → نجح
-        if ($data !== null) {
-            $items = $data['data'] ?? ($data['items'] ?? ($data['rows'] ?? $data));
+        foreach ($entity_urls as $eurl) {
+            $ch = curl_init($eurl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => [
+                    "Authorization: Bearer $access_token",
+                    'Accept: application/json',
+                    'X-Requested-With: XMLHttpRequest',
+                ],
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_FOLLOWLOCATION => false, // لا نتبع redirects هنا
+                CURLOPT_MAXREDIRS      => 3,
+            ]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            $json = json_decode($res, true);
+            $entity_debug[] = ['url' => $eurl, 'code' => $code, 'is_json' => $json !== null, 'preview' => substr($res, 0, 300)];
+
+            if ($code === 200 && $json !== null) {
+                $found_data = $json;
+                break;
+            }
+        }
+
+        if ($found_data !== null) {
+            $items = $found_data['data'] ?? ($found_data['items'] ?? ($found_data['rows'] ?? $found_data));
             echo json_encode([
                 'success' => true,
                 'count'   => is_array($items) ? count($items) : 0,
                 'data'    => $items,
-                '_raw'    => $data, // للديباق
+                '_raw'    => $found_data,
             ], JSON_UNESCAPED_UNICODE);
         } else {
-            // رجع HTML → الـ session لم يُقبل، نرسل أول 500 حرف للديباق
             echo json_encode([
                 'success' => false,
-                'message' => 'تم تسجيل الدخول لكن رجع HTML بدل JSON',
-                'debug'   => [
-                    'api_code' => $api_code,
-                    'api_url'  => $api_url,
-                    'preview'  => substr($api_res, 0, 500),
-                ],
+                'message' => 'تم الحصول على token لكن فشل جلب البيانات',
+                'token_ok' => true,
+                'debug'   => $entity_debug,
             ], JSON_UNESCAPED_UNICODE);
         }
         break;

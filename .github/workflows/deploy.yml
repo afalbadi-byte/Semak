@@ -44,6 +44,8 @@ jobs:
         run: |
           sed -i "s|__DAFTRA_EMAIL__|${{ secrets.DAFTRA_EMAIL }}|g" dist/api.php
           sed -i "s|__DAFTRA_PASSWORD__|${{ secrets.DAFTRA_PASSWORD }}|g" dist/api.php
+          sed -i "s|__DAFTRA_CLIENT_ID__|${{ secrets.DAFTRA_CLIENT_ID }}|g" dist/api.php
+          sed -i "s|__DAFTRA_CLIENT_SECRET__|${{ secrets.DAFTRA_CLIENT_SECRET }}|g" dist/api.php
 
       - name: Deploy to server via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
