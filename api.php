@@ -1660,53 +1660,66 @@ switch ($action) {
         $d_client_secret = "__DAFTRA_CLIENT_SECRET__";
         $d_api_base = "https://semak.daftra.com/api2";
 
-        // ── 1) الحصول على OAuth2 access_token ──
-        $token_urls = [
-            "$d_api_base/v2/oauth/token",
-            "https://semak.daftra.com/v2/oauth/token",
-            "$d_api_base/oauth/token",
+        // ── 1) الحصول على OAuth2 access_token — نجرب كل التركيبات ──
+        $token_url = "https://semak.daftra.com/v2/oauth/token";
+        $daftra_apikey = "__DAFTRA_KEY__";
+
+        // تركيبات مختلفة: grant_type × client_id المحتملة
+        $attempts = [
+            // client_credentials (بدون email/password — الأمثل للسيرفر)
+            ['grant_type'=>'client_credentials', 'client_id'=>$d_client_id,   'client_secret'=>$d_client_secret],
+            // password grant مع client_id=1
+            ['grant_type'=>'password', 'client_id'=>$d_client_id, 'client_secret'=>$d_client_secret, 'username'=>$d_email, 'password'=>$d_password],
+            // جرب بـ APIKEY كـ client_id
+            ['grant_type'=>'client_credentials', 'client_id'=>$daftra_apikey, 'client_secret'=>$d_client_secret],
+            ['grant_type'=>'password', 'client_id'=>$daftra_apikey, 'client_secret'=>$d_client_secret, 'username'=>$d_email, 'password'=>$d_password],
+            // بدون client credentials (public client)
+            ['grant_type'=>'password', 'username'=>$d_email, 'password'=>$d_password],
         ];
 
         $access_token = null;
         $token_debug  = [];
 
-        foreach ($token_urls as $token_url) {
-            $ch = curl_init($token_url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => http_build_query([
-                    'grant_type'    => 'password',
-                    'client_id'     => $d_client_id,
-                    'client_secret' => $d_client_secret,
-                    'username'      => $d_email,
-                    'password'      => $d_password,
-                ]),
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/x-www-form-urlencoded',
-                    'Accept: application/json',
-                ],
-                CURLOPT_TIMEOUT        => 15,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 5,
-            ]);
-            $res  = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+        foreach ($attempts as $attempt) {
+            // جرب مرتين: مرة بـ body عادي، مرة بـ Basic Auth header
+            $variations = [null, base64_encode($d_client_id.':'.$d_client_secret)];
+            foreach ($variations as $basic_auth) {
+                $headers = ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'];
+                if ($basic_auth) {
+                    $headers[] = "Authorization: Basic $basic_auth";
+                    $attempt_body = $attempt;
+                    unset($attempt_body['client_id'], $attempt_body['client_secret']);
+                } else {
+                    $attempt_body = $attempt;
+                }
 
-            $json = json_decode($res, true);
-            $token_debug[] = ['url' => $token_url, 'code' => $code, 'keys' => array_keys($json ?? []), 'preview' => substr($res, 0, 200)];
+                $ch = curl_init($token_url);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_POST           => true,
+                    CURLOPT_POSTFIELDS     => http_build_query($attempt_body),
+                    CURLOPT_HTTPHEADER     => $headers,
+                    CURLOPT_TIMEOUT        => 10,
+                ]);
+                $res  = curl_exec($ch);
+                $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
 
-            if ($code === 200 && !empty($json['access_token'])) {
-                $access_token = $json['access_token'];
-                break;
+                $json = json_decode($res, true);
+                $label = ($basic_auth ? 'basic_auth+' : '') . ($attempt['grant_type']) . '/' . ($attempt['client_id'] ?? 'no_client');
+                $token_debug[] = ['label'=>$label, 'code'=>$code, 'preview'=>substr($res,0,150)];
+
+                if ($code === 200 && !empty($json['access_token'])) {
+                    $access_token = $json['access_token'];
+                    break 2;
+                }
             }
         }
 
         if (!$access_token) {
             echo json_encode([
                 'success' => false,
-                'message' => 'فشل الحصول على OAuth2 token',
+                'message' => 'فشل الحصول على OAuth2 token — جربنا كل التركيبات',
                 'debug'   => $token_debug,
             ], JSON_UNESCAPED_UNICODE);
             break;
