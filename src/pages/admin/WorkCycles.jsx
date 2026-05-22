@@ -1,35 +1,83 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Layers, RefreshCw, ChevronLeft, Building2, DollarSign, ExternalLink,
     TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Receipt,
-    ShoppingCart, Search, Link, Users, Home, CheckSquare, Settings, X, Save
+    ShoppingCart, Search, Link2, Users, Home, CheckSquare, Save, X,
+    Calendar, FileText
 } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
+// ── مطابقة اسم المشروع مع work_order بدفترة ──────────────────────────────
+// يزيل الأرقام والأقواس ويقارن النص الجوهري
+function normName(s = '') {
+    return s.replace(/[\d()\[\]#؟?.,،\-_]/g, '').replace(/\s+/g, ' ').trim();
+}
+function matchByName(projectName, woTitle) {
+    const pn = normName(projectName);
+    const wn = normName(woTitle);
+    if (!pn || !wn) return false;
+    return pn === wn || pn.includes(wn) || wn.includes(pn);
+}
+
 export default function WorkCycles() {
-    const [projects, setProjects] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [selected, setSelected] = useState(null);  // project id
-    const [search, setSearch] = useState('');
+    const [projects, setProjects]       = useState([]); // محلية
+    const [workOrders, setWorkOrders]   = useState([]); // دفترة
+    const [merged, setMerged]           = useState([]); // مدمجة
+    const [loading, setLoading]         = useState(true);
+    const [selected, setSelected]       = useState(null); // { type:'project'|'wo', id }
+    const [search, setSearch]           = useState('');
 
-    const load = async () => {
+    const load = useCallback(async () => {
         setLoading(true);
-        try {
-            const res = await fetch(`${API_URL}?action=get_project_cycles`);
-            const json = await res.json();
-            if (json.success) setProjects(json.data);
-        } finally { setLoading(false); }
-    };
+        const [pRes, wRes] = await Promise.all([
+            fetch(`${API_URL}?action=get_project_cycles`).then(r => r.json()).catch(() => ({ success: false })),
+            fetch(`${API_URL}?action=daftra_list&module=work_orders`).then(r => r.json()).catch(() => ({ success: false })),
+        ]);
+        const localProjects = pRes.success ? (pRes.data || []) : [];
+        const daftraWOs     = wRes.success ? (wRes.data || []) : [];
+        setProjects(localProjects);
+        setWorkOrders(daftraWOs);
 
-    useEffect(() => { load(); }, []);
+        // دمج: كل مشروع محلي يُربط بـ work_order من دفترة
+        const usedWoIds = new Set();
+        const items = localProjects.map(p => {
+            // ابحث عن work_order مطابق بالاسم أو بـ daftra_id المحفوظ
+            const wo = daftraWOs.find(w =>
+                (p.daftra_id && String(p.daftra_id) === String(w.id)) ||
+                matchByName(p.name, w.title || '')
+            );
+            if (wo) usedWoIds.add(String(wo.id));
+            return { type: 'project', project: p, wo: wo || null };
+        });
 
-    const filtered = projects.filter(p =>
-        !search || (p.name || '').toLowerCase().includes(search.toLowerCase())
-    );
+        // أضف work_orders من دفترة التي لم تتطابق مع أي مشروع محلي
+        daftraWOs.forEach(wo => {
+            if (!usedWoIds.has(String(wo.id))) {
+                items.push({ type: 'wo_only', wo, project: null });
+            }
+        });
+
+        setMerged(items);
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const filtered = merged.filter(item => {
+        if (!search) return true;
+        const name = item.project?.name || item.wo?.title || '';
+        return name.toLowerCase().includes(search.toLowerCase());
+    });
 
     if (selected) {
-        return <ProjectCycleDetail id={selected} onBack={() => { setSelected(null); load(); }} />;
+        return (
+            <CycleDetail
+                item={selected}
+                workOrders={workOrders}
+                onBack={() => { setSelected(null); load(); }}
+            />
+        );
     }
 
     return (
@@ -43,12 +91,12 @@ export default function WorkCycles() {
                         </div>
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black">دورات العمل</h1>
-                            <p className="text-sm text-slate-300 mt-1">إحصائيات الوحدات والأداء المالي لكل مشروع</p>
+                            <p className="text-sm text-slate-300 mt-1">بيانات المشاريع المحلية مع الملخص المالي من دفترة</p>
                         </div>
                     </div>
                     <a href="https://semak.daftra.com/work_orders" target="_blank" rel="noreferrer"
                         className="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition">
-                        <ExternalLink size={14}/> دورات العمل في دفترة
+                        <ExternalLink size={14}/> دفترة
                     </a>
                 </div>
             </div>
@@ -63,7 +111,7 @@ export default function WorkCycles() {
                 <button onClick={load} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-2.5 rounded-xl transition" title="تحديث">
                     <RefreshCw size={16} className={loading ? 'animate-spin' : ''}/>
                 </button>
-                <span className="text-sm font-bold text-slate-500">{filtered.length} مشروع</span>
+                <span className="text-sm font-bold text-slate-500">{filtered.length} دورة</span>
             </div>
 
             {loading ? (
@@ -73,13 +121,12 @@ export default function WorkCycles() {
             ) : filtered.length === 0 ? (
                 <div className="bg-white rounded-2xl p-12 text-center text-slate-400">
                     <Layers size={48} className="mx-auto mb-3 opacity-50"/>
-                    <p className="font-bold">لا توجد مشاريع</p>
-                    <p className="text-sm mt-2">أضف مشاريع من قسم "إدارة المشاريع والوحدات"</p>
+                    <p className="font-bold">لا توجد دورات عمل</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filtered.map(p => (
-                        <ProjectCard key={p.id} project={p} onOpen={() => setSelected(p.id)} />
+                    {filtered.map((item, i) => (
+                        <CycleCard key={i} item={item} onOpen={() => setSelected(item)}/>
                     ))}
                 </div>
             )}
@@ -87,57 +134,84 @@ export default function WorkCycles() {
     );
 }
 
-function ProjectCard({ project: p, onOpen }) {
-    const total = Number(p.total_units || 0);
-    const sold  = Number(p.sold_units  || 0);
-    const avail = Number(p.available_units || 0);
+// ─────────────── بطاقة الدورة ─────────────────────────────────────────────
+
+function CycleCard({ item, onOpen }) {
+    const { project: p, wo } = item;
+    const name  = p?.name  || wo?.title || '—';
+    const total = Number(p?.total_units || 0);
+    const sold  = Number(p?.sold_units  || 0);
+    const avail = Number(p?.available_units || 0);
     const soldPct = total > 0 ? Math.round((sold / total) * 100) : 0;
+    const linked = !!wo;
+
+    const statusMap = {
+        '1': { label: 'مفتوحة',      cls: 'bg-emerald-100 text-emerald-700' },
+        '2': { label: 'قيد التنفيذ', cls: 'bg-blue-100 text-blue-700' },
+        '3': { label: 'مكتملة',      cls: 'bg-slate-200 text-slate-700' },
+        '4': { label: 'ملغاة',       cls: 'bg-red-100 text-red-700' },
+    };
+    const st = wo ? (statusMap[String(wo.status)] || { label: wo.status || '—', cls: 'bg-slate-100 text-slate-600' }) : null;
 
     return (
         <div className="bg-white rounded-2xl shadow border border-slate-100 p-5 hover:shadow-md transition cursor-pointer" onClick={onOpen}>
+            {/* رأس البطاقة */}
             <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 bg-[#1a365d] rounded-xl flex items-center justify-center">
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 shrink-0 bg-[#1a365d] rounded-xl flex items-center justify-center">
                         <Building2 size={22} className="text-[#c5a059]"/>
                     </div>
-                    <div>
-                        <h3 className="text-lg font-black text-[#1a365d]">{p.name}</h3>
-                        {p.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{p.description}</p>}
+                    <div className="min-w-0">
+                        <h3 className="text-lg font-black text-[#1a365d] truncate">{name}</h3>
+                        {wo?.number && <p className="text-xs text-slate-400 font-mono">#{wo.number}</p>}
                     </div>
                 </div>
-                {p.daftra_id
-                    ? <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1"><Link size={10}/>مرتبط</span>
-                    : <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-lg">غير مرتبط</span>
-                }
-            </div>
-
-            {/* إحصائيات الوحدات */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-                <StatChip label="إجمالي" val={total} color="slate"/>
-                <StatChip label="مباعة"  val={sold}  color="emerald"/>
-                <StatChip label="متاحة"  val={avail} color="blue"/>
-            </div>
-
-            {/* شريط المبيعات */}
-            <div className="mb-4">
-                <div className="flex justify-between text-xs text-slate-500 mb-1">
-                    <span>نسبة المبيعات</span>
-                    <span className="font-bold text-[#1a365d]">{soldPct}%</span>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-l from-[#c5a059] to-[#1a365d] rounded-full transition-all"
-                        style={{ width: `${soldPct}%` }}/>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                    {st && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${st.cls}`}>{st.label}</span>}
+                    {linked
+                        ? <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg flex items-center gap-1"><Link2 size={9}/>مرتبط</span>
+                        : <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg">دفترة فقط</span>
+                    }
                 </div>
             </div>
 
-            <div className="text-xs font-bold text-emerald-600 pt-3 border-t border-slate-100">
-                {p.daftra_id ? 'عرض الملخص المالي ←' : 'عرض التفاصيل وربط دفترة ←'}
+            {/* وحدات (إن وجدت) */}
+            {p && (
+                <>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                        <MiniStat label="إجمالي" val={total} color="slate"/>
+                        <MiniStat label="مباعة"  val={sold}  color="emerald"/>
+                        <MiniStat label="متاحة"  val={avail} color="blue"/>
+                    </div>
+                    <div className="mb-3">
+                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                            <span>نسبة المبيعات</span>
+                            <span className="font-bold text-[#1a365d]">{soldPct}%</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-l from-[#c5a059] to-[#1a365d] rounded-full"
+                                style={{ width: `${soldPct}%` }}/>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* تواريخ من دفترة */}
+            {wo?.start_date && (
+                <div className="flex items-center gap-1 text-xs text-slate-500 mb-1">
+                    <Calendar size={11}/> بدء: {wo.start_date}
+                    {wo.delivery_date && <> — تسليم: {wo.delivery_date}</>}
+                </div>
+            )}
+
+            <div className="text-xs font-bold text-emerald-600 mt-3 pt-3 border-t border-slate-100">
+                {linked ? 'عرض الملخص المالي ←' : 'عرض التفاصيل ←'}
             </div>
         </div>
     );
 }
 
-function StatChip({ label, val, color }) {
+function MiniStat({ label, val, color }) {
     const c = { slate: 'bg-slate-50 text-slate-600', emerald: 'bg-emerald-50 text-emerald-700', blue: 'bg-blue-50 text-blue-700' };
     return (
         <div className={`${c[color]} rounded-xl p-2 text-center`}>
@@ -149,66 +223,72 @@ function StatChip({ label, val, color }) {
 
 // ─────────────── صفحة التفاصيل ───────────────────────────────────────────────
 
-function ProjectCycleDetail({ id, onBack }) {
-    const [data, setData]       = useState(null);
-    const [loading, setLoading] = useState(true);
+function CycleDetail({ item, workOrders, onBack }) {
+    const { project: p, wo: initWo } = item;
+
+    const [summary, setSummary] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [units,   setUnits]   = useState([]);
     const [linking, setLinking] = useState(false);
-    const [daftraInput, setDaftraInput] = useState('');
-    const [saving, setSaving]   = useState(false);
-    const [workOrders, setWorkOrders] = useState([]);
-    const [woLoading, setWoLoading] = useState(false);
+    const [selWoId, setSelWoId] = useState('');
+    const [saving,  setSaving]  = useState(false);
+    const [wo, setWo] = useState(initWo);
 
-    const fmt = n => Number(n || 0).toLocaleString('ar-SA', { maximumFractionDigits: 0 });
+    const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
-    const loadData = () => {
+    // جلب الملخص المالي من دفترة
+    const loadSummary = useCallback(async (woId) => {
+        if (!woId) return;
         setLoading(true);
-        fetch(`${API_URL}?action=project_cycle_summary&id=${id}`)
-            .then(r => r.json())
-            .then(j => { if (j.success) setData(j); setLoading(false); });
-    };
+        const res = await fetch(`${API_URL}?action=daftra_work_order_summary&id=${woId}`)
+            .then(r => r.json()).catch(() => null);
+        if (res?.success) {
+            setSummary(res.summary);
+            setUnits([]); // سيُستبدل بالوحدات المحلية
+        }
+        setLoading(false);
+    }, []);
 
-    const loadWorkOrders = () => {
-        setWoLoading(true);
-        fetch(`${API_URL}?action=daftra_list&module=work_orders`)
+    // جلب الوحدات من قاعدة البيانات المحلية
+    useEffect(() => {
+        if (!p?.id) return;
+        fetch(`${API_URL}?action=project_cycle_summary&id=${p.id}`)
             .then(r => r.json())
-            .then(j => { if (j.success) setWorkOrders(j.data || []); setWoLoading(false); });
-    };
+            .then(j => { if (j.success) setUnits(j.units || []); });
+    }, [p?.id]);
 
-    useEffect(() => { loadData(); }, [id]);
+    useEffect(() => {
+        if (wo?.id) loadSummary(wo.id);
+    }, [wo?.id]);
 
     const saveLink = async () => {
+        if (!selWoId || !p?.id) return;
         setSaving(true);
-        await fetch(`${API_URL}`, {
+        await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set_project_daftra_id', project_id: id, daftra_id: daftraInput || null }),
+            body: JSON.stringify({ action: 'set_project_daftra_id', project_id: p.id, daftra_id: selWoId }),
         });
+        const newWo = workOrders.find(w => String(w.id) === String(selWoId));
+        setWo(newWo || null);
         setSaving(false);
         setLinking(false);
-        loadData();
+        if (newWo) loadSummary(newWo.id);
     };
 
     const removeLink = async () => {
-        if (!confirm('إزالة الربط مع دفترة؟')) return;
-        await fetch(`${API_URL}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set_project_daftra_id', project_id: id, daftra_id: null }),
+        if (!p?.id) return;
+        await fetch(API_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'set_project_daftra_id', project_id: p.id, daftra_id: null }),
         });
-        loadData();
+        setWo(null); setSummary(null);
     };
 
-    if (loading) return (
-        <div className="bg-white rounded-2xl p-12 text-center">
-            <RefreshCw className="animate-spin inline mr-2 text-emerald-600"/> جاري التحميل...
-        </div>
-    );
-    if (!data || !data.project) return <div className="p-6">لم يتم العثور على المشروع</div>;
-
-    const { project: p, units, daftra, invoices, purchases, expenses } = data;
-    const total = Number(p.total_units || 0);
-    const sold  = Number(p.sold_units  || 0);
-    const avail = Number(p.available_units || 0);
+    const name = p?.name || wo?.title || '—';
+    const total = Number(p?.total_units || 0);
+    const sold  = Number(p?.sold_units  || 0);
+    const avail = Number(p?.available_units || 0);
 
     return (
         <div className="space-y-6 p-4 md:p-6">
@@ -216,29 +296,38 @@ function ProjectCycleDetail({ id, onBack }) {
                 <ChevronLeft size={18}/> رجوع لدورات العمل
             </button>
 
-            {/* رأس المشروع */}
+            {/* رأس الدورة */}
             <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] rounded-[2rem] p-6 text-white shadow-xl">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
-                        <div className="text-xs text-slate-400 mb-1">دورة عمل — مشروع</div>
-                        <h2 className="text-2xl font-black mb-1">{p.name}</h2>
-                        {p.description && <p className="text-slate-300 text-sm">{p.description}</p>}
-                    </div>
-                    {p.daftra_id ? (
-                        <div className="flex gap-2 flex-wrap">
-                            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
-                                <Link size={12}/> مرتبط بدفترة #{p.daftra_id}
-                            </span>
-                            <button onClick={removeLink} className="bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1">
-                                <X size={12}/> إزالة الربط
-                            </button>
+                        {wo?.number && <div className="text-xs font-mono text-slate-400 mb-1">دورة عمل #{wo.number}</div>}
+                        <h2 className="text-2xl font-black mb-1">{name}</h2>
+                        {wo?.description && <p className="text-slate-300 text-sm mb-2">{wo.description}</p>}
+                        <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+                            {wo?.start_date    && <span>📅 بدء: {wo.start_date}</span>}
+                            {wo?.delivery_date && <span>🏁 تسليم: {wo.delivery_date}</span>}
                         </div>
-                    ) : (
-                        <button onClick={() => { setLinking(true); loadWorkOrders(); }}
-                            className="bg-[#c5a059]/20 hover:bg-[#c5a059]/30 border border-[#c5a059]/30 text-[#c5a059] px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition">
-                            <Link size={14}/> ربط بدورة عمل في دفترة
-                        </button>
-                    )}
+                    </div>
+                    <div className="flex flex-col gap-2 items-end">
+                        {wo ? (
+                            <>
+                                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                                    <Link2 size={11}/> مرتبط بدفترة #{wo.id}
+                                </span>
+                                {p && (
+                                    <button onClick={removeLink}
+                                        className="bg-white/10 hover:bg-white/20 text-white/70 px-2 py-1 rounded-lg text-xs flex items-center gap-1">
+                                        <X size={10}/> تغيير الربط
+                                    </button>
+                                )}
+                            </>
+                        ) : p ? (
+                            <button onClick={() => setLinking(true)}
+                                className="bg-[#c5a059]/20 hover:bg-[#c5a059]/30 border border-[#c5a059]/40 text-[#c5a059] px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition">
+                                <Link2 size={14}/> ربط بدفترة
+                            </button>
+                        ) : null}
+                    </div>
                 </div>
             </div>
 
@@ -246,92 +335,86 @@ function ProjectCycleDetail({ id, onBack }) {
             {linking && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
                     <h3 className="font-black text-amber-900 mb-3 flex items-center gap-2">
-                        <Link size={16}/> ربط المشروع بدورة عمل في دفترة
+                        <Link2 size={16}/> اختر دورة العمل في دفترة
                     </h3>
-                    {woLoading ? (
-                        <div className="text-sm text-slate-500 flex items-center gap-2">
-                            <RefreshCw size={14} className="animate-spin"/> جاري جلب دورات العمل من دفترة...
-                        </div>
-                    ) : workOrders.length > 0 ? (
-                        <div className="mb-3">
-                            <label className="text-sm font-bold text-amber-800 mb-1 block">اختر دورة العمل:</label>
-                            <select value={daftraInput} onChange={e => setDaftraInput(e.target.value)}
-                                className="w-full border border-amber-300 bg-white rounded-xl px-3 py-2 outline-none focus:border-amber-500 text-sm">
-                                <option value="">— اختر —</option>
-                                {workOrders.map(wo => (
-                                    <option key={wo.id} value={wo.id}>#{wo.number} — {wo.title || wo.id}</option>
-                                ))}
-                            </select>
-                        </div>
-                    ) : (
-                        <div className="mb-3">
-                            <label className="text-sm font-bold text-amber-800 mb-1 block">أو أدخل ID دورة العمل يدوياً:</label>
-                            <input type="number" placeholder="مثال: 5" value={daftraInput} onChange={e => setDaftraInput(e.target.value)}
-                                className="border border-amber-300 rounded-xl px-3 py-2 outline-none focus:border-amber-500 text-sm w-40"/>
-                        </div>
-                    )}
-                    <div className="flex gap-2 mt-3">
-                        <button onClick={saveLink} disabled={!daftraInput || saving}
+                    <select value={selWoId} onChange={e => setSelWoId(e.target.value)}
+                        className="w-full border border-amber-300 bg-white rounded-xl px-3 py-2.5 outline-none focus:border-amber-500 text-sm mb-3">
+                        <option value="">— اختر دورة العمل —</option>
+                        {workOrders.map(w => (
+                            <option key={w.id} value={w.id}>
+                                {w.title || `دورة #${w.number}`} (ID: {w.id})
+                            </option>
+                        ))}
+                    </select>
+                    <div className="flex gap-2">
+                        <button onClick={saveLink} disabled={!selWoId || saving}
                             className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition">
-                            {saving ? <RefreshCw size={14} className="animate-spin"/> : <Save size={14}/>}
-                            حفظ الربط
+                            {saving ? <RefreshCw size={14} className="animate-spin"/> : <Save size={14}/>} حفظ
                         </button>
                         <button onClick={() => setLinking(false)}
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold transition">
-                            إلغاء
-                        </button>
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold transition">إلغاء</button>
                     </div>
                 </div>
             )}
 
             {/* إحصائيات الوحدات */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <BigStat label="إجمالي الوحدات" value={total}  icon={Home}        color="slate"/>
-                <BigStat label="وحدات مباعة"     value={sold}   icon={CheckSquare} color="emerald"/>
-                <BigStat label="وحدات متاحة"     value={avail}  icon={Building2}   color="blue"/>
-                <BigStat label="نسبة الإنجاز"    value={total > 0 ? `${Math.round((sold/total)*100)}%` : '—'} icon={TrendingUp} color="gold"/>
-            </div>
+            {p && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <BigStat label="إجمالي الوحدات" value={total}  icon={Home}        color="slate"/>
+                    <BigStat label="وحدات مباعة"     value={sold}   icon={CheckSquare} color="emerald"/>
+                    <BigStat label="وحدات متاحة"     value={avail}  icon={Building2}   color="blue"/>
+                    <BigStat label="نسبة المبيعات"
+                        value={total > 0 ? `${Math.round((sold/total)*100)}%` : '—'}
+                        icon={TrendingUp} color="gold"/>
+                </div>
+            )}
 
-            {/* الملخص المالي من دفترة */}
-            {daftra ? (
+            {/* الملخص المالي */}
+            {loading && (
+                <div className="bg-white rounded-2xl p-8 text-center">
+                    <RefreshCw className="animate-spin inline mr-2 text-emerald-600"/> جاري جلب البيانات المالية من دفترة...
+                </div>
+            )}
+
+            {!loading && wo && summary && (
                 <>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <BigStat label="الإيرادات"    value={fmt(daftra.total_revenue)}   icon={TrendingUp}   color="emerald"/>
-                        <BigStat label="المشتريات"    value={fmt(daftra.total_purchases)} icon={ShoppingCart} color="purple"/>
-                        <BigStat label="المصروفات"    value={fmt(daftra.total_expenses)}  icon={TrendingDown} color="red"/>
-                        <BigStat label="صافي الربح"   value={fmt(daftra.net_profit)}      icon={DollarSign}   color={daftra.net_profit >= 0 ? 'emerald' : 'red'}/>
+                        <BigStat label="الإيرادات"   value={fmt(summary.total_revenue)}   icon={TrendingUp}   color="emerald"/>
+                        <BigStat label="المشتريات"   value={fmt(summary.total_purchases)} icon={ShoppingCart} color="purple"/>
+                        <BigStat label="المصروفات"   value={fmt(summary.total_expenses)}  icon={TrendingDown} color="red"/>
+                        <BigStat label="صافي الربح"  value={fmt(summary.net_profit)}      icon={DollarSign}
+                            color={summary.net_profit >= 0 ? 'emerald' : 'red'}/>
                     </div>
 
-                    <Section title="الفواتير الصادرة" icon={Receipt} color="blue" items={invoices} columns={[
-                        {key:'no', label:'رقم'}, {key:'date', label:'التاريخ'}, {key:'client', label:'العميل'},
-                        {key:'total', label:'الإجمالي', fmt:true}, {key:'paid', label:'المسدد', fmt:true}
-                    ]} fmt={fmt}/>
-                    <Section title="المشتريات" icon={ShoppingCart} color="purple" items={purchases} columns={[
-                        {key:'no', label:'رقم'}, {key:'date', label:'التاريخ'}, {key:'supplier', label:'المورد'},
-                        {key:'total', label:'الإجمالي', fmt:true}, {key:'paid', label:'المسدد', fmt:true}
-                    ]} fmt={fmt}/>
-                    <Section title="المصروفات" icon={TrendingDown} color="red" items={expenses} columns={[
-                        {key:'date', label:'التاريخ'}, {key:'category', label:'التصنيف'}, {key:'vendor', label:'البائع'},
-                        {key:'amount', label:'المبلغ', fmt:true}, {key:'note', label:'ملاحظات'}
-                    ]} fmt={fmt}/>
+                    {/* مؤشر الميزانية */}
+                    {summary.budget > 0 && (
+                        <BudgetBar summary={summary} fmt={fmt}/>
+                    )}
                 </>
-            ) : (
+            )}
+
+            {!loading && wo && !summary && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-slate-400">
+                    <FileText size={32} className="mx-auto mb-2 opacity-40"/>
+                    <p className="font-bold">لا توجد معاملات مالية لهذه الدورة في دفترة بعد</p>
+                </div>
+            )}
+
+            {!wo && !linking && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
-                    <Link size={32} className="mx-auto mb-2 text-amber-400 opacity-60"/>
-                    <p className="font-bold text-amber-800">لا توجد بيانات مالية</p>
-                    <p className="text-sm text-amber-600 mt-1">ارتبط بدورة عمل في دفترة لعرض الإيرادات والمصروفات والمشتريات</p>
+                    <Link2 size={32} className="mx-auto mb-2 text-amber-400"/>
+                    <p className="font-bold text-amber-800">غير مرتبط بدفترة</p>
+                    <p className="text-sm text-amber-600 mt-1">اضغط "ربط بدفترة" لعرض الإيرادات والمصروفات</p>
                 </div>
             )}
 
             {/* قائمة الوحدات */}
-            <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/40">
-                    <Users size={18} className="text-slate-700"/>
-                    <h3 className="font-black text-[#1a365d]">الوحدات ({units.length})</h3>
-                </div>
-                {units.length === 0 ? (
-                    <div className="p-6 text-center text-slate-400 text-sm">لا توجد وحدات مسجلة في هذا المشروع</div>
-                ) : (
+            {units.length > 0 && (
+                <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/40">
+                        <Users size={18} className="text-slate-700"/>
+                        <h3 className="font-black text-[#1a365d]">الوحدات ({units.length})</h3>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-right text-sm">
                             <thead className="bg-slate-50 text-xs uppercase text-slate-600">
@@ -358,7 +441,32 @@ function ProjectCycleDetail({ id, onBack }) {
                             </tbody>
                         </table>
                     </div>
-                )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function BudgetBar({ summary, fmt }) {
+    const over = summary.budget_used_pct > 100;
+    return (
+        <div className={`rounded-2xl p-5 border ${over ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    {over ? <AlertTriangle className="text-red-600"/> : <CheckCircle2 className="text-emerald-600"/>}
+                    <h3 className={`font-black ${over ? 'text-red-900' : 'text-[#1a365d]'}`}>استهلاك الميزانية</h3>
+                </div>
+                <div className={`text-2xl font-black ${over ? 'text-red-700' : 'text-emerald-700'}`}>{summary.budget_used_pct}%</div>
+            </div>
+            <div className="h-3 bg-white rounded-full overflow-hidden border border-slate-200">
+                <div className={`h-full transition-all ${over ? 'bg-gradient-to-l from-red-500 to-orange-500' : 'bg-gradient-to-l from-emerald-500 to-teal-500'}`}
+                    style={{ width: `${Math.min(100, summary.budget_used_pct)}%` }}/>
+            </div>
+            <div className="flex justify-between text-xs mt-2 font-bold">
+                <span className="text-slate-600">استُهلك: {fmt(summary.total_cost)} ريال</span>
+                <span className={summary.budget_left >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                    {summary.budget_left >= 0 ? 'متبقي' : 'تجاوز'}: {fmt(Math.abs(summary.budget_left))} ريال
+                </span>
             </div>
         </div>
     );
@@ -378,39 +486,6 @@ function BigStat({ label, value, icon: Icon, color }) {
             {Icon && <Icon size={18} className="mb-1 opacity-70"/>}
             <div className="text-[10px] font-bold opacity-80">{label}</div>
             <div className="text-2xl font-black">{value}</div>
-        </div>
-    );
-}
-
-function Section({ title, icon: Icon, color, items, columns, fmt }) {
-    return (
-        <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
-            <div className={`p-4 border-b border-slate-100 flex items-center gap-2 bg-${color}-50/40`}>
-                <Icon size={18} className={`text-${color}-700`}/>
-                <h3 className="font-black text-[#1a365d]">{title} ({items.length})</h3>
-            </div>
-            {items.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-sm">لا توجد سجلات مرتبطة</div>
-            ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-right text-sm">
-                        <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-                            <tr>{columns.map(c => <th key={c.key} className="px-3 py-2">{c.label}</th>)}</tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {items.map((it, i) => (
-                                <tr key={i} className="hover:bg-slate-50/50">
-                                    {columns.map(c => (
-                                        <td key={c.key} className="px-3 py-2 whitespace-nowrap">
-                                            {c.fmt ? fmt(it[c.key]) : (it[c.key] || '—')}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
         </div>
     );
 }
