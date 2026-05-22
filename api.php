@@ -1657,60 +1657,88 @@ switch ($action) {
         $d_email    = "__DAFTRA_EMAIL__";
         $d_password = "__DAFTRA_PASSWORD__";
         $d_base     = "https://semak.daftra.com";
-
-        // ── 1) تسجيل الدخول — نجرب عدة endpoints ──
+        // ── 1) تسجيل الدخول — نقرأ صفحة اللوجن أولاً ثم نرسل الفورم ──
         $cookie_jar = tempnam(sys_get_temp_dir(), 'daftra_cookie_');
+        $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 
-        // دفترة: تسجيل الدخول يتم على www.daftra.com ثم يُعاد التوجيه للـ subdomain
-        $login_endpoints = [
-            ["https://www.daftra.com/users/login",  http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password,'data[User][remember_me]'=>'1']), 'application/x-www-form-urlencoded'],
-            ["https://www.daftra.com/users/login",  http_build_query(['email'=>$d_email,'password'=>$d_password]), 'application/x-www-form-urlencoded'],
-            ["https://www.daftra.com/login",        http_build_query(['data[User][email]'=>$d_email,'data[User][password]'=>$d_password]), 'application/x-www-form-urlencoded'],
-        ];
+        // خطوة أ: GET صفحة اللوجن
+        $get_ch = curl_init("https://www.daftra.com/users/login");
+        curl_setopt_array($get_ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => ["Accept: text/html", "User-Agent: $ua"],
+            CURLOPT_COOKIEJAR      => $cookie_jar,
+            CURLOPT_COOKIEFILE     => $cookie_jar,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 10,
+            CURLOPT_TIMEOUT        => 15,
+        ]);
+        $login_page_html = curl_exec($get_ch);
+        $login_page_url  = curl_getinfo($get_ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($get_ch);
 
-        $login_ok   = false;
-        $login_url  = '';
-        $login_code = 0;
-        $tried      = [];
-
-        foreach ($login_endpoints as [$ep_url, $ep_body, $ep_ct]) {
-            $login_ch = curl_init($ep_url);
-            curl_setopt_array($login_ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => $ep_body,
-                CURLOPT_HTTPHEADER     => [
-                    "Content-Type: $ep_ct",
-                    'Accept: text/html,application/xhtml+xml,application/json,*/*',
-                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-                ],
-                CURLOPT_COOKIEJAR      => $cookie_jar,
-                CURLOPT_COOKIEFILE     => $cookie_jar,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 10,
-                CURLOPT_TIMEOUT        => 15,
-            ]);
-            $login_res  = curl_exec($login_ch);
-            $login_code = curl_getinfo($login_ch, CURLINFO_HTTP_CODE);
-            $login_url  = curl_getinfo($login_ch, CURLINFO_EFFECTIVE_URL);
-            curl_close($login_ch);
-
-            $tried[] = ['ep' => $ep_url, 'code' => $login_code, 'final' => $login_url];
-
-            // نجح لو: 200 ووصل لـ semak.daftra.com (الـ subdomain بعد الـ redirect)
-            $login_ok = $login_code === 200
-                && str_contains($login_url, 'semak.daftra.com')
-                && !str_contains($login_url, '/login');
-
-            if ($login_ok) break;
+        // استخرج form action
+        preg_match('/<form[^>]+action=["\']([^"\']+)["\'][^>]*>/i', $login_page_html, $fm);
+        $form_action = trim($fm[1] ?? '');
+        if ($form_action && !str_starts_with($form_action, 'http')) {
+            $p = parse_url($login_page_url);
+            $form_action = $p['scheme'].'://'.$p['host'].$form_action;
         }
+        if (!$form_action) $form_action = $login_page_url;
+
+        // استخرج hidden fields (CSRF وغيره)
+        preg_match_all('/<input[^>]+type=["\']hidden["\'][^>]*>/i', $login_page_html, $hm);
+        $hidden = [];
+        foreach ($hm[0] as $tag) {
+            preg_match('/name=["\']([^"\']+)["\']/i',  $tag, $nm);
+            preg_match('/value=["\']([^"\']*)["\']?/i', $tag, $vm);
+            if (!empty($nm[1])) $hidden[$nm[1]] = $vm[1] ?? '';
+        }
+
+        // خطوة ب: POST بيانات الدخول
+        $post_data = array_merge($hidden, [
+            'data[User][email]'       => $d_email,
+            'data[User][password]'    => $d_password,
+            'data[User][remember_me]' => '1',
+        ]);
+        $post_ch = curl_init($form_action);
+        curl_setopt_array($post_ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query($post_data),
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: text/html,application/xhtml+xml,*/*',
+                "User-Agent: $ua",
+                "Referer: $login_page_url",
+            ],
+            CURLOPT_COOKIEJAR      => $cookie_jar,
+            CURLOPT_COOKIEFILE     => $cookie_jar,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 10,
+            CURLOPT_TIMEOUT        => 20,
+        ]);
+        $login_res  = curl_exec($post_ch);
+        $login_code = curl_getinfo($post_ch, CURLINFO_HTTP_CODE);
+        $login_url  = curl_getinfo($post_ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($post_ch);
+
+        $login_ok = $login_code === 200
+            && str_contains($login_url, 'semak.daftra.com')
+            && !str_contains($login_url, '/login');
 
         if (!$login_ok) {
             @unlink($cookie_jar);
             echo json_encode([
                 'success' => false,
-                'message' => 'فشل تسجيل الدخول لدفترة — جرّبنا كل المسارات',
-                'debug'   => $tried,
+                'message' => 'فشل تسجيل الدخول لدفترة',
+                'debug'   => [
+                    'login_page_url' => $login_page_url,
+                    'form_action'    => $form_action,
+                    'hidden_keys'    => array_keys($hidden),
+                    'post_code'      => $login_code,
+                    'post_final_url' => $login_url,
+                    'preview'        => substr($login_res, 0, 400),
+                ],
             ], JSON_UNESCAPED_UNICODE);
             break;
         }
