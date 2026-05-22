@@ -1041,6 +1041,145 @@ switch ($action) {
         echo json_encode(["success" => true]);
         break;
 
+    // ─── دورات العمل: مشاريع محلية + ربط دفترة ──────────────────────────────
+
+    case 'get_project_cycles':
+        // كل المشاريع المحلية مع عدد الوحدات (مصدر دورات العمل)
+        $rows = $conn->query("SELECT p.id, p.name, p.description, p.status,
+            COUNT(u.id) AS total_units,
+            SUM(CASE WHEN u.status = 'مباعة' OR o.id IS NOT NULL THEN 1 ELSE 0 END) AS sold_units,
+            SUM(CASE WHEN u.status != 'مباعة' AND o.id IS NULL THEN 1 ELSE 0 END) AS available_units,
+            p.daftra_id
+            FROM projects p
+            LEFT JOIN units u ON u.project_id = p.id
+            LEFT JOIN owners o ON o.unit_code = u.unit_code
+            GROUP BY p.id ORDER BY p.id ASC");
+        $projects = [];
+        if ($rows) while ($r = $rows->fetch_assoc()) $projects[] = $r;
+        echo json_encode(['success' => true, 'data' => $projects]);
+        break;
+
+    case 'set_project_daftra_id':
+        // ربط مشروع محلي بـ work_order في دفترة
+        $pid = (int)($input_data['project_id'] ?? 0);
+        $did = ($input_data['daftra_id'] !== '' && $input_data['daftra_id'] !== null)
+               ? (int)$input_data['daftra_id'] : 'NULL';
+        // auto-migrate: إضافة عمود daftra_id إن لم يكن موجوداً
+        $conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS daftra_id INT DEFAULT NULL");
+        $conn->query("UPDATE projects SET daftra_id=$did WHERE id=$pid");
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'project_cycle_summary':
+        // ملخص دورة عمل لمشروع محلي: إحصائيات الوحدات + Daftra (إن كان مرتبطاً)
+        $pid = (int)($_GET['id'] ?? 0);
+        if (!$pid) { echo json_encode(['success' => false, 'message' => 'id مطلوب']); break; }
+
+        // auto-migrate
+        $conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS daftra_id INT DEFAULT NULL");
+
+        $pq = $conn->query("SELECT p.id, p.name, p.description, p.status, p.daftra_id,
+            COUNT(u.id) AS total_units,
+            SUM(CASE WHEN o.id IS NOT NULL THEN 1 ELSE 0 END) AS sold_units,
+            SUM(CASE WHEN o.id IS NULL THEN 1 ELSE 0 END) AS available_units
+            FROM projects p
+            LEFT JOIN units u ON u.project_id = p.id
+            LEFT JOIN owners o ON o.unit_code = u.unit_code
+            WHERE p.id = $pid GROUP BY p.id");
+        if (!$pq || $pq->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'المشروع غير موجود']); break; }
+        $project = $pq->fetch_assoc();
+
+        // إحصائيات الوحدات التفصيلية
+        $uq = $conn->query("SELECT u.unit_code, u.status, o.owner_name, o.owner_phone
+            FROM units u LEFT JOIN owners o ON o.unit_code = u.unit_code
+            WHERE u.project_id = $pid ORDER BY u.unit_code");
+        $units = [];
+        if ($uq) while ($r = $uq->fetch_assoc()) $units[] = $r;
+
+        $daftra_summary = null;
+        $invoices_list  = [];
+        $purchases_list = [];
+        $expenses_list  = [];
+
+        $wo_id = (int)($project['daftra_id'] ?? 0);
+        if ($wo_id > 0) {
+            // جلب بيانات دفترة
+            $daftra_key = "__DAFTRA_KEY__";
+            $base = "https://semak.daftra.com/api2";
+            $headers = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+            $fetch_daftra = function($endpoint) use ($base, $headers) {
+                $all = []; $page = 1;
+                while ($page <= 50) {
+                    $ch = curl_init("$base/$endpoint.json?page=$page&limit=100");
+                    curl_setopt_array($ch, [
+                        CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers,
+                        CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+                    ]);
+                    $res = curl_exec($ch); curl_close($ch);
+                    $data = json_decode($res, true);
+                    if (!isset($data['data']) || count($data['data']) === 0) break;
+                    $all = array_merge($all, $data['data']);
+                    if (count($data['data']) < 100) break;
+                    $page++;
+                }
+                return $all;
+            };
+
+            $all_invoices  = $fetch_daftra("invoices");
+            $all_purchases = $fetch_daftra("purchase_invoices");
+            $all_expenses  = $fetch_daftra("expenses");
+
+            $total_revenue = 0; $total_purchases = 0; $total_expenses = 0;
+
+            foreach ($all_invoices as $r) {
+                $i = $r['Invoice'] ?? [];
+                if ((int)($i['work_order_id'] ?? 0) !== $wo_id) continue;
+                $invoices_list[] = ['no' => $i['no'], 'date' => $i['date'],
+                    'client' => $i['client_business_name'] ?? '',
+                    'total' => (float)($i['summary_total'] ?? 0),
+                    'paid'  => (float)($i['summary_paid'] ?? 0)];
+                $total_revenue += (float)($i['summary_total'] ?? 0);
+            }
+            foreach ($all_purchases as $r) {
+                $p = $r['PurchaseOrder'] ?? [];
+                if ((int)($p['work_order_id'] ?? 0) !== $wo_id) continue;
+                $purchases_list[] = ['no' => $p['no'], 'date' => $p['date'],
+                    'supplier' => $p['supplier_business_name'] ?? '',
+                    'total' => (float)($p['summary_total'] ?? 0),
+                    'paid'  => (float)($p['summary_paid'] ?? 0)];
+                $total_purchases += (float)($p['summary_total'] ?? 0);
+            }
+            foreach ($all_expenses as $r) {
+                $e = $r['Expense'] ?? [];
+                if ((int)($e['work_order_id'] ?? 0) !== $wo_id) continue;
+                $expenses_list[] = ['date' => $e['date'], 'amount' => (float)($e['amount'] ?? 0),
+                    'category' => $e['category'] ?? '', 'vendor' => $e['vendor'] ?? '', 'note' => $e['note'] ?? ''];
+                $total_expenses += (float)($e['amount'] ?? 0);
+            }
+
+            $total_cost  = $total_purchases + $total_expenses;
+            $net_profit  = $total_revenue - $total_cost;
+            $daftra_summary = [
+                'total_revenue'   => $total_revenue,
+                'total_purchases' => $total_purchases,
+                'total_expenses'  => $total_expenses,
+                'total_cost'      => $total_cost,
+                'net_profit'      => $net_profit,
+            ];
+        }
+
+        echo json_encode([
+            'success'  => true,
+            'project'  => $project,
+            'units'    => $units,
+            'daftra'   => $daftra_summary,
+            'invoices' => $invoices_list,
+            'purchases'=> $purchases_list,
+            'expenses' => $expenses_list,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_work_order_summary':
         // ملخّص شامل لـ Work Order (دورة عمل) من دفترة مع كل البنود المرتبطة
         $daftra_key = "__DAFTRA_KEY__";
