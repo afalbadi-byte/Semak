@@ -1064,10 +1064,18 @@ switch ($action) {
             return $all;
         };
 
-        // جلب الدورة بحد ذاتها
+        // جلب الدورة بحد ذاتها (مع FOLLOWLOCATION لأن Daftra يرد أحياناً بـ 302)
         $ch = curl_init("$base/work_orders/$wo_id.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers, CURLOPT_TIMEOUT => 15]);
-        $wo_raw = curl_exec($ch); curl_close($ch);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+        ]);
+        $wo_raw = curl_exec($ch);
+        $wo_http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
         $wo_data = json_decode($wo_raw, true);
         $wo = $wo_data['WorkOrder'] ?? $wo_data['data']['WorkOrder'] ?? null;
 
@@ -1170,7 +1178,13 @@ switch ($action) {
             $all = []; $page = 1;
             while ($page <= 50) {
                 $ch = curl_init("$base/$endpoint.json?page=$page&limit=100");
-                curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers, CURLOPT_TIMEOUT => 15]);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTPHEADER => $headers,
+                    CURLOPT_TIMEOUT => 15,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 5,
+                ]);
                 $res = curl_exec($ch); curl_close($ch);
                 $data = json_decode($res, true);
                 if (!isset($data['data']) || count($data['data']) === 0) break;
@@ -1331,6 +1345,8 @@ switch ($action) {
                 CURLOPT_HTTPHEADER => $headers,
                 CURLOPT_TIMEOUT => 10,           // أقصر للصفحة الواحدة
                 CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
             ]);
             $res = curl_exec($ch);
             $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
