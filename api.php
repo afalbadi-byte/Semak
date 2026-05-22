@@ -1865,6 +1865,91 @@ switch ($action) {
         }
         break;
 
+    case 'daftra_parse_html':
+        // يجلب HTML صفحة le_work_cycle بعد auth ويستخرج منها مسارات AJAX
+        set_time_limit(45);
+        $d_email         = "__DAFTRA_EMAIL__";
+        $d_password      = "__DAFTRA_PASSWORD__";
+        $d_client_id     = "__DAFTRA_CLIENT_ID__";
+        $d_client_secret = "__DAFTRA_CLIENT_SECRET__";
+
+        // الحصول على token أولاً
+        $access_token = null;
+        foreach (["https://semak.daftra.com/api2/v2/oauth/token", "https://semak.daftra.com/v2/oauth/token"] as $tu) {
+            $ch = curl_init($tu);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => http_build_query([
+                    'grant_type'    => 'password',
+                    'client_id'     => $d_client_id,
+                    'client_secret' => $d_client_secret,
+                    'username'      => $d_email,
+                    'password'      => $d_password,
+                ]),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
+                CURLOPT_TIMEOUT    => 10,
+            ]);
+            $r = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            $j = json_decode($r, true);
+            if ($c === 200 && !empty($j['access_token'])) { $access_token = $j['access_token']; break; }
+        }
+        if (!$access_token) { echo json_encode(['success'=>false,'message'=>'فشل التوكن']); break; }
+
+        // اجلب HTML الصفحة
+        $page_url = "https://semak.daftra.com/v2/owner/entity/le_work_cycle/list";
+        $ch = curl_init($page_url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $access_token", 'Accept: text/html'],
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $html = curl_exec($ch);
+        $html_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        // استخرج مسارات API من HTML
+        $patterns_found = [];
+        if (preg_match_all('/["\']([^"\']*\/entity[^"\']+)["\']/', $html, $m)) {
+            $patterns_found['entity_urls'] = array_slice(array_unique($m[1]), 0, 30);
+        }
+        if (preg_match_all('/["\']([^"\']*\/api[^"\']+)["\']/', $html, $m)) {
+            $patterns_found['api_urls'] = array_slice(array_unique($m[1]), 0, 20);
+        }
+        // استخرج script tags التي تحتوي entity أو ajax
+        preg_match_all('/<script[^>]*>(.*?)<\/script>/si', $html, $sm);
+        $scripts = [];
+        foreach ($sm[1] as $s) {
+            if (stripos($s,'entity')!==false || stripos($s,'ajax')!==false || stripos($s,'datatable')!==false) {
+                $scripts[] = substr(trim($s), 0, 800);
+            }
+        }
+        $patterns_found['scripts'] = array_slice($scripts, 0, 4);
+
+        // جرب POST على نفس الـ URL (DataTables AJAX)
+        $ch = curl_init($page_url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query(['draw'=>1,'start'=>0,'length'=>50]),
+            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $access_token", 'Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'],
+            CURLOPT_TIMEOUT        => 10,
+        ]);
+        $post_res  = curl_exec($ch);
+        $post_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $post_json = json_decode($post_res, true);
+
+        echo json_encode([
+            'success'      => true,
+            'html_code'    => $html_code,
+            'html_length'  => strlen($html),
+            'patterns'     => $patterns_found,
+            'post_attempt' => ['code'=>$post_code, 'is_json'=>$post_json!==null, 'preview'=>substr($post_res,0,400)],
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'daftra_work_orders_all':
         // جلب كل دورات العمل من دفترة: القائمة العامة + محاولة IDs فردية للوصول للدورات المخفية
         set_time_limit(60);
