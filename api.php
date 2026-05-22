@@ -1796,22 +1796,38 @@ switch ($action) {
 
         // ── 2) جلب قائمة دورات العمل بـ Bearer token ──
         $base_v2 = "https://semak.daftra.com";
-        $entity_candidates = [
-            // الأول: docs يقول /v2/api/entity/ — بدون api2 prefix (!)
-            "$base_v2/v2/api/entity/le_work_cycle/list/1",
-            "$base_v2/v2/api/entity/le_project/list/1",
-            "$base_v2/v2/api/entity/le_work_cycle/list",
-            "$base_v2/v2/api/entity/le_project/list",
-            // جرب .json على مسارات /v2/owner/entity/ التي تعطي HTML
-            "$base_v2/v2/owner/entity/le_work_cycle/list.json",
-            "$base_v2/v2/owner/entity/le_project/list.json",
-            // مع query param للـ JSON format
-            "$base_v2/v2/owner/entity/le_work_cycle/list?ext=json",
-            "$base_v2/v2/owner/entity/le_work_cycle/list?_type=json",
-            "$base_v2/v2/owner/entity/le_work_cycle/list?format=json",
-            // AJAX DataTables style
-            "$base_v2/v2/owner/entity/le_work_cycle/list?draw=1&start=0&length=50",
+
+        // أولاً: نجرب اكتشاف أسماء الـ entities المتاحة
+        $discover_urls = [
+            "$base_v2/v2/api/entities",
+            "$base_v2/v2/api/entity",
+            "$base_v2/v2/api/entity/types",
+            "$base_v2/v2/api/entity/list",
         ];
+        $discovered_entities = null;
+        foreach ($discover_urls as $du) {
+            $ch = curl_init($du);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$bearer_headers, CURLOPT_TIMEOUT=>8]);
+            $r = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            if ($c === 200 && json_decode($r)) { $discovered_entities = ['url'=>$du, 'data'=>json_decode($r, true)]; break; }
+        }
+
+        // ثانياً: نجرب أسماء entity متعددة على المسار الصحيح
+        $entity_name_variants = [
+            'work_cycle', 'work_cycles', 'WorkCycle', 'workcycle',
+            'project', 'projects', 'Project',
+            'le_work_cycle', 'le_project',
+            // ربما اسم مختلف في نظام دفترة
+            'task', 'tasks', 'job', 'jobs',
+        ];
+        $entity_candidates = [];
+        foreach ($entity_name_variants as $en) {
+            $entity_candidates[] = "$base_v2/v2/api/entity/$en/list/1";
+        }
+        // أضف أيضاً مسار AJAX الذي تستخدمه الصفحة (CakePHP style)
+        $entity_candidates[] = "$base_v2/v2/owner/entity/le_work_cycle/index.json";
+        $entity_candidates[] = "$base_v2/v2/owner/le_work_cycle/data";
+        $entity_candidates[] = "$base_v2/v2/owner/le_work_cycle/list";
 
         $found_data   = null;
         $entity_debug = [];
@@ -1858,11 +1874,12 @@ switch ($action) {
             ], JSON_UNESCAPED_UNICODE);
         } else {
             echo json_encode([
-                'success'      => false,
-                'message'      => 'تم الحصول على token لكن فشل جلب البيانات',
-                'token_ok'     => true,
-                'cred_debug'   => $cred_debug,
-                'entity_debug' => $entity_debug,
+                'success'              => false,
+                'message'              => 'تم الحصول على token لكن فشل جلب البيانات',
+                'token_ok'             => true,
+                'cred_debug'           => $cred_debug,
+                'discovered_entities'  => $discovered_entities,
+                'entity_debug'         => $entity_debug,
             ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         }
         break;
