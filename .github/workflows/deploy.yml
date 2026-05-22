@@ -47,6 +47,9 @@ jobs:
           sed -i "s|__DAFTRA_CLIENT_ID__|${{ secrets.DAFTRA_CLIENT_ID }}|g" dist/api.php
           sed -i "s|__DAFTRA_CLIENT_SECRET__|${{ secrets.DAFTRA_CLIENT_SECRET }}|g" dist/api.php
 
+      - name: Inject Daftra session cookie
+        run: sed -i "s|__DAFTRA_SESSION__|${{ secrets.DAFTRA_SESSION_COOKIE }}|g" dist/api.php
+
       - name: Deploy to server via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:

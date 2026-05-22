@@ -1753,159 +1753,63 @@ switch ($action) {
         exit;
 
     case 'daftra_v2_work_cycles':
-        // ─── الحل الدائم: Authorization Code OAuth2 + password grant fallback ───
-        set_time_limit(55);
-        $d_email         = "__DAFTRA_EMAIL__";
-        $d_password      = "__DAFTRA_PASSWORD__";
-        $d_client_id     = "__DAFTRA_CLIENT_ID__";    // 584
-        $d_client_secret = "__DAFTRA_CLIENT_SECRET__";
-        $base_daftra     = "https://semak.daftra.com";
-        $token_url_v2    = "$base_daftra/v2/oauth/token";
+        // ─── الحل الدائم: session cookie → AJAX endpoint ─────────────────────
+        set_time_limit(30);
 
-        // ── الخطوة 1: حاول تجديد access_token من DB ──
-        $access_token   = null;
-        $token_source   = null;
-        $stored = $conn->query("SELECT * FROM daftra_tokens ORDER BY updated_at DESC LIMIT 1");
-        if ($stored && $stored->num_rows > 0) {
-            $row = $stored->fetch_assoc();
-            $expired = strtotime($row['expires_at']) < time() + 300; // تجديد قبل 5 دقائق
-            if (!$expired) {
-                $access_token = $row['access_token'];
-                $token_source = 'db_stored';
-            } elseif (!empty($row['refresh_token'])) {
-                // جرب تجديد التوكن
-                $ch = curl_init($token_url_v2);
-                curl_setopt_array($ch, [
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_POST           => true,
-                    CURLOPT_POSTFIELDS     => http_build_query([
-                        'grant_type'    => 'refresh_token',
-                        'client_id'     => $d_client_id,
-                        'client_secret' => $d_client_secret,
-                        'refresh_token' => $row['refresh_token'],
-                    ]),
-                    CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
-                    CURLOPT_TIMEOUT    => 10,
-                ]);
-                $r = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-                $j = json_decode($r, true);
-                if ($c === 200 && !empty($j['access_token'])) {
-                    $access_token = $j['access_token'];
-                    $token_source = 'db_refreshed';
-                    // حفظ التوكن الجديد
-                    $at2  = $conn->real_escape_string($j['access_token']);
-                    $rt2  = $conn->real_escape_string($j['refresh_token'] ?? $row['refresh_token']);
-                    $exp2 = date('Y-m-d H:i:s', time() + intval($j['expires_in'] ?? 3600));
-                    $conn->query("DELETE FROM daftra_tokens");
-                    $conn->query("INSERT INTO daftra_tokens (access_token, refresh_token, expires_at) VALUES ('$at2','$rt2','$exp2')");
-                }
-            }
-        }
+        // Cookie محقون من GitHub Secret عبر CI/CD
+        $session_cookie = urldecode("__DAFTRA_SESSION__");
+        $ajax_url       = "https://semak.daftra.com/v2/owner/entity/le_work_cycle/list?ajax=1";
 
-        // ── الخطوة 2: إذا ما عندنا token صالح — نستخدم password grant ──
-        if (!$access_token) {
-            foreach ([$token_url_v2, "$base_daftra/api2/v2/oauth/token"] as $tu) {
-                $ch = curl_init($tu);
-                curl_setopt_array($ch, [
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_POST           => true,
-                    CURLOPT_POSTFIELDS     => http_build_query([
-                        'grant_type'    => 'password',
-                        'client_id'     => $d_client_id,
-                        'client_secret' => $d_client_secret,
-                        'username'      => $d_email,
-                        'password'      => $d_password,
-                    ]),
-                    CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
-                    CURLOPT_TIMEOUT    => 12,
-                ]);
-                $r = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-                $j = json_decode($r, true);
-                if ($c === 200 && !empty($j['access_token'])) {
-                    $access_token = $j['access_token'];
-                    $token_source = 'password_grant';
-                    break;
-                }
-            }
-        }
+        $ch = curl_init($ajax_url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_HTTPHEADER     => [
+                "Cookie: laravel_session=$session_cookie",
+                'Accept: application/json, text/javascript, */*; q=0.01',
+                'X-Requested-With: XMLHttpRequest',
+                'Referer: https://semak.daftra.com/v2/owner/entity/le_work_cycle/list',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+            ],
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
 
-        if (!$access_token) {
-            // ما في token — المستخدم يحتاج يفتح رابط التفويض
-            $auth_url = "$base_daftra/v2/oauth/authorize?" . http_build_query([
-                'client_id'     => $d_client_id,
-                'redirect_uri'  => 'https://semak.sa/api.php?action=daftra_oauth_callback',
-                'response_type' => 'code',
-            ]);
+        $json = json_decode($res, true);
+
+        // فحص انتهاء الجلسة
+        if ($code === 401 || (isset($json['message']) && stripos($json['message'], 'Unauthenticated') !== false)) {
             echo json_encode([
-                'success'    => false,
-                'message'    => 'يحتاج تفويض — افتح رابط المصادقة مرة واحدة',
-                'auth_url'   => $auth_url,
-                'client_id'  => $d_client_id,
+                'success' => false,
+                'message' => 'انتهت جلسة دفترة — يرجى تحديث DAFTRA_SESSION_COOKIE في GitHub Secrets',
+                'code'    => $code,
+                'preview' => substr($res, 0, 200),
             ], JSON_UNESCAPED_UNICODE);
             break;
         }
 
-        // ── الخطوة 3: جلب بيانات le_work_cycle بالـ token ──
-        $bh = [
-            "Authorization: Bearer $access_token",
-            'Accept: application/json',
-            'X-Requested-With: XMLHttpRequest',
-        ];
-
-        $endpoints = [
-            // API endpoints (bearer-friendly)
-            "$base_daftra/v2/api/entity/le_work_cycle/list/1",
-            "$base_daftra/v2/api/entity/work_cycle/list/1",
-            "$base_daftra/v2/api/entity/work_cycles/list/1",
-            // AJAX endpoints — قد تعمل مع client_id=584 registered app
-            "$base_daftra/v2/owner/entity/le_work_cycle/list?ajax=1",
-            "$base_daftra/v2/owner/entity/le_project/list?ajax=1",
-        ];
-
-        $found_data   = null;
-        $entity_debug = [];
-
-        foreach ($endpoints as $eurl) {
-            $ch = curl_init($eurl);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER     => $bh,
-                CURLOPT_TIMEOUT        => 8,
-                CURLOPT_FOLLOWLOCATION => false,
-            ]);
-            $res  = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            $json = json_decode($res, true);
-            $entity_debug[] = ['url'=>$eurl, 'code'=>$code, 'is_json'=>$json!==null, 'preview'=>substr($res,0,250)];
-            if ($code === 200 && $json !== null && !isset($json['message'])) {
-                $found_data = $json;
-                break;
-            }
-        }
-
-        if ($found_data !== null) {
-            $items = $found_data['data'] ?? ($found_data['items'] ?? ($found_data['rows'] ?? (is_array($found_data) ? $found_data : [])));
+        if ($code !== 200 || $json === null) {
             echo json_encode([
-                'success'      => true,
-                'token_source' => $token_source,
-                'count'        => is_array($items) ? count($items) : 0,
-                'data'         => $items,
+                'success' => false,
+                'message' => "فشل الاتصال بدفترة (HTTP $code)",
+                'curl_error' => $err,
+                'preview' => substr($res, 0, 300),
             ], JSON_UNESCAPED_UNICODE);
-        } else {
-            $auth_url = "$base_daftra/v2/oauth/authorize?" . http_build_query([
-                'client_id'     => $d_client_id,
-                'redirect_uri'  => 'https://semak.sa/api.php?action=daftra_oauth_callback',
-                'response_type' => 'code',
-            ]);
-            echo json_encode([
-                'success'      => false,
-                'message'      => 'token OK لكن فشل جلب بيانات le_work_cycle — يحتاج Authorization Code',
-                'token_source' => $token_source,
-                'auth_url'     => $auth_url,
-                'entity_debug' => $entity_debug,
-            ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            break;
         }
+
+        // استخرج الصفوف من أي شكل للرد
+        $items = $json['data'] ?? ($json['rows'] ?? ($json['items'] ?? (isset($json[0]) ? $json : [])));
+
+        echo json_encode([
+            'success' => true,
+            'source'  => 'daftra_session',
+            'count'   => is_array($items) ? count($items) : 0,
+            'data'    => $items,
+        ], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_parse_html':
