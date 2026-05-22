@@ -1517,6 +1517,32 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_probe_modules':
+        // اكتشاف اسم endpoint صحيح لـ "إدارة المشاريع" تحت "دورات العمل" في دفترة
+        $daftra_key = "__DAFTRA_KEY__";
+        $hdrs = ["APIKEY: $daftra_key", "Accept: application/json"];
+        $candidates = [
+            'projects', 'le_projects', 'work_cycle_projects', 'project_phases',
+            'work_cycles', 'cycle_projects', 'project_management', 'project_orders',
+        ];
+        $results = [];
+        foreach ($candidates as $mod) {
+            $ch = curl_init("https://semak.daftra.com/api2/$mod.json?limit=5");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hdrs, CURLOPT_TIMEOUT=>8, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_MAXREDIRS=>5]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            $decoded = json_decode($res, true);
+            $results[$mod] = [
+                'http' => $code,
+                'has_data' => isset($decoded['data']) && count($decoded['data']) > 0,
+                'count' => isset($decoded['data']) ? count($decoded['data']) : 0,
+                'sample_keys' => isset($decoded['data'][0]) ? array_keys($decoded['data'][0]) : [],
+            ];
+        }
+        echo json_encode(['success'=>true, 'results'=>$results], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_work_orders_all':
         // جلب كل دورات العمل من دفترة: القائمة العامة + محاولة IDs فردية للوصول للدورات المخفية
         set_time_limit(60);
