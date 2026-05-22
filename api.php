@@ -1517,6 +1517,63 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_work_orders_all':
+        // جلب كل دورات العمل من دفترة: القائمة العامة + محاولة IDs فردية للوصول للدورات المخفية
+        set_time_limit(60);
+        $daftra_key = "__DAFTRA_KEY__";
+        $base_url   = "https://semak.daftra.com/api2";
+        $hdrs       = ["APIKEY: $daftra_key", "Accept: application/json"];
+
+        $fetch_wo = function($url) use ($hdrs) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $hdrs,
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 5,
+            ]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($code !== 200 || !$res) return null;
+            return json_decode($res, true);
+        };
+
+        $all  = [];
+        $seen = [];
+
+        // 1) جلب القائمة (كل الصفحات)
+        for ($pg = 1; $pg <= 10; $pg++) {
+            $d = $fetch_wo("$base_url/work_orders.json?page=$pg&limit=100");
+            if (!$d || empty($d['data'])) break;
+            foreach ($d['data'] as $row) {
+                $wo = $row['WorkOrder'] ?? [];
+                $id = (string)($wo['id'] ?? '');
+                if ($id && !isset($seen[$id])) { $seen[$id] = true; $all[] = $wo; }
+            }
+            if (count($d['data']) < 100) break;
+        }
+
+        // 2) جلب IDs 1-20 فردياً للوصول للدورات التي لا تظهر في القائمة (مختلفة الحالة أو النوع)
+        for ($id = 1; $id <= 20; $id++) {
+            if (isset($seen[(string)$id])) continue;
+            $d = $fetch_wo("$base_url/work_orders/$id.json");
+            if (!$d) continue;
+            // دفترة قد ترجع البيانات تحت data.WorkOrder أو data مباشرة
+            $wo = $d['data']['WorkOrder'] ?? ($d['data'] ?? null);
+            if (!$wo || !isset($wo['id'])) continue;
+            $wid = (string)$wo['id'];
+            if (!isset($seen[$wid])) { $seen[$wid] = true; $all[] = $wo; }
+        }
+
+        // ترتيب تصاعدي حسب ID
+        usort($all, fn($a,$b) => (int)($a['id']??0) - (int)($b['id']??0));
+
+        echo json_encode(['success' => true, 'count' => count($all), 'data' => $all], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_full_summary':
         // ملخص مالي موسّع: فواتير + مصروفات + مشتريات + موردين + خزائن
         $daftra_key = "__DAFTRA_KEY__";
