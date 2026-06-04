@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v394
+// deploy: 2026-06-04-v395
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -393,6 +393,100 @@ function acc_zatca_keygen($conn, $tid, $company, $egsSerial) {
                   VALUES ($tid,'$egs_e','$pk_e','$csr_e','".acc_zatca_pih0()."')
                   ON DUPLICATE KEY UPDATE egs_serial=VALUES(egs_serial), private_key=VALUES(private_key), csr=VALUES(csr)");
     return ['csr' => $csrPem, 'public_pem' => $pubPem, 'egs_serial' => $egsSerial];
+}
+// تهريب نص لإدراجه في XML
+function acc_xmlesc($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_XML1, 'UTF-8'); }
+// بناء فاتورة UBL 2.1 مبسّطة (تمثيلية لوضع المحاكاة — تُشدّد للمطابقة الكاملة عند الربط بالمنصّة)
+function acc_zatca_ubl($inv, $items, $company, $icv, $pihB64) {
+    $isSimplified = (($inv['invoice_type'] ?? 'simplified') === 'simplified');
+    $typeName = $isSimplified ? '0200000' : '0100000';
+    $kindCode = ['invoice' => '388', 'debit_note' => '383', 'credit_note' => '381'][$inv['doc_kind'] ?? 'invoice'] ?? '388';
+    $cur = $inv['currency'] ?: 'SAR';
+    $sellerName = acc_xmlesc($company['company_name'] ?: 'Semak');
+    $sellerVat  = acc_xmlesc($company['vat_number'] ?: '');
+    $buyerName  = acc_xmlesc($inv['party_name'] ?: 'Walk-in Customer');
+    $sub = number_format((float)$inv['subtotal'], 2, '.', '');
+    $taxT = number_format((float)$inv['tax_total'], 2, '.', '');
+    $tot = number_format((float)$inv['total'], 2, '.', '');
+    $lines = '';
+    foreach ($items as $i => $it) {
+        $n = $i + 1;
+        $qty = rtrim(rtrim(number_format((float)$it['qty'], 3, '.', ''), '0'), '.');
+        $net = number_format((float)$it['net_amount'], 2, '.', '');
+        $taxAmt = number_format((float)$it['tax_amount'], 2, '.', '');
+        $ltWithTax = number_format((float)$it['net_amount'] + (float)$it['tax_amount'], 2, '.', '');
+        $price = number_format((float)$it['unit_price'], 2, '.', '');
+        $rate = number_format((float)$it['tax_rate'], 2, '.', '');
+        $desc = acc_xmlesc($it['description']);
+        $lines .= "<cac:InvoiceLine><cbc:ID>$n</cbc:ID><cbc:InvoicedQuantity unitCode=\"PCE\">$qty</cbc:InvoicedQuantity>"
+            . "<cbc:LineExtensionAmount currencyID=\"$cur\">$net</cbc:LineExtensionAmount>"
+            . "<cac:TaxTotal><cbc:TaxAmount currencyID=\"$cur\">$taxAmt</cbc:TaxAmount><cbc:RoundingAmount currencyID=\"$cur\">$ltWithTax</cbc:RoundingAmount></cac:TaxTotal>"
+            . "<cac:Item><cbc:Name>$desc</cbc:Name><cac:ClassifiedTaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>$rate</cbc:Percent>"
+            . "<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item>"
+            . "<cac:Price><cbc:PriceAmount currencyID=\"$cur\">$price</cbc:PriceAmount></cac:Price></cac:InvoiceLine>";
+    }
+    $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+        . '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"'
+        . ' xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"'
+        . ' xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+        . '<cbc:ProfileID>reporting:1.0</cbc:ProfileID>'
+        . '<cbc:ID>' . acc_xmlesc($inv['invoice_no']) . '</cbc:ID>'
+        . '<cbc:UUID>' . acc_xmlesc($inv['uuid']) . '</cbc:UUID>'
+        . '<cbc:IssueDate>' . acc_xmlesc($inv['issue_date']) . '</cbc:IssueDate>'
+        . '<cbc:IssueTime>' . acc_xmlesc(substr($inv['issue_time'] ?? '00:00:00', 0, 8)) . '</cbc:IssueTime>'
+        . '<cbc:InvoiceTypeCode name="' . $typeName . '">' . $kindCode . '</cbc:InvoiceTypeCode>'
+        . '<cbc:DocumentCurrencyCode>' . $cur . '</cbc:DocumentCurrencyCode>'
+        . '<cbc:TaxCurrencyCode>' . $cur . '</cbc:TaxCurrencyCode>'
+        . '<cac:AdditionalDocumentReference><cbc:ID>ICV</cbc:ID><cbc:UUID>' . (int)$icv . '</cbc:UUID></cac:AdditionalDocumentReference>'
+        . '<cac:AdditionalDocumentReference><cbc:ID>PIH</cbc:ID><cac:Attachment>'
+        . '<cbc:EmbeddedDocumentBinaryObject mimeCode="text/plain">' . acc_xmlesc($pihB64) . '</cbc:EmbeddedDocumentBinaryObject></cac:Attachment></cac:AdditionalDocumentReference>'
+        . '<cac:AccountingSupplierParty><cac:Party>'
+        . '<cac:PartyTaxScheme><cbc:CompanyID>' . $sellerVat . '</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>'
+        . '<cac:PartyLegalEntity><cbc:RegistrationName>' . $sellerName . '</cbc:RegistrationName></cac:PartyLegalEntity>'
+        . '</cac:Party></cac:AccountingSupplierParty>'
+        . '<cac:AccountingCustomerParty><cac:Party>'
+        . '<cac:PartyLegalEntity><cbc:RegistrationName>' . $buyerName . '</cbc:RegistrationName></cac:PartyLegalEntity>'
+        . '</cac:Party></cac:AccountingCustomerParty>'
+        . '<cac:TaxTotal><cbc:TaxAmount currencyID="' . $cur . '">' . $taxT . '</cbc:TaxAmount>'
+        . '<cac:TaxSubtotal><cbc:TaxableAmount currencyID="' . $cur . '">' . $sub . '</cbc:TaxableAmount>'
+        . '<cbc:TaxAmount currencyID="' . $cur . '">' . $taxT . '</cbc:TaxAmount>'
+        . '<cac:TaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>15.00</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal>'
+        . '<cac:LegalMonetaryTotal>'
+        . '<cbc:LineExtensionAmount currencyID="' . $cur . '">' . $sub . '</cbc:LineExtensionAmount>'
+        . '<cbc:TaxExclusiveAmount currencyID="' . $cur . '">' . $sub . '</cbc:TaxExclusiveAmount>'
+        . '<cbc:TaxInclusiveAmount currencyID="' . $cur . '">' . $tot . '</cbc:TaxInclusiveAmount>'
+        . '<cbc:PayableAmount currencyID="' . $cur . '">' . $tot . '</cbc:PayableAmount></cac:LegalMonetaryTotal>'
+        . $lines
+        . '</Invoice>';
+    return $xml;
+}
+// هاش الفاتورة وفق الهيئة = Base64 لتمثيل sha256 النصّي (متوافق مع PIH0)
+function acc_zatca_hash($xml) { return base64_encode(hash('sha256', $xml)); }
+// التوقيع الرقمي ECDSA على هاش الفاتورة بالمفتاح الخاص — يعيد Base64
+function acc_zatca_sign($data, $privPem) {
+    $pk = openssl_pkey_get_private($privPem);
+    if (!$pk) throw new Exception('مفتاح خاص غير صالح');
+    $sig = '';
+    if (!openssl_sign($data, $sig, $pk, OPENSSL_ALGO_SHA256)) throw new Exception('فشل التوقيع');
+    return base64_encode($sig);
+}
+// استخراج بايتات المفتاح العام (DER من SubjectPublicKeyInfo) للوسم 8
+function acc_zatca_pubkey_der($privPem) {
+    $pk = openssl_pkey_get_private($privPem);
+    if (!$pk) return '';
+    $det = openssl_pkey_get_details($pk);
+    $pem = $det['key'] ?? '';
+    $b64 = preg_replace('/-----[^-]+-----|\s+/', '', $pem);
+    return base64_decode($b64) ?: '';
+}
+// رمز QR للمرحلة الثانية (9 وسوم): 1..5 + هاش + توقيع + مفتاح عام + توقيع الختم
+function acc_zatca_qr_v2($seller, $vat, $tsIso, $total, $vatTotal, $hashB64, $sigB64, $pubDer, $stampSigB64) {
+    $tlv = acc_tlv(1, $seller) . acc_tlv(2, $vat) . acc_tlv(3, $tsIso)
+         . acc_tlv(4, number_format((float)$total, 2, '.', ''))
+         . acc_tlv(5, number_format((float)$vatTotal, 2, '.', ''))
+         . acc_tlv(6, $hashB64) . acc_tlv(7, $sigB64)
+         . acc_tlv(8, $pubDer) . acc_tlv(9, $stampSigB64);
+    return base64_encode($tlv);
 }
 // ضبط شجرة الحسابات: تحديد الأب بأطول بادئة كود موجودة
 function acc_fix_hierarchy($conn, $tid) {
@@ -3290,6 +3384,70 @@ switch ($action) {
             echo json_encode(['success'=>true,'egs_serial'=>$res['egs_serial'],'csr'=>$res['csr'],'public_pem'=>$res['public_pem'],'message'=>'تم توليد المفتاح وطلب الشهادة (CSR)'], JSON_UNESCAPED_UNICODE);
         } catch (Exception $e) {
             echo json_encode(['success'=>false,'message'=>'فشل التوليد: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
+    case 'zatca_stamp':
+        // ختم فاتورة بيع وفق المرحلة الثانية (وضع المحاكاة): UBL → هاش → توقيع ECDSA →
+        // رمز QR بتسعة وسوم + سلسلة ICV/PIH. خاص بالمقاولات (بيع/شراء بضريبة) فقط.
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $id  = (int)($input_data['id'] ?? 0);
+        $by  = $input_data['actor'] ?? null;
+        $h = $conn->query("SELECT * FROM acc_invoices WHERE id=$id AND tenant_id=$tid LIMIT 1");
+        $inv = $h ? $h->fetch_assoc() : null;
+        if (!$inv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة']); break; }
+        if ($inv['doc_type'] !== 'sales') { echo json_encode(['success'=>false,'message'=>'الختم لفواتير البيع فقط']); break; }
+        if (!in_array($inv['status'], ['posted','partial','paid'])) { echo json_encode(['success'=>false,'message'=>'لا تُختم إلا الفواتير المُرحّلة']); break; }
+        // مختومة مسبقًا؟ أعِد بياناتها دون استهلاك ICV جديد (حفاظًا على سلامة السلسلة)
+        if (!empty($inv['invoice_hash']) && !empty($inv['icv'])) {
+            echo json_encode(['success'=>true,'already'=>true,'id'=>$id,'icv'=>(int)$inv['icv'],'uuid'=>$inv['uuid'],'invoice_hash'=>$inv['invoice_hash'],'qr_base64'=>$inv['qr_base64'],'message'=>'الفاتورة مختومة مسبقًا'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        // لا بدّ من مفتاح خاص للمنشأة (من zatca_keygen)
+        $zrow0 = acc_zatca_get($conn, $tid);
+        if (empty($zrow0['private_key'])) { echo json_encode(['success'=>false,'message'=>'ولّد مفتاح المنشأة (zatca_keygen) أولًا']); break; }
+        $company = [];
+        foreach (['company_name','vat_number','cr_number'] as $k) $company[$k] = acc_setting($conn, $tid, $k, '');
+        $ir = $conn->query("SELECT * FROM acc_invoice_items WHERE invoice_id=$id AND tenant_id=$tid ORDER BY id");
+        $items = []; while ($ir && ($x = $ir->fetch_assoc())) $items[] = $x;
+        if (!$items) { echo json_encode(['success'=>false,'message'=>'لا توجد بنود في الفاتورة']); break; }
+        $conn->begin_transaction();
+        try {
+            // قفل سجل الاعتماد، تخصيص ICV التالي، وجلب PIH (هاش الفاتورة السابقة)
+            $lr = $conn->query("SELECT last_icv, last_pih, private_key FROM acc_zatca WHERE tenant_id=$tid FOR UPDATE");
+            $z = $lr ? $lr->fetch_assoc() : null;
+            if (!$z) throw new Exception('سجل اعتماد الزكاة مفقود');
+            $icv     = (int)$z['last_icv'] + 1;
+            $pihB64  = $z['last_pih'] ?: acc_zatca_pih0();
+            $privPem = $z['private_key'];
+            $uuid = $inv['uuid'] ?: acc_uuid4();
+            $inv['uuid'] = $uuid;
+            $inv['issue_time'] = gmdate('H:i:s');
+            // UBL → هاش → توقيع → مفتاح عام → ختم تمثيلي
+            $xml      = acc_zatca_ubl($inv, $items, $company, $icv, $pihB64);
+            $hashB64  = acc_zatca_hash($xml);
+            $sigB64   = acc_zatca_sign($hashB64, $privPem);   // توقيع الفاتورة (الوسم 7)
+            $pubDer   = acc_zatca_pubkey_der($privPem);        // المفتاح العام (الوسم 8)
+            $stampB64 = acc_zatca_sign($pubDer, $privPem);     // ختم تمثيلي للمحاكاة (الوسم 9)
+            $seller = $company['company_name'] ?: 'سمك للمقاولات';
+            $sVat   = $company['vat_number'] ?: '300000000000003';
+            $tsIso  = $inv['issue_date'].'T'.$inv['issue_time'].'Z';
+            $tot = round((float)$inv['total'],2); $taxT = round((float)$inv['tax_total'],2);
+            $qr = acc_zatca_qr_v2($seller, $sVat, $tsIso, $tot, $taxT, $hashB64, $sigB64, $pubDer, $stampB64);
+            // تخزين الختم على الفاتورة
+            $upd = "UPDATE acc_invoices SET uuid='".$conn->real_escape_string($uuid)."',icv=$icv,"
+                 . "pih='".$conn->real_escape_string($pihB64)."',invoice_hash='".$conn->real_escape_string($hashB64)."',"
+                 . "qr_base64='".$conn->real_escape_string($qr)."',signed_xml='".$conn->real_escape_string($xml)."',"
+                 . "zatca_status='stamped_simulation' WHERE id=$id AND tenant_id=$tid";
+            if (!$conn->query($upd)) throw new Exception($conn->error);
+            // تقديم السلسلة: PIH للفاتورة التالية = هاش هذه الفاتورة
+            if (!$conn->query("UPDATE acc_zatca SET last_icv=$icv, last_pih='".$conn->real_escape_string($hashB64)."' WHERE tenant_id=$tid")) throw new Exception($conn->error);
+            $conn->commit();
+            acc_audit($conn, $tid, 'invoice', $id, 'zatca_stamp', 'icv='.$icv.' hash='.$hashB64, $by);
+            echo json_encode(['success'=>true,'id'=>$id,'icv'=>$icv,'uuid'=>$uuid,'pih'=>$pihB64,'invoice_hash'=>$hashB64,'qr_base64'=>$qr,'zatca_status'=>'stamped_simulation','message'=>'تم ختم الفاتورة (وضع المحاكاة)'], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>'فشل الختم: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
         break;
 
