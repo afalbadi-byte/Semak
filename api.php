@@ -975,7 +975,7 @@ switch ($action) {
         break;
 
     case 'discover_workflows':
-        // ─── اكتشاف workflow IDs المتاحة في الحساب ───────────────────────────
+        // ─── v2: اكتشاف workflow IDs المتاحة في الحساب ──────────────────────
         set_time_limit(45);
         $dk   = "__DAFTRA_KEY__";
         $base = "https://semak.daftra.com";
