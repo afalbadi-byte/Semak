@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
+import useTableControls from '../../utils/useTableControls';
+import SortHeader from '../../components/SortHeader';
+import TablePager from '../../components/TablePager';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -188,6 +191,9 @@ export default function QuotationsManage({ user, navigateTo }) {
     const m = new Date().toISOString().slice(0, 7);
     return String(e.date || '').startsWith(m);
   }).length;
+
+  // ─── فرز + ترقيم صفحات ───────────────────────────────────────
+  const tc = useTableControls(displayed, { pageSize: 15, initialSort: { key: 'date', dir: 'desc' } });
 
   // ─── إجراءات العرض / الإنشاء / التعديل ───────────────────────
   const openCreate = () => {
@@ -483,13 +489,16 @@ export default function QuotationsManage({ user, navigateTo }) {
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
-                    {['رقم', 'التاريخ', 'العميل', 'المبلغ', 'الحالة', 'إجراءات'].map(h => (
-                      <th key={h} className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">{h}</th>
-                    ))}
+                    <SortHeader label="رقم"     sortKey="no"     activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="التاريخ" sortKey="date"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="العميل"  sortKey="client" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="المبلغ"  sortKey="total"  activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="الحالة"  sortKey="status" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayed.map((est, idx) => {
+                  {tc.pageRows.map((est, idx) => {
                     const si = estimateStatusInfo(est.status);
                     const isConverting = converting === est.id;
                     return (
@@ -553,6 +562,10 @@ export default function QuotationsManage({ user, navigateTo }) {
                   })}
                 </tbody>
               </table>
+              <div className="px-4 pb-4">
+                <TablePager page={tc.page} totalPages={tc.totalPages} setPage={tc.setPage}
+                  pageStart={tc.pageStart} pageEnd={tc.pageEnd} totalRows={tc.totalRows} />
+              </div>
             </div>
           )}
         </div>

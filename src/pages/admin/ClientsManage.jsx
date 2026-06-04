@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt } from '../../utils/exporters';
+import useTableControls from '../../utils/useTableControls';
+import SortHeader from '../../components/SortHeader';
+import TablePager from '../../components/TablePager';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -152,8 +155,13 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
       notes:         cl.notes || '',
       balance:       parseFloat(cl.balance || cl.total_balance || 0),
       business_name: cl.business_name || '',
+      _raw:          c,
     };
   };
+
+  // ─── فرز + ترقيم صفحات (على الصفوف المُحمّلة) ───────────────
+  const normalizedClients = clients.map(norm);
+  const tc = useTableControls(normalizedClients, { pageSize: 15, initialSort: { key: 'name', dir: 'asc' } });
 
   // ─── إنشاء عميل ──────────────────────────────────────────────
   const handleCreate = async () => {
@@ -361,16 +369,16 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
                 <table className="w-full text-right text-sm">
                   <thead className="bg-slate-50 border-b border-slate-100">
                     <tr className="text-[#1a365d] font-black text-xs">
-                      <th className="p-4">الاسم</th>
-                      <th className="p-4">الهاتف</th>
-                      <th className="p-4">البريد الإلكتروني</th>
-                      <th className="p-4 text-center">الرصيد (ر.س)</th>
+                      <SortHeader label="الاسم"            sortKey="name"    activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                      <SortHeader label="الهاتف"           sortKey="phone"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                      <SortHeader label="البريد الإلكتروني" sortKey="email"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                      <SortHeader label="الرصيد (ر.س)"     sortKey="balance" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} align="center" />
                       <th className="p-4 text-center">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {clients.map((c, idx) => {
-                      const cl = norm(c);
+                    {tc.pageRows.map((cl, idx) => {
+                      const c = cl._raw;
                       return (
                         <tr
                           key={cl.id || idx}
@@ -425,7 +433,13 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
                 </table>
               </div>
 
-              {/* ─── Pagination ─── */}
+              {/* ─── ترقيم محلي للصفوف المُحمّلة ─── */}
+              <div className="px-6 pb-2 pt-2">
+                <TablePager page={tc.page} totalPages={tc.totalPages} setPage={tc.setPage}
+                  pageStart={tc.pageStart} pageEnd={tc.pageEnd} totalRows={tc.totalRows} />
+              </div>
+
+              {/* ─── Pagination (server) ─── */}
               <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
                 <button
                   disabled={page === 1}

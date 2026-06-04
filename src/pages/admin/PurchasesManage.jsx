@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
+import useTableControls from '../../utils/useTableControls';
+import SortHeader from '../../components/SortHeader';
+import TablePager from '../../components/TablePager';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -137,6 +140,9 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   const totalAmount      = displayed.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
   const totalPaid        = displayed.reduce((s, p) => s + (parseFloat(p.paid)  || 0), 0);
   const totalOutstanding = totalAmount - totalPaid;
+
+  // ─── فرز + ترقيم صفحات ───────────────────────────────────────
+  const tc = useTableControls(displayed, { pageSize: 15, initialSort: { key: 'date', dir: 'desc' } });
 
   // ─── حسابات البنود ───────────────────────────────────────────
   const lineTotal = (item) => {
@@ -360,13 +366,17 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
-                    {['رقم', 'التاريخ', 'المورد', 'الإجمالي', 'المتبقي', 'المشروع', 'إجراءات'].map(h => (
-                      <th key={h} className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">{h}</th>
-                    ))}
+                    <SortHeader label="رقم"      sortKey="no"       activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="التاريخ"  sortKey="date"     activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="المورد"   sortKey="supplier" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="الإجمالي" sortKey="total"    activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">المتبقي</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">المشروع</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayed.map((p, idx) => {
+                  {tc.pageRows.map((p, idx) => {
                     const remaining = (parseFloat(p.total) || 0) - (parseFloat(p.paid) || 0);
                     const project   = workCycles.find(w => String(w.id) === String(p.work_order_id));
                     return (
@@ -412,6 +422,10 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                   })}
                 </tbody>
               </table>
+              <div className="px-4 pb-4">
+                <TablePager page={tc.page} totalPages={tc.totalPages} setPage={tc.setPage}
+                  pageStart={tc.pageStart} pageEnd={tc.pageEnd} totalRows={tc.totalRows} />
+              </div>
             </div>
           )}
         </div>

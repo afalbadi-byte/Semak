@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
+import useTableControls from '../../utils/useTableControls';
+import SortHeader from '../../components/SortHeader';
+import TablePager from '../../components/TablePager';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -205,6 +208,9 @@ export default function ExpensesManage({ user, navigateTo }) {
   const thisMonthAmount = displayed
     .filter(e => String(e.date || '').startsWith(new Date().toISOString().slice(0, 7)))
     .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+  // ─── فرز + ترقيم صفحات ───────────────────────────────────────
+  const tc = useTableControls(displayed, { pageSize: 15, initialSort: { key: 'date', dir: 'desc' } });
 
   // ─── إيجاد اسم الفئة من المعرف ───────────────────────────────
   const getCategoryName = (id) => {
@@ -443,13 +449,17 @@ export default function ExpensesManage({ user, navigateTo }) {
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
-                    {['التاريخ', 'الفئة', 'المورد', 'المبلغ', 'المشروع', 'ملاحظات', 'إجراءات'].map(h => (
-                      <th key={h} className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">{h}</th>
-                    ))}
+                    <SortHeader label="التاريخ" sortKey="date"     activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="الفئة"   sortKey="category" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="المورد"  sortKey="supplier" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="المبلغ"  sortKey="amount"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">المشروع</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">ملاحظات</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayed.map((exp, idx) => {
+                  {tc.pageRows.map((exp, idx) => {
                     const catId   = exp.category_id || exp.expense_category_id || '';
                     const catName = exp.category || exp.category_name || getCategoryName(catId);
                     const supName = exp.supplier || getSupplierName(exp.supplier_id);
@@ -504,6 +514,10 @@ export default function ExpensesManage({ user, navigateTo }) {
                   })}
                 </tbody>
               </table>
+              <div className="px-4 pb-4">
+                <TablePager page={tc.page} totalPages={tc.totalPages} setPage={tc.setPage}
+                  pageStart={tc.pageStart} pageEnd={tc.pageEnd} totalRows={tc.totalRows} />
+              </div>
             </div>
           )}
         </div>

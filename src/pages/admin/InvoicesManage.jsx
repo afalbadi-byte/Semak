@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
+import useTableControls from '../../utils/useTableControls';
+import SortHeader from '../../components/SortHeader';
+import TablePager from '../../components/TablePager';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -196,6 +199,9 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   const totalRevenue  = displayed.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
   const totalPaid     = displayed.reduce((s, i) => s + (parseFloat(i.paid)  || 0), 0);
   const totalOutstanding = totalRevenue - totalPaid;
+
+  // ─── فرز + ترقيم صفحات ───────────────────────────────────────
+  const tc = useTableControls(displayed, { pageSize: 15, initialSort: { key: 'date', dir: 'desc' } });
 
   // ─── إجراءات الفاتورة ────────────────────────────────────────
   const openCreate = () => {
@@ -481,14 +487,19 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    {['رقم الفاتورة', 'التاريخ', 'العميل', 'الإجمالي', 'المدفوع', 'المتبقي', 'الحالة', 'إجراءات'].map(h => (
-                      <th key={h} className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">{h}</th>
-                    ))}
+                  <tr className="bg-slate-50 border-b border-slate-100 text-right">
+                    <SortHeader label="رقم الفاتورة" sortKey="no"     activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="التاريخ"      sortKey="date"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="العميل"       sortKey="client" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="الإجمالي"     sortKey="total"  activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="المدفوع"      sortKey="paid"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-500 whitespace-nowrap">المتبقي</th>
+                    <SortHeader label="الحالة"       sortKey="status" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-500 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayed.map((inv, idx) => {
+                  {tc.pageRows.map((inv, idx) => {
                     const remaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
                     return (
                       <tr
@@ -538,6 +549,10 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                   })}
                 </tbody>
               </table>
+              <div className="px-4 pb-4">
+                <TablePager page={tc.page} totalPages={tc.totalPages} setPage={tc.setPage}
+                  pageStart={tc.pageStart} pageEnd={tc.pageEnd} totalRows={tc.totalRows} />
+              </div>
             </div>
           )}
         </div>

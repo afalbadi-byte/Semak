@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
+import useTableControls from '../../utils/useTableControls';
+import SortHeader from '../../components/SortHeader';
+import TablePager from '../../components/TablePager';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -239,6 +242,22 @@ export default function ProductsManage({ user, navigateTo }) {
         return sum + (parseFloat(item.sale_price || item.price) || 0);
       }, 0) / totalCount
     : 0;
+
+  // ─── فرز + ترقيم صفحات (على الصفوف المُحمّلة) ───────────────
+  // تطبيع الصفوف بمفاتيح الفرز المطلوبة مع الاحتفاظ بالصف الأصلي في _raw
+  const normalizedProducts = products.map(row => {
+    const p = row.Product || row;
+    return {
+      id:            p.id,
+      code:          p.code || '',
+      name:          p.name || '',
+      selling_price: parseFloat(p.sale_price ?? p.price) || 0,
+      buying_price:  parseFloat(p.purchase_price) || 0,
+      stock:         parseFloat(p.stock_count) || 0,
+      _raw:          row,
+    };
+  });
+  const tc = useTableControls(normalizedProducts, { pageSize: 15, initialSort: { key: 'name', dir: 'asc' } });
 
   // ════════ عرض النموذج (إنشاء / تعديل) ════════════════════════
   if (view === 'create' || view === 'edit') {
@@ -513,18 +532,19 @@ export default function ProductsManage({ user, navigateTo }) {
               <table className="w-full text-right text-sm">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr className="text-[#1a365d] font-black text-xs">
-                    <th className="px-5 py-4">الكود</th>
-                    <th className="px-5 py-4">الاسم</th>
+                    <SortHeader label="الكود"     sortKey="code"          activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="الاسم"     sortKey="name"          activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <th className="px-5 py-4">الفئة</th>
-                    <th className="px-5 py-4">سعر البيع</th>
-                    <th className="px-5 py-4">سعر الشراء</th>
+                    <SortHeader label="سعر البيع"  sortKey="selling_price" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <SortHeader label="سعر الشراء" sortKey="buying_price"  activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <th className="px-5 py-4">الوحدة</th>
-                    <th className="px-5 py-4">المخزون</th>
+                    <SortHeader label="المخزون"   sortKey="stock"         activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <th className="px-5 py-4 text-center">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {products.map((row, idx) => {
+                  {tc.pageRows.map((np, idx) => {
+                    const row = np._raw;
                     const p = row.Product || row;
                     const pid = p.id;
                     return (
@@ -578,6 +598,12 @@ export default function ProductsManage({ user, navigateTo }) {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* ─── ترقيم محلي للصفوف المُحمّلة ─── */}
+            <div className="px-5 pb-2 pt-2">
+              <TablePager page={tc.page} totalPages={tc.totalPages} setPage={tc.setPage}
+                pageStart={tc.pageStart} pageEnd={tc.pageEnd} totalRows={tc.totalRows} />
             </div>
 
             {/* ─── تحميل المزيد ─── */}

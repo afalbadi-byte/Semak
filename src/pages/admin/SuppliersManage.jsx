@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt } from '../../utils/exporters';
+import useTableControls from '../../utils/useTableControls';
+import SortHeader from '../../components/SortHeader';
+import TablePager from '../../components/TablePager';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -110,6 +113,10 @@ export default function SuppliersManage({ user, navigateTo, showToast: externalT
   const [form, setForm]           = useState(emptyForm());
 
   const notify = (msg, type = 'success') => setToast({ msg, type });
+
+  // ─── فرز + ترقيم صفحات (على الصفوف المُحمّلة) ───────────────
+  const normalizedSuppliers = suppliers.map(s => ({ ...norm(s), _raw: s }));
+  const tc = useTableControls(normalizedSuppliers, { pageSize: 15, initialSort: { key: 'name', dir: 'asc' } });
 
   // ─── جلب الموردين ─────────────────────────────────────────────
   const loadSuppliers = useCallback(async (pg = 1, q = search) => {
@@ -336,16 +343,16 @@ export default function SuppliersManage({ user, navigateTo, showToast: externalT
                 <table className="w-full text-right text-sm">
                   <thead className="bg-slate-50 border-b border-slate-100">
                     <tr className="text-[#1a365d] font-black text-xs">
-                      <th className="p-4">الاسم</th>
-                      <th className="p-4">الهاتف</th>
-                      <th className="p-4">البريد الإلكتروني</th>
+                      <SortHeader label="الاسم"            sortKey="name"  activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                      <SortHeader label="الهاتف"           sortKey="phone" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                      <SortHeader label="البريد الإلكتروني" sortKey="email" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                       <th className="p-4">العنوان</th>
                       <th className="p-4 text-center">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {suppliers.map((s, idx) => {
-                      const sp = norm(s);
+                    {tc.pageRows.map((sp, idx) => {
+                      const s = sp._raw;
                       return (
                         <tr key={sp.id || idx} className="hover:bg-slate-50/70 transition">
                           <td className="p-4 font-black text-[#1a365d]">{sp.name}</td>
@@ -377,7 +384,13 @@ export default function SuppliersManage({ user, navigateTo, showToast: externalT
                 </table>
               </div>
 
-              {/* ─── Pagination ─── */}
+              {/* ─── ترقيم محلي للصفوف المُحمّلة ─── */}
+              <div className="px-6 pb-2 pt-2">
+                <TablePager page={tc.page} totalPages={tc.totalPages} setPage={tc.setPage}
+                  pageStart={tc.pageStart} pageEnd={tc.pageEnd} totalRows={tc.totalRows} />
+              </div>
+
+              {/* ─── Pagination (server) ─── */}
               <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
                 <button
                   disabled={page === 1}
