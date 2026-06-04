@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v398
+// deploy: 2026-06-05-v399
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -3657,6 +3657,24 @@ switch ($action) {
         }
         acc_audit($conn,$tid,'migration',null,'daftra_products','created='.$created.' updated='.$updated,$input_data['actor']??null);
         echo json_encode(['success'=>true,'mode'=>'commit','created'=>$created,'updated'=>$updated,'total'=>count($prods),'message'=>'تم ترحيل كتالوج المنتجات'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'mig_daftra_trial_balance':
+        // قراءة فقط: ميزان المراجعة من دفترة (journal_accounts) + النقد/البنوك (treasuries) — للمراجعة قبل القيد الافتتاحي. لا كتابة إطلاقًا
+        set_time_limit(90);
+        $dk="__DAFTRA_KEY__"; $tbase="https://semak.daftra.com/api2"; $thh=["APIKEY: $dk","Accept: application/json"];
+        $tfetch=function($ep)use($tbase,$thh){ $ch=curl_init("$tbase/$ep"); curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$thh,CURLOPT_TIMEOUT=>25]); $r=curl_exec($ch); curl_close($ch); return json_decode($r,true); };
+        // ميزان المراجعة من شجرة الحسابات
+        $accs=[]; for($pg=1;$pg<=40;$pg++){ $j=$tfetch("journal_accounts.json?limit=200&page=$pg"); $d=$j['data']??null; if(!is_array($d)||!$d)break; foreach($d as $row){ $a=$row['JournalAccount']??$row; if(!empty($a['disabled'])||!empty($a['is_hidden']))continue; $td=(float)($a['total_debit']??0); $tc=(float)($a['total_credit']??0); if(round($td,2)==0&&round($tc,2)==0)continue; $accs[]=['code'=>(string)($a['code']??''),'name'=>(string)($a['name']??''),'type'=>(string)($a['type']??''),'level'=>(int)($a['level']??0),'debit'=>round($td,2),'credit'=>round($tc,2),'net'=>round($td-$tc,2)]; } if(count($d)<200)break; }
+        usort($accs,function($x,$y){ return strcmp($x['code'],$y['code']); });
+        $sumD=0;$sumC=0; foreach($accs as $a){ $sumD+=$a['debit']; $sumC+=$a['credit']; }
+        // النقد والبنوك
+        $treas=[]; $tj=$tfetch("treasuries.json?limit=200"); if(isset($tj['data'])) foreach($tj['data'] as $row){ $t=$row['Treasury']??$row; $treas[]=['id'=>(string)($t['id']??''),'name'=>(string)($t['name']??''),'type'=>(string)($t['type_name']??($t['type']??'')),'is_primary'=>!empty($t['is_primary'])?1:0,'balance'=>round((float)($t['balance']??0),2)]; }
+        $treasTotal=0; foreach($treas as $t)$treasTotal+=$t['balance'];
+        echo json_encode(['success'=>true,'mode'=>'preview_readonly','source'=>'daftra',
+            'trial_balance'=>['accounts'=>$accs,'count'=>count($accs),'total_debit'=>round($sumD,2),'total_credit'=>round($sumC,2),'balanced'=>round($sumD-$sumC,2)==0],
+            'treasuries'=>['items'=>$treas,'total'=>round($treasTotal,2)],
+            'note'=>'قراءة فقط للمراجعة — لم يُكتب أي قيد. عند الجاهزية نبني القيد الافتتاحي عبر mig_opening_entry بعد ربط أكواد دفترة بشجرة حساباتنا'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
