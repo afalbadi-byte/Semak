@@ -1872,23 +1872,40 @@ switch ($action) {
         exit;
 
     case 'daftra_v2_work_cycles':
-        // ─── يقرأ من الكاش المحلي (يُملأ عبر Bookmarklet) ───────────────────
-        $rows = [];
-        $res2 = $conn->query("SELECT daftra_id, name, raw_json FROM daftra_wc_cache ORDER BY daftra_id ASC");
-        if ($res2) while ($r = $res2->fetch_assoc()) {
-            $decoded = json_decode($r['raw_json'], true);
-            $rows[] = $decoded ?: ['id' => $r['daftra_id'], 'name' => $r['name']];
+        // ─── الحل الدائم: APIKEY + le_workflow-type-entity-1 ─────────────────
+        set_time_limit(30);
+        $dk      = "__DAFTRA_KEY__";
+        $wf_base = "https://semak.daftra.com/v2/api/entity/le_workflow-type-entity-1";
+        $hh      = ["APIKEY: $dk", "Accept: application/json"];
+
+        $all_rows = [];
+        for ($pg = 1; $pg <= 10; $pg++) {
+            $ch = curl_init("$wf_base/list/$pg");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $hh,
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($code !== 200) break;
+            $json = json_decode($res, true);
+            if (!$json || empty($json['data'])) break;
+
+            foreach ($json['data'] as $item) $all_rows[] = $item;
+
+            // آخر صفحة
+            if (($json['current_page'] ?? 1) >= ($json['last_page'] ?? 1)) break;
         }
 
-        $log   = $conn->query("SELECT synced_at, count FROM daftra_sync_log WHERE entity='work_cycles' LIMIT 1");
-        $lrow  = ($log && $log->num_rows > 0) ? $log->fetch_assoc() : null;
-
         echo json_encode([
-            'success'     => true,
-            'source'      => 'local_cache',
-            'last_synced' => $lrow ? $lrow['synced_at'] : null,
-            'count'       => count($rows),
-            'data'        => $rows,
+            'success' => true,
+            'source'  => 'daftra_api',
+            'count'   => count($all_rows),
+            'data'    => $all_rows,
         ], JSON_UNESCAPED_UNICODE);
         break;
 
