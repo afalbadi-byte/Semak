@@ -50,7 +50,48 @@ jobs:
       - name: Inject Daftra session cookie
         run: sed -i "s|__DAFTRA_SESSION__|${{ secrets.DAFTRA_SESSION_COOKIE }}|g" dist/api.php
 
-      - name: Deploy to server via FTP
+      # Hostinger FTP is intermittently flaky — retry up to 3 times.
+      # Attempts 1 & 2 use continue-on-error so a transient failure doesn't fail
+      # the job; the final attempt has no continue-on-error, so it gates success.
+      - name: Deploy to server via FTP (attempt 1)
+        id: ftp1
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 600000
+          log-level: minimal
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Deploy to server via FTP (attempt 2)
+        id: ftp2
+        if: steps.ftp1.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 600000
+          log-level: minimal
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Deploy to server via FTP (attempt 3, final)
+        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ${{ secrets.FTP_HOST }}
