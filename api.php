@@ -1,5 +1,5 @@
 <?php
-// cache-bust: 2026-06-04b
+// deploy: 2026-06-04-v378
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
