@@ -1134,6 +1134,343 @@ switch ($action) {
         echo $res;
         break;
 
+    // ══════════════════════════════════════════════════════════════════════
+    // وحدة الفواتير — CRUD كامل
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_invoices_list':
+        set_time_limit(30);
+        $dk   = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $hh   = ["APIKEY: $dk", "Accept: application/json"];
+        $page = (int)($_GET['page'] ?? 1);
+        $limit = (int)($_GET['limit'] ?? 50);
+        $from = $_GET['from'] ?? '';
+        $to   = $_GET['to']   ?? '';
+        $qp   = "page=$page&limit=$limit";
+        if ($from) $qp .= "&from_date=$from";
+        if ($to)   $qp .= "&to_date=$to";
+        $ch = curl_init("$base/invoices.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hh, CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        // تسوية البيانات
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $i = $r['Invoice'] ?? $r;
+            $rows[] = [
+                'id'           => $i['id'],
+                'no'           => $i['no'] ?? '',
+                'date'         => $i['date'] ?? '',
+                'client_id'    => $i['client_id'] ?? '',
+                'client'       => $i['client_business_name'] ?? ($i['client_first_name'].' '.$i['client_last_name']),
+                'total'        => (float)($i['summary_total'] ?? $i['grand_total'] ?? 0),
+                'paid'         => (float)($i['summary_paid'] ?? 0),
+                'status'       => $i['status'] ?? '',
+                'work_order_id'=> $i['work_order_id'] ?? null,
+                'currency'     => $i['currency_code'] ?? 'SAR',
+                'notes'        => $i['notes'] ?? '',
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows,'meta'=>$data['meta']??[]], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_invoice_single':
+        $dk = "__DAFTRA_KEY__"; $inv_id = (int)($_GET['id']??0);
+        if (!$inv_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+        $ch = curl_init("https://semak.daftra.com/api2/invoices/$inv_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        if ($code !== 200) { echo json_encode(['success'=>false,'http_code'=>$code]); break; }
+        echo json_encode(['success'=>true,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_invoice_create':
+    case 'daftra_invoice_update':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $inv_id = (int)($body['id'] ?? $_GET['id'] ?? 0);
+        $is_update = ($action === 'daftra_invoice_update' && $inv_id > 0);
+        $url    = $is_update
+            ? "https://semak.daftra.com/api2/invoices/$inv_id.json"
+            : "https://semak.daftra.com/api2/invoices.json";
+        $method = $is_update ? 'PUT' : 'POST';
+        // بناء هيكل دفترة
+        $items = [];
+        foreach ($body['items'] ?? [] as $it) {
+            $items[] = [
+                'name'       => $it['name']       ?? '',
+                'quantity'   => (float)($it['quantity']   ?? 1),
+                'unit_price' => (float)($it['unit_price'] ?? 0),
+                'discount'   => (float)($it['discount']   ?? 0),
+                'tax'        => (float)($it['tax']        ?? 15),
+            ];
+        }
+        $payload = ['Invoice' => [
+            'client_id'     => $body['client_id']     ?? '',
+            'date'          => $body['date']          ?? date('Y-m-d'),
+            'currency_code' => $body['currency']      ?? 'SAR',
+            'work_order_id' => $body['work_order_id'] ?? null,
+            'notes'         => $body['notes']         ?? '',
+            'InvoiceItem'   => $items,
+        ]];
+        if ($is_update) $payload['Invoice']['id'] = $inv_id;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => ["APIKEY: $dk","Accept: application/json","Content-Type: application/json"],
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $resp = json_decode($res, true);
+        echo json_encode([
+            'success'   => in_array($code, [200,201]),
+            'http_code' => $code,
+            'data'      => $resp,
+            'message'   => in_array($code,[200,201]) ? 'تمّ بنجاح' : 'فشل الإرسال',
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_invoice_delete':
+        $dk = "__DAFTRA_KEY__"; $inv_id = (int)($_GET['id']??0);
+        if (!$inv_id) { echo json_encode(['success'=>false]); break; }
+        $ch = curl_init("https://semak.daftra.com/api2/invoices/$inv_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
+        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,204]),'http_code'=>$code]);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // وحدة المشتريات — CRUD كامل
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_purchases_list':
+        set_time_limit(30);
+        $dk   = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $qp   = "page=$page&limit=50";
+        if ($from) $qp .= "&from_date=$from";
+        if ($to)   $qp .= "&to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $p = $r['PurchaseInvoice'] ?? $r['PurchaseOrder'] ?? $r;
+            $rows[] = [
+                'id'           => $p['id'],
+                'no'           => $p['no']   ?? '',
+                'date'         => $p['date'] ?? '',
+                'supplier_id'  => $p['supplier_id'] ?? '',
+                'supplier'     => $p['supplier_business_name'] ?? '',
+                'total'        => (float)($p['summary_total'] ?? $p['grand_total'] ?? 0),
+                'paid'         => (float)($p['summary_paid']  ?? 0),
+                'work_order_id'=> $p['work_order_id'] ?? null,
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_purchase_create':
+    case 'daftra_purchase_update':
+        $dk   = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $pur_id    = (int)($body['id'] ?? $_GET['id'] ?? 0);
+        $is_update = ($action === 'daftra_purchase_update' && $pur_id > 0);
+        $url    = $is_update
+            ? "https://semak.daftra.com/api2/purchase_invoices/$pur_id.json"
+            : "https://semak.daftra.com/api2/purchase_invoices.json";
+        $items = [];
+        foreach ($body['items'] ?? [] as $it) {
+            $items[] = ['name'=>$it['name']??'','quantity'=>(float)($it['quantity']??1),'unit_price'=>(float)($it['unit_price']??0),'discount'=>(float)($it['discount']??0),'tax'=>(float)($it['tax']??15)];
+        }
+        $payload = ['PurchaseInvoice' => [
+            'supplier_id'   => $body['supplier_id']   ?? '',
+            'date'          => $body['date']          ?? date('Y-m-d'),
+            'work_order_id' => $body['work_order_id'] ?? null,
+            'notes'         => $body['notes']         ?? '',
+            'PurchaseInvoiceItem' => $items,
+        ]];
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // وحدة الخزاين
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_treasuries':
+        $dk = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/treasuries.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $t = $r['Treasury'] ?? $r;
+            $rows[] = ['id'=>$t['id'],'name'=>$t['name']??'','balance'=>(float)($t['balance']??0),'currency'=>$t['currency_code']??'SAR','status'=>$t['status']??1];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows,'http_code'=>$code,'raw_count'=>count($data['data']??[])], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_treasury_transactions':
+        $dk  = "__DAFTRA_KEY__";
+        $tid = (int)($_GET['treasury_id'] ?? 0);
+        $from= $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $qp  = $tid ? "treasury_id=$tid" : '';
+        if ($from) $qp .= ($qp?'&':'')."from_date=$from";
+        if ($to)   $qp .= ($qp?'&':'')."to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/treasury_transactions.json".($qp?"?$qp":''));
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $tx = $r['TreasuryTransaction'] ?? $r;
+            $rows[] = ['id'=>$tx['id'],'date'=>$tx['date']??'','type'=>$tx['type']??'','amount'=>(float)($tx['amount']??0),'notes'=>$tx['notes']??'','treasury_id'=>$tx['treasury_id']??'','treasury'=>$tx['treasury_name']??''];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_treasury_add':
+        $dk   = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $payload = ['TreasuryTransaction' => [
+            'treasury_id' => $body['treasury_id'] ?? '',
+            'type'        => $body['type']        ?? 'in',
+            'date'        => $body['date']        ?? date('Y-m-d'),
+            'amount'      => (float)($body['amount'] ?? 0),
+            'notes'       => $body['notes']       ?? '',
+        ]];
+        $ch = curl_init("https://semak.daftra.com/api2/treasury_transactions.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // بيانات مرجعية: المنتجات / الموردون
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_products':
+        $dk = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/products.json?limit=200");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $pr = $r['Product'] ?? $r;
+            $rows[] = ['id'=>$pr['id'],'name'=>$pr['name']??'','price'=>(float)($pr['selling_price']??0),'code'=>$pr['code']??''];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_suppliers_list':
+        $dk = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/suppliers.json?limit=200");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $s = $r['Supplier'] ?? $r;
+            $rows[] = ['id'=>$s['id'],'name'=>$s['business_name']??($s['first_name'].' '.$s['last_name'])];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // تقارير مالية شاملة
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_reports':
+        set_time_limit(60);
+        $dk   = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $hh   = ["APIKEY: $dk", "Accept: application/json"];
+        $from = $_GET['from'] ?? date('Y-01-01');
+        $to   = $_GET['to']   ?? date('Y-m-d');
+
+        $fetch_all = function($ep) use ($base, $hh) {
+            $all = []; $pg = 1;
+            while ($pg <= 20) {
+                $ch = curl_init("$base/$ep".( strpos($ep,'?')!==false ? '&' : '?' )."page=$pg&limit=100");
+                curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hh, CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
+                $r = curl_exec($ch); curl_close($ch);
+                $d = json_decode($r, true);
+                if (!$d || empty($d['data'])) break;
+                $all = array_merge($all, $d['data']);
+                if (count($d['data']) < 100) break;
+                $pg++;
+            }
+            return $all;
+        };
+
+        $inv_raw = $fetch_all("invoices.json?from_date=$from&to_date=$to");
+        $pur_raw = $fetch_all("purchase_invoices.json?from_date=$from&to_date=$to");
+        $exp_raw = $fetch_all("expenses.json?from_date=$from&to_date=$to");
+
+        // الإيرادات
+        $revenue = 0; $rev_paid = 0;
+        $by_client = []; $by_month = [];
+        foreach ($inv_raw as $r) {
+            $i = $r['Invoice'] ?? $r;
+            $total = (float)($i['summary_total'] ?? $i['grand_total'] ?? 0);
+            $paid  = (float)($i['summary_paid'] ?? 0);
+            $revenue += $total; $rev_paid += $paid;
+            $cn = $i['client_business_name'] ?? ($i['client_first_name']??'').' '.($i['client_last_name']??'');
+            $by_client[$cn] = ($by_client[$cn] ?? 0) + $total;
+            $month = substr($i['date'] ?? date('Y-m'), 0, 7);
+            $by_month[$month]['revenue'] = ($by_month[$month]['revenue'] ?? 0) + $total;
+        }
+
+        // المشتريات
+        $purchases = 0;
+        foreach ($pur_raw as $r) {
+            $p = $r['PurchaseInvoice'] ?? $r['PurchaseOrder'] ?? $r;
+            $purchases += (float)($p['summary_total'] ?? $p['grand_total'] ?? 0);
+            $month = substr($p['date'] ?? date('Y-m'), 0, 7);
+            $by_month[$month]['purchases'] = ($by_month[$month]['purchases'] ?? 0) + (float)($p['summary_total'] ?? $p['grand_total'] ?? 0);
+        }
+
+        // المصروفات
+        $expenses = 0;
+        foreach ($exp_raw as $r) {
+            $e = $r['Expense'] ?? $r;
+            $expenses += (float)($e['amount'] ?? $e['total'] ?? 0);
+            $month = substr($e['date'] ?? date('Y-m'), 0, 7);
+            $by_month[$month]['expenses'] = ($by_month[$month]['expenses'] ?? 0) + (float)($e['amount'] ?? 0);
+        }
+
+        // ترتيب الشهور
+        ksort($by_month);
+
+        // أكبر العملاء
+        arsort($by_client);
+        $top_clients = array_slice(array_map(fn($n,$v) => ['name'=>$n,'total'=>$v], array_keys($by_client), array_values($by_client)), 0, 10, true);
+
+        echo json_encode([
+            'success'     => true,
+            'period'      => ['from'=>$from, 'to'=>$to],
+            'summary'     => ['revenue'=>$revenue,'rev_paid'=>$rev_paid,'purchases'=>$purchases,'expenses'=>$expenses,'net'=>$revenue-$purchases-$expenses,'costs'=>$purchases+$expenses],
+            'by_month'    => $by_month,
+            'by_client'   => array_values($top_clients),
+            'counts'      => ['invoices'=>count($inv_raw),'purchases'=>count($pur_raw),'expenses'=>count($exp_raw)],
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
     // ═══════════════════════════════════════════════════════════════════════
     // دورات العمل (Work Cycles) — تجميع التكاليف والإيرادات بفترة ومشروع
     // ═══════════════════════════════════════════════════════════════════════

@@ -4,7 +4,8 @@ import {
     UserCircle, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
     Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle, Bot,
     AlertTriangle, DollarSign, ArrowLeft, CheckCircle2, Coins, ShieldCheck,
-    BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight
+    BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
+    Receipt, ShoppingCart
 } from 'lucide-react';
 
 import UnitInspection   from './UnitInspection';
@@ -21,6 +22,10 @@ import UnitsOverview    from './UnitsOverview';
 import ProjectsManage   from './ProjectsManage';
 import UnitsEdit        from './UnitsEdit';
 import WhatsAppInbox    from './WhatsAppInbox';
+import InvoicesManage  from './InvoicesManage';
+import PurchasesManage from './PurchasesManage';
+import TreasuryManage  from './TreasuryManage';
+import ReportsHub      from './ReportsHub';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -332,10 +337,13 @@ export default function Dashboard({ onLogout }) {
         {
             id:'finance', color:'emerald', icon:Landmark, statsKey:'finance',
             label:'الشؤون المالية والإدارية',
-            desc:'الإيرادات · المصروفات · الوثائق الرسمية',
+            desc:'الفواتير · الخزاين · التقارير · الوثائق',
             tools:[
-                { id:'finance',    tabId:'finance',    label:'الإيرادات والمصروفات', icon:DollarSign,  permKey:'finance',    color:'emerald' },
-                { id:'accounting', tabId:'accounting', label:'النظام المحاسبي',       icon:Calculator,  permKey:'accounting', color:'slate', isExternal:true, path:'https://semak.daftra.com/' },
+                { id:'invoices',   tabId:'invoices',   label:'الفواتير',              icon:Receipt,     permKey:'finance',    color:'emerald' },
+                { id:'purchases',  tabId:'purchases',  label:'فواتير الشراء',         icon:ShoppingCart,permKey:'finance',    color:'amber'   },
+                { id:'treasury',   tabId:'treasury',   label:'الخزاين',               icon:Coins,       permKey:'finance',    color:'teal'    },
+                { id:'reports',    tabId:'reports',    label:'التقارير المالية',       icon:BarChart3,   permKey:'finance',    color:'indigo'  },
+                { id:'finance',    tabId:'finance',    label:'الإيرادات والمصروفات',  icon:DollarSign,  permKey:'finance',    color:'slate'   },
                 { id:'letters',    tabId:'letters',    label:'الوثائق الرسمية',       icon:FilePenLine, permKey:'letters',    color:'rose',   isLink:true, path:'/admin/letter-generator' },
             ],
             statsChips: (s, fmt) => [
@@ -367,7 +375,8 @@ export default function Dashboard({ onLogout }) {
         snaglist:'تقارير الملاحظات', maintenance:'الصيانة', leads:'العملاء المحتملون',
         bot:'خدمة العملاء الذكية', whatsapp:'صندوق الرسائل', qr:'رموز الوحدات',
         letters:'الوثائق الرسمية', finance:'الإيرادات والمصروفات', daftra_explorer:'التقارير المالية',
-        work_cycles:'أوامر ومراحل العمل', users:'إدارة الفريق',
+        work_cycles:'المشاريع', users:'إدارة الفريق',
+        invoices:'الفواتير', purchases:'فواتير الشراء', treasury:'الخزاين', reports:'التقارير المالية',
     };
 
     if (authLoading) return (
@@ -507,6 +516,10 @@ export default function Dashboard({ onLogout }) {
                 {activeTab === 'finance'     && hasPermission('finance')     && <div className="animate-fadeIn"><Finance /></div>}
                 {activeTab === 'daftra_explorer' && hasPermission('finance') && <div className="animate-fadeIn"><DaftraExplorer /></div>}
                 {activeTab === 'work_cycles' && hasPermission('finance')     && <div className="animate-fadeIn"><WorkCycles /></div>}
+                {activeTab === 'invoices'    && hasPermission('finance')     && <div className="animate-fadeIn"><InvoicesManage /></div>}
+                {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
+                {activeTab === 'treasury'    && hasPermission('finance')     && <div className="animate-fadeIn"><TreasuryManage /></div>}
+                {activeTab === 'reports'     && hasPermission('finance')     && <div className="animate-fadeIn"><ReportsHub /></div>}
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={(t,m)=>alert(`${t}: ${m}`)} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
 
