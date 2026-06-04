@@ -1,4 +1,6 @@
 <?php
+// cache-bust: 2026-06-04
+if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
 header("Access-Control-Allow-Origin: *");
