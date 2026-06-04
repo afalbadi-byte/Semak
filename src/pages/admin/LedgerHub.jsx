@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import QRCode from 'react-qr-code';
 import {
     BookOpen, FileText, Layers, Plus, Trash2, RefreshCw, Save, X, Search,
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download,
     AlertTriangle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
+    Settings, Printer, Building2,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1143,7 +1145,7 @@ function calcTotals(items) {
     return { sub: r(sub), tax: r(tax), total: r(sub + tax) };
 }
 
-function InvoicesTab({ docType, parties, accounts, toast }) {
+function InvoicesTab({ docType, parties, accounts, company = {}, toast }) {
     const isSales = docType === 'sales';
     const [list, setList] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -1214,6 +1216,61 @@ function InvoicesTab({ docType, parties, accounts, toast }) {
     const openView = async (id) => {
         try { const r = await api('inv_single', { params: { id } }); if (r.success) setViewing(r); else toast(r.message, 'error'); }
         catch (e) { toast(e.message, 'error'); }
+    };
+
+    // طباعة فاتورة احترافية (مع رمز QR للزكاة إن وُجد) في نافذة منفصلة
+    const printInvoice = () => {
+        if (!viewing) return;
+        const inv = viewing.invoice, items = viewing.items || [];
+        const qrEl = document.querySelector('#zatca-qr-box svg');
+        const qrSvg = qrEl ? qrEl.outerHTML : '';
+        const w = window.open('', '_blank', 'width=820,height=1000');
+        if (!w) { toast('فعّل النوافذ المنبثقة للطباعة', 'error'); return; }
+        const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+        const rows = items.map(it => `<tr><td style="text-align:right">${esc(it.description)}</td><td>${it.qty}</td><td>${money(it.unit_price)}</td><td>${money(it.discount)}</td><td>${money(it.tax_amount)}</td><td style="text-align:left">${money(it.line_total)}</td></tr>`).join('');
+        const docTitle = inv.doc_type === 'sales' ? (inv.invoice_type === 'simplified' ? 'فاتورة ضريبية مبسطة' : 'فاتورة ضريبية') : 'فاتورة مشتريات';
+        w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(inv.invoice_no)}</title>
+<style>
+*{box-sizing:border-box} body{font-family:'Cairo','Segoe UI',Arial,sans-serif;color:#1a365d;margin:0;padding:36px;font-size:13px}
+.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #c5a059;padding-bottom:16px;margin-bottom:18px}
+.co{font-size:20px;font-weight:800} .muted{color:#64748b;font-size:12px;margin-top:3px}
+.tag{display:inline-block;background:#1a365d;color:#fff;padding:6px 14px;border-radius:8px;font-weight:700}
+.meta{display:flex;gap:24px;margin:14px 0;flex-wrap:wrap} .meta div{font-size:12px}
+table{width:100%;border-collapse:collapse;margin:14px 0} th,td{border:1px solid #e2e8f0;padding:8px;text-align:center}
+th{background:#f8fafc;color:#475569;font-weight:700}
+.totals{width:280px;margin-right:auto;margin-top:8px} .totals tr td{border:none;padding:4px 8px;text-align:left}
+.grand{font-weight:800;font-size:15px;border-top:2px solid #1a365d!important}
+.foot{display:flex;justify-content:space-between;align-items:flex-end;margin-top:24px}
+.qrbox{text-align:center} .qrbox svg{width:120px;height:120px}
+@media print{body{padding:12px}}
+</style></head><body>
+<div class="head">
+  <div><div class="co">${esc(company.company_name || 'سمك')}</div>
+    ${company.vat_number ? `<div class="muted">الرقم الضريبي: ${esc(company.vat_number)}</div>` : ''}
+    ${company.cr_number ? `<div class="muted">السجل التجاري: ${esc(company.cr_number)}</div>` : ''}
+    ${company.city ? `<div class="muted">${esc([company.address, company.district, company.city].filter(Boolean).join('، '))}</div>` : ''}
+  </div>
+  <div style="text-align:left"><div class="tag">${docTitle}</div><div class="muted">رقم: <b>${esc(inv.invoice_no)}</b></div></div>
+</div>
+<div class="meta">
+  <div><b>الطرف:</b> ${esc(inv.party_label || inv.party_name || '—')}</div>
+  ${inv.party_vat ? `<div><b>الرقم الضريبي للطرف:</b> ${esc(inv.party_vat)}</div>` : ''}
+  <div><b>التاريخ:</b> ${esc(inv.issue_date)}</div>
+  ${inv.due_date ? `<div><b>الاستحقاق:</b> ${esc(inv.due_date)}</div>` : ''}
+</div>
+<table><thead><tr><th style="text-align:right">الوصف</th><th>كمية</th><th>سعر</th><th>خصم</th><th>ضريبة</th><th style="text-align:left">إجمالي</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="foot">
+  <div class="qrbox">${qrSvg}${inv.uuid ? `<div class="muted" style="margin-top:6px;font-size:10px">${esc(inv.uuid)}</div>` : ''}</div>
+  <table class="totals">
+    <tr><td>المجموع قبل الضريبة</td><td style="text-align:left">${money(inv.subtotal)}</td></tr>
+    <tr><td>ضريبة القيمة المضافة (15%)</td><td style="text-align:left">${money(inv.tax_total)}</td></tr>
+    <tr class="grand"><td>الإجمالي شامل الضريبة</td><td style="text-align:left">${money(inv.total)} ﷼</td></tr>
+    <tr><td style="color:#059669">المدفوع</td><td style="text-align:left;color:#059669">${money(inv.paid)}</td></tr>
+  </table>
+</div>
+</body></html>`);
+        w.document.close(); w.focus();
+        setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
     };
 
     const t = editing ? calcTotals(editing.items) : null;
@@ -1392,7 +1449,10 @@ function InvoicesTab({ docType, parties, accounts, toast }) {
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
                             <h3 className="text-lg font-black text-[#1a365d]">{viewing.invoice.invoice_no}</h3>
-                            <button onClick={() => setViewing(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><X size={18} /></button>
+                            <div className="flex items-center gap-2">
+                                <Btn color="navy" size="sm" onClick={printInvoice}><Printer size={14} /> طباعة</Btn>
+                                <button onClick={() => setViewing(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><X size={18} /></button>
+                            </div>
                         </div>
                         <div className="p-6 space-y-4 text-sm">
                             <div className="grid grid-cols-2 gap-2 text-slate-600">
@@ -1421,6 +1481,18 @@ function InvoicesTab({ docType, parties, accounts, toast }) {
                                 </div>
                             </div>
                             {viewing.invoice.entry_id && <p className="text-xs text-slate-400">القيد المرتبط: #{viewing.invoice.entry_id}</p>}
+                            {viewing.invoice.qr_base64 && (
+                                <div className="flex items-center gap-4 pt-3 border-t border-slate-100">
+                                    <div id="zatca-qr-box" className="bg-white p-2 rounded-lg border border-slate-200">
+                                        <QRCode value={viewing.invoice.qr_base64} size={104} />
+                                    </div>
+                                    <div className="text-xs text-slate-500 leading-relaxed">
+                                        <p className="font-bold text-[#1a365d]">رمز QR — هيئة الزكاة والضريبة</p>
+                                        <p>فاتورة ضريبية متوافقة (المرحلة الأولى)</p>
+                                        {viewing.invoice.uuid && <p className="text-slate-400 mt-1" dir="ltr">{viewing.invoice.uuid}</p>}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1574,6 +1646,62 @@ function PaymentsTab({ parties, toast }) {
     );
 }
 
+// ─── تبويب: ملف المنشأة (يُستخدم في رمز QR للزكاة وفي الطباعة) ────────────────
+const SETTINGS_FIELDS = [
+    { k: 'company_name', label: 'الاسم القانوني للمنشأة', ph: 'سمك للمقاولات', req: true, col: 2 },
+    { k: 'vat_number', label: 'الرقم الضريبي (15 رقمًا)', ph: '3xxxxxxxxxxxxx3', req: true, dir: 'ltr' },
+    { k: 'cr_number', label: 'رقم السجل التجاري', ph: '1010xxxxxx', dir: 'ltr' },
+    { k: 'address', label: 'العنوان (الشارع)', ph: 'شارع ...' },
+    { k: 'district', label: 'الحي', ph: 'حي ...' },
+    { k: 'city', label: 'المدينة', ph: 'الرياض' },
+    { k: 'postal_code', label: 'الرمز البريدي', ph: '12345', dir: 'ltr' },
+    { k: 'building_no', label: 'رقم المبنى', ph: '0000', dir: 'ltr' },
+    { k: 'phone', label: 'الهاتف', ph: '05xxxxxxxx', dir: 'ltr' },
+    { k: 'email', label: 'البريد الإلكتروني', ph: 'info@...', dir: 'ltr' },
+];
+function SettingsTab({ company, reload, toast }) {
+    const [form, setForm] = useState(company || {});
+    const [saving, setSaving] = useState(false);
+    useEffect(() => { setForm(company || {}); }, [company]);
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const save = async () => {
+        if (!form.company_name) return toast('الاسم القانوني مطلوب', 'error');
+        const vat = String(form.vat_number || '');
+        if (vat && !/^\d{15}$/.test(vat)) return toast('الرقم الضريبي يجب أن يكون 15 رقمًا', 'error');
+        setSaving(true);
+        try {
+            const settings = {};
+            SETTINGS_FIELDS.forEach(f => { settings[f.k] = form[f.k] || ''; });
+            const r = await api('gl_settings_save', { method: 'POST', body: { settings } });
+            if (r.success) { toast(r.message || 'تم الحفظ'); reload && reload(); }
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); } finally { setSaving(false); }
+    };
+    return (
+        <div className="space-y-5">
+            <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center"><Building2 size={20} className="text-[#c5a059]" /></div>
+                <div>
+                    <h3 className="text-lg font-black text-[#1a365d]">ملف المنشأة</h3>
+                    <p className="text-xs text-slate-500">يُستخدم في رمز QR للفواتير الضريبية وفي رأس الطباعة — أدخل البيانات الرسمية للمنشأة</p>
+                </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {SETTINGS_FIELDS.map(f => (
+                    <div key={f.k} className={f.col === 2 ? 'md:col-span-2' : ''}>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">{f.label}{f.req && <span className="text-red-500"> *</span>}</label>
+                        <input value={form[f.k] || ''} onChange={e => set(f.k, e.target.value)} placeholder={f.ph} dir={f.dir || 'rtl'}
+                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:border-[#c5a059] focus:ring-2 focus:ring-amber-100 outline-none" />
+                    </div>
+                ))}
+            </div>
+            <div className="flex justify-end">
+                <Btn color="green" onClick={save} disabled={saving}><Save size={15} /> {saving ? 'جارٍ الحفظ…' : 'حفظ ملف المنشأة'}</Btn>
+            </div>
+        </div>
+    );
+}
+
 const TABS = [
     { id: 'chart', label: 'دليل الحسابات', icon: BookOpen },
     { id: 'journal', label: 'القيود اليومية', icon: FileText },
@@ -1587,6 +1715,7 @@ const TABS = [
     { id: 'vat', label: 'إقرار الضريبة', icon: Banknote },
     { id: 'parties', label: 'العملاء والموردون', icon: Users },
     { id: 'costcenters', label: 'مراكز التكلفة', icon: Layers },
+    { id: 'settings', label: 'ملف المنشأة', icon: Settings },
 ];
 
 export default function LedgerHub() {
@@ -1600,6 +1729,7 @@ export default function LedgerHub() {
     const [partyLoading, setPartyLoading] = useState(false);
     const [costCenters, setCostCenters] = useState([]);
     const [ccLoading, setCcLoading] = useState(false);
+    const [company, setCompany] = useState({});
     const [seeded, setSeeded] = useState(false);
 
     const loadAccounts = useCallback(async () => {
@@ -1617,8 +1747,12 @@ export default function LedgerHub() {
         try { const r = await api('gl_cost_centers'); setCostCenters(r.data || []); }
         catch (e) { toast(e.message, 'error'); } finally { setCcLoading(false); }
     }, [toast]);
+    const loadCompany = useCallback(async () => {
+        try { const r = await api('gl_settings_get'); if (r.success) setCompany(r.settings || {}); }
+        catch (e) { /* صامت — لا يعطّل الواجهة */ }
+    }, []);
 
-    useEffect(() => { loadAccounts(); loadParties(); loadCostCenters(); }, [loadAccounts, loadParties, loadCostCenters]);
+    useEffect(() => { loadAccounts(); loadParties(); loadCostCenters(); loadCompany(); }, [loadAccounts, loadParties, loadCostCenters, loadCompany]);
 
     // زرع دليل الحسابات إن كان فارغاً
     const seed = async () => {
@@ -1667,8 +1801,8 @@ export default function LedgerHub() {
                 <div className="p-4 md:p-6">
                     {activeTab === 'chart' && <ChartTab accounts={accounts} reload={loadAccounts} loading={accLoading} toast={toast} />}
                     {activeTab === 'journal' && <JournalTab accounts={accounts} parties={parties} costCenters={costCenters} toast={toast} />}
-                    {activeTab === 'sales' && <InvoicesTab docType="sales" parties={parties} accounts={accounts} toast={toast} />}
-                    {activeTab === 'purchases' && <InvoicesTab docType="purchase" parties={parties} accounts={accounts} toast={toast} />}
+                    {activeTab === 'sales' && <InvoicesTab docType="sales" parties={parties} accounts={accounts} company={company} toast={toast} />}
+                    {activeTab === 'purchases' && <InvoicesTab docType="purchase" parties={parties} accounts={accounts} company={company} toast={toast} />}
                     {activeTab === 'payments' && <PaymentsTab parties={parties} accounts={accounts} toast={toast} />}
                     {activeTab === 'trial' && <TrialBalanceTab toast={toast} />}
                     {activeTab === 'income' && <IncomeTab toast={toast} />}
@@ -1677,6 +1811,7 @@ export default function LedgerHub() {
                     {activeTab === 'vat' && <VatTab toast={toast} />}
                     {activeTab === 'parties' && <PartiesTab parties={parties} reload={loadParties} loading={partyLoading} toast={toast} />}
                     {activeTab === 'costcenters' && <CostCentersTab costCenters={costCenters} reload={loadCostCenters} loading={ccLoading} toast={toast} />}
+                    {activeTab === 'settings' && <SettingsTab company={company} reload={loadCompany} toast={toast} />}
                 </div>
             </div>
         </div>
