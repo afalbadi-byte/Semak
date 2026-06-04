@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v389
+// deploy: 2026-06-04-v390
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -135,6 +135,117 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_lines (
     INDEX idx_entry (entry_id),
     INDEX idx_account (tenant_id, account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// ─── أبعاد إضافية على البنود: الطرف (عميل/مورد) وتاريخ الاستحقاق (للذمم والأعمار) ─
+$conn->query("ALTER TABLE acc_lines ADD COLUMN IF NOT EXISTS party_type VARCHAR(12) DEFAULT NULL");
+$conn->query("ALTER TABLE acc_lines ADD COLUMN IF NOT EXISTS party_id   INT DEFAULT NULL");
+$conn->query("ALTER TABLE acc_lines ADD COLUMN IF NOT EXISTS due_date   DATE DEFAULT NULL");
+$conn->query("ALTER TABLE acc_lines ADD INDEX IF NOT EXISTS idx_party (tenant_id, party_type, party_id)");
+
+// الأطراف: دفتر مساعد للعملاء والموردين (ذمم مدينة/دائنة)
+$conn->query("CREATE TABLE IF NOT EXISTS acc_parties (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    type        ENUM('customer','supplier') NOT NULL,
+    name        VARCHAR(255) NOT NULL,
+    vat_number  VARCHAR(20)  DEFAULT NULL,
+    cr_number   VARCHAR(30)  DEFAULT NULL,
+    phone       VARCHAR(40)  DEFAULT NULL,
+    email       VARCHAR(120) DEFAULT NULL,
+    address     VARCHAR(512) DEFAULT NULL,
+    daftra_id   VARCHAR(40)  DEFAULT NULL,
+    status      TINYINT(1)   DEFAULT 1,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tenant_type (tenant_id, type),
+    INDEX idx_daftra (tenant_id, daftra_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// مراكز التكلفة
+$conn->query("CREATE TABLE IF NOT EXISTS acc_cost_centers (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    code        VARCHAR(32)  DEFAULT NULL,
+    name        VARCHAR(255) NOT NULL,
+    parent_id   INT DEFAULT NULL,
+    status      TINYINT(1) DEFAULT 1,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tenant (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// الفترات المالية (لمنع الترحيل في فترة مقفلة والإقفال السنوي)
+$conn->query("CREATE TABLE IF NOT EXISTS acc_periods (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    fy          INT NOT NULL,
+    start_date  DATE NOT NULL,
+    end_date    DATE NOT NULL,
+    is_closed   TINYINT(1) DEFAULT 0,
+    closed_at   DATETIME DEFAULT NULL,
+    closed_by   VARCHAR(128) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_fy (tenant_id, fy)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// أرقام تسلسلية آمنة للتزامن (قيود/فواتير/سندات)
+$conn->query("CREATE TABLE IF NOT EXISTS acc_sequences (
+    tenant_id INT NOT NULL,
+    kind      VARCHAR(20) NOT NULL,
+    yr        INT NOT NULL,
+    last_no   INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (tenant_id, kind, yr)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// سجل التدقيق المحاسبي
+$conn->query("CREATE TABLE IF NOT EXISTS acc_audit_log (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    entity      VARCHAR(40) NOT NULL,
+    entity_id   INT DEFAULT NULL,
+    action      VARCHAR(20) NOT NULL,
+    detail      TEXT,
+    actor       VARCHAR(128) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_entity (tenant_id, entity, entity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
+// مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
+function acc_next_no($conn, $tid, $kind, $yr) {
+    $tid = (int)$tid; $yr = (int)$yr; $kind = $conn->real_escape_string($kind);
+    $conn->query("INSERT INTO acc_sequences (tenant_id,kind,yr,last_no) VALUES ($tid,'$kind',$yr,LAST_INSERT_ID(1))
+                  ON DUPLICATE KEY UPDATE last_no=LAST_INSERT_ID(last_no+1)");
+    return (int)$conn->insert_id;
+}
+// تسجيل حركة في سجل التدقيق
+function acc_audit($conn, $tid, $entity, $eid, $action, $detail, $actor) {
+    $tid    = (int)$tid;
+    $entity = $conn->real_escape_string($entity);
+    $action = $conn->real_escape_string($action);
+    $detail = $conn->real_escape_string(is_string($detail) ? $detail : json_encode($detail, JSON_UNESCAPED_UNICODE));
+    $actor  = $conn->real_escape_string((string)($actor ?? ''));
+    $eidSql = ($eid === null) ? 'NULL' : (int)$eid;
+    $conn->query("INSERT INTO acc_audit_log (tenant_id,entity,entity_id,action,detail,actor)
+                  VALUES ($tid,'$entity',$eidSql,'$action','$detail'," . ($actor !== '' ? "'$actor'" : 'NULL') . ")");
+}
+// ضبط شجرة الحسابات: تحديد الأب بأطول بادئة كود موجودة
+function acc_fix_hierarchy($conn, $tid) {
+    $tid = (int)$tid;
+    $res = $conn->query("SELECT id, code FROM acc_accounts WHERE tenant_id=$tid");
+    $byCode = []; $all = [];
+    while ($res && ($x = $res->fetch_assoc())) { $all[] = $x; $byCode[$x['code']] = (int)$x['id']; }
+    $n = 0;
+    foreach ($all as $a) {
+        $code = (string)$a['code']; $parent = null;
+        for ($len = strlen($code) - 1; $len >= 1; $len--) {
+            $pre = substr($code, 0, $len);
+            if (isset($byCode[$pre])) { $parent = $byCode[$pre]; break; }
+        }
+        $pv = ($parent === null) ? 'NULL' : (int)$parent;
+        $conn->query("UPDATE acc_accounts SET parent_id=$pv WHERE id=" . (int)$a['id'] . " AND tenant_id=$tid");
+        $n++;
+    }
+    return $n;
+}
 
 // ─── auto-migrate: WhatsApp bot conversation history ────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
@@ -2387,7 +2498,8 @@ switch ($action) {
         $stmt = $conn->prepare("INSERT INTO acc_accounts (tenant_id,code,name,type,is_group) VALUES (?,?,?,?,?)");
         foreach ($seed as $a) { $stmt->bind_param('isssi', $tid, $a[0], $a[1], $a[2], $a[3]); $stmt->execute(); }
         $stmt->close();
-        echo json_encode(['success'=>true,'message'=>'تم إنشاء دليل الحسابات','count'=>count($seed)], JSON_UNESCAPED_UNICODE);
+        $fixed = acc_fix_hierarchy($conn, $tid); // اربط كل حساب بأبيه عبر بادئة الكود
+        echo json_encode(['success'=>true,'message'=>'تم إنشاء دليل الحسابات','count'=>count($seed),'linked'=>$fixed], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_accounts':
@@ -2432,15 +2544,23 @@ switch ($action) {
         break;
 
     case 'gl_entry_create':
-        // إنشاء قيد متوازن — كودنا يتحقق أن المدين = الدائن ويرحّل في معاملة واحدة
+    case 'gl_entry_update':
+        // إنشاء/تعديل قيد متوازن — كودنا يتحقق أن المدين = الدائن ويرحّل في معاملة واحدة
         $tid   = (int)($input_data['tenant_id'] ?? 1);
+        $id    = (int)($input_data['id'] ?? 0);
         $date  = $conn->real_escape_string($input_data['date'] ?? date('Y-m-d'));
         $desc  = $conn->real_escape_string($input_data['description'] ?? '');
         $reft  = $conn->real_escape_string($input_data['ref_type'] ?? '');
-        $refid = isset($input_data['ref_id']) ? (int)$input_data['ref_id'] : 'NULL';
+        $refid = isset($input_data['ref_id']) && $input_data['ref_id'] !== '' ? (int)$input_data['ref_id'] : 'NULL';
         $by    = $conn->real_escape_string($input_data['created_by'] ?? '');
+        $posted= isset($input_data['is_posted']) ? (int)(bool)$input_data['is_posted'] : 1;
         $lines = $input_data['lines'] ?? [];
         if (count($lines) < 2) { echo json_encode(['success'=>false,'message'=>'القيد يحتاج بندين على الأقل']); break; }
+
+        // منع الترحيل في فترة مالية مقفلة
+        $fy = (int)substr($date, 0, 4);
+        $pc = $conn->query("SELECT is_closed FROM acc_periods WHERE tenant_id=$tid AND fy=$fy LIMIT 1");
+        if ($pc && ($pr = $pc->fetch_assoc()) && (int)$pr['is_closed'] === 1) { echo json_encode(['success'=>false,'message'=>"الفترة المالية $fy مقفلة — لا يمكن الترحيل"], JSON_UNESCAPED_UNICODE); break; }
 
         $td = 0; $tc = 0; $clean = [];
         foreach ($lines as $ln) {
@@ -2450,7 +2570,11 @@ switch ($action) {
             if (!$acc || ($dv == 0 && $cv == 0)) continue;
             if ($dv > 0 && $cv > 0) { echo json_encode(['success'=>false,'message'=>'البند لا يكون مدين ودائن معًا']); break 2; }
             $td += $dv; $tc += $cv;
-            $clean[] = ['acc'=>$acc,'d'=>$dv,'c'=>$cv,'cc'=>isset($ln['cost_center_id'])&&$ln['cost_center_id']!==''?(int)$ln['cost_center_id']:'NULL','desc'=>$conn->real_escape_string($ln['description']??'')];
+            $pt  = isset($ln['party_type']) && in_array($ln['party_type'], ['customer','supplier']) ? "'".$conn->real_escape_string($ln['party_type'])."'" : 'NULL';
+            $plid= isset($ln['party_id']) && $ln['party_id'] !== '' ? (int)$ln['party_id'] : 'NULL';
+            $dd  = isset($ln['due_date']) && $ln['due_date'] !== '' ? "'".$conn->real_escape_string($ln['due_date'])."'" : 'NULL';
+            $cc  = isset($ln['cost_center_id']) && $ln['cost_center_id'] !== '' ? (int)$ln['cost_center_id'] : 'NULL';
+            $clean[] = ['acc'=>$acc,'d'=>$dv,'c'=>$cv,'cc'=>$cc,'pt'=>$pt,'pid'=>$plid,'dd'=>$dd,'desc'=>$conn->real_escape_string($ln['description'] ?? '')];
         }
         if (count($clean) < 2) { echo json_encode(['success'=>false,'message'=>'بنود غير كافية']); break; }
         if (round($td,2) != round($tc,2)) { echo json_encode(['success'=>false,'message'=>"القيد غير متوازن: مدين $td ≠ دائن $tc"], JSON_UNESCAPED_UNICODE); break; }
@@ -2458,19 +2582,32 @@ switch ($action) {
 
         $conn->begin_transaction();
         try {
-            // رقم تسلسلي للقيد
-            $rn = $conn->query("SELECT COALESCE(MAX(id),0)+1 n FROM acc_entries WHERE tenant_id=$tid");
-            $seq = (int)$rn->fetch_assoc()['n'];
-            $eno = 'JV-'.str_pad($seq, 6, '0', STR_PAD_LEFT);
-            $conn->query("INSERT INTO acc_entries (tenant_id,entry_no,date,description,ref_type,ref_id,total_debit,total_credit,created_by)
-                          VALUES ($tid,'$eno','$date','$desc',".($reft?"'$reft'":'NULL').",$refid,$td,$tc,".($by?"'$by'":'NULL').")");
-            $eid = $conn->insert_id;
+            if ($id) {
+                $er  = $conn->query("SELECT * FROM acc_entries WHERE id=$id AND tenant_id=$tid LIMIT 1");
+                $old = $er ? $er->fetch_assoc() : null;
+                if (!$old) throw new Exception('القيد غير موجود');
+                if (!empty($old['ref_type']) && !in_array($old['ref_type'], ['', 'manual', 'proof'])) throw new Exception('قيد مرتبط بمستند — لا يُعدّل يدويًا، استخدم العكس');
+                $ofy = (int)substr($old['date'], 0, 4);
+                $opc = $conn->query("SELECT is_closed FROM acc_periods WHERE tenant_id=$tid AND fy=$ofy LIMIT 1");
+                if ($opc && ($opr = $opc->fetch_assoc()) && (int)$opr['is_closed'] === 1) throw new Exception('تاريخ القيد الأصلي في فترة مقفلة');
+                if (!$conn->query("UPDATE acc_entries SET date='$date',description='$desc',ref_type=".($reft?"'$reft'":'NULL').",ref_id=$refid,total_debit=$td,total_credit=$tc,is_posted=$posted WHERE id=$id AND tenant_id=$tid")) throw new Exception($conn->error);
+                $conn->query("DELETE FROM acc_lines WHERE entry_id=$id AND tenant_id=$tid");
+                $eid = $id; $eno = $old['entry_no'];
+            } else {
+                $yr  = (int)substr($date, 0, 4);
+                $seq = acc_next_no($conn, $tid, 'JV', $yr);
+                $eno = 'JV-'.$yr.'-'.str_pad($seq, 6, '0', STR_PAD_LEFT);
+                if (!$conn->query("INSERT INTO acc_entries (tenant_id,entry_no,date,description,ref_type,ref_id,total_debit,total_credit,is_posted,created_by)
+                              VALUES ($tid,'$eno','$date','$desc',".($reft?"'$reft'":'NULL').",$refid,$td,$tc,$posted,".($by?"'$by'":'NULL').")")) throw new Exception($conn->error);
+                $eid = $conn->insert_id;
+            }
             foreach ($clean as $l) {
-                $conn->query("INSERT INTO acc_lines (tenant_id,entry_id,account_id,debit,credit,cost_center_id,description)
-                              VALUES ($tid,$eid,{$l['acc']},{$l['d']},{$l['c']},{$l['cc']},'{$l['desc']}')");
+                if (!$conn->query("INSERT INTO acc_lines (tenant_id,entry_id,account_id,debit,credit,cost_center_id,party_type,party_id,due_date,description)
+                              VALUES ($tid,$eid,{$l['acc']},{$l['d']},{$l['c']},{$l['cc']},{$l['pt']},{$l['pid']},{$l['dd']},'{$l['desc']}')")) throw new Exception($conn->error);
             }
             $conn->commit();
-            echo json_encode(['success'=>true,'id'=>$eid,'entry_no'=>$eno,'total'=>$td,'message'=>'تم ترحيل القيد'], JSON_UNESCAPED_UNICODE);
+            acc_audit($conn, $tid, 'entry', $eid, $id ? 'update' : 'create', $eno.' total='.$td, $by);
+            echo json_encode(['success'=>true,'id'=>$eid,'entry_no'=>$eno,'total'=>$td,'message'=>$id?'تم تعديل القيد':'تم ترحيل القيد'], JSON_UNESCAPED_UNICODE);
         } catch (Exception $e) {
             $conn->rollback();
             echo json_encode(['success'=>false,'message'=>'فشل الترحيل: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -2525,6 +2662,296 @@ switch ($action) {
             'success'=>true,'data'=>$rows,
             'totals'=>['debit'=>round($TD,2),'credit'=>round($TC,2),'balanced'=>round($TD,2)==round($TC,2)],
         ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_fix_hierarchy':
+        // إعادة ربط الحسابات بآبائها عبر بادئة الكود (للحسابات القديمة)
+        $tid = (int)($_GET['tenant'] ?? $input_data['tenant_id'] ?? 1);
+        $n = acc_fix_hierarchy($conn, $tid);
+        echo json_encode(['success'=>true,'updated'=>$n], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_entry_delete':
+        // حذف قيد يدوي غير مقفل وغير مرتبط بمستند (المستندات تُعكس لا تُحذف)
+        $tid = (int)($input_data['tenant_id'] ?? $_GET['tenant'] ?? 1);
+        $eid = (int)($input_data['id'] ?? $_GET['id'] ?? 0);
+        if (!$eid) { echo json_encode(['success'=>false,'message'=>'معرّف القيد مطلوب']); break; }
+        $h = $conn->query("SELECT * FROM acc_entries WHERE id=$eid AND tenant_id=$tid LIMIT 1");
+        $head = $h ? $h->fetch_assoc() : null;
+        if (!$head) { echo json_encode(['success'=>false,'message'=>'القيد غير موجود']); break; }
+        $fy = (int)substr($head['date'], 0, 4);
+        $pc = $conn->query("SELECT is_closed FROM acc_periods WHERE tenant_id=$tid AND fy=$fy LIMIT 1");
+        if ($pc && ($pr = $pc->fetch_assoc()) && (int)$pr['is_closed'] === 1) { echo json_encode(['success'=>false,'message'=>'لا يمكن الحذف: الفترة مقفلة']); break; }
+        if (!empty($head['ref_type']) && !in_array($head['ref_type'], ['', 'manual', 'proof'])) { echo json_encode(['success'=>false,'message'=>'القيد مرتبط بمستند ('.$head['ref_type'].') — استخدم العكس'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->begin_transaction();
+        try {
+            $conn->query("DELETE FROM acc_lines WHERE entry_id=$eid AND tenant_id=$tid");
+            $conn->query("DELETE FROM acc_entries WHERE id=$eid AND tenant_id=$tid");
+            $conn->commit();
+            acc_audit($conn, $tid, 'entry', $eid, 'delete', $head['entry_no'], $input_data['actor'] ?? null);
+            echo json_encode(['success'=>true,'message'=>'تم حذف القيد']);
+        } catch (Exception $e) { $conn->rollback(); echo json_encode(['success'=>false,'message'=>$e->getMessage()], JSON_UNESCAPED_UNICODE); }
+        break;
+
+    case 'gl_entry_reverse':
+        // إنشاء قيد عكسي (يقلب المدين/الدائن) بدل حذف قيد مُرحَّل
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $eid  = (int)($input_data['id'] ?? 0);
+        $date = $conn->real_escape_string($input_data['date'] ?? date('Y-m-d'));
+        if (!$eid) { echo json_encode(['success'=>false,'message'=>'معرّف القيد مطلوب']); break; }
+        $h = $conn->query("SELECT * FROM acc_entries WHERE id=$eid AND tenant_id=$tid LIMIT 1");
+        $head = $h ? $h->fetch_assoc() : null;
+        if (!$head) { echo json_encode(['success'=>false,'message'=>'القيد غير موجود']); break; }
+        $lr = $conn->query("SELECT * FROM acc_lines WHERE entry_id=$eid AND tenant_id=$tid");
+        $olines = []; while ($lr && ($x = $lr->fetch_assoc())) $olines[] = $x;
+        if (!$olines) { echo json_encode(['success'=>false,'message'=>'لا توجد بنود للعكس']); break; }
+        $yr = (int)substr($date, 0, 4);
+        $pc = $conn->query("SELECT is_closed FROM acc_periods WHERE tenant_id=$tid AND fy=$yr LIMIT 1");
+        if ($pc && ($pr = $pc->fetch_assoc()) && (int)$pr['is_closed'] === 1) { echo json_encode(['success'=>false,'message'=>"الفترة $yr مقفلة"], JSON_UNESCAPED_UNICODE); break; }
+        $conn->begin_transaction();
+        try {
+            $seq = acc_next_no($conn, $tid, 'JV', $yr);
+            $eno = 'JV-'.$yr.'-'.str_pad($seq, 6, '0', STR_PAD_LEFT);
+            $rdesc = $conn->real_escape_string('عكس قيد '.$head['entry_no']);
+            if (!$conn->query("INSERT INTO acc_entries (tenant_id,entry_no,date,description,ref_type,ref_id,total_debit,total_credit,is_posted,created_by)
+                          VALUES ($tid,'$eno','$date','$rdesc','reversal',$eid,{$head['total_credit']},{$head['total_debit']},1,NULL)")) throw new Exception($conn->error);
+            $nid = $conn->insert_id;
+            foreach ($olines as $l) {
+                $pt  = $l['party_type'] !== null ? "'".$conn->real_escape_string($l['party_type'])."'" : 'NULL';
+                $plid= $l['party_id'] !== null ? (int)$l['party_id'] : 'NULL';
+                $dd  = $l['due_date'] !== null ? "'".$conn->real_escape_string($l['due_date'])."'" : 'NULL';
+                $cc  = $l['cost_center_id'] !== null ? (int)$l['cost_center_id'] : 'NULL';
+                $ld  = $conn->real_escape_string($l['description'] ?? '');
+                if (!$conn->query("INSERT INTO acc_lines (tenant_id,entry_id,account_id,debit,credit,cost_center_id,party_type,party_id,due_date,description)
+                              VALUES ($tid,$nid,{$l['account_id']},{$l['credit']},{$l['debit']},$cc,$pt,$plid,$dd,'$ld')")) throw new Exception($conn->error);
+            }
+            $conn->commit();
+            acc_audit($conn, $tid, 'entry', $nid, 'reverse', 'عكس '.$head['entry_no'], $input_data['actor'] ?? null);
+            echo json_encode(['success'=>true,'id'=>$nid,'entry_no'=>$eno,'message'=>'تم عكس القيد'], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) { $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل العكس: '.$e->getMessage()], JSON_UNESCAPED_UNICODE); }
+        break;
+
+    case 'gl_ledger':
+        // كشف حساب: رصيد افتتاحي قبل الفترة + حركات + رصيد جارٍ (كودنا يحسب)
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $acc  = (int)($_GET['account_id'] ?? 0);
+        $from = $conn->real_escape_string($_GET['from'] ?? '');
+        $to   = $conn->real_escape_string($_GET['to'] ?? '');
+        if (!$acc) { echo json_encode(['success'=>false,'message'=>'الحساب مطلوب']); break; }
+        $ar = $conn->query("SELECT * FROM acc_accounts WHERE id=$acc AND tenant_id=$tid LIMIT 1");
+        $accRow = $ar ? $ar->fetch_assoc() : null;
+        if (!$accRow) { echo json_encode(['success'=>false,'message'=>'الحساب غير موجود']); break; }
+        $isDebitNat = in_array($accRow['type'], ['asset','expense']);
+        $opD = 0; $opC = 0;
+        if ($from) {
+            $o = $conn->query("SELECT COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.account_id=$acc AND l.tenant_id=$tid AND e.date<'$from'");
+            if ($o && ($x = $o->fetch_assoc())) { $opD = (float)$x['d']; $opC = (float)$x['c']; }
+        }
+        $opening = $isDebitNat ? ($opD - $opC) : ($opC - $opD);
+        $w = "l.account_id=$acc AND l.tenant_id=$tid";
+        if ($from) $w .= " AND e.date>='$from'";
+        if ($to)   $w .= " AND e.date<='$to'";
+        $res = $conn->query("SELECT e.entry_no,e.date,e.description ent_desc,l.debit,l.credit,l.description line_desc,l.party_type,l.party_id FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE $w ORDER BY e.date,e.id,l.id");
+        $rows = []; $run = $opening; $sumD = 0; $sumC = 0;
+        while ($res && ($x = $res->fetch_assoc())) {
+            $d = (float)$x['debit']; $c = (float)$x['credit'];
+            $run += $isDebitNat ? ($d - $c) : ($c - $d);
+            $x['balance'] = round($run, 2); $sumD += $d; $sumC += $c;
+            $rows[] = $x;
+        }
+        echo json_encode(['success'=>true,'account'=>$accRow,'opening'=>round($opening,2),'data'=>$rows,'totals'=>['debit'=>round($sumD,2),'credit'=>round($sumC,2),'closing'=>round($run,2)]], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_income_statement':
+        // قائمة الدخل — إيرادات ومصروفات للفترة (كودنا يحسب)
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
+        $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
+        $sql = "SELECT a.id,a.code,a.name,a.type, COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c
+                FROM acc_accounts a
+                LEFT JOIN acc_lines l ON l.account_id=a.id AND l.tenant_id=a.tenant_id
+                LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.date>='$from' AND e.date<='$to'
+                WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('revenue','expense')
+                GROUP BY a.id ORDER BY a.code";
+        $res = $conn->query($sql); $rev = []; $exp = []; $totRev = 0; $totExp = 0;
+        while ($res && ($x = $res->fetch_assoc())) {
+            $d = (float)$x['d']; $c = (float)$x['c'];
+            if ($x['type'] === 'revenue') { $amt = round($c - $d, 2); $x['amount'] = $amt; $totRev += $amt; $rev[] = $x; }
+            else { $amt = round($d - $c, 2); $x['amount'] = $amt; $totExp += $amt; $exp[] = $x; }
+        }
+        echo json_encode(['success'=>true,'period'=>['from'=>$from,'to'=>$to],'revenue'=>$rev,'expenses'=>$exp,'totals'=>['revenue'=>round($totRev,2),'expenses'=>round($totExp,2),'net'=>round($totRev-$totExp,2)]], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_balance_sheet':
+        // الميزانية العمومية حتى تاريخ — أصول/خصوم/حقوق ملكية + صافي الدخل (كودنا يحسب)
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $to  = $conn->real_escape_string($_GET['to'] ?? date('Y-m-d'));
+        $sql = "SELECT a.id,a.code,a.name,a.type, COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c
+                FROM acc_accounts a
+                LEFT JOIN acc_lines l ON l.account_id=a.id AND l.tenant_id=a.tenant_id
+                LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.date<='$to'
+                WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('asset','liability','equity')
+                GROUP BY a.id ORDER BY a.code";
+        $res = $conn->query($sql); $assets = []; $liab = []; $eq = []; $tA = 0; $tL = 0; $tE = 0;
+        while ($res && ($x = $res->fetch_assoc())) {
+            $d = (float)$x['d']; $c = (float)$x['c'];
+            if ($x['type'] === 'asset') { $amt = round($d - $c, 2); $x['amount'] = $amt; $tA += $amt; $assets[] = $x; }
+            elseif ($x['type'] === 'liability') { $amt = round($c - $d, 2); $x['amount'] = $amt; $tL += $amt; $liab[] = $x; }
+            else { $amt = round($c - $d, 2); $x['amount'] = $amt; $tE += $amt; $eq[] = $x; }
+        }
+        // صافي الدخل المتراكم حتى التاريخ يُضاف لحقوق الملكية (الأرباح غير المُرحَّلة)
+        $ni = $conn->query("SELECT COALESCE(SUM(CASE WHEN a.type='revenue' THEN l.credit-l.debit ELSE 0 END),0) rev, COALESCE(SUM(CASE WHEN a.type='expense' THEN l.debit-l.credit ELSE 0 END),0) exp FROM acc_lines l JOIN acc_accounts a ON a.id=l.account_id JOIN acc_entries e ON e.id=l.entry_id WHERE l.tenant_id=$tid AND e.date<='$to' AND a.type IN ('revenue','expense')");
+        $netIncome = 0; if ($ni && ($nr = $ni->fetch_assoc())) $netIncome = round((float)$nr['rev'] - (float)$nr['exp'], 2);
+        $tE2 = round($tE + $netIncome, 2);
+        echo json_encode(['success'=>true,'as_of'=>$to,'assets'=>$assets,'liabilities'=>$liab,'equity'=>$eq,'net_income'=>$netIncome,'totals'=>['assets'=>round($tA,2),'liabilities'=>round($tL,2),'equity'=>$tE2,'liab_plus_equity'=>round($tL+$tE2,2),'balanced'=>round($tA,2)==round($tL+$tE2,2)]], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_vat_report':
+        // إقرار ضريبة القيمة المضافة — حساب 2102 (مخرجات دائن / مدخلات مدين)
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
+        $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
+        $ar = $conn->query("SELECT id FROM acc_accounts WHERE tenant_id=$tid AND code='2102' LIMIT 1");
+        $vatId = $ar ? (int)($ar->fetch_assoc()['id'] ?? 0) : 0;
+        if (!$vatId) { echo json_encode(['success'=>false,'message'=>'حساب ضريبة القيمة المضافة (2102) غير موجود']); break; }
+        $r = $conn->query("SELECT COALESCE(SUM(l.credit),0) out_vat, COALESCE(SUM(l.debit),0) in_vat FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.account_id=$vatId AND l.tenant_id=$tid AND e.date>='$from' AND e.date<='$to'");
+        $out = 0; $in = 0; if ($r && ($x = $r->fetch_assoc())) { $out = (float)$x['out_vat']; $in = (float)$x['in_vat']; }
+        echo json_encode(['success'=>true,'period'=>['from'=>$from,'to'=>$to],'output_vat'=>round($out,2),'input_vat'=>round($in,2),'net_payable'=>round($out-$in,2)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_parties':
+        // دفتر الأطراف (عملاء/موردون)
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $type = $conn->real_escape_string($_GET['type'] ?? '');
+        $w = "tenant_id=$tid";
+        if (in_array($type, ['customer','supplier'])) $w .= " AND type='$type'";
+        $res = $conn->query("SELECT * FROM acc_parties WHERE $w ORDER BY name");
+        $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_party_save':
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $id   = (int)($input_data['id'] ?? 0);
+        $type = $conn->real_escape_string($input_data['type'] ?? 'customer');
+        if (!in_array($type, ['customer','supplier'])) $type = 'customer';
+        $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $vat  = $conn->real_escape_string(trim($input_data['vat_number'] ?? ''));
+        $cr   = $conn->real_escape_string(trim($input_data['cr_number'] ?? ''));
+        $phone= $conn->real_escape_string(trim($input_data['phone'] ?? ''));
+        $email= $conn->real_escape_string(trim($input_data['email'] ?? ''));
+        $addr = $conn->real_escape_string(trim($input_data['address'] ?? ''));
+        $daftra = $conn->real_escape_string(trim($input_data['daftra_id'] ?? ''));
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+        if ($id) {
+            $conn->query("UPDATE acc_parties SET type='$type',name='$name',vat_number='$vat',cr_number='$cr',phone='$phone',email='$email',address='$addr',daftra_id='$daftra' WHERE id=$id AND tenant_id=$tid");
+            echo json_encode(['success'=>true,'id'=>$id]);
+        } else {
+            $ok = $conn->query("INSERT INTO acc_parties (tenant_id,type,name,vat_number,cr_number,phone,email,address,daftra_id) VALUES ($tid,'$type','$name','$vat','$cr','$phone','$email','$addr','$daftra')");
+            echo json_encode(['success'=>(bool)$ok,'id'=>$conn->insert_id,'message'=>$ok?'تم':$conn->error], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
+    case 'gl_party_delete':
+        // حذف طرف غير مرتبط بحركات، وإلا تعطيله
+        $tid = (int)($input_data['tenant_id'] ?? $_GET['tenant'] ?? 1);
+        $id  = (int)($input_data['id'] ?? $_GET['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'المعرّف مطلوب']); break; }
+        $u = $conn->query("SELECT COUNT(*) c FROM acc_lines WHERE tenant_id=$tid AND party_id=$id");
+        $used = $u ? (int)$u->fetch_assoc()['c'] : 0;
+        if ($used > 0) { $conn->query("UPDATE acc_parties SET status=0 WHERE id=$id AND tenant_id=$tid"); echo json_encode(['success'=>true,'message'=>'تم التعطيل (مرتبط بحركات)','deactivated'=>true]); break; }
+        $conn->query("DELETE FROM acc_parties WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>true,'message'=>'تم الحذف']);
+        break;
+
+    case 'gl_party_ledger':
+        // كشف حساب طرف (ذمم مدينة/دائنة) — رصيد افتتاحي + حركات + رصيد جارٍ
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $pid  = (int)($_GET['party_id'] ?? 0);
+        $from = $conn->real_escape_string($_GET['from'] ?? '');
+        $to   = $conn->real_escape_string($_GET['to'] ?? '');
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'الطرف مطلوب']); break; }
+        $pr = $conn->query("SELECT * FROM acc_parties WHERE id=$pid AND tenant_id=$tid LIMIT 1");
+        $party = $pr ? $pr->fetch_assoc() : null;
+        if (!$party) { echo json_encode(['success'=>false,'message'=>'الطرف غير موجود']); break; }
+        $sign = $party['type'] === 'customer' ? 1 : -1;
+        $opD = 0; $opC = 0;
+        if ($from) {
+            $o = $conn->query("SELECT COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.party_id=$pid AND l.tenant_id=$tid AND e.date<'$from'");
+            if ($o && ($x = $o->fetch_assoc())) { $opD = (float)$x['d']; $opC = (float)$x['c']; }
+        }
+        $opening = $sign * ($opD - $opC);
+        $w = "l.party_id=$pid AND l.tenant_id=$tid";
+        if ($from) $w .= " AND e.date>='$from'";
+        if ($to)   $w .= " AND e.date<='$to'";
+        $res = $conn->query("SELECT e.entry_no,e.date,e.description ent_desc,l.debit,l.credit,l.due_date,l.description line_desc FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE $w ORDER BY e.date,e.id,l.id");
+        $rows = []; $run = $opening; $sd = 0; $sc = 0;
+        while ($res && ($x = $res->fetch_assoc())) {
+            $d = (float)$x['debit']; $c = (float)$x['credit'];
+            $run += $sign * ($d - $c); $x['balance'] = round($run, 2); $sd += $d; $sc += $c; $rows[] = $x;
+        }
+        echo json_encode(['success'=>true,'party'=>$party,'opening'=>round($opening,2),'data'=>$rows,'totals'=>['debit'=>round($sd,2),'credit'=>round($sc,2),'closing'=>round($run,2)]], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_aging':
+        // أعمار الذمم 30/60/90 حسب تاريخ الاستحقاق (أو تاريخ القيد)
+        $tid   = (int)($_GET['tenant'] ?? 1);
+        $ptype = $conn->real_escape_string($_GET['party_type'] ?? 'customer');
+        if (!in_array($ptype, ['customer','supplier'])) $ptype = 'customer';
+        $asof  = $conn->real_escape_string($_GET['as_of'] ?? date('Y-m-d'));
+        $sign  = $ptype === 'customer' ? 1 : -1;
+        $sql = "SELECT p.id,p.name,
+                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date))<=0 THEN (l.debit-l.credit) ELSE 0 END),0) b_cur,
+                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 1 AND 30 THEN (l.debit-l.credit) ELSE 0 END),0) b30,
+                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 31 AND 60 THEN (l.debit-l.credit) ELSE 0 END),0) b60,
+                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 61 AND 90 THEN (l.debit-l.credit) ELSE 0 END),0) b90,
+                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date))>90 THEN (l.debit-l.credit) ELSE 0 END),0) b90p,
+                  COALESCE(SUM(l.debit-l.credit),0) net
+                FROM acc_parties p
+                LEFT JOIN acc_lines l ON l.party_id=p.id AND l.party_type=p.type AND l.tenant_id=p.tenant_id
+                LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.date<='$asof'
+                WHERE p.tenant_id=$tid AND p.type='$ptype'
+                GROUP BY p.id HAVING ABS(net)>0.001 ORDER BY p.name";
+        $res = $conn->query($sql); $rows = []; $tot = ['current'=>0,'d30'=>0,'d60'=>0,'d90'=>0,'d90p'=>0,'total'=>0];
+        while ($res && ($x = $res->fetch_assoc())) {
+            $row = [
+                'id'=>$x['id'],'name'=>$x['name'],
+                'current'=>round($sign*(float)$x['b_cur'],2),
+                'd30'=>round($sign*(float)$x['b30'],2),
+                'd60'=>round($sign*(float)$x['b60'],2),
+                'd90'=>round($sign*(float)$x['b90'],2),
+                'd90p'=>round($sign*(float)$x['b90p'],2),
+                'total'=>round($sign*(float)$x['net'],2),
+            ];
+            $tot['current']+=$row['current']; $tot['d30']+=$row['d30']; $tot['d60']+=$row['d60'];
+            $tot['d90']+=$row['d90']; $tot['d90p']+=$row['d90p']; $tot['total']+=$row['total'];
+            $rows[] = $row;
+        }
+        foreach ($tot as $k=>$v) $tot[$k] = round($v, 2);
+        echo json_encode(['success'=>true,'party_type'=>$ptype,'as_of'=>$asof,'data'=>$rows,'totals'=>$tot], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_cost_centers':
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $res = $conn->query("SELECT * FROM acc_cost_centers WHERE tenant_id=$tid ORDER BY code,name");
+        $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_cost_center_save':
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $id   = (int)($input_data['id'] ?? 0);
+        $code = $conn->real_escape_string(trim($input_data['code'] ?? ''));
+        $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $pid  = isset($input_data['parent_id']) && $input_data['parent_id'] !== '' ? (int)$input_data['parent_id'] : 'NULL';
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+        if ($id) {
+            $conn->query("UPDATE acc_cost_centers SET code='$code',name='$name',parent_id=$pid WHERE id=$id AND tenant_id=$tid");
+            echo json_encode(['success'=>true,'id'=>$id]);
+        } else {
+            $ok = $conn->query("INSERT INTO acc_cost_centers (tenant_id,code,name,parent_id) VALUES ($tid,'$code','$name',$pid)");
+            echo json_encode(['success'=>(bool)$ok,'id'=>$conn->insert_id,'message'=>$ok?'تم':$conn->error], JSON_UNESCAPED_UNICODE);
+        }
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
