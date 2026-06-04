@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v393
+// deploy: 2026-06-04-v394
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -290,6 +290,25 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_settings (
     PRIMARY KEY (tenant_id, skey)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// اعتماد هيئة الزكاة (ZATCA) وحالة الفوترة لكل منشأة — مفتاح/شهادة/عدّاد ICV/سلسلة PIH
+// ملاحظة أمنية: المفتاح الخاص يُخزَّن هنا للتشغيل الذاتي؛ نقل ذلك لتخزين مُشفّر منفصل لاحقًا قبل الإنتاج.
+$conn->query("CREATE TABLE IF NOT EXISTS acc_zatca (
+    tenant_id          INT PRIMARY KEY,
+    environment        ENUM('simulation','sandbox','production') NOT NULL DEFAULT 'simulation',
+    egs_serial         VARCHAR(160) DEFAULT NULL,
+    private_key        MEDIUMTEXT   DEFAULT NULL,
+    csr                MEDIUMTEXT   DEFAULT NULL,
+    compliance_cert    MEDIUMTEXT   DEFAULT NULL,
+    compliance_secret  VARCHAR(255) DEFAULT NULL,
+    compliance_request_id VARCHAR(80) DEFAULT NULL,
+    production_cert    MEDIUMTEXT   DEFAULT NULL,
+    production_secret  VARCHAR(255) DEFAULT NULL,
+    production_request_id VARCHAR(80) DEFAULT NULL,
+    last_icv           BIGINT       NOT NULL DEFAULT 0,
+    last_pih           VARCHAR(120) DEFAULT NULL,
+    updated_at         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -337,6 +356,43 @@ function acc_zatca_qr($seller, $vat, $tsIso, $total, $vatTotal) {
          . acc_tlv(4, number_format((float)$total, 2, '.', ''))
          . acc_tlv(5, number_format((float)$vatTotal, 2, '.', ''));
     return base64_encode($tlv);
+}
+// PIH للفاتورة الأولى في السلسلة = Base64 لتمثيل sha256("0") النصّي (ثابت معروف لدى الهيئة)
+function acc_zatca_pih0() { return base64_encode(hash('sha256', '0')); }
+// جلب/إنشاء سجل اعتماد الزكاة للمنشأة
+function acc_zatca_get($conn, $tid) {
+    $tid = (int)$tid;
+    $conn->query("INSERT IGNORE INTO acc_zatca (tenant_id, last_pih) VALUES ($tid, '".acc_zatca_pih0()."')");
+    $r = $conn->query("SELECT * FROM acc_zatca WHERE tenant_id=$tid LIMIT 1");
+    return $r ? $r->fetch_assoc() : null;
+}
+// توليد زوج مفاتيح secp256k1 + طلب توقيع شهادة (CSR) وتخزينه للمنشأة
+// يعيد مصفوفة فيها csr و public_pem و egs_serial، ويُخزّن المفتاح الخاص في قاعدة البيانات
+function acc_zatca_keygen($conn, $tid, $company, $egsSerial) {
+    $pk = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'secp256k1']);
+    if (!$pk) throw new Exception('تعذّر توليد المفتاح: '.openssl_error_string());
+    $privPem = '';
+    if (!openssl_pkey_export($pk, $privPem)) throw new Exception('تعذّر تصدير المفتاح الخاص');
+    $det = openssl_pkey_get_details($pk);
+    $pubPem = $det['key'] ?? '';
+    // CSR قياسي الآن (إضافات قالب الزكاة المخصّصة تُضبط عند الربط بالمنصّة)
+    $dn = [
+        'countryName'            => 'SA',
+        'organizationName'       => $company['company_name'] ?: 'Semak',
+        'organizationalUnitName' => $company['cr_number'] ?: 'Branch',
+        'commonName'             => $egsSerial,
+    ];
+    $csrPem = '';
+    $csr = @openssl_csr_new($dn, $pk, ['digest_alg' => 'sha256']);
+    if ($csr) @openssl_csr_export($csr, $csrPem);
+    $tid = (int)$tid;
+    $pk_e   = $conn->real_escape_string($privPem);
+    $csr_e  = $conn->real_escape_string($csrPem);
+    $egs_e  = $conn->real_escape_string($egsSerial);
+    $conn->query("INSERT INTO acc_zatca (tenant_id, egs_serial, private_key, csr, last_pih)
+                  VALUES ($tid,'$egs_e','$pk_e','$csr_e','".acc_zatca_pih0()."')
+                  ON DUPLICATE KEY UPDATE egs_serial=VALUES(egs_serial), private_key=VALUES(private_key), csr=VALUES(csr)");
+    return ['csr' => $csrPem, 'public_pem' => $pubPem, 'egs_serial' => $egsSerial];
 }
 // ضبط شجرة الحسابات: تحديد الأب بأطول بادئة كود موجودة
 function acc_fix_hierarchy($conn, $tid) {
@@ -3201,6 +3257,40 @@ switch ($action) {
         }
         $z['sha256'] = in_array('sha256', array_map('strtolower', hash_algos()), true);
         echo json_encode(['success' => true, 'zatca' => $z], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'zatca_status':
+        // حالة اعتماد الزكاة للمنشأة (بدون أي أسرار) — للواجهة
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $row = acc_zatca_get($conn, $tid);
+        echo json_encode(['success' => true, 'status' => [
+            'environment'         => $row['environment'] ?? 'simulation',
+            'egs_serial'          => $row['egs_serial'] ?? null,
+            'has_private_key'     => !empty($row['private_key']),
+            'has_csr'             => !empty($row['csr']),
+            'has_compliance_cert' => !empty($row['compliance_cert']),
+            'has_production_cert' => !empty($row['production_cert']),
+            'last_icv'            => (int)($row['last_icv'] ?? 0),
+            'last_pih'            => $row['last_pih'] ?? null,
+        ]], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'zatca_keygen':
+        // توليد مفتاح secp256k1 + CSR للمنشأة (خطوة تحضيرية للربط) — لا يُعيد المفتاح الخاص أبدًا
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $by  = $input_data['actor'] ?? null;
+        $company = [];
+        foreach (['company_name','cr_number','vat_number'] as $k) $company[$k] = acc_setting($conn, $tid, $k, '');
+        if (!$company['company_name']) { echo json_encode(['success'=>false,'message'=>'أكمل ملف المنشأة (الاسم القانوني) أولًا']); break; }
+        $egs = trim($input_data['egs_serial'] ?? '');
+        if ($egs === '') $egs = '1-Semak|2-Ledger|3-'.substr(acc_uuid4(), 0, 8);
+        try {
+            $res = acc_zatca_keygen($conn, $tid, $company, $egs);
+            acc_audit($conn, $tid, 'zatca', null, 'keygen', 'egs='.$egs, $by);
+            echo json_encode(['success'=>true,'egs_serial'=>$res['egs_serial'],'csr'=>$res['csr'],'public_pem'=>$res['public_pem'],'message'=>'تم توليد المفتاح وطلب الشهادة (CSR)'], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            echo json_encode(['success'=>false,'message'=>'فشل التوليد: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
