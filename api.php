@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v385
+// deploy: 2026-06-04-v386
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -1465,14 +1465,23 @@ switch ($action) {
             exit(0);
         }
 
-        // فشل جلب PDF — نُرجع رابط الطباعة المباشر ليفتحه المتصفّح + سجل المحاولات
-        echo json_encode([
-            'success'   => false,
-            'message'   => 'تعذّر جلب PDF — قد تكون الجلسة منتهية',
-            'print_url' => "https://semak.daftra.com".$candidates[0],
-            'tried'     => $tried,
-        ], JSON_UNESCAPED_UNICODE);
-        break;
+        // فشل جلب PDF عبر جلسة الخادم (كوكي منتهي) — تدرّج سلس:
+        // إن طُلب JSON صراحةً نُرجع تفاصيل التشخيص، وإلا نحوّل المتصفّح مباشرة
+        // لرابط دفترة (يفتح بجلسة متصفّح المستخدم إن كان مسجّلاً في دفترة).
+        $debug = isset($_GET['debug']);
+        if ($debug) {
+            echo json_encode([
+                'success'   => false,
+                'message'   => 'تعذّر جلب PDF عبر جلسة الخادم — الكوكي منتهي',
+                'print_url' => "https://semak.daftra.com".$candidates[0],
+                'tried'     => $tried,
+            ], JSON_UNESCAPED_UNICODE);
+        } else {
+            ob_end_clean();
+            header_remove('Content-Type');
+            header('Location: https://semak.daftra.com'.$candidates[0], true, 302);
+        }
+        exit(0);
 
     // ══════════════════════════════════════════════════════════════════════
     // وحدة المشتريات — CRUD كامل
