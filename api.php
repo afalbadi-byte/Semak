@@ -974,6 +974,45 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'discover_workflows':
+        // ─── اكتشاف workflow IDs المتاحة في الحساب ───────────────────────────
+        set_time_limit(45);
+        $dk   = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com";
+        $hh   = ["APIKEY: $dk", "Accept: application/json"];
+
+        $results = [];
+        for ($wid = 1; $wid <= 15; $wid++) {
+            $url = "$base/v2/api/entity/le_workflow-type-entity-$wid/list/1";
+            $ch  = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $hh,
+                CURLOPT_TIMEOUT        => 6,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            $json = json_decode($res, true);
+            $has_data = $code === 200 && $json !== null && !isset($json['error']) && !isset($json['message']);
+
+            $results[] = [
+                'workflow_id' => $wid,
+                'url'         => $url,
+                'http_code'   => $code,
+                'has_data'    => $has_data,
+                'preview'     => substr($res, 0, 300),
+                'keys'        => $json !== null ? array_keys((array)$json) : null,
+            ];
+
+            if ($has_data) break; // وجدنا بيانات — توقف
+        }
+
+        echo json_encode(['success' => true, 'results' => $results], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
     case 'dept_stats':
         // ─── إحصائيات سريعة لكل قسم (تُدمج في لوحة التحكم) ─────────────────
         set_time_limit(40);
