@@ -1117,9 +1117,469 @@ function CostCentersTab({ costCenters, reload, loading, toast }) {
 // ════════════════════════════════════════════════════════════════════════════
 //  المكوّن الرئيسي
 // ════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+//  تبويبات المستندات (Phase 3): فواتير البيع/الشراء + سندات القبض/الصرف
+// ════════════════════════════════════════════════════════════════════════════
+const INV_STATUS = {
+    draft:   { label: 'مسودة',           cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+    posted:  { label: 'مُرحّلة',          cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+    partial: { label: 'مدفوعة جزئيًا',    cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+    paid:    { label: 'مدفوعة',           cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    void:    { label: 'ملغاة',            cls: 'bg-red-100 text-red-700 border-red-200' },
+};
+function StatusBadge({ status }) {
+    const s = INV_STATUS[status] || INV_STATUS.draft;
+    return <span className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold border ${s.cls}`}>{s.label}</span>;
+}
+
+function calcTotals(items) {
+    let sub = 0, tax = 0;
+    (items || []).forEach(it => {
+        const net = Math.max(0, (Number(it.qty) || 0) * (Number(it.unit_price) || 0) - (Number(it.discount) || 0));
+        sub += net;
+        tax += net * (Number(it.tax_rate) || 0) / 100;
+    });
+    const r = (n) => Math.round(n * 100) / 100;
+    return { sub: r(sub), tax: r(tax), total: r(sub + tax) };
+}
+
+function InvoicesTab({ docType, parties, accounts, toast }) {
+    const isSales = docType === 'sales';
+    const [list, setList] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [viewing, setViewing] = useState(null);
+    const [statusFilter, setStatusFilter] = useState('');
+
+    const partyOptions = useMemo(
+        () => parties.filter(p => p.type === (isSales ? 'customer' : 'supplier')),
+        [parties, isSales]);
+    const acctOptions = useMemo(
+        () => accounts.filter(a => Number(a.is_group) === 0 && (isSales ? a.type === 'revenue' : (a.type === 'expense' || a.type === 'asset'))),
+        [accounts, isSales]);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const r = await api('inv_list', { params: { doc_type: docType, ...(statusFilter ? { status: statusFilter } : {}) } });
+            setList(r.data || []);
+        } catch (e) { toast(e.message, 'error'); } finally { setLoading(false); }
+    }, [docType, statusFilter, toast]);
+    useEffect(() => { load(); }, [load]);
+
+    const blankItem = () => ({ description: '', qty: 1, unit_price: 0, discount: 0, tax_rate: 15 });
+    const newInvoice = () => setEditing({
+        doc_type: docType, invoice_type: 'standard', party_id: '', party_name: '',
+        issue_date: todayISO(), due_date: '', gl_account_id: '', notes: '', items: [blankItem()],
+    });
+
+    const editDraft = async (id) => {
+        try {
+            const r = await api('inv_single', { params: { id } });
+            if (!r.success) return toast(r.message, 'error');
+            const inv = r.invoice;
+            setEditing({
+                id: inv.id, doc_type: docType, invoice_type: inv.invoice_type,
+                party_id: inv.party_id || '', party_name: inv.party_name || '',
+                issue_date: inv.issue_date, due_date: inv.due_date || '', gl_account_id: inv.gl_account_id || '',
+                notes: inv.notes || '',
+                items: (r.items || []).map(x => ({ description: x.description, qty: x.qty, unit_price: x.unit_price, discount: x.discount, tax_rate: x.tax_rate })),
+            });
+        } catch (e) { toast(e.message, 'error'); }
+    };
+
+    const saveDraft = async () => {
+        const f = editing;
+        if (!f.items.some(it => it.description && Number(it.qty))) return toast('أضف بندًا صالحًا على الأقل', 'error');
+        try {
+            const r = await api('inv_save', { method: 'POST', body: {
+                id: f.id || 0, doc_type: docType, invoice_type: f.invoice_type,
+                party_id: f.party_id || '', party_name: f.party_name || '',
+                issue_date: f.issue_date, due_date: f.due_date || '', gl_account_id: f.gl_account_id || '',
+                notes: f.notes || '', items: f.items,
+            }});
+            if (r.success) { toast(r.message || 'تم الحفظ'); setEditing(null); load(); }
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+    };
+
+    const act = async (action, id, confirmMsg) => {
+        if (confirmMsg && !window.confirm(confirmMsg)) return;
+        try {
+            const r = await api(action, { method: 'POST', body: { id } });
+            if (r.success) { toast((r.message || 'تم') + (r.entry_no ? ' — ' + r.entry_no : '')); load(); }
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+    };
+    const openView = async (id) => {
+        try { const r = await api('inv_single', { params: { id } }); if (r.success) setViewing(r); else toast(r.message, 'error'); }
+        catch (e) { toast(e.message, 'error'); }
+    };
+
+    const t = editing ? calcTotals(editing.items) : null;
+    const setItem = (i, key, val) => setEditing(e => ({ ...e, items: e.items.map((it, idx) => idx === i ? { ...it, [key]: val } : it) }));
+
+    return (
+        <div className="space-y-4">
+            {/* الإجراءات + الفلتر */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <Btn color="navy" onClick={newInvoice}><Plus size={15} /> {isSales ? 'فاتورة بيع جديدة' : 'فاتورة شراء جديدة'}</Btn>
+                    <Btn color="gray" size="sm" onClick={load}><RefreshCw size={14} /> تحديث</Btn>
+                </div>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                    <option value="">كل الحالات</option>
+                    {Object.keys(INV_STATUS).map(k => <option key={k} value={k}>{INV_STATUS[k].label}</option>)}
+                </select>
+            </div>
+
+            {/* قائمة الفواتير */}
+            <Card>
+                {loading ? <Spinner /> : list.length === 0 ? <Empty msg="لا توجد فواتير" /> : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 text-slate-500 text-xs">
+                                <tr>
+                                    <th className="px-3 py-3 text-right font-bold">الرقم</th>
+                                    <th className="px-3 py-3 text-right font-bold">التاريخ</th>
+                                    <th className="px-3 py-3 text-right font-bold">{isSales ? 'العميل' : 'المورد'}</th>
+                                    <th className="px-3 py-3 text-left font-bold">الإجمالي</th>
+                                    <th className="px-3 py-3 text-left font-bold">المدفوع</th>
+                                    <th className="px-3 py-3 text-center font-bold">الحالة</th>
+                                    <th className="px-3 py-3 text-center font-bold">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {list.map(inv => (
+                                    <tr key={inv.id} className="hover:bg-slate-50/50">
+                                        <td className="px-3 py-3 font-mono font-bold text-[#1a365d]">{inv.invoice_no}</td>
+                                        <td className="px-3 py-3 text-slate-500">{inv.issue_date}</td>
+                                        <td className="px-3 py-3">{inv.party_label || inv.party_name || '—'}</td>
+                                        <td className="px-3 py-3 text-left font-bold">{money(inv.total)}</td>
+                                        <td className="px-3 py-3 text-left text-emerald-600">{money(inv.paid)}</td>
+                                        <td className="px-3 py-3 text-center"><StatusBadge status={inv.status} /></td>
+                                        <td className="px-3 py-3">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button onClick={() => openView(inv.id)} title="عرض" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Eye size={15} /></button>
+                                                {inv.status === 'draft' && <button onClick={() => editDraft(inv.id)} title="تعديل" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><Edit2 size={15} /></button>}
+                                                {inv.status === 'draft' && <button onClick={() => act('inv_post', inv.id)} title="ترحيل" className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600"><CheckCircle2 size={15} /></button>}
+                                                {inv.status === 'draft' && <button onClick={() => act('inv_delete', inv.id, 'حذف المسودة؟')} title="حذف" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={15} /></button>}
+                                                {(inv.status === 'posted') && <button onClick={() => act('inv_void', inv.id, 'إلغاء الفاتورة وعكس قيدها؟')} title="إلغاء" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><RotateCcw size={15} /></button>}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
+
+            {/* محرّر الفاتورة */}
+            {editing && (
+                <div className="fixed inset-0 z-[90] bg-black/40 flex items-start justify-center overflow-y-auto p-4" onClick={() => setEditing(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <h3 className="text-lg font-black text-[#1a365d]">{editing.id ? 'تعديل مسودة' : (isSales ? 'فاتورة بيع جديدة' : 'فاتورة شراء جديدة')}</h3>
+                            <button onClick={() => setEditing(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><X size={18} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">{isSales ? 'العميل' : 'المورد'}</label>
+                                    <select value={editing.party_id}
+                                        onChange={e => { const p = partyOptions.find(x => String(x.id) === e.target.value); setEditing(ed => ({ ...ed, party_id: e.target.value, party_name: p ? p.name : ed.party_name })); }}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                        <option value="">— اختر —</option>
+                                        {partyOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">تاريخ الإصدار</label>
+                                    <input type="date" value={editing.issue_date} onChange={e => setEditing(ed => ({ ...ed, issue_date: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">تاريخ الاستحقاق</label>
+                                    <input type="date" value={editing.due_date} onChange={e => setEditing(ed => ({ ...ed, due_date: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">{isSales ? 'حساب الإيراد' : 'حساب المصروف/المخزون'}</label>
+                                    <select value={editing.gl_account_id} onChange={e => setEditing(ed => ({ ...ed, gl_account_id: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                        <option value="">{isSales ? 'افتراضي (إيرادات المبيعات)' : 'افتراضي (مصروفات تشغيلية)'}</option>
+                                        {acctOptions.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+                                    </select>
+                                </div>
+                                {isSales && (
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 block mb-1">نوع الفاتورة (ZATCA)</label>
+                                        <select value={editing.invoice_type} onChange={e => setEditing(ed => ({ ...ed, invoice_type: e.target.value }))}
+                                            className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                            <option value="standard">ضريبية (B2B)</option>
+                                            <option value="simplified">مبسطة (B2C)</option>
+                                        </select>
+                                    </div>
+                                )}
+                                <div className={isSales ? '' : 'md:col-span-1'}>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">ملاحظات</label>
+                                    <input type="text" value={editing.notes} onChange={e => setEditing(ed => ({ ...ed, notes: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                            </div>
+
+                            {/* بنود الفاتورة */}
+                            <div className="border border-slate-100 rounded-xl overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 text-slate-500 text-xs">
+                                        <tr>
+                                            <th className="px-2 py-2 text-right font-bold">الوصف</th>
+                                            <th className="px-2 py-2 font-bold w-20">الكمية</th>
+                                            <th className="px-2 py-2 font-bold w-28">السعر</th>
+                                            <th className="px-2 py-2 font-bold w-24">خصم</th>
+                                            <th className="px-2 py-2 font-bold w-20">ضريبة%</th>
+                                            <th className="px-2 py-2 font-bold w-28 text-left">الإجمالي</th>
+                                            <th className="w-10"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {editing.items.map((it, i) => {
+                                            const net = Math.max(0, (Number(it.qty) || 0) * (Number(it.unit_price) || 0) - (Number(it.discount) || 0));
+                                            const lt = net + net * (Number(it.tax_rate) || 0) / 100;
+                                            return (
+                                                <tr key={i} className="border-t border-slate-50">
+                                                    <td className="px-2 py-1.5"><input value={it.description} onChange={e => setItem(i, 'description', e.target.value)} placeholder="وصف البند" className="w-full bg-transparent px-2 py-1.5 outline-none" /></td>
+                                                    <td className="px-2 py-1.5"><input type="number" value={it.qty} onChange={e => setItem(i, 'qty', e.target.value)} className="w-full bg-slate-50 rounded-lg px-2 py-1.5 text-center outline-none" /></td>
+                                                    <td className="px-2 py-1.5"><input type="number" value={it.unit_price} onChange={e => setItem(i, 'unit_price', e.target.value)} className="w-full bg-slate-50 rounded-lg px-2 py-1.5 text-center outline-none" /></td>
+                                                    <td className="px-2 py-1.5"><input type="number" value={it.discount} onChange={e => setItem(i, 'discount', e.target.value)} className="w-full bg-slate-50 rounded-lg px-2 py-1.5 text-center outline-none" /></td>
+                                                    <td className="px-2 py-1.5"><input type="number" value={it.tax_rate} onChange={e => setItem(i, 'tax_rate', e.target.value)} className="w-full bg-slate-50 rounded-lg px-2 py-1.5 text-center outline-none" /></td>
+                                                    <td className="px-2 py-1.5 text-left font-bold text-[#1a365d]">{money(lt)}</td>
+                                                    <td className="px-2 py-1.5 text-center">
+                                                        {editing.items.length > 1 && <button onClick={() => setEditing(e => ({ ...e, items: e.items.filter((_, idx) => idx !== i) }))} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={14} /></button>}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                <div className="p-2 border-t border-slate-50">
+                                    <Btn color="gray" size="sm" onClick={() => setEditing(e => ({ ...e, items: [...e.items, blankItem()] }))}><Plus size={14} /> إضافة بند</Btn>
+                                </div>
+                            </div>
+
+                            {/* الإجماليات */}
+                            <div className="flex justify-end">
+                                <div className="w-full md:w-72 space-y-1.5 text-sm">
+                                    <div className="flex justify-between text-slate-500"><span>الإجمالي قبل الضريبة</span><span className="font-bold">{money(t.sub)}</span></div>
+                                    <div className="flex justify-between text-slate-500"><span>ضريبة القيمة المضافة</span><span className="font-bold">{money(t.tax)}</span></div>
+                                    <div className="flex justify-between text-[#1a365d] text-base border-t border-slate-100 pt-1.5"><span className="font-black">الإجمالي</span><span className="font-black">{money(t.total)} ﷼</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                            <Btn color="gray" onClick={() => setEditing(null)}><X size={15} /> إلغاء</Btn>
+                            <Btn color="navy" onClick={saveDraft}><Save size={15} /> حفظ كمسودة</Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* عرض الفاتورة */}
+            {viewing && (
+                <div className="fixed inset-0 z-[90] bg-black/40 flex items-start justify-center overflow-y-auto p-4" onClick={() => setViewing(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <h3 className="text-lg font-black text-[#1a365d]">{viewing.invoice.invoice_no}</h3>
+                            <button onClick={() => setViewing(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><X size={18} /></button>
+                        </div>
+                        <div className="p-6 space-y-4 text-sm">
+                            <div className="grid grid-cols-2 gap-2 text-slate-600">
+                                <div><span className="text-slate-400">الطرف:</span> <b>{viewing.invoice.party_label || viewing.invoice.party_name || '—'}</b></div>
+                                <div><span className="text-slate-400">الحالة:</span> <StatusBadge status={viewing.invoice.status} /></div>
+                                <div><span className="text-slate-400">التاريخ:</span> {viewing.invoice.issue_date}</div>
+                                <div><span className="text-slate-400">الاستحقاق:</span> {viewing.invoice.due_date || '—'}</div>
+                                {viewing.invoice.party_vat && <div><span className="text-slate-400">الرقم الضريبي:</span> {viewing.invoice.party_vat}</div>}
+                            </div>
+                            <div className="border border-slate-100 rounded-xl overflow-hidden">
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-2 text-right">الوصف</th><th className="px-2 py-2">كمية</th><th className="px-2 py-2">سعر</th><th className="px-2 py-2">ضريبة</th><th className="px-2 py-2 text-left">إجمالي</th></tr></thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {(viewing.items || []).map(it => (
+                                            <tr key={it.id}><td className="px-2 py-2">{it.description}</td><td className="px-2 py-2 text-center">{it.qty}</td><td className="px-2 py-2 text-center">{money(it.unit_price)}</td><td className="px-2 py-2 text-center">{money(it.tax_amount)}</td><td className="px-2 py-2 text-left font-bold">{money(it.line_total)}</td></tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="flex justify-end">
+                                <div className="w-64 space-y-1">
+                                    <div className="flex justify-between text-slate-500"><span>قبل الضريبة</span><span>{money(viewing.invoice.subtotal)}</span></div>
+                                    <div className="flex justify-between text-slate-500"><span>الضريبة</span><span>{money(viewing.invoice.tax_total)}</span></div>
+                                    <div className="flex justify-between font-black text-[#1a365d]"><span>الإجمالي</span><span>{money(viewing.invoice.total)} ﷼</span></div>
+                                    <div className="flex justify-between text-emerald-600"><span>المدفوع</span><span>{money(viewing.invoice.paid)}</span></div>
+                                </div>
+                            </div>
+                            {viewing.invoice.entry_id && <p className="text-xs text-slate-400">القيد المرتبط: #{viewing.invoice.entry_id}</p>}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function PaymentsTab({ parties, toast }) {
+    const [list, setList] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [typeFilter, setTypeFilter] = useState('');
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try { const r = await api('pay_list', { params: { ...(typeFilter ? { pay_type: typeFilter } : {}) } }); setList(r.data || []); }
+        catch (e) { toast(e.message, 'error'); } finally { setLoading(false); }
+    }, [typeFilter, toast]);
+    useEffect(() => { load(); }, [load]);
+
+    const newPay = (pay_type) => setEditing({ pay_type, party_id: '', invoice_id: '', date: todayISO(), amount: '', method: 'cash', notes: '' });
+    const partyOptions = useMemo(() => editing ? parties.filter(p => p.type === (editing.pay_type === 'receipt' ? 'customer' : 'supplier')) : [], [parties, editing]);
+
+    const save = async () => {
+        const f = editing;
+        if (!(Number(f.amount) > 0)) return toast('أدخل مبلغًا صحيحًا', 'error');
+        try {
+            const r = await api('pay_save', { method: 'POST', body: {
+                pay_type: f.pay_type, party_id: f.party_id || '', invoice_id: f.invoice_id || '',
+                date: f.date, amount: Number(f.amount), method: f.method, notes: f.notes || '',
+            }});
+            if (r.success) { toast((r.message || 'تم') + (r.pay_no ? ' — ' + r.pay_no : '')); setEditing(null); load(); }
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+    };
+    const voidPay = async (id) => {
+        if (!window.confirm('إلغاء السند وعكس قيده؟')) return;
+        try { const r = await api('pay_void', { method: 'POST', body: { id } }); if (r.success) { toast(r.message); load(); } else toast(r.message, 'error'); }
+        catch (e) { toast(e.message, 'error'); }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <Btn color="green" onClick={() => newPay('receipt')}><Plus size={15} /> سند قبض</Btn>
+                    <Btn color="navy" onClick={() => newPay('payment')}><Plus size={15} /> سند صرف</Btn>
+                    <Btn color="gray" size="sm" onClick={load}><RefreshCw size={14} /> تحديث</Btn>
+                </div>
+                <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                    <option value="">الكل</option>
+                    <option value="receipt">سندات قبض</option>
+                    <option value="payment">سندات صرف</option>
+                </select>
+            </div>
+
+            <Card>
+                {loading ? <Spinner /> : list.length === 0 ? <Empty msg="لا توجد سندات" /> : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 text-slate-500 text-xs">
+                                <tr>
+                                    <th className="px-3 py-3 text-right font-bold">الرقم</th>
+                                    <th className="px-3 py-3 text-right font-bold">النوع</th>
+                                    <th className="px-3 py-3 text-right font-bold">التاريخ</th>
+                                    <th className="px-3 py-3 text-right font-bold">الطرف</th>
+                                    <th className="px-3 py-3 text-right font-bold">الفاتورة</th>
+                                    <th className="px-3 py-3 text-left font-bold">المبلغ</th>
+                                    <th className="px-3 py-3 text-center font-bold">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {list.map(p => (
+                                    <tr key={p.id} className="hover:bg-slate-50/50">
+                                        <td className="px-3 py-3 font-mono font-bold text-[#1a365d]">{p.pay_no}</td>
+                                        <td className="px-3 py-3">{p.pay_type === 'receipt' ? <span className="text-emerald-600 font-bold">قبض</span> : <span className="text-[#1a365d] font-bold">صرف</span>}</td>
+                                        <td className="px-3 py-3 text-slate-500">{p.date}</td>
+                                        <td className="px-3 py-3">{p.party_label || '—'}</td>
+                                        <td className="px-3 py-3 font-mono text-slate-400">{p.invoice_no || '—'}</td>
+                                        <td className="px-3 py-3 text-left font-bold">{money(p.amount)}</td>
+                                        <td className="px-3 py-3 text-center">
+                                            <button onClick={() => voidPay(p.id)} title="إلغاء" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><RotateCcw size={15} /></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
+
+            {editing && (
+                <div className="fixed inset-0 z-[90] bg-black/40 flex items-start justify-center overflow-y-auto p-4" onClick={() => setEditing(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <h3 className="text-lg font-black text-[#1a365d]">{editing.pay_type === 'receipt' ? 'سند قبض' : 'سند صرف'}</h3>
+                            <button onClick={() => setEditing(null)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><X size={18} /></button>
+                        </div>
+                        <div className="p-6 space-y-3">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">{editing.pay_type === 'receipt' ? 'العميل' : 'المورد'}</label>
+                                <select value={editing.party_id} onChange={e => setEditing(ed => ({ ...ed, party_id: e.target.value }))}
+                                    className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                    <option value="">— اختر —</option>
+                                    {partyOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">التاريخ</label>
+                                    <input type="date" value={editing.date} onChange={e => setEditing(ed => ({ ...ed, date: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">المبلغ</label>
+                                    <input type="number" value={editing.amount} onChange={e => setEditing(ed => ({ ...ed, amount: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">طريقة الدفع</label>
+                                    <select value={editing.method} onChange={e => setEditing(ed => ({ ...ed, method: e.target.value }))}
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                        <option value="cash">نقدًا (الصندوق)</option>
+                                        <option value="bank">بنك</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1">رقم الفاتورة (اختياري)</label>
+                                    <input type="number" value={editing.invoice_id} onChange={e => setEditing(ed => ({ ...ed, invoice_id: e.target.value }))} placeholder="معرّف الفاتورة"
+                                        className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">ملاحظات</label>
+                                <input type="text" value={editing.notes} onChange={e => setEditing(ed => ({ ...ed, notes: e.target.value }))}
+                                    className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                            <Btn color="gray" onClick={() => setEditing(null)}><X size={15} /> إلغاء</Btn>
+                            <Btn color="green" onClick={save}><Save size={15} /> تسجيل وترحيل</Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 const TABS = [
     { id: 'chart', label: 'دليل الحسابات', icon: BookOpen },
     { id: 'journal', label: 'القيود اليومية', icon: FileText },
+    { id: 'sales', label: 'فواتير البيع', icon: FileText },
+    { id: 'purchases', label: 'فواتير الشراء', icon: FileText },
+    { id: 'payments', label: 'سندات القبض/الصرف', icon: Wallet },
     { id: 'trial', label: 'ميزان المراجعة', icon: Scale },
     { id: 'income', label: 'قائمة الدخل', icon: TrendingUp },
     { id: 'balance', label: 'الميزانية العمومية', icon: PieChart },
@@ -1207,6 +1667,9 @@ export default function LedgerHub() {
                 <div className="p-4 md:p-6">
                     {activeTab === 'chart' && <ChartTab accounts={accounts} reload={loadAccounts} loading={accLoading} toast={toast} />}
                     {activeTab === 'journal' && <JournalTab accounts={accounts} parties={parties} costCenters={costCenters} toast={toast} />}
+                    {activeTab === 'sales' && <InvoicesTab docType="sales" parties={parties} accounts={accounts} toast={toast} />}
+                    {activeTab === 'purchases' && <InvoicesTab docType="purchase" parties={parties} accounts={accounts} toast={toast} />}
+                    {activeTab === 'payments' && <PaymentsTab parties={parties} accounts={accounts} toast={toast} />}
                     {activeTab === 'trial' && <TrialBalanceTab toast={toast} />}
                     {activeTab === 'income' && <IncomeTab toast={toast} />}
                     {activeTab === 'balance' && <BalanceSheetTab toast={toast} />}
