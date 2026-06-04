@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v391
+// deploy: 2026-06-04-v392
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -282,6 +282,14 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_payments (
     INDEX idx_party (tenant_id, party_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// إعدادات المنشأة (ملف الشركة) — مفتاح/قيمة لكل تينانت — تُستخدم في ZATCA والطباعة
+$conn->query("CREATE TABLE IF NOT EXISTS acc_settings (
+    tenant_id INT NOT NULL DEFAULT 1,
+    skey      VARCHAR(64) NOT NULL,
+    sval      TEXT DEFAULT NULL,
+    PRIMARY KEY (tenant_id, skey)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -300,6 +308,35 @@ function acc_audit($conn, $tid, $entity, $eid, $action, $detail, $actor) {
     $eidSql = ($eid === null) ? 'NULL' : (int)$eid;
     $conn->query("INSERT INTO acc_audit_log (tenant_id,entity,entity_id,action,detail,actor)
                   VALUES ($tid,'$entity',$eidSql,'$action','$detail'," . ($actor !== '' ? "'$actor'" : 'NULL') . ")");
+}
+// قراءة إعداد منشأة واحد (مع قيمة افتراضية)
+function acc_setting($conn, $tid, $key, $default = '') {
+    $tid = (int)$tid; $key = $conn->real_escape_string($key);
+    $r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=$tid AND skey='$key' LIMIT 1");
+    $row = $r ? $r->fetch_assoc() : null;
+    return ($row && $row['sval'] !== null && $row['sval'] !== '') ? $row['sval'] : $default;
+}
+// مُولّد UUID v4
+function acc_uuid4() {
+    $d = random_bytes(16);
+    $d[6] = chr((ord($d[6]) & 0x0f) | 0x40);
+    $d[8] = chr((ord($d[8]) & 0x3f) | 0x80);
+    return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($d), 4));
+}
+// ترميز حقل TLV واحد (وسم/طول/قيمة)
+function acc_tlv($tag, $value) {
+    $value = (string)$value; $len = strlen($value);
+    // الطول قد يتجاوز 127 للأسماء العربية الطويلة — نستخدم ترميز طول من بايت واحد (يكفي ≤255)
+    return chr($tag) . chr($len) . $value;
+}
+// توليد رمز QR وفق هيئة الزكاة والضريبة (TLV ثم Base64) — الوسوم 1..5 للفاتورة المبسّطة
+function acc_zatca_qr($seller, $vat, $tsIso, $total, $vatTotal) {
+    $tlv = acc_tlv(1, $seller)
+         . acc_tlv(2, $vat)
+         . acc_tlv(3, $tsIso)
+         . acc_tlv(4, number_format((float)$total, 2, '.', ''))
+         . acc_tlv(5, number_format((float)$vatTotal, 2, '.', ''));
+    return base64_encode($tlv);
 }
 // ضبط شجرة الحسابات: تحديد الأب بأطول بادئة كود موجودة
 function acc_fix_hierarchy($conn, $tid) {
@@ -3109,6 +3146,34 @@ switch ($action) {
         }
         break;
 
+    case 'gl_settings_get':
+        // ملف الشركة (يُستخدم في QR والطباعة) — يعيد المفاتيح المعروفة مع قيم افتراضية فارغة
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $keys = ['company_name','vat_number','cr_number','address','city','district','postal_code','building_no','phone','email','logo_url'];
+        $out = [];
+        foreach ($keys as $k) $out[$k] = acc_setting($conn, $tid, $k, '');
+        echo json_encode(['success'=>true,'settings'=>$out], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_settings_save':
+        // حفظ/تحديث ملف الشركة — يقبل كائن settings بمفاتيح مسموح بها فقط
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $by  = $input_data['actor'] ?? null;
+        $allowed = ['company_name','vat_number','cr_number','address','city','district','postal_code','building_no','phone','email','logo_url'];
+        $set = is_array($input_data['settings'] ?? null) ? $input_data['settings'] : [];
+        $n = 0;
+        foreach ($set as $k => $v) {
+            if (!in_array($k, $allowed, true)) continue;
+            $kk = $conn->real_escape_string($k);
+            $vv = $conn->real_escape_string((string)$v);
+            if (!$conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'$kk','$vv')
+                               ON DUPLICATE KEY UPDATE sval=VALUES(sval)")) { echo json_encode(['success'=>false,'message'=>$conn->error]); break 2; }
+            $n++;
+        }
+        acc_audit($conn, $tid, 'settings', null, 'save', "saved $n keys", $by);
+        echo json_encode(['success'=>true,'saved'=>$n,'message'=>'تم حفظ إعدادات المنشأة'], JSON_UNESCAPED_UNICODE);
+        break;
+
     // ═══════════════════════════════════════════════════════════════════════
     // المستندات المستقلة (Phase 3): فواتير بيع/شراء + سندات قبض/صرف → ترحيل آلي
     // ═══════════════════════════════════════════════════════════════════════
@@ -3260,7 +3325,17 @@ switch ($action) {
                 $reft = 'purchase_invoice';
             }
             $r = acc_post_entry($conn, $tid, $inv['issue_date'], $desc, $reft, $id, $by, $lines, 1);
-            if (!$conn->query("UPDATE acc_invoices SET status='posted',entry_id={$r['eid']} WHERE id=$id AND tenant_id=$tid")) throw new Exception($conn->error);
+            // فواتير البيع: توليد UUID ورمز QR وفق هيئة الزكاة (يُحفظ مع الترحيل)
+            $zSet = '';
+            if ($inv['doc_type'] === 'sales') {
+                $uuid = $inv['uuid'] ?: acc_uuid4();
+                $seller = acc_setting($conn, $tid, 'company_name', 'سمك للمقاولات');
+                $sVat   = acc_setting($conn, $tid, 'vat_number', '300000000000003');
+                $tsIso  = $inv['issue_date'].'T'.gmdate('H:i:s').'Z';
+                $qr = acc_zatca_qr($seller, $sVat, $tsIso, $tot, $taxT);
+                $zSet = ",uuid='".$conn->real_escape_string($uuid)."',qr_base64='".$conn->real_escape_string($qr)."'";
+            }
+            if (!$conn->query("UPDATE acc_invoices SET status='posted',entry_id={$r['eid']}$zSet WHERE id=$id AND tenant_id=$tid")) throw new Exception($conn->error);
             $conn->commit();
             acc_audit($conn, $tid, 'invoice', $id, 'post', $inv['invoice_no'].' → '.$r['eno'], $by);
             echo json_encode(['success'=>true,'id'=>$id,'entry_id'=>$r['eid'],'entry_no'=>$r['eno'],'message'=>'تم ترحيل الفاتورة'], JSON_UNESCAPED_UNICODE);
