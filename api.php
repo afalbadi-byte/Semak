@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v395
+// deploy: 2026-06-04-v396
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -3449,6 +3449,113 @@ switch ($action) {
             $conn->rollback();
             echo json_encode(['success'=>false,'message'=>'فشل الختم: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
+        break;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ترحيل دفترة (Phase 3.4): بيانات أساسية (عملاء) + قيد افتتاحي بتاريخ القطع
+    // ═══════════════════════════════════════════════════════════════════════
+
+    case 'mig_daftra_preview':
+        // معاينة (قراءة فقط — لا كتابة): العملاء وأرصدتهم الافتتاحية كما ستُرحَّل من دفترة
+        set_time_limit(45);
+        $dk = "__DAFTRA_KEY__"; $mbase = "https://semak.daftra.com/api2";
+        $mhh = ["APIKEY: $dk", "Accept: application/json"];
+        $mfetch = function($ep) use ($mbase,$mhh){ $ch=curl_init("$mbase/$ep"); curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$mhh,CURLOPT_TIMEOUT=>20]); $r=curl_exec($ch); curl_close($ch); return json_decode($r,true); };
+        $mClients = $mfetch("clients.json"); $mInvs = $mfetch("invoices.json");
+        if (!isset($mClients['data'])) { echo json_encode(['success'=>false,'message'=>'تعذّر جلب العملاء من دفترة']); break; }
+        // اختيار الرقم الضريبي/السجل من حقول bn1/bn2 حسب تسمياتها
+        $pickBn = function($c, $kind){
+            foreach (['bn1'=>'bn1_label','bn2'=>'bn2_label'] as $vk=>$lk){
+                $lbl = mb_strtolower((string)($c[$lk] ?? '')); $val = trim((string)($c[$vk] ?? ''));
+                if ($val==='') continue;
+                if ($kind==='vat' && (mb_strpos($lbl,'ضريب')!==false||strpos($lbl,'vat')!==false||strpos($lbl,'tax')!==false)) return $val;
+                if ($kind==='cr'  && (mb_strpos($lbl,'سجل')!==false||strpos($lbl,'cr')!==false||strpos($lbl,'commercial')!==false)) return $val;
+            }
+            return '';
+        };
+        // إجمالي غير المسدّد لكل عميل من الفواتير
+        $unpaidByClient = [];
+        if (isset($mInvs['data'])) foreach ($mInvs['data'] as $row){ $i=$row['Invoice']??[]; $cid=(string)($i['client_id']??''); if($cid==='')continue; $u=(float)($i['summary_unpaid']??max(0,(float)($i['summary_total']??0)-(float)($i['summary_paid']??0))); $unpaidByClient[$cid]=($unpaidByClient[$cid]??0)+$u; }
+        $mParties=[]; $arTotal=0;
+        foreach ($mClients['data'] as $row){
+            $c=$row['Client']??$row;
+            $cid=(string)($c['id']??'');
+            $name=trim((string)($c['business_name']??'')) ?: trim(trim((string)($c['first_name']??'')).' '.trim((string)($c['last_name']??''))) ?: ('عميل #'.$cid);
+            $start=(float)($c['starting_balance']??0);
+            $unpaid=(float)($unpaidByClient[$cid]??0);
+            $ar=round($start+$unpaid,2); $arTotal+=$ar;
+            $mParties[]=[
+                'daftra_id'=>$cid,'name'=>$name,'type'=>'customer',
+                'vat_number'=>$pickBn($c,'vat'),'cr_number'=>$pickBn($c,'cr'),
+                'phone'=>trim((string)($c['phone1']??'')) ?: trim((string)($c['phone2']??'')),
+                'email'=>(string)($c['email']??''),
+                'address'=>trim(trim((string)($c['address1']??'')).' '.trim((string)($c['city']??''))),
+                'starting_balance'=>round($start,2),'unpaid_invoices'=>round($unpaid,2),'ar_opening'=>$ar,
+            ];
+        }
+        echo json_encode(['success'=>true,'source'=>'daftra',
+            'counts'=>['clients'=>count($mParties),'invoices'=>isset($mInvs['data'])?count($mInvs['data']):0],
+            'parties'=>$mParties,'ar_opening_total'=>round($arTotal,2),
+            'note'=>'أرصدة الحسابات العامة (نقد/بنك/حقوق ملكية...) تتطلب تصدير ميزان المراجعة من دفترة بتاريخ القطع ثم استدعاء mig_opening_entry'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'mig_daftra_commit':
+        // كتابة العملاء في الدفتر المساعد acc_parties (idempotent عبر daftra_id) — يتطلب confirm=true
+        $tid = (int)($input_data['tenant_id'] ?? 0);
+        if ($tid<=0) { echo json_encode(['success'=>false,'message'=>'حدّد tenant_id']); break; }
+        if (empty($input_data['confirm'])) { echo json_encode(['success'=>false,'message'=>'أضف confirm=true لتأكيد الكتابة']); break; }
+        $parties = $input_data['parties'] ?? null;
+        if (!is_array($parties) || !$parties) { echo json_encode(['success'=>false,'message'=>'مرّر مصفوفة parties من mig_daftra_preview']); break; }
+        $created=0;$updated=0;
+        foreach ($parties as $p){
+            $name=$conn->real_escape_string(trim((string)($p['name']??''))); if($name==='')continue;
+            $did=$conn->real_escape_string((string)($p['daftra_id']??''));
+            $type=in_array($p['type']??'customer',['customer','supplier'])?$p['type']:'customer';
+            $vat=$conn->real_escape_string((string)($p['vat_number']??''));
+            $cr =$conn->real_escape_string((string)($p['cr_number']??''));
+            $ph =$conn->real_escape_string((string)($p['phone']??''));
+            $em =$conn->real_escape_string((string)($p['email']??''));
+            $ad =$conn->real_escape_string((string)($p['address']??''));
+            $exrow=null;
+            if($did!==''){ $ex=$conn->query("SELECT id FROM acc_parties WHERE tenant_id=$tid AND daftra_id='$did' LIMIT 1"); $exrow=$ex?$ex->fetch_assoc():null; }
+            if($exrow){
+                $conn->query("UPDATE acc_parties SET name='$name',type='$type',vat_number=NULLIF('$vat',''),cr_number=NULLIF('$cr',''),phone=NULLIF('$ph',''),email=NULLIF('$em',''),address=NULLIF('$ad','') WHERE id={$exrow['id']} AND tenant_id=$tid");
+                $updated++;
+            } else {
+                $conn->query("INSERT INTO acc_parties (tenant_id,type,name,vat_number,cr_number,phone,email,address,daftra_id) VALUES ($tid,'$type','$name',NULLIF('$vat',''),NULLIF('$cr',''),NULLIF('$ph',''),NULLIF('$em',''),NULLIF('$ad',''),NULLIF('$did',''))");
+                $created++;
+            }
+        }
+        acc_audit($conn,$tid,'migration',null,'daftra_parties','created='.$created.' updated='.$updated,$input_data['actor']??null);
+        echo json_encode(['success'=>true,'created'=>$created,'updated'=>$updated,'message'=>'تم ترحيل العملاء إلى الدفتر المساعد'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'mig_opening_entry':
+        // قيد افتتاحي متوازن بتاريخ القطع — يُغذّى من ميزان المراجعة المصدَّر من دفترة. قيد واحد فقط لكل مستأجر
+        $tid=(int)($input_data['tenant_id']??0);
+        if($tid<=0){echo json_encode(['success'=>false,'message'=>'حدّد tenant_id']);break;}
+        $date=$conn->real_escape_string($input_data['date']??date('Y-m-d'));
+        $lines_in=$input_data['lines']??[];
+        if(!is_array($lines_in)||count($lines_in)<2){echo json_encode(['success'=>false,'message'=>'القيد يحتاج سطرين على الأقل']);break;}
+        $exq=$conn->query("SELECT id FROM acc_entries WHERE tenant_id=$tid AND ref_type='opening' LIMIT 1");
+        if($exq&&$exq->fetch_assoc()){echo json_encode(['success'=>false,'message'=>'يوجد قيد افتتاحي مسبقًا لهذا المستأجر — احذفه أولًا إن أردت إعادة الترحيل']);break;}
+        $lines=[]; $err=null;
+        foreach($lines_in as $L){
+            $code=trim((string)($L['account_code']??''));
+            $aid=$code!==''?acc_id_by_code($conn,$tid,$code):(int)($L['account_id']??0);
+            if(!$aid){$err='حساب غير موجود: '.($code?:(string)($L['account_id']??'?'));break;}
+            $line=['account_id'=>$aid,'debit'=>round((float)($L['debit']??0),2),'credit'=>round((float)($L['credit']??0),2),'description'=>($L['description']??'رصيد افتتاحي')];
+            if(!empty($L['party_type'])&&!empty($L['party_id'])){$line['party_type']=$L['party_type'];$line['party_id']=(int)$L['party_id'];}
+            $lines[]=$line;
+        }
+        if($err){echo json_encode(['success'=>false,'message'=>$err]);break;}
+        $conn->begin_transaction();
+        try{
+            $r=acc_post_entry($conn,$tid,$date,'قيد افتتاحي (ترحيل دفترة)','opening',null,$input_data['actor']??null,$lines,1);
+            acc_audit($conn,$tid,'migration',$r['eid'],'opening_entry','total='.$r['total'],$input_data['actor']??null);
+            $conn->commit();
+            echo json_encode(['success'=>true,'entry_id'=>$r['eid'],'entry_no'=>$r['eno'],'total'=>$r['total'],'message'=>'تم ترحيل القيد الافتتاحي'], JSON_UNESCAPED_UNICODE);
+        }catch(Exception $e){ $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل: '.$e->getMessage()], JSON_UNESCAPED_UNICODE); }
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
