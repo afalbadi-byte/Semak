@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v397
+// deploy: 2026-06-05-v398
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -206,6 +206,27 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_audit_log (
     actor       VARCHAR(128) DEFAULT NULL,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_entity (tenant_id, entity, entity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// كتالوج المنتجات/الخدمات (بيانات مرجعية مرحَّلة من دفترة)
+$conn->query("CREATE TABLE IF NOT EXISTS acc_products (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id    INT NOT NULL DEFAULT 1,
+    daftra_id    VARCHAR(40)  DEFAULT NULL,
+    code         VARCHAR(80)  DEFAULT NULL,
+    name         VARCHAR(255) NOT NULL,
+    description  TEXT,
+    unit_price   DECIMAL(15,2) DEFAULT 0,
+    buy_price    DECIMAL(15,2) DEFAULT 0,
+    tax_rate     DECIMAL(6,3)  DEFAULT 0,
+    barcode      VARCHAR(80)  DEFAULT NULL,
+    track_stock  TINYINT(1)   DEFAULT 0,
+    stock_balance DECIMAL(15,3) DEFAULT 0,
+    unit         VARCHAR(40)  DEFAULT NULL,
+    status       TINYINT(1)   DEFAULT 1,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_prod_tenant (tenant_id),
+    INDEX idx_prod_daftra (tenant_id, daftra_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 // ─── المستندات المستقلة: الفواتير وبنودها والسندات (Phase 3) ────────────────
@@ -3577,6 +3598,65 @@ switch ($action) {
             $conn->commit();
             echo json_encode(['success'=>true,'entry_id'=>$r['eid'],'entry_no'=>$r['eno'],'total'=>$r['total'],'message'=>'تم ترحيل القيد الافتتاحي'], JSON_UNESCAPED_UNICODE);
         }catch(Exception $e){ $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل: '.$e->getMessage()], JSON_UNESCAPED_UNICODE); }
+        break;
+
+    case 'mig_daftra_suppliers':
+        // ترحيل الموردين من دفترة إلى acc_parties (type=supplier). قراءة فقط بدون confirm، كتابة idempotent مع confirm=true
+        set_time_limit(90);
+        $tid = (int)($input_data['tenant_id'] ?? ($_GET['tenant_id'] ?? 0));
+        if ($tid<=0) { echo json_encode(['success'=>false,'message'=>'حدّد tenant_id']); break; }
+        $confirm = !empty($input_data['confirm']) || (($_GET['confirm']??'')==='1');
+        $dk="__DAFTRA_KEY__"; $sbase="https://semak.daftra.com/api2"; $shh=["APIKEY: $dk","Accept: application/json"];
+        $sfetch=function($ep)use($sbase,$shh){ $ch=curl_init("$sbase/$ep"); curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$shh,CURLOPT_TIMEOUT=>25]); $r=curl_exec($ch); curl_close($ch); return json_decode($r,true); };
+        // جلب كل الصفحات
+        $rows=[]; for($pg=1;$pg<=30;$pg++){ $j=$sfetch("suppliers.json?limit=200&page=$pg"); $d=$j['data']??null; if(!is_array($d)||!$d)break; foreach($d as $row) $rows[]=$row['Supplier']??$row; if(count($d)<200)break; }
+        if(!$rows){ echo json_encode(['success'=>false,'message'=>'تعذّر جلب الموردين من دفترة']); break; }
+        $pickBn=function($c,$kind){ foreach(['bn1'=>'bn1_label','bn2'=>'bn2_label'] as $vk=>$lk){ $lbl=mb_strtolower((string)($c[$lk]??'')); $val=trim((string)($c[$vk]??'')); if($val==='')continue; if($kind==='vat'&&(mb_strpos($lbl,'ضريب')!==false||strpos($lbl,'vat')!==false||strpos($lbl,'tax')!==false))return $val; if($kind==='cr'&&(mb_strpos($lbl,'سجل')!==false||strpos($lbl,'cr')!==false||strpos($lbl,'commercial')!==false))return $val; } return ''; };
+        $parties=[]; foreach($rows as $s){
+            $sid=(string)($s['id']??'');
+            $name=trim((string)($s['business_name']??'')) ?: trim(trim((string)($s['first_name']??'')).' '.trim((string)($s['last_name']??''))) ?: ('مورد #'.$sid);
+            $parties[]=['daftra_id'=>$sid,'name'=>$name,'type'=>'supplier','vat_number'=>$pickBn($s,'vat'),'cr_number'=>$pickBn($s,'cr'),'phone'=>trim((string)($s['phone1']??''))?:trim((string)($s['phone2']??'')),'email'=>(string)($s['email']??''),'address'=>trim(trim((string)($s['address1']??'')).' '.trim((string)($s['city']??'')))];
+        }
+        if(!$confirm){ echo json_encode(['success'=>true,'mode'=>'preview','source'=>'daftra','count'=>count($parties),'sample'=>array_slice($parties,0,8),'note'=>'أضف confirm=true لكتابة الموردين في الدفتر المساعد'], JSON_UNESCAPED_UNICODE); break; }
+        $created=0;$updated=0;
+        foreach($parties as $p){
+            $name=$conn->real_escape_string($p['name']); if($name==='')continue;
+            $did=$conn->real_escape_string($p['daftra_id']); $vat=$conn->real_escape_string($p['vat_number']); $cr=$conn->real_escape_string($p['cr_number']); $ph=$conn->real_escape_string($p['phone']); $em=$conn->real_escape_string($p['email']); $ad=$conn->real_escape_string($p['address']);
+            $exrow=null; if($did!==''){ $ex=$conn->query("SELECT id FROM acc_parties WHERE tenant_id=$tid AND daftra_id='$did' AND type='supplier' LIMIT 1"); $exrow=$ex?$ex->fetch_assoc():null; }
+            if($exrow){ $conn->query("UPDATE acc_parties SET name='$name',type='supplier',vat_number=NULLIF('$vat',''),cr_number=NULLIF('$cr',''),phone=NULLIF('$ph',''),email=NULLIF('$em',''),address=NULLIF('$ad','') WHERE id={$exrow['id']} AND tenant_id=$tid"); $updated++; }
+            else { $conn->query("INSERT INTO acc_parties (tenant_id,type,name,vat_number,cr_number,phone,email,address,daftra_id) VALUES ($tid,'supplier','$name',NULLIF('$vat',''),NULLIF('$cr',''),NULLIF('$ph',''),NULLIF('$em',''),NULLIF('$ad',''),NULLIF('$did',''))"); $created++; }
+        }
+        acc_audit($conn,$tid,'migration',null,'daftra_suppliers','created='.$created.' updated='.$updated,$input_data['actor']??null);
+        echo json_encode(['success'=>true,'mode'=>'commit','created'=>$created,'updated'=>$updated,'total'=>count($parties),'message'=>'تم ترحيل الموردين'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'mig_daftra_products':
+        // ترحيل كتالوج المنتجات/الخدمات من دفترة إلى acc_products. قراءة فقط بدون confirm، كتابة idempotent مع confirm=true
+        set_time_limit(90);
+        $tid = (int)($input_data['tenant_id'] ?? ($_GET['tenant_id'] ?? 0));
+        if ($tid<=0) { echo json_encode(['success'=>false,'message'=>'حدّد tenant_id']); break; }
+        $confirm = !empty($input_data['confirm']) || (($_GET['confirm']??'')==='1');
+        $dk="__DAFTRA_KEY__"; $pbase="https://semak.daftra.com/api2"; $phh=["APIKEY: $dk","Accept: application/json"];
+        $pfetch=function($ep)use($pbase,$phh){ $ch=curl_init("$pbase/$ep"); curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$phh,CURLOPT_TIMEOUT=>25]); $r=curl_exec($ch); curl_close($ch); return json_decode($r,true); };
+        $rows=[]; for($pg=1;$pg<=30;$pg++){ $j=$pfetch("products.json?limit=200&page=$pg"); $d=$j['data']??null; if(!is_array($d)||!$d)break; foreach($d as $row) $rows[]=$row['Product']??$row; if(count($d)<200)break; }
+        if(!$rows){ echo json_encode(['success'=>false,'message'=>'تعذّر جلب المنتجات من دفترة']); break; }
+        $prods=[]; foreach($rows as $p){
+            $pid=(string)($p['id']??'');
+            $tx=(float)($p['tax1']??0); if($tx<0||$tx>100)$tx=0; // tax1 قد يكون معرّفًا لا نسبة — نقبل النِّسب المعقولة فقط
+            $prods[]=['daftra_id'=>$pid,'code'=>(string)($p['product_code']??''),'name'=>trim((string)($p['name']??''))?:('منتج #'.$pid),'description'=>(string)($p['description']??''),'unit_price'=>round((float)($p['unit_price']??0),2),'buy_price'=>round((float)($p['buy_price']??($p['average_price']??0)),2),'tax_rate'=>$tx,'barcode'=>(string)($p['barcode']??''),'track_stock'=>!empty($p['track_stock'])?1:0,'stock_balance'=>round((float)($p['stock_balance']??0),3)];
+        }
+        if(!$confirm){ echo json_encode(['success'=>true,'mode'=>'preview','source'=>'daftra','count'=>count($prods),'sample'=>array_slice($prods,0,8),'note'=>'أضف confirm=true لكتابة المنتجات'], JSON_UNESCAPED_UNICODE); break; }
+        $created=0;$updated=0;
+        foreach($prods as $p){
+            $name=$conn->real_escape_string($p['name']); if($name==='')continue;
+            $did=$conn->real_escape_string($p['daftra_id']); $code=$conn->real_escape_string($p['code']); $desc=$conn->real_escape_string($p['description']); $bc=$conn->real_escape_string($p['barcode']);
+            $up=(float)$p['unit_price']; $bp=(float)$p['buy_price']; $tr=(float)$p['tax_rate']; $sb=(float)$p['stock_balance']; $ts=(int)$p['track_stock'];
+            $exrow=null; if($did!==''){ $ex=$conn->query("SELECT id FROM acc_products WHERE tenant_id=$tid AND daftra_id='$did' LIMIT 1"); $exrow=$ex?$ex->fetch_assoc():null; }
+            if($exrow){ $conn->query("UPDATE acc_products SET code=NULLIF('$code',''),name='$name',description=NULLIF('$desc',''),unit_price=$up,buy_price=$bp,tax_rate=$tr,barcode=NULLIF('$bc',''),track_stock=$ts,stock_balance=$sb WHERE id={$exrow['id']} AND tenant_id=$tid"); $updated++; }
+            else { $conn->query("INSERT INTO acc_products (tenant_id,daftra_id,code,name,description,unit_price,buy_price,tax_rate,barcode,track_stock,stock_balance) VALUES ($tid,NULLIF('$did',''),NULLIF('$code',''),'$name',NULLIF('$desc',''),$up,$bp,$tr,NULLIF('$bc',''),$ts,$sb)"); $created++; }
+        }
+        acc_audit($conn,$tid,'migration',null,'daftra_products','created='.$created.' updated='.$updated,$input_data['actor']??null);
+        echo json_encode(['success'=>true,'mode'=>'commit','created'=>$created,'updated'=>$updated,'total'=>count($prods),'message'=>'تم ترحيل كتالوج المنتجات'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
