@@ -9,7 +9,7 @@ const API_URL = "https://semak.sa/api.php";
 
 /** لون badge حالة المتابعة بناءً على الاسم أو اللون المُرجَع من دفترة */
 function statusStyle(followUpStatus) {
-    if (!followUpStatus?.name) return { label: 'نشطة', cls: 'bg-emerald-100 text-emerald-700' };
+    if (!followUpStatus?.name) return { label: 'مفتوح', cls: 'bg-emerald-100 text-emerald-700' };
     const colorMap = {
         teal:   'bg-teal-100 text-teal-700',
         blue:   'bg-blue-100 text-blue-700',
