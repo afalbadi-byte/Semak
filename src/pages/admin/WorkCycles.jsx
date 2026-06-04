@@ -2,20 +2,33 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Layers, RefreshCw, ChevronLeft, Building2, DollarSign, ExternalLink,
     TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
-    ShoppingCart, Search, Calendar, FileText, Receipt
+    ShoppingCart, Search, Calendar, FileText, Receipt, User
 } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
-const statusMap = {
-    '1': { label: 'مفتوحة',      cls: 'bg-emerald-100 text-emerald-700' },
-    '2': { label: 'قيد التنفيذ', cls: 'bg-blue-100    text-blue-700'    },
-    '3': { label: 'مكتملة',      cls: 'bg-slate-200   text-slate-700'   },
-    '4': { label: 'ملغاة',       cls: 'bg-red-100     text-red-700'     },
-};
+/** لون badge حالة المتابعة بناءً على الاسم أو اللون المُرجَع من دفترة */
+function statusStyle(followUpStatus) {
+    if (!followUpStatus?.name) return { label: 'نشطة', cls: 'bg-emerald-100 text-emerald-700' };
+    const colorMap = {
+        teal:   'bg-teal-100 text-teal-700',
+        blue:   'bg-blue-100 text-blue-700',
+        green:  'bg-emerald-100 text-emerald-700',
+        red:    'bg-red-100 text-red-700',
+        orange: 'bg-orange-100 text-orange-700',
+        yellow: 'bg-yellow-100 text-yellow-700',
+        purple: 'bg-purple-100 text-purple-700',
+        grey:   'bg-slate-200 text-slate-700',
+        gray:   'bg-slate-200 text-slate-700',
+    };
+    return {
+        label: followUpStatus.name,
+        cls: colorMap[followUpStatus.color] || 'bg-slate-100 text-slate-600',
+    };
+}
 
 export default function WorkCycles() {
-    const [workOrders, setWorkOrders] = useState([]);
+    const [workCycles, setWorkCycles] = useState([]);
     const [loading,    setLoading]    = useState(true);
     const [error,      setError]      = useState('');
     const [selected,   setSelected]   = useState(null);
@@ -25,9 +38,9 @@ export default function WorkCycles() {
         setLoading(true);
         setError('');
         try {
-            const res = await fetch(`${API_URL}?action=daftra_work_orders_all`).then(r => r.json());
+            const res = await fetch(`${API_URL}?action=daftra_v2_work_cycles`).then(r => r.json());
             if (res.success) {
-                setWorkOrders(res.data || []);
+                setWorkCycles(res.data || []);
             } else {
                 setError(res.message || 'فشل الاتصال بدفترة');
             }
@@ -39,8 +52,10 @@ export default function WorkCycles() {
 
     useEffect(() => { load(); }, [load]);
 
-    const filtered = workOrders.filter(wo =>
-        !search || (wo.title || '').toLowerCase().includes(search.toLowerCase())
+    const filtered = workCycles.filter(wc =>
+        !search ||
+        (wc.title || '').toLowerCase().includes(search.toLowerCase()) ||
+        (wc.work_order_client?.business_name || '').toLowerCase().includes(search.toLowerCase())
     );
 
     if (selected) {
@@ -58,13 +73,13 @@ export default function WorkCycles() {
                             <Layers size={32}/>
                         </div>
                         <div>
-                            <h1 className="text-2xl md:text-3xl font-black">دورات العمل</h1>
-                            <p className="text-sm text-slate-300 mt-1">دورات العمل من دفترة</p>
+                            <h1 className="text-2xl md:text-3xl font-black">المشاريع</h1>
+                            <p className="text-sm text-slate-300 mt-1">{workCycles.length > 0 ? `${workCycles.length} مشروع نشط` : 'دورات العمل والمشاريع'}</p>
                         </div>
                     </div>
-                    <a href="https://semak.daftra.com/work_orders" target="_blank" rel="noreferrer"
+                    <a href="https://semak.daftra.com/le/workflow-type-entity-1/list" target="_blank" rel="noreferrer"
                         className="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition">
-                        <ExternalLink size={14}/> دفترة
+                        <ExternalLink size={14}/> إدارة المشاريع
                     </a>
                 </div>
             </div>
@@ -74,22 +89,22 @@ export default function WorkCycles() {
                 <div className="relative flex-1">
                     <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
                     <input
-                        type="text" placeholder="بحث باسم دورة العمل..." value={search}
+                        type="text" placeholder="بحث بالاسم أو العميل..." value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 pr-9 pl-3 py-2.5 rounded-xl outline-none focus:border-emerald-500"
+                        className="w-full bg-slate-50 border border-slate-200 pr-9 pl-3 py-2.5 rounded-xl outline-none focus:border-blue-500"
                     />
                 </div>
-                <button onClick={load} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-2.5 rounded-xl transition" title="تحديث">
+                <button onClick={load} className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-2.5 rounded-xl transition" title="تحديث">
                     <RefreshCw size={16} className={loading ? 'animate-spin' : ''}/>
                 </button>
-                <span className="text-sm font-bold text-slate-500">{filtered.length} دورة</span>
+                <span className="text-sm font-bold text-slate-500">{filtered.length} مشروع</span>
             </div>
 
             {/* حالات التحميل / الخطأ / الفراغ */}
             {loading ? (
                 <div className="bg-white rounded-2xl p-12 text-center">
-                    <RefreshCw className="animate-spin inline mr-2 text-emerald-600"/>
-                    جاري التحميل من دفترة...
+                    <RefreshCw className="animate-spin inline mr-2 text-blue-600"/>
+                    جاري تحميل المشاريع...
                 </div>
             ) : error ? (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center text-red-700">
@@ -102,12 +117,12 @@ export default function WorkCycles() {
             ) : filtered.length === 0 ? (
                 <div className="bg-white rounded-2xl p-12 text-center text-slate-400">
                     <Layers size={48} className="mx-auto mb-3 opacity-50"/>
-                    <p className="font-bold">لا توجد دورات عمل</p>
+                    <p className="font-bold">لا توجد مشاريع</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filtered.map((wo, i) => (
-                        <WOCard key={wo.id ?? i} wo={wo} onOpen={() => setSelected(wo)}/>
+                    {filtered.map((wc, i) => (
+                        <WCCard key={wc.id ?? i} wc={wc} onOpen={() => setSelected(wc)}/>
                     ))}
                 </div>
             )}
@@ -115,10 +130,15 @@ export default function WorkCycles() {
     );
 }
 
-// ─────────────── بطاقة دورة العمل ────────────────────────────────────────────
+// ─────────────── بطاقة المشروع ────────────────────────────────────────────
 
-function WOCard({ wo, onOpen }) {
-    const st = statusMap[String(wo.status)] || { label: wo.status || '—', cls: 'bg-slate-100 text-slate-600' };
+function WCCard({ wc, onOpen }) {
+    const st = statusStyle(wc.work_order_follow_up_status);
+    const client = wc.work_order_client?.business_name || '';
+    const custom = wc['le_workflow-type-entity-1_custom_data'] || {};
+    const activity = custom.activity || '';
+    const apartCount = custom.apartment_count;
+    const workType = custom.work_order_type1 || '';
 
     return (
         <div
@@ -126,16 +146,16 @@ function WOCard({ wo, onOpen }) {
             onClick={onOpen}
         >
             {/* رأس البطاقة */}
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3 min-w-0">
                     <div className="w-11 h-11 shrink-0 bg-[#1a365d] rounded-xl flex items-center justify-center">
                         <Building2 size={22} className="text-[#c5a059]"/>
                     </div>
                     <div className="min-w-0">
-                        <h3 className="text-lg font-black text-[#1a365d] truncate">
-                            {wo.title || `دورة #${wo.number}`}
+                        <h3 className="text-base font-black text-[#1a365d] truncate leading-tight">
+                            {wc.title || `مشروع #${wc.number}`}
                         </h3>
-                        {wo.number && <p className="text-xs text-slate-400 font-mono">#{wo.number}</p>}
+                        {wc.number && <p className="text-xs text-slate-400 font-mono">#{wc.number}</p>}
                     </div>
                 </div>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 ${st.cls}`}>
@@ -143,24 +163,45 @@ function WOCard({ wo, onOpen }) {
                 </span>
             </div>
 
+            {/* العميل */}
+            {client && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2">
+                    <User size={11} className="text-slate-400 shrink-0"/>
+                    <span className="truncate">{client}</span>
+                </div>
+            )}
+
+            {/* النشاط والنوع */}
+            {(activity || workType) && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                    {activity && <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{activity}</span>}
+                    {workType  && <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full">{workType}</span>}
+                </div>
+            )}
+
             {/* التواريخ */}
-            {(wo.start_date || wo.delivery_date) && (
-                <div className="flex items-center gap-1 text-xs text-slate-500 mb-3">
+            {(wc.start_date || wc.delivery_date) && (
+                <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
                     <Calendar size={11}/>
-                    {wo.start_date && <span>بدء: {wo.start_date}</span>}
-                    {wo.start_date && wo.delivery_date && <span className="mx-1">—</span>}
-                    {wo.delivery_date && <span>تسليم: {wo.delivery_date}</span>}
+                    {wc.start_date && <span>بدء: {wc.start_date}</span>}
+                    {wc.start_date && wc.delivery_date && <span className="mx-1">—</span>}
+                    {wc.delivery_date && <span>تسليم: {wc.delivery_date}</span>}
                 </div>
             )}
 
-            {/* الميزانية إن وجدت */}
-            {Number(wo.budget) > 0 && (
-                <div className="text-xs text-slate-500 mb-3">
-                    💰 الميزانية: <span className="font-bold text-[#1a365d]">{Number(wo.budget).toLocaleString('en-US')} ريال</span>
-                </div>
-            )}
+            {/* الميزانية وعدد الشقق */}
+            <div className="flex items-center justify-between mt-2">
+                {Number(wc.budget) > 0 ? (
+                    <div className="text-xs text-slate-500">
+                        💰 <span className="font-bold text-[#1a365d]">{Number(wc.budget).toLocaleString('en-US')} {wc.budget_currency || 'ريال'}</span>
+                    </div>
+                ) : <div/>}
+                {apartCount > 0 && (
+                    <span className="text-xs text-slate-500">🏢 {apartCount} وحدة</span>
+                )}
+            </div>
 
-            <div className="text-xs font-bold text-emerald-600 pt-3 border-t border-slate-100">
+            <div className="text-xs font-bold text-blue-600 pt-3 mt-2 border-t border-slate-100">
                 عرض الملخص المالي ←
             </div>
         </div>
@@ -181,7 +222,6 @@ function CycleDetail({ wo, onBack }) {
             .then(r => r.json())
             .then(j => {
                 if (j.success && j.summary) {
-                    // دمج القوائم داخل summary لسهولة الوصول
                     setSummary({
                         ...j.summary,
                         invoices:  j.invoices  || [],
@@ -194,24 +234,33 @@ function CycleDetail({ wo, onBack }) {
             .finally(() => setLoading(false));
     }, [wo?.id]);
 
-    const st = statusMap[String(wo.status)] || { label: wo.status || '—', cls: 'bg-slate-100 text-slate-600' };
+    const st = statusStyle(wo.work_order_follow_up_status);
+    const client = wo.work_order_client?.business_name || '';
+    const custom = wo['le_workflow-type-entity-1_custom_data'] || {};
 
     return (
         <div className="space-y-6 p-4 md:p-6">
-            <button onClick={onBack} className="flex items-center gap-2 text-[#1a365d] font-bold hover:text-emerald-600 transition">
-                <ChevronLeft size={18}/> رجوع لدورات العمل
+            <button onClick={onBack} className="flex items-center gap-2 text-[#1a365d] font-bold hover:text-blue-600 transition">
+                <ChevronLeft size={18}/> رجوع للمشاريع
             </button>
 
-            {/* رأس الدورة */}
+            {/* رأس المشروع */}
             <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] rounded-[2rem] p-6 text-white shadow-xl">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div>
-                        {wo.number && <div className="text-xs font-mono text-slate-400 mb-1">دورة عمل #{wo.number}</div>}
-                        <h2 className="text-2xl font-black mb-1">{wo.title || `دورة #${wo.number}`}</h2>
+                    <div className="min-w-0">
+                        {wo.number && <div className="text-xs font-mono text-slate-400 mb-1">مشروع #{wo.number}</div>}
+                        <h2 className="text-2xl font-black mb-1">{wo.title || `مشروع #${wo.number}`}</h2>
+                        {client && (
+                            <div className="flex items-center gap-1.5 text-slate-300 text-sm mb-2">
+                                <User size={13}/> {client}
+                            </div>
+                        )}
                         {wo.description && <p className="text-slate-300 text-sm mb-2">{wo.description}</p>}
                         <div className="flex flex-wrap gap-3 text-xs text-slate-300">
                             {wo.start_date    && <span>📅 بدء: {wo.start_date}</span>}
                             {wo.delivery_date && <span>🏁 تسليم: {wo.delivery_date}</span>}
+                            {custom.activity  && <span>🏗️ {custom.activity}</span>}
+                            {custom.apartment_count > 0 && <span>🏢 {custom.apartment_count} وحدة</span>}
                         </div>
                     </div>
                     <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${st.cls}`}>{st.label}</span>
@@ -221,8 +270,8 @@ function CycleDetail({ wo, onBack }) {
             {/* تحميل */}
             {loading && (
                 <div className="bg-white rounded-2xl p-8 text-center">
-                    <RefreshCw className="animate-spin inline mr-2 text-emerald-600"/>
-                    جاري جلب البيانات المالية من دفترة...
+                    <RefreshCw className="animate-spin inline mr-2 text-blue-600"/>
+                    جاري جلب البيانات المالية...
                 </div>
             )}
 
@@ -272,11 +321,11 @@ function CycleDetail({ wo, onBack }) {
                 </>
             )}
 
-            {/* لا يوجد بيانات */}
+            {/* لا يوجد بيانات مالية */}
             {!loading && !summary && (
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-slate-400">
                     <FileText size={32} className="mx-auto mb-2 opacity-40"/>
-                    <p className="font-bold">لا توجد معاملات مالية لهذه الدورة في دفترة بعد</p>
+                    <p className="font-bold">لا توجد معاملات مالية مرتبطة بهذا المشروع بعد</p>
                 </div>
             )}
         </div>
@@ -316,7 +365,7 @@ function BudgetBar({ summary, fmt }) {
             </div>
             <div className="h-3 bg-white rounded-full overflow-hidden border border-slate-200">
                 <div
-                    className={`h-full transition-all ${over ? 'bg-gradient-to-l from-red-500 to-orange-500' : 'bg-gradient-to-l from-emerald-500 to-teal-500'}`}
+                    className={`h-full transition-all ${over ? 'bg-gradient-to-l from-red-500 to-orange-500' : 'bg-gradient-to-l from-blue-500 to-blue-400'}`}
                     style={{ width: `${Math.min(100, summary.budget_used_pct)}%` }}
                 />
             </div>

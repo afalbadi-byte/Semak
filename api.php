@@ -1040,19 +1040,31 @@ switch ($action) {
         // ── جلب البيانات بالتوازي نسبياً ──
         $r_clients   = $qfetch("clients.json?limit=1");
         $r_suppliers = $qfetch("suppliers.json?limit=1");
-        $r_wo        = $qfetch("work_orders.json?limit=100");
         $r_inv_all   = $qfetch("invoices.json?limit=100");
         $r_inv_month = $qfetch("invoices.json?from_date=$month&to_date=$today&limit=100");
         $r_exp_all   = $qfetch("expenses.json?limit=100");
         $r_exp_month = $qfetch("expenses.json?from_date=$month&to_date=$today&limit=100");
 
+        // ── جلب دورات العمل من V2 API ──
+        $wf_ch = curl_init("https://semak.daftra.com/v2/api/entity/le_workflow-type-entity-1/list/1");
+        curl_setopt_array($wf_ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => $hh,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $wf_raw = curl_exec($wf_ch); curl_close($wf_ch);
+        $wf_data = json_decode($wf_raw, true);
+        $wf_rows = $wf_data['data'] ?? [];
+        $wf_total = (int)($wf_data['total'] ?? count($wf_rows));
+
         // ── تحليل ──
-        $clients_total = (int)($r_clients['meta']['total'] ?? count($r_clients['data'] ?? []));
+        $clients_total   = (int)($r_clients['meta']['total'] ?? count($r_clients['data'] ?? []));
         $suppliers_total = (int)($r_suppliers['meta']['total'] ?? count($r_suppliers['data'] ?? []));
 
-        $wo_rows    = $r_wo['data'] ?? [];
-        $wo_total   = count($wo_rows);
-        $wo_open    = count(array_filter($wo_rows, fn($x) => in_array($x['WorkOrder']['status'] ?? '', ['draft','open','pending','in_progress','new'])));
+        // عدد المشاريع النشطة (لا تحمل حالة متابعة = لم تكتمل بعد)
+        $wo_total = $wf_total;
+        $wo_open  = count(array_filter($wf_rows, fn($x) => !empty($x['id']) && ($x['follow_up_status_id'] ?? null) === null));
 
         $sum_inv = function($rows) {
             $t = 0; foreach ($rows as $r) $t += (float)($r['Invoice']['summary_total'] ?? $r['Invoice']['grand_total'] ?? 0); return $t;
