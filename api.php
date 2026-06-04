@@ -1304,6 +1304,114 @@ switch ($action) {
         break;
 
     // ══════════════════════════════════════════════════════════════════════
+    // المدفوعات والتحصيل — سندات قبض/صرف مربوطة بالفاتورة والخزينة
+    // (دفترة تسجّل القيد المحاسبي وتحدّث الرصيد تلقائيًا)
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_invoice_payments_list':
+        // قائمة دفعات العملاء — اختياريًا حسب الفاتورة
+        $dk = "__DAFTRA_KEY__";
+        $inv_id = (int)($_GET['invoice_id'] ?? 0);
+        $page   = (int)($_GET['page'] ?? 1);
+        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $qp = "page=$page&limit=50";
+        if ($inv_id) $qp .= "&invoice_id=$inv_id";
+        if ($from)   $qp .= "&from_date=$from";
+        if ($to)     $qp .= "&to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/invoice_payments.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $p = $r['InvoicePayment'] ?? $r;
+            $rows[] = [
+                'id'         => $p['id'],
+                'date'       => $p['date'] ?? '',
+                'amount'     => (float)($p['amount'] ?? 0),
+                'invoice_id' => $p['invoice_id'] ?? '',
+                'invoice_no' => $p['invoice_no'] ?? '',
+                'client'     => $p['client_business_name'] ?? ($p['client_first_name'].' '.$p['client_last_name']),
+                'client_id'  => $p['client_id'] ?? '',
+                'method'     => $p['payment_method'] ?? '',
+                'treasury'   => $p['treasury_name'] ?? '',
+                'treasury_id'=> $p['treasury_id'] ?? '',
+                'notes'      => $p['notes'] ?? '',
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_invoice_payment_add':
+        // سند قبض على فاتورة — يقفل/يخفّض الفاتورة ويزيد الخزينة
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $payload = ['InvoicePayment' => [
+            'invoice_id'     => $body['invoice_id']  ?? '',
+            'amount'         => (float)($body['amount'] ?? 0),
+            'date'           => $body['date']        ?? date('Y-m-d'),
+            'treasury_id'    => $body['treasury_id'] ?? '',
+            'payment_method' => $body['method']      ?? 'cash',
+            'notes'          => $body['notes']       ?? '',
+        ]];
+        $ch = curl_init("https://semak.daftra.com/api2/invoice_payments.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تم تسجيل الدفعة':'فشل التسجيل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_supplier_payments_list':
+        // قائمة دفعات الموردين
+        $dk = "__DAFTRA_KEY__";
+        $pur_id = (int)($_GET['purchase_id'] ?? 0);
+        $page   = (int)($_GET['page'] ?? 1);
+        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $qp = "page=$page&limit=50";
+        if ($pur_id) $qp .= "&purchase_invoice_id=$pur_id";
+        if ($from)   $qp .= "&from_date=$from";
+        if ($to)     $qp .= "&to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoice_payments.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $p = $r['PurchaseInvoicePayment'] ?? $r['PurchaseOrderPayment'] ?? $r;
+            $rows[] = [
+                'id'          => $p['id'],
+                'date'        => $p['date'] ?? '',
+                'amount'      => (float)($p['amount'] ?? 0),
+                'purchase_id' => $p['purchase_invoice_id'] ?? $p['purchase_order_id'] ?? '',
+                'supplier'    => $p['supplier_business_name'] ?? '',
+                'supplier_id' => $p['supplier_id'] ?? '',
+                'method'      => $p['payment_method'] ?? '',
+                'treasury'    => $p['treasury_name'] ?? '',
+                'notes'       => $p['notes'] ?? '',
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_supplier_payment_add':
+        // سند صرف لمورد — يخفّض رصيد المورد ويخصم من الخزينة
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $payload = ['PurchaseInvoicePayment' => [
+            'purchase_invoice_id' => $body['purchase_id'] ?? '',
+            'supplier_id'         => $body['supplier_id'] ?? '',
+            'amount'              => (float)($body['amount'] ?? 0),
+            'date'                => $body['date']        ?? date('Y-m-d'),
+            'treasury_id'         => $body['treasury_id'] ?? '',
+            'payment_method'      => $body['method']      ?? 'cash',
+            'notes'               => $body['notes']       ?? '',
+        ]];
+        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoice_payments.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تم تسجيل الصرف':'فشل التسجيل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
     // PDF الرسمي من دفترة (عربي صحيح + ZATCA QR) — proxy بالجلسة المخزّنة
     // ══════════════════════════════════════════════════════════════════════
 

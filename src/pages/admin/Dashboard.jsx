@@ -34,6 +34,7 @@ import SuppliersManage  from './SuppliersManage';
 import ProductsManage   from './ProductsManage';
 import ChequesManage    from './ChequesManage';
 import RentalsManage    from './RentalsManage';
+import PaymentsManage   from './PaymentsManage';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -492,6 +493,7 @@ export default function Dashboard({ onLogout }) {
                 { id:'quotations',  tabId:'quotations',  label:'عروض الأسعار',        icon:FileText,     permKey:'finance', color:'sky'     },
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',       icon:ShoppingCart, permKey:'finance', color:'amber'   },
                 { id:'expenses',    tabId:'expenses',    label:'المصروفات',           icon:Tag,          permKey:'finance', color:'red'     },
+                { id:'payments',    tabId:'payments',    label:'المدفوعات والتحصيل',  icon:ArrowRightLeft,permKey:'finance', color:'green'   },
                 { id:'cheques',     tabId:'cheques',     label:'الشيكات',             icon:CreditCard,   permKey:'finance', color:'indigo'  },
                 { id:'treasury',    tabId:'treasury',    label:'الخزاين',             icon:Coins,        permKey:'finance', color:'teal'    },
                 { id:'reports',     tabId:'reports',     label:'التقارير المالية',    icon:BarChart3,    permKey:'finance', color:'blue'    },
@@ -531,7 +533,7 @@ export default function Dashboard({ onLogout }) {
         invoices:'الفواتير', purchases:'فواتير الشراء', treasury:'الخزاين', reports:'التقارير المالية',
         quotations:'عروض الأسعار', expenses:'المصروفات', cheques:'الشيكات',
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
-        rentals:'الإيجارات والعقود',
+        rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
     };
 
     if (authLoading) return (
@@ -698,6 +700,7 @@ export default function Dashboard({ onLogout }) {
                 {activeTab === 'quotations'  && hasPermission('finance')     && <div className="animate-fadeIn"><QuotationsManage /></div>}
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
+                {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}
                 {activeTab === 'cheques'     && hasPermission('finance')     && <div className="animate-fadeIn"><ChequesManage /></div>}
                 {activeTab === 'treasury'    && hasPermission('finance')     && <div className="animate-fadeIn"><TreasuryManage /></div>}
                 {activeTab === 'reports'     && hasPermission('finance')     && <div className="animate-fadeIn"><ReportsHub /></div>}

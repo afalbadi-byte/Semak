@@ -114,6 +114,12 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   const [confirmId, setConfirmId]     = useState(null);
   const [toast, setToast]             = useState(null);
 
+  // ─── دفعة سريعة (تحصيل على الفاتورة) ─────────────────────────
+  const [payInvoice, setPayInvoice]   = useState(null);   // الفاتورة الجاري تحصيلها
+  const [treasuries, setTreasuries]   = useState([]);
+  const [paySaving, setPaySaving]     = useState(false);
+  const [payForm, setPayForm]         = useState({ amount: '', date: today(), treasury_id: '', method: 'cash', notes: '' });
+
   const [filters, setFilters] = useState({
     from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
     to: today(),
@@ -241,6 +247,53 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       }
     } catch {
       notify('خطأ في الاتصال بالخادم', 'error');
+    }
+  };
+
+  // ─── تسجيل دفعة (تحصيل) على فاتورة ──────────────────────────
+  const openPayment = (inv) => {
+    const remaining = (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0);
+    setPayForm({ amount: remaining > 0 ? remaining.toFixed(2) : '', date: today(), treasury_id: '', method: 'cash', notes: '' });
+    setPayInvoice(inv);
+    // جلب الخزائن مرة واحدة
+    if (treasuries.length === 0) {
+      fetch(`${API_URL}?action=daftra_treasuries`)
+        .then(r => r.json())
+        .then(d => { if (d.success) setTreasuries(d.data || []); })
+        .catch(() => {});
+    }
+  };
+
+  const submitPayment = async () => {
+    if (!payInvoice) return;
+    if (!(parseFloat(payForm.amount) > 0)) return notify('أدخل مبلغاً صحيحاً', 'error');
+    setPaySaving(true);
+    try {
+      const res = await fetch(`${API_URL}?action=daftra_invoice_payment_add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id:  payInvoice.id,
+          amount:      parseFloat(payForm.amount),
+          date:        payForm.date,
+          treasury_id: payForm.treasury_id,
+          method:      payForm.method,
+          notes:       payForm.notes,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        notify('تم تسجيل الدفعة بنجاح');
+        setPayInvoice(null);
+        loadInvoices();
+        setView('list');
+      } else {
+        notify(data.message || 'فشل تسجيل الدفعة', 'error');
+      }
+    } catch {
+      notify('خطأ في الاتصال بالخادم', 'error');
+    } finally {
+      setPaySaving(false);
     }
   };
 
@@ -671,7 +724,16 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
         </div>
 
         {/* أزرار الإجراءات */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
+          {((parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0)) > 0 && (
+            <button
+              onClick={() => openPayment(inv)}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
+            >
+              <DollarSign size={15} />
+              تسجيل دفعة
+            </button>
+          )}
           <button
             onClick={() => openEdit(inv)}
             className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#2d5299] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
@@ -983,6 +1045,68 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
           onConfirm={() => handleDelete(confirmId)}
           onCancel={() => setConfirmId(null)}
         />
+      )}
+
+      {/* مودال تسجيل دفعة */}
+      {payInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !paySaving && setPayInvoice(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
+            <div className="bg-emerald-600 text-white px-6 py-4 flex items-center justify-between">
+              <h3 className="font-black text-base flex items-center gap-2"><DollarSign size={18}/> تسجيل دفعة — فاتورة #{payInvoice.no || payInvoice.id}</h3>
+              <button onClick={() => !paySaving && setPayInvoice(null)} className="opacity-80 hover:opacity-100"><X size={18}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 rounded-xl p-3 flex justify-between text-sm">
+                <span className="text-slate-500 font-bold">المتبقي على الفاتورة</span>
+                <span className="font-black text-amber-600">{fmt((parseFloat(payInvoice.total)||0) - (parseFloat(payInvoice.paid)||0), payInvoice.currency)}</span>
+              </div>
+              <div>
+                <label className="text-xs font-black text-slate-500 mb-1 block">المبلغ المُحصّل *</label>
+                <input type="number" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none" placeholder="0.00"/>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-black text-slate-500 mb-1 block">التاريخ</label>
+                  <input type="date" value={payForm.date} onChange={e => setPayForm(f => ({ ...f, date: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none"/>
+                </div>
+                <div>
+                  <label className="text-xs font-black text-slate-500 mb-1 block">طريقة الدفع</label>
+                  <select value={payForm.method} onChange={e => setPayForm(f => ({ ...f, method: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none bg-white">
+                    <option value="cash">نقدي</option>
+                    <option value="bank">تحويل بنكي</option>
+                    <option value="cheque">شيك</option>
+                    <option value="card">بطاقة</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-black text-slate-500 mb-1 block">الخزينة</label>
+                <select value={payForm.treasury_id} onChange={e => setPayForm(f => ({ ...f, treasury_id: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none bg-white">
+                  <option value="">— اختر الخزينة —</option>
+                  {treasuries.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-black text-slate-500 mb-1 block">ملاحظات</label>
+                <input type="text" value={payForm.notes} onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-emerald-500 outline-none" placeholder="اختياري"/>
+              </div>
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button onClick={submitPayment} disabled={paySaving}
+                className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white px-5 py-3 rounded-xl font-bold text-sm transition-colors">
+                {paySaving ? <RefreshCw size={15} className="animate-spin"/> : <CheckCircle2 size={15}/>}
+                تأكيد الدفعة
+              </button>
+              <button onClick={() => setPayInvoice(null)} disabled={paySaving}
+                className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors">إلغاء</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* المحتوى */}
