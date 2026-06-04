@@ -1304,6 +1304,66 @@ switch ($action) {
         break;
 
     // ══════════════════════════════════════════════════════════════════════
+    // PDF الرسمي من دفترة (عربي صحيح + ZATCA QR) — proxy بالجلسة المخزّنة
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_doc_pdf':
+        // type: invoice | estimate | purchase   id: رقم المستند
+        $type    = $_GET['type'] ?? 'invoice';
+        $doc_id  = (int)($_GET['id'] ?? 0);
+        $session = "__DAFTRA_SESSION__";
+        if (!$doc_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+
+        // مسارات الطباعة المرشّحة حسب نوع المستند (دفترة تولّد PDF عربي + QR)
+        $paths = [
+            'invoice'  => ["/owner/invoices/pdf/$doc_id", "/owner/invoices/print/$doc_id", "/invoices/print/$doc_id"],
+            'estimate' => ["/owner/invoices/pdf_estimate/$doc_id", "/owner/invoices/print_estimate/$doc_id"],
+            'purchase' => ["/owner/purchase_invoices/pdf/$doc_id", "/owner/purchase_invoices/print/$doc_id"],
+        ];
+        $candidates = $paths[$type] ?? $paths['invoice'];
+
+        $pdf_body = null; $pdf_ctype = null; $tried = [];
+        foreach ($candidates as $path) {
+            $url = "https://semak.daftra.com$path";
+            $ch  = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT        => 25,
+                CURLOPT_HTTPHEADER     => ["Cookie: $session", "Accept: application/pdf,text/html"],
+                CURLOPT_USERAGENT      => 'Mozilla/5.0 SemakProxy',
+            ]);
+            $body  = curl_exec($ch);
+            $code  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $ctype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            curl_close($ch);
+            $tried[] = ['path'=>$path, 'code'=>$code, 'ctype'=>$ctype, 'len'=>strlen($body ?? '')];
+            // PDF حقيقي يبدأ بـ %PDF
+            if ($body && (stripos($ctype, 'pdf') !== false || substr($body, 0, 4) === '%PDF')) {
+                $pdf_body  = $body; $pdf_ctype = 'application/pdf'; break;
+            }
+        }
+
+        if ($pdf_body !== null) {
+            ob_end_clean();
+            header_remove('Content-Type');
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: inline; filename="'.$type.'_'.$doc_id.'.pdf"');
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            echo $pdf_body;
+            exit(0);
+        }
+
+        // فشل جلب PDF — نُرجع رابط الطباعة المباشر ليفتحه المتصفّح + سجل المحاولات
+        echo json_encode([
+            'success'   => false,
+            'message'   => 'تعذّر جلب PDF — قد تكون الجلسة منتهية',
+            'print_url' => "https://semak.daftra.com".$candidates[0],
+            'tried'     => $tried,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
     // وحدة المشتريات — CRUD كامل
     // ══════════════════════════════════════════════════════════════════════
 

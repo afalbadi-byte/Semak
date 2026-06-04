@@ -4,6 +4,8 @@ import {
   Edit3, Trash2, ChevronLeft, RefreshCw,
   AlertTriangle, CheckCircle2, X
 } from 'lucide-react';
+import ExportButton from '../../components/ExportButton';
+import { fmt as fmtExport } from '../../utils/exporters';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -314,13 +316,26 @@ export default function ExpensesManage({ user, navigateTo }) {
             <p className="text-xs text-slate-400 font-medium">تتبع وإدارة مصروفات الشركة</p>
           </div>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
-        >
-          <Plus size={16} />
-          مصروف جديد
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            rows={displayed}
+            columns={[
+              { key: 'date', label: 'التاريخ' },
+              { key: 'category', label: 'الفئة', format: (v, r) => v || r.category_name || getCategoryName(r.category_id || r.expense_category_id) },
+              { key: 'supplier', label: 'المورد', format: (v, r) => v || getSupplierName(r.supplier_id) },
+              { key: 'amount', label: 'المبلغ', format: fmtExport.money },
+              { key: 'notes', label: 'ملاحظات' },
+            ]}
+            filename="المصروفات"
+          />
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
+          >
+            <Plus size={16} />
+            مصروف جديد
+          </button>
+        </div>
       </div>
 
       {/* شريط الفلاتر */}

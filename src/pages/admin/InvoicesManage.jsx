@@ -4,6 +4,8 @@ import {
   Edit3, Trash2, Eye, ChevronLeft, RefreshCw,
   AlertTriangle, CheckCircle2, X, FileText, Printer
 } from 'lucide-react';
+import ExportButton from '../../components/ExportButton';
+import { fmt as fmtExport } from '../../utils/exporters';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -346,13 +348,27 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
             <p className="text-xs text-slate-400 font-medium">إدارة الفواتير والمدفوعات</p>
           </div>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
-        >
-          <Plus size={16} />
-          فاتورة جديدة
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            rows={displayed}
+            columns={[
+              { key: 'no', label: 'رقم الفاتورة' },
+              { key: 'date', label: 'التاريخ' },
+              { key: 'client', label: 'العميل' },
+              { key: 'total', label: 'الإجمالي', format: fmtExport.money },
+              { key: 'paid', label: 'المدفوع', format: fmtExport.money },
+              { key: 'status', label: 'الحالة', format: (_v, r) => invoiceStatus(r.total, r.paid).label },
+            ]}
+            filename="الفواتير"
+          />
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
+          >
+            <Plus size={16} />
+            فاتورة جديدة
+          </button>
+        </div>
       </div>
 
       {/* شريط الفلاتر */}
@@ -647,6 +663,13 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
           >
             <Edit3 size={15} />
             تعديل الفاتورة
+          </button>
+          <button
+            onClick={() => window.open(`${API_URL}?action=daftra_doc_pdf&type=invoice&id=${inv.id}`, '_blank')}
+            className="flex items-center gap-2 bg-[#c5a059] hover:bg-[#b08f47] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
+          >
+            <Printer size={15} />
+            PDF رسمي (دفترة)
           </button>
           <button
             onClick={() => window.print()}

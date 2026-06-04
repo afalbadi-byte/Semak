@@ -4,6 +4,8 @@ import {
   Edit3, Trash2, Eye, ChevronLeft, ChevronRight, RefreshCw,
   AlertTriangle, CheckCircle2, X,
 } from 'lucide-react';
+import ExportButton from '../../components/ExportButton';
+import { fmt } from '../../utils/exporters';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -277,12 +279,25 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
                 <p className="text-slate-400 text-sm font-bold mt-0.5">قائمة عملاء دفترة</p>
               </div>
             </div>
-            <button
-              onClick={() => { setForm(emptyForm()); setView('create'); }}
-              className="flex items-center gap-2 bg-[#1a365d] hover:bg-blue-900 text-white px-6 py-3 rounded-xl font-bold transition shadow-md"
-            >
-              <Plus size={18} /> إضافة عميل
-            </button>
+            <div className="flex items-center gap-2">
+              <ExportButton
+                rows={clients.map(norm)}
+                columns={[
+                  { key: 'name', label: 'الاسم' },
+                  { key: 'phone', label: 'الهاتف' },
+                  { key: 'email', label: 'البريد' },
+                  { key: 'address', label: 'العنوان' },
+                  { key: 'balance', label: 'الرصيد', format: fmt.money },
+                ]}
+                filename="العملاء"
+              />
+              <button
+                onClick={() => { setForm(emptyForm()); setView('create'); }}
+                className="flex items-center gap-2 bg-[#1a365d] hover:bg-blue-900 text-white px-6 py-3 rounded-xl font-bold transition shadow-md"
+              >
+                <Plus size={18} /> إضافة عميل
+              </button>
+            </div>
           </div>
 
           {/* ─── Summary Chips ─── */}

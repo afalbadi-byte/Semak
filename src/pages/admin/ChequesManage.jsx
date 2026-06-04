@@ -4,6 +4,8 @@ import {
   AlertTriangle, CheckCircle2, X, ChevronDown,
   DollarSign, Building
 } from 'lucide-react';
+import ExportButton from '../../components/ExportButton';
+import { fmt as fmtExport } from '../../utils/exporters';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -307,13 +309,27 @@ export default function ChequesManage({ user, navigateTo }) {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => loadAll(appliedFilters)}
-          className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition text-slate-500"
-          title="تحديث"
-        >
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            rows={currentList}
+            columns={[
+              { key: 'no', label: 'رقم الشيك', format: (_v, row) => { const c = row.Cheque || row; return c.cheque_number || c.number || `#${c.id}`; } },
+              { key: 'party', label: 'الجهة', format: (_v, row) => { const c = row.Cheque || row; return c.client_name || c.supplier_name || c.client?.business_name || c.supplier?.business_name || c.party_name || ''; } },
+              { key: 'amount', label: 'المبلغ', format: (_v, row) => { const c = row.Cheque || row; return fmtExport.money(c.amount ?? c.total); } },
+              { key: 'due_date', label: 'تاريخ الاستحقاق', format: (_v, row) => { const c = row.Cheque || row; return c.due_date || c.date || ''; } },
+              { key: 'bank', label: 'البنك', format: (_v, row) => { const c = row.Cheque || row; return c.bank_name || c.bank || ''; } },
+              { key: 'status', label: 'الحالة', format: (_v, row) => { const c = row.Cheque || row; return (STATUS_CONFIG[c.status] || {}).label || c.status || ''; } },
+            ]}
+            filename="الشيكات"
+          />
+          <button
+            onClick={() => loadAll(appliedFilters)}
+            className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition text-slate-500"
+            title="تحديث"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       {/* ─── التبويبات ─── */}

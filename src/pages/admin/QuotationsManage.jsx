@@ -4,6 +4,8 @@ import {
   Edit3, Trash2, Eye, ChevronLeft, RefreshCw,
   AlertTriangle, CheckCircle2, X, ArrowRight
 } from 'lucide-react';
+import ExportButton from '../../components/ExportButton';
+import { fmt as fmtExport } from '../../utils/exporters';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -354,13 +356,26 @@ export default function QuotationsManage({ user, navigateTo }) {
             <p className="text-xs text-slate-400 font-medium">إدارة عروض الأسعار والعملاء</p>
           </div>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
-        >
-          <Plus size={16} />
-          عرض سعر جديد
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            rows={displayed}
+            columns={[
+              { key: 'no', label: 'رقم العرض' },
+              { key: 'date', label: 'التاريخ' },
+              { key: 'client', label: 'العميل' },
+              { key: 'total', label: 'الإجمالي', format: fmtExport.money },
+              { key: 'status', label: 'الحالة', format: (v) => estimateStatusInfo(v).label },
+            ]}
+            filename="عروض_الأسعار"
+          />
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
+          >
+            <Plus size={16} />
+            عرض سعر جديد
+          </button>
+        </div>
       </div>
 
       {/* شريط الفلاتر */}

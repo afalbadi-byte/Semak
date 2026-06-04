@@ -4,6 +4,8 @@ import {
   Building, Edit3, ChevronLeft, RefreshCw,
   AlertTriangle, CheckCircle2, X, Package, Truck
 } from 'lucide-react';
+import ExportButton from '../../components/ExportButton';
+import { fmt as fmtExport } from '../../utils/exporters';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -245,13 +247,26 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
             <p className="text-xs text-slate-400 font-medium">إدارة أوامر الشراء والموردين</p>
           </div>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-[#c5a059] hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
-        >
-          <Plus size={16} />
-          أمر شراء جديد
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            rows={displayed}
+            columns={[
+              { key: 'no', label: 'رقم الفاتورة' },
+              { key: 'date', label: 'التاريخ' },
+              { key: 'supplier', label: 'المورد' },
+              { key: 'total', label: 'الإجمالي', format: fmtExport.money },
+              { key: 'paid', label: 'المدفوع', format: fmtExport.money },
+            ]}
+            filename="فواتير_الشراء"
+          />
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-[#c5a059] hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
+          >
+            <Plus size={16} />
+            أمر شراء جديد
+          </button>
+        </div>
       </div>
 
       {/* شريط الفلاتر */}

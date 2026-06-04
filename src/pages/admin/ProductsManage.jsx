@@ -4,6 +4,8 @@ import {
   Edit3, Trash2, ChevronLeft, RefreshCw,
   AlertTriangle, CheckCircle2, X
 } from 'lucide-react';
+import ExportButton from '../../components/ExportButton';
+import { fmt as fmtExport } from '../../utils/exporters';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -427,6 +429,22 @@ export default function ProductsManage({ user, navigateTo }) {
           </div>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
+          <ExportButton
+            rows={products}
+            columns={[
+              { key: 'code', label: 'الكود', format: (_v, r) => (r.Product || r).code || '' },
+              { key: 'name', label: 'الاسم', format: (_v, r) => (r.Product || r).name || '' },
+              { key: 'category', label: 'الفئة', format: (_v, r) => {
+                const t = (r.Product || r).product_type ?? (r.Product || r).type;
+                return String(t) === '2' || t === 'service' ? 'خدمة' : 'منتج';
+              } },
+              { key: 'selling_price', label: 'سعر البيع', format: (_v, r) => fmtExport.money((r.Product || r).sale_price ?? (r.Product || r).price) },
+              { key: 'buying_price', label: 'سعر الشراء', format: (_v, r) => fmtExport.money((r.Product || r).purchase_price) },
+              { key: 'unit', label: 'الوحدة', format: (_v, r) => (r.Product || r).unit || '' },
+              { key: 'stock', label: 'المخزون', format: (_v, r) => fmtExport.int((r.Product || r).stock_count) },
+            ]}
+            filename="المنتجات"
+          />
           <button
             onClick={() => loadProducts(1, search)}
             className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition text-slate-500"
