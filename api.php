@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v384
+// deploy: 2026-06-04-v385
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -1424,10 +1424,12 @@ switch ($action) {
         if (!$doc_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
 
         // مسارات الطباعة المرشّحة حسب نوع المستند (دفترة تولّد PDF عربي + QR)
+        // الأنماط الصحيحة المؤكّدة من نظام دفترة الحيّ:
+        //   فاتورة:  /owner/invoices/view/{id}.pdf   (وطباعة: /owner/invoices/view/{id}/print:1)
         $paths = [
-            'invoice'  => ["/owner/invoices/pdf/$doc_id", "/owner/invoices/print/$doc_id", "/invoices/print/$doc_id"],
-            'estimate' => ["/owner/invoices/pdf_estimate/$doc_id", "/owner/invoices/print_estimate/$doc_id"],
-            'purchase' => ["/owner/purchase_invoices/pdf/$doc_id", "/owner/purchase_invoices/print/$doc_id"],
+            'invoice'  => ["/owner/invoices/view/$doc_id.pdf", "/owner/invoices/view/$doc_id/print:1"],
+            'estimate' => ["/owner/invoices/view_estimate/$doc_id.pdf", "/owner/estimates/view/$doc_id.pdf", "/owner/invoices/view/$doc_id.pdf"],
+            'purchase' => ["/owner/purchase_invoices/view/$doc_id.pdf", "/owner/purchase_invoices/view/$doc_id/print:1"],
         ];
         $candidates = $paths[$type] ?? $paths['invoice'];
 
