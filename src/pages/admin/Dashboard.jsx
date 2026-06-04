@@ -5,7 +5,8 @@ import {
     Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle, Bot,
     AlertTriangle, DollarSign, ArrowLeft, CheckCircle2, Coins, ShieldCheck,
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
-    Receipt, ShoppingCart
+    Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
+    Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers
 } from 'lucide-react';
 
 import UnitInspection   from './UnitInspection';
@@ -22,10 +23,17 @@ import UnitsOverview    from './UnitsOverview';
 import ProjectsManage   from './ProjectsManage';
 import UnitsEdit        from './UnitsEdit';
 import WhatsAppInbox    from './WhatsAppInbox';
-import InvoicesManage  from './InvoicesManage';
-import PurchasesManage from './PurchasesManage';
-import TreasuryManage  from './TreasuryManage';
-import ReportsHub      from './ReportsHub';
+import InvoicesManage   from './InvoicesManage';
+import PurchasesManage  from './PurchasesManage';
+import TreasuryManage   from './TreasuryManage';
+import ReportsHub       from './ReportsHub';
+import QuotationsManage from './QuotationsManage';
+import ExpensesManage   from './ExpensesManage';
+import ClientsManage    from './ClientsManage';
+import SuppliersManage  from './SuppliersManage';
+import ProductsManage   from './ProductsManage';
+import ChequesManage    from './ChequesManage';
+import RentalsManage    from './RentalsManage';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -324,27 +332,48 @@ export default function Dashboard({ onLogout }) {
         {
             id:'procurement', color:'amber', icon:Briefcase, statsKey:'procurement',
             label:'المشتريات والتعاقدات',
-            desc:'أوامر العمل · الموردون · متابعة مراحل التنفيذ',
+            desc:'أوامر العمل · الموردون · المنتجات · متابعة مراحل التنفيذ',
             tools:[
-                { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل', icon:ClipboardCheck, permKey:'finance', color:'amber' },
+                { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
+                { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
+                { id:'products',    tabId:'products',    label:'المنتجات والخدمات',    icon:Package,        permKey:'finance', color:'cyan'   },
             ],
             statsChips: (s, fmt) => [
-                { icon:Briefcase,   label:'الموردون',          value: fmt(s?.suppliers),  color:'amber' },
-                { icon:ClipboardCheck, label:'أوامر العمل',    value: fmt(s?.work_orders), color:'blue'  },
+                { icon:Briefcase,      label:'الموردون',    value: fmt(s?.suppliers),   color:'amber' },
+                { icon:ClipboardCheck, label:'أوامر العمل', value: fmt(s?.work_orders), color:'blue'  },
                 s?.open > 0 ? { icon:AlertTriangle, label:'مفتوحة', value: s?.open, color:'red' } : null,
             ],
         },
         {
-            id:'finance', color:'emerald', icon:Landmark, statsKey:'finance',
-            label:'الشؤون المالية والإدارية',
-            desc:'الفواتير · الخزاين · التقارير · الوثائق',
+            id:'rentals', color:'teal', icon:Home,
+            label:'الإيجارات والعقود',
+            desc:'الوحدات · الحجوزات · عقود الإيجار · الأقساط · تسليم الوحدات',
             tools:[
-                { id:'invoices',   tabId:'invoices',   label:'الفواتير',              icon:Receipt,     permKey:'finance',    color:'emerald' },
-                { id:'purchases',  tabId:'purchases',  label:'فواتير الشراء',         icon:ShoppingCart,permKey:'finance',    color:'amber'   },
-                { id:'treasury',   tabId:'treasury',   label:'الخزاين',               icon:Coins,       permKey:'finance',    color:'teal'    },
-                { id:'reports',    tabId:'reports',    label:'التقارير المالية',       icon:BarChart3,   permKey:'finance',    color:'indigo'  },
-                { id:'finance',    tabId:'finance',    label:'الإيرادات والمصروفات',  icon:DollarSign,  permKey:'finance',    color:'slate'   },
-                { id:'letters',    tabId:'letters',    label:'الوثائق الرسمية',       icon:FilePenLine, permKey:'letters',    color:'rose',   isLink:true, path:'/admin/letter-generator' },
+                { id:'rentals', tabId:'rentals', label:'إدارة الإيجارات', icon:Home, permKey:'finance', color:'teal' },
+            ],
+        },
+        {
+            id:'contacts', color:'purple', icon:UserCheck,
+            label:'جهات الاتصال',
+            desc:'العملاء · الموردون · بيانات الاتصال',
+            tools:[
+                { id:'clients',   tabId:'clients',   label:'إدارة العملاء',  icon:Users,     permKey:'finance', color:'purple' },
+            ],
+        },
+        {
+            id:'finance', color:'emerald', icon:Landmark, statsKey:'finance',
+            label:'الشؤون المالية والمحاسبية',
+            desc:'الفواتير · عروض الأسعار · المصروفات · الشيكات · الخزاين · التقارير',
+            tools:[
+                { id:'invoices',    tabId:'invoices',    label:'الفواتير',            icon:Receipt,      permKey:'finance', color:'emerald' },
+                { id:'quotations',  tabId:'quotations',  label:'عروض الأسعار',        icon:FileText,     permKey:'finance', color:'sky'     },
+                { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',       icon:ShoppingCart, permKey:'finance', color:'amber'   },
+                { id:'expenses',    tabId:'expenses',    label:'المصروفات',           icon:Tag,          permKey:'finance', color:'red'     },
+                { id:'cheques',     tabId:'cheques',     label:'الشيكات',             icon:CreditCard,   permKey:'finance', color:'indigo'  },
+                { id:'treasury',    tabId:'treasury',    label:'الخزاين',             icon:Coins,        permKey:'finance', color:'teal'    },
+                { id:'reports',     tabId:'reports',     label:'التقارير المالية',    icon:BarChart3,    permKey:'finance', color:'blue'    },
+                { id:'finance',     tabId:'finance',     label:'الإيرادات والمصروفات',icon:DollarSign,   permKey:'finance', color:'slate'   },
+                { id:'letters',     tabId:'letters',     label:'الوثائق الرسمية',     icon:FilePenLine,  permKey:'letters', color:'rose',   isLink:true, path:'/admin/letter-generator' },
             ],
             statsChips: (s, fmt) => [
                 { icon:TrendingUp, label:'إيرادات الشهر',  value: fmt(s?.revenue_month)  + ' ﷼', color:'emerald' },
@@ -375,8 +404,11 @@ export default function Dashboard({ onLogout }) {
         snaglist:'تقارير الملاحظات', maintenance:'الصيانة', leads:'العملاء المحتملون',
         bot:'خدمة العملاء الذكية', whatsapp:'صندوق الرسائل', qr:'رموز الوحدات',
         letters:'الوثائق الرسمية', finance:'الإيرادات والمصروفات', daftra_explorer:'التقارير المالية',
-        work_cycles:'المشاريع', users:'إدارة الفريق',
+        work_cycles:'أوامر ومراحل العمل', users:'إدارة الفريق',
         invoices:'الفواتير', purchases:'فواتير الشراء', treasury:'الخزاين', reports:'التقارير المالية',
+        quotations:'عروض الأسعار', expenses:'المصروفات', cheques:'الشيكات',
+        clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
+        rentals:'الإيجارات والعقود',
     };
 
     if (authLoading) return (
@@ -517,9 +549,16 @@ export default function Dashboard({ onLogout }) {
                 {activeTab === 'daftra_explorer' && hasPermission('finance') && <div className="animate-fadeIn"><DaftraExplorer /></div>}
                 {activeTab === 'work_cycles' && hasPermission('finance')     && <div className="animate-fadeIn"><WorkCycles /></div>}
                 {activeTab === 'invoices'    && hasPermission('finance')     && <div className="animate-fadeIn"><InvoicesManage /></div>}
+                {activeTab === 'quotations'  && hasPermission('finance')     && <div className="animate-fadeIn"><QuotationsManage /></div>}
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
+                {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
+                {activeTab === 'cheques'     && hasPermission('finance')     && <div className="animate-fadeIn"><ChequesManage /></div>}
                 {activeTab === 'treasury'    && hasPermission('finance')     && <div className="animate-fadeIn"><TreasuryManage /></div>}
                 {activeTab === 'reports'     && hasPermission('finance')     && <div className="animate-fadeIn"><ReportsHub /></div>}
+                {activeTab === 'clients'     && hasPermission('finance')     && <div className="animate-fadeIn"><ClientsManage /></div>}
+                {activeTab === 'suppliers'   && hasPermission('finance')     && <div className="animate-fadeIn"><SuppliersManage /></div>}
+                {activeTab === 'products'    && hasPermission('finance')     && <div className="animate-fadeIn"><ProductsManage /></div>}
+                {activeTab === 'rentals'     && hasPermission('finance')     && <div className="animate-fadeIn"><RentalsManage /></div>}
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={(t,m)=>alert(`${t}: ${m}`)} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
 

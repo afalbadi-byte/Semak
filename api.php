@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v378
+// deploy: 2026-06-04-v382
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -1389,6 +1389,493 @@ switch ($action) {
             $rows[] = ['id'=>$s['id'],'name'=>$s['business_name']??($s['first_name'].' '.$s['last_name'])];
         }
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // عروض الأسعار — CRUD كامل
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_estimates_list':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $qp = "page=$page&limit=50";
+        if ($from) $qp .= "&from_date=$from";
+        if ($to)   $qp .= "&to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/estimates.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $e = $r['Estimate'] ?? $r['Invoice'] ?? $r;
+            $rows[] = [
+                'id'        => $e['id'],
+                'no'        => $e['no'] ?? '',
+                'date'      => $e['date'] ?? '',
+                'client_id' => $e['client_id'] ?? '',
+                'client'    => $e['client_business_name'] ?? ($e['client_first_name'].' '.$e['client_last_name']),
+                'total'     => (float)($e['summary_total'] ?? $e['grand_total'] ?? 0),
+                'status'    => $e['status'] ?? '',
+                'notes'     => $e['notes'] ?? '',
+                'currency'  => $e['currency_code'] ?? 'SAR',
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_estimate_single':
+        $dk = "__DAFTRA_KEY__"; $eid = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/api2/estimates/$eid.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>$code===200,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_estimate_create':
+    case 'daftra_estimate_update':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $eid = (int)($body['id'] ?? 0);
+        $is_update = ($action === 'daftra_estimate_update' && $eid > 0);
+        $url = $is_update ? "https://semak.daftra.com/api2/estimates/$eid.json" : "https://semak.daftra.com/api2/estimates.json";
+        $items = [];
+        foreach ($body['items'] ?? [] as $it) {
+            $items[] = ['name'=>$it['name']??'','quantity'=>(float)($it['quantity']??1),'unit_price'=>(float)($it['unit_price']??0),'discount'=>(float)($it['discount']??0),'tax'=>(float)($it['tax']??15)];
+        }
+        $payload = ['Estimate' => [
+            'client_id'    => $body['client_id'] ?? '',
+            'date'         => $body['date']       ?? date('Y-m-d'),
+            'currency_code'=> $body['currency']   ?? 'SAR',
+            'notes'        => $body['notes']      ?? '',
+            'EstimateItem' => $items,
+        ]];
+        if ($is_update) $payload['Estimate']['id'] = $eid;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_estimate_delete':
+        $dk = "__DAFTRA_KEY__"; $eid = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/api2/estimates/$eid.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
+        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,204])]);
+        break;
+
+    case 'daftra_estimate_to_invoice':
+        // تحويل عرض السعر لفاتورة
+        $dk = "__DAFTRA_KEY__"; $eid = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/api2/estimates/$eid/convert_to_invoice.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>'{}', CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // المصروفات — CRUD كامل
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_expenses_list':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $qp = "page=$page&limit=50";
+        if ($from) $qp .= "&from_date=$from";
+        if ($to)   $qp .= "&to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/expenses.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $e = $r['Expense'] ?? $r;
+            $rows[] = [
+                'id'          => $e['id'],
+                'date'        => $e['date'] ?? '',
+                'amount'      => (float)($e['amount'] ?? 0),
+                'category'    => $e['category_name'] ?? $e['expense_category_name'] ?? '',
+                'category_id' => $e['expense_category_id'] ?? '',
+                'notes'       => $e['notes'] ?? $e['description'] ?? '',
+                'supplier'    => $e['supplier_business_name'] ?? '',
+                'supplier_id' => $e['supplier_id'] ?? '',
+                'ref'         => $e['ref_no'] ?? $e['no'] ?? '',
+                'work_order_id'=> $e['work_order_id'] ?? null,
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_expense_create':
+    case 'daftra_expense_update':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $exp_id = (int)($body['id'] ?? 0);
+        $is_update = ($action === 'daftra_expense_update' && $exp_id > 0);
+        $url = $is_update ? "https://semak.daftra.com/api2/expenses/$exp_id.json" : "https://semak.daftra.com/api2/expenses.json";
+        $payload = ['Expense' => [
+            'date'                => $body['date']         ?? date('Y-m-d'),
+            'amount'              => (float)($body['amount'] ?? 0),
+            'expense_category_id' => $body['category_id']  ?? '',
+            'supplier_id'         => $body['supplier_id']  ?? '',
+            'notes'               => $body['notes']        ?? '',
+            'work_order_id'       => $body['work_order_id'] ?? null,
+        ]];
+        if ($is_update) $payload['Expense']['id'] = $exp_id;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_expense_delete':
+        $dk = "__DAFTRA_KEY__"; $exp_id = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/api2/expenses/$exp_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
+        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,204])]);
+        break;
+
+    case 'daftra_expense_categories':
+        $dk = "__DAFTRA_KEY__";
+        $ch = curl_init("https://semak.daftra.com/api2/expense_categories.json?limit=100");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $c = $r['ExpenseCategory'] ?? $r;
+            $rows[] = ['id'=>$c['id'],'name'=>$c['name']??''];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // سندات القبض / مدفوعات العملاء
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_incomes_list':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $qp = "page=$page&limit=50";
+        if ($from) $qp .= "&from_date=$from";
+        if ($to)   $qp .= "&to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/incomes.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $inc = $r['Income'] ?? $r;
+            $rows[] = [
+                'id'        => $inc['id'],
+                'date'      => $inc['date'] ?? '',
+                'amount'    => (float)($inc['amount'] ?? 0),
+                'client'    => $inc['client_business_name'] ?? ($inc['client_first_name'].' '.$inc['client_last_name']) ?? '',
+                'client_id' => $inc['client_id'] ?? '',
+                'notes'     => $inc['notes'] ?? '',
+                'ref'       => $inc['ref_no'] ?? '',
+                'treasury'  => $inc['treasury_name'] ?? '',
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_income_add':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $payload = ['Income' => [
+            'date'        => $body['date']        ?? date('Y-m-d'),
+            'amount'      => (float)($body['amount'] ?? 0),
+            'client_id'   => $body['client_id']   ?? '',
+            'treasury_id' => $body['treasury_id'] ?? '',
+            'notes'       => $body['notes']       ?? '',
+        ]];
+        $ch = curl_init("https://semak.daftra.com/api2/incomes.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // الشيكات — مستلمة ومدفوعة
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_cheques_list':
+        $dk = "__DAFTRA_KEY__";
+        $type = $_GET['type'] ?? 'receivable'; // receivable | payable
+        $page = (int)($_GET['page'] ?? 1);
+        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+        $endpoint = ($type === 'payable') ? 'payable_cheques' : 'receivable_cheques';
+        $qp = "page=$page&limit=50";
+        if ($from) $qp .= "&from_date=$from";
+        if ($to)   $qp .= "&to_date=$to";
+        $ch = curl_init("https://semak.daftra.com/api2/{$endpoint}.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        $key = ($type === 'payable') ? 'PayableCheque' : 'ReceivableCheque';
+        foreach ($data['data'] ?? [] as $r) {
+            $c = $r[$key] ?? $r;
+            $rows[] = [
+                'id'          => $c['id'],
+                'no'          => $c['cheque_no'] ?? $c['no'] ?? '',
+                'amount'      => (float)($c['amount'] ?? 0),
+                'due_date'    => $c['due_date'] ?? $c['date'] ?? '',
+                'bank'        => $c['bank_name'] ?? '',
+                'status'      => $c['status'] ?? '',
+                'party'       => $c['client_business_name'] ?? $c['supplier_business_name'] ?? '',
+                'notes'       => $c['notes'] ?? '',
+                'type'        => $type,
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_cheque_update_status':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $cheque_id = (int)($body['id'] ?? 0);
+        $type = $body['type'] ?? 'receivable';
+        $status = $body['status'] ?? '';
+        $endpoint = ($type === 'payable') ? 'payable_cheques' : 'receivable_cheques';
+        $key = ($type === 'payable') ? 'PayableCheque' : 'ReceivableCheque';
+        $payload = [$key => ['id' => $cheque_id, 'status' => $status]];
+        $ch = curl_init("https://semak.daftra.com/api2/{$endpoint}/$cheque_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>'PUT', CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // إدارة العملاء — CRUD كامل
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_clients_list':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $search = $_GET['search'] ?? '';
+        $qp = "page=$page&limit=50";
+        if ($search) $qp .= "&search=$search";
+        $ch = curl_init("https://semak.daftra.com/api2/clients.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $c = $r['Client'] ?? $r;
+            $rows[] = [
+                'id'      => $c['id'],
+                'name'    => $c['business_name'] ?? trim($c['first_name'].' '.$c['last_name']),
+                'email'   => $c['email'] ?? '',
+                'phone'   => $c['phone'] ?? $c['mobile'] ?? '',
+                'address' => $c['address'] ?? '',
+                'balance' => (float)($c['balance'] ?? 0),
+                'created' => $c['created'] ?? '',
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$data['meta']['total']??count($rows)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_client_create':
+    case 'daftra_client_update':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $cid = (int)($body['id'] ?? 0);
+        $is_update = ($action === 'daftra_client_update' && $cid > 0);
+        $url = $is_update ? "https://semak.daftra.com/api2/clients/$cid.json" : "https://semak.daftra.com/api2/clients.json";
+        $payload = ['Client' => [
+            'business_name' => $body['name']    ?? '',
+            'email'         => $body['email']   ?? '',
+            'phone'         => $body['phone']   ?? '',
+            'mobile'        => $body['phone']   ?? '',
+            'address'       => $body['address'] ?? '',
+            'notes'         => $body['notes']   ?? '',
+        ]];
+        if ($is_update) $payload['Client']['id'] = $cid;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_client_delete':
+        $dk = "__DAFTRA_KEY__"; $cid = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/api2/clients/$cid.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
+        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,204])]);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // إدارة الموردين — CRUD كامل
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_supplier_create':
+    case 'daftra_supplier_update':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $sid = (int)($body['id'] ?? 0);
+        $is_update = ($action === 'daftra_supplier_update' && $sid > 0);
+        $url = $is_update ? "https://semak.daftra.com/api2/suppliers/$sid.json" : "https://semak.daftra.com/api2/suppliers.json";
+        $payload = ['Supplier' => [
+            'business_name' => $body['name']    ?? '',
+            'email'         => $body['email']   ?? '',
+            'phone'         => $body['phone']   ?? '',
+            'mobile'        => $body['phone']   ?? '',
+            'address'       => $body['address'] ?? '',
+            'notes'         => $body['notes']   ?? '',
+        ]];
+        if ($is_update) $payload['Supplier']['id'] = $sid;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_supplier_delete':
+        $dk = "__DAFTRA_KEY__"; $sid = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/api2/suppliers/$sid.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
+        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,204])]);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // إدارة المنتجات والخدمات — CRUD كامل
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_products_list':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $search = $_GET['search'] ?? '';
+        $qp = "page=$page&limit=50";
+        if ($search) $qp .= "&search=$search";
+        $ch = curl_init("https://semak.daftra.com/api2/products.json?$qp");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $p = $r['Product'] ?? $r;
+            $rows[] = [
+                'id'            => $p['id'],
+                'name'          => $p['name']          ?? '',
+                'code'          => $p['code']          ?? '',
+                'selling_price' => (float)($p['selling_price']  ?? 0),
+                'buying_price'  => (float)($p['buying_price']   ?? 0),
+                'unit'          => $p['unit']          ?? '',
+                'category'      => $p['category_name'] ?? '',
+                'stock'         => (float)($p['quantity'] ?? $p['stock_quantity'] ?? 0),
+                'type'          => $p['product_type']  ?? $p['type'] ?? '',
+            ];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_product_create':
+    case 'daftra_product_update':
+        $dk = "__DAFTRA_KEY__";
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $pid = (int)($body['id'] ?? 0);
+        $is_update = ($action === 'daftra_product_update' && $pid > 0);
+        $url = $is_update ? "https://semak.daftra.com/api2/products/$pid.json" : "https://semak.daftra.com/api2/products.json";
+        $payload = ['Product' => [
+            'name'          => $body['name']          ?? '',
+            'code'          => $body['code']          ?? '',
+            'selling_price' => (float)($body['selling_price'] ?? 0),
+            'buying_price'  => (float)($body['buying_price']  ?? 0),
+            'unit'          => $body['unit']          ?? '',
+            'notes'         => $body['notes']         ?? '',
+        ]];
+        if ($is_update) $payload['Product']['id'] = $pid;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_product_delete':
+        $dk = "__DAFTRA_KEY__"; $pid = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/api2/products/$pid.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
+        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,204])]);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // الإيجارات — وحدات + حجوزات + عقود + أقساط + تسليم
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_rental_units':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $ch = curl_init("https://semak.daftra.com/v2/api/rental/units?page=$page&limit=50");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        echo json_encode(['success'=>true,'data'=>$data['data']??[],'meta'=>$data['meta']??[],'http_code'=>$code], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_reservation_orders':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $ch = curl_init("https://semak.daftra.com/v2/api/rental/reservation-orders?page=$page&limit=50");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        echo json_encode(['success'=>true,'data'=>$data['data']??[],'meta'=>$data['meta']??[],'http_code'=>$code], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_lease_contracts':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/lease_contract/list/$page");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        echo json_encode(['success'=>true,'data'=>$data['data']??[],'meta'=>$data['meta']??[],'raw'=>$data,'http_code'=>$code], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_lease_contract_single':
+        $dk = "__DAFTRA_KEY__"; $lid = (int)($_GET['id']??0);
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/lease_contract/$lid/1");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>$code===200,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_contract_installments':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $contract_id = $_GET['contract_id'] ?? '';
+        $status = $_GET['status'] ?? ''; // paid | unpaid | overdue
+        $url = "https://semak.daftra.com/v2/api/entity/contract_installment/list/$page";
+        if ($contract_id || $status) {
+            $filters = [];
+            if ($contract_id) $filters[] = "lease_contract_id=$contract_id";
+            if ($status)      $filters[] = "status=$status";
+            $url .= '?'.implode('&', $filters);
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        echo json_encode(['success'=>true,'data'=>$data['data']??[],'meta'=>$data['meta']??[],'http_code'=>$code], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_unit_delivery':
+        $dk = "__DAFTRA_KEY__";
+        $page = (int)($_GET['page'] ?? 1);
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/le_workflow-type-entity-3/list/$page");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        echo json_encode(['success'=>true,'data'=>$data['data']??[],'meta'=>$data['meta']??[],'http_code'=>$code], JSON_UNESCAPED_UNICODE);
         break;
 
     // ══════════════════════════════════════════════════════════════════════
