@@ -224,6 +224,116 @@ function DeptSection({ dept, hasPermission, dashCounts, deptStats, statsLoading,
     );
 }
 
+// ─── بطاقة مؤشر مالي كبيرة (KPI) ────────────────────────────────────────────
+function KpiCard({ icon: Icon, label, value, sub, tone = 'navy', loading }) {
+    const tones = {
+        navy:    { grad:'from-[#1a365d] to-[#2a4a7d]', ic:'bg-white/15 text-white',       txt:'text-white',       sub:'text-white/60',       lbl:'text-white/70' },
+        emerald: { grad:'from-emerald-600 to-emerald-500', ic:'bg-white/20 text-white',   txt:'text-white',       sub:'text-white/70',       lbl:'text-white/80' },
+        red:     { grad:'from-rose-600 to-red-500',    ic:'bg-white/20 text-white',       txt:'text-white',       sub:'text-white/70',       lbl:'text-white/80' },
+        gold:    { grad:'from-[#c5a059] to-[#d4b675]', ic:'bg-white/20 text-white',       txt:'text-white',       sub:'text-white/70',       lbl:'text-white/80' },
+    };
+    const c = tones[tone] || tones.navy;
+    return (
+        <div className={`relative overflow-hidden rounded-3xl bg-gradient-to-bl ${c.grad} p-5 md:p-6 shadow-lg`}>
+            <div className="absolute -left-6 -bottom-8 opacity-10">
+                <Icon size={120} strokeWidth={1.5} className="text-white"/>
+            </div>
+            <div className="relative">
+                <div className="flex items-center gap-2.5 mb-3">
+                    <div className={`w-9 h-9 ${c.ic} rounded-xl flex items-center justify-center`}><Icon size={18}/></div>
+                    <span className={`text-xs font-bold ${c.lbl}`}>{label}</span>
+                </div>
+                {loading
+                    ? <div className="h-9 w-32 bg-white/20 rounded-lg animate-pulse"/>
+                    : <div className={`text-2xl md:text-3xl font-black ${c.txt} tracking-tight`} dir="ltr">{value}</div>
+                }
+                {sub && !loading && <p className={`text-[11px] font-bold mt-1.5 ${c.sub}`}>{sub}</p>}
+            </div>
+        </div>
+    );
+}
+
+// ─── رسم بياني — اتجاه 6 أشهر (SVG، بدون مكتبات) ─────────────────────────────
+function TrendChart({ data, loading }) {
+    const fmtK = (n) => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : Math.round(n);
+    if (loading) {
+        return (
+            <div className="h-64 flex items-end gap-3 px-2">
+                {[...Array(6)].map((_, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1.5 justify-end">
+                        <div className="w-full bg-slate-100 rounded-t-lg animate-pulse" style={{ height: `${30 + (i*11)%50}%` }}/>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+    const rows = data || [];
+    const max  = Math.max(1, ...rows.map(r => Math.max(r.revenue || 0, r.expenses || 0)));
+    return (
+        <div>
+            <div className="flex items-center gap-4 mb-4 text-[11px] font-bold">
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-[#c5a059]"/> إيرادات</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-rose-400"/> مصروفات</span>
+            </div>
+            <div className="h-56 flex items-end gap-2 md:gap-4">
+                {rows.map((r, i) => {
+                    const rh = Math.max(2, ((r.revenue || 0) / max) * 100);
+                    const eh = Math.max(2, ((r.expenses || 0) / max) * 100);
+                    return (
+                        <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group">
+                            <div className="w-full flex items-end justify-center gap-1 md:gap-1.5 h-full">
+                                <div className="relative flex-1 max-w-[26px] bg-[#c5a059] rounded-t-md transition-all hover:opacity-80" style={{ height: `${rh}%` }}>
+                                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-black text-[#c5a059] opacity-0 group-hover:opacity-100 transition whitespace-nowrap">{fmtK(r.revenue||0)}</span>
+                                </div>
+                                <div className="relative flex-1 max-w-[26px] bg-rose-400 rounded-t-md transition-all hover:opacity-80" style={{ height: `${eh}%` }}>
+                                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-black text-rose-500 opacity-0 group-hover:opacity-100 transition whitespace-nowrap">{fmtK(r.expenses||0)}</span>
+                                </div>
+                            </div>
+                            <span className="text-[10px] md:text-[11px] font-bold text-slate-400 mt-2">{r.label}</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+// ─── عنوان قسم + شبكة أدوات موحّدة (تصميم مسطّح نظيف) ────────────────────────
+function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads }) {
+    const p = DEPT_PALETTE[dept.color] || DEPT_PALETTE.indigo;
+    const tools = dept.tools.filter(t => hasPermission(t.permKey));
+    if (tools.length === 0) return null;
+    return (
+        <section>
+            <div className="flex items-center gap-2.5 mb-3 px-1">
+                <div className={`w-7 h-7 ${p.icon} rounded-lg flex items-center justify-center shrink-0`}>
+                    <dept.icon size={15}/>
+                </div>
+                <h3 className={`text-sm font-black ${p.title}`}>{dept.label}</h3>
+                <div className="flex-1 h-px bg-slate-200/70"/>
+                <span className="text-[11px] font-bold text-slate-400">{tools.length} أدوات</span>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5 md:gap-3">
+                {tools.map(tool => (
+                    <ToolCard
+                        key={tool.id}
+                        icon={tool.icon}
+                        label={tool.label}
+                        badge={tool.badge ? dashCounts[tool.badge] : undefined}
+                        badgeLabel={tool.badgeLabel}
+                        color={tool.color}
+                        onClick={() => {
+                            if (tool.isExternal) window.open(tool.path, '_blank');
+                            else if (tool.isLink) window.location.href = tool.path;
+                            else { setActiveTab(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
+                        }}
+                    />
+                ))}
+            </div>
+        </section>
+    );
+}
+
 // ─── الداشبورد الرئيسي ───────────────────────────────────────────────────────
 export default function Dashboard({ onLogout }) {
     const [activeTab, setActiveTab] = useState('overview');
@@ -235,6 +345,8 @@ export default function Dashboard({ onLogout }) {
     const [dashTasks,   setDashTasks]   = useState([]);
     const [deptStats,   setDeptStats]   = useState(null);
     const [statsLoading,setStatsLoading]= useState(false);
+    const [trend,       setTrend]       = useState(null);
+    const [trendLoading,setTrendLoading]= useState(false);
 
     const loadDashboardCounts = async () => {
         try {
@@ -254,10 +366,21 @@ export default function Dashboard({ onLogout }) {
         finally { setStatsLoading(false); }
     };
 
+    const loadTrend = async () => {
+        setTrendLoading(true);
+        try {
+            const res  = await fetch(`${API_URL}?action=dashboard_trend`);
+            const data = await res.json();
+            if (data.success) setTrend(data.trend || []);
+        } catch {}
+        finally { setTrendLoading(false); }
+    };
+
     useEffect(() => {
         if (activeTab === 'overview') {
             loadDashboardCounts();
             loadDeptStats();
+            loadTrend();
         }
     }, [activeTab]);
 
@@ -465,74 +588,97 @@ export default function Dashboard({ onLogout }) {
                 )}
 
                 {/* ════════════════════════════════════════════════════════════
-                    الصفحة الرئيسية — مقسّمة حسب الأقسام
+                    الصفحة الرئيسية — تصميم موحّد نظيف
                 ════════════════════════════════════════════════════════════ */}
-                {activeTab === 'overview' && (
-                    <div className="p-4 md:p-8 animate-fadeIn max-w-7xl mx-auto space-y-6">
+                {activeTab === 'overview' && (() => {
+                    const fin = deptStats?.finance || {};
+                    const fmtSAR = (n) => (n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—') + ' ﷼';
+                    const net = fin.net ?? 0;
+                    return (
+                    <div className="p-4 md:p-8 animate-fadeIn max-w-7xl mx-auto space-y-8">
 
                         {/* الترحيب */}
                         <div className="flex items-center justify-between flex-wrap gap-3">
                             <div>
                                 <h2 className="text-2xl md:text-3xl font-black text-[#1a365d]">مرحباً، {dbUser.name.split(' ')[0]}</h2>
-                                <p className="text-slate-500 text-sm mt-1">إليك ملخص النظام حسب الأقسام</p>
+                                <p className="text-slate-500 text-sm mt-1">نظرة شاملة على أداء المنشأة</p>
                             </div>
-                            <button onClick={() => { loadDashboardCounts(); loadDeptStats(); }}
-                            className="bg-white border border-slate-200 hover:border-teal-500 text-slate-600 hover:text-teal-600 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
-                            <RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''}/> تحديث
-                        </button>
+                            <button onClick={() => { loadDashboardCounts(); loadDeptStats(); loadTrend(); }}
+                                className="bg-white border border-slate-200 hover:border-teal-500 text-slate-600 hover:text-teal-600 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
+                                <RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''}/> تحديث
+                            </button>
                         </div>
 
-                        {/* المهام المعلّقة */}
-                        {dashTasks.length > 0 ? (
-                            <div className="bg-gradient-to-l from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 shadow-sm">
-                                <h3 className="text-sm font-black text-amber-900 mb-3 flex items-center gap-2">
-                                    <AlertTriangle size={16}/> مهام تحتاج إنجاز
-                                </h3>
-                                <ul className="space-y-2">
-                                    {dashTasks.map((t, i) => (
-                                        <li key={i}
-                                            onClick={() => { setActiveTab(t.tab); if (t.tab === 'leads') loadLeads(); }}
-                                            className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/60 cursor-pointer transition"
-                                        >
-                                            <span className={`w-2 h-2 rounded-full bg-${t.color}-500 shrink-0`}/>
-                                            <span className="text-sm text-slate-700 font-bold flex-1">{t.text}</span>
-                                            <ChevronRight size={14} className="text-slate-400"/>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ) : (
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
-                                <CheckCircle2 size={20} className="text-emerald-600 shrink-0"/>
-                                <div>
-                                    <h3 className="text-sm font-black text-emerald-900">كل شيء تحت السيطرة</h3>
-                                    <p className="text-xs text-emerald-700 mt-0.5">لا توجد مهام معلّقة</p>
-                                </div>
-                            </div>
-                        )}
+                        {/* ─── المؤشرات المالية الكبيرة ───────────────────── */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <KpiCard icon={TrendingUp} tone="emerald" label="إيرادات الشهر"
+                                value={fmtSAR(fin.revenue_month)} sub="إجمالي فواتير هذا الشهر" loading={statsLoading}/>
+                            <KpiCard icon={DollarSign} tone="red" label="مصروفات الشهر"
+                                value={fmtSAR(fin.expenses_month)} sub="إجمالي مصروفات هذا الشهر" loading={statsLoading}/>
+                            <KpiCard icon={BarChart3} tone={net >= 0 ? 'navy' : 'red'} label="صافي الربح الكلي"
+                                value={fmtSAR(net)} sub={`إيرادات ${fmtSAR(fin.revenue_all)}`} loading={statsLoading}/>
+                            <KpiCard icon={Receipt} tone="gold" label="فواتير الشهر"
+                                value={String(deptStats?.sales?.invoices_month ?? '—')} sub={`${deptStats?.sales?.clients ?? 0} عميل مسجّل`} loading={statsLoading}/>
+                        </div>
 
-                        {/* ─── الأقسام ──────────────────────────────────── */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                            {DEPARTMENTS.map(dept => {
-                                const visible = dept.tools.filter(t => hasPermission(t.permKey));
-                                const hasStats = !!dept.statsChips;
-                                if (visible.length === 0 && dept.tools.length > 0 && !hasStats) return null;
-                                return (
-                                    <DeptSection
-                                        key={dept.id}
-                                        dept={dept}
-                                        hasPermission={hasPermission}
-                                        dashCounts={dashCounts}
-                                        deptStats={deptStats}
-                                        statsLoading={statsLoading}
-                                        setActiveTab={setActiveTab}
-                                        loadLeads={loadLeads}
-                                    />
-                                );
-                            })}
+                        {/* ─── الرسم البياني + المهام ───────────────────── */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                            {/* الرسم البياني */}
+                            <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-sm p-5 md:p-6">
+                                <div className="flex items-center justify-between mb-5">
+                                    <h3 className="text-base font-black text-[#1a365d] flex items-center gap-2">
+                                        <BarChart3 size={18} className="text-[#c5a059]"/> الإيرادات والمصروفات — آخر 6 أشهر
+                                    </h3>
+                                </div>
+                                <TrendChart data={trend} loading={trendLoading}/>
+                            </div>
+
+                            {/* المهام المعلّقة */}
+                            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 md:p-6 flex flex-col">
+                                <h3 className="text-base font-black text-[#1a365d] flex items-center gap-2 mb-4">
+                                    <AlertTriangle size={18} className="text-amber-500"/> مهام تحتاج إنجاز
+                                </h3>
+                                {dashTasks.length > 0 ? (
+                                    <ul className="space-y-1.5 flex-1">
+                                        {dashTasks.map((t, i) => (
+                                            <li key={i}
+                                                onClick={() => { setActiveTab(t.tab); if (t.tab === 'leads') loadLeads(); }}
+                                                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition border border-transparent hover:border-slate-200"
+                                            >
+                                                <span className={`w-2 h-2 rounded-full bg-${t.color}-500 shrink-0`}/>
+                                                <span className="text-[13px] text-slate-700 font-bold flex-1 leading-tight">{t.text}</span>
+                                                <ChevronRight size={14} className="text-slate-300 shrink-0"/>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+                                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-3">
+                                            <CheckCircle2 size={24} className="text-emerald-600"/>
+                                        </div>
+                                        <h4 className="text-sm font-black text-emerald-900">كل شيء تحت السيطرة</h4>
+                                        <p className="text-xs text-slate-400 mt-1">لا توجد مهام معلّقة حالياً</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ─── الأدوات — شبكة موحّدة حسب الأقسام ───────────── */}
+                        <div className="space-y-7">
+                            {DEPARTMENTS.map(dept => (
+                                <SectionTools
+                                    key={dept.id}
+                                    dept={dept}
+                                    hasPermission={hasPermission}
+                                    dashCounts={dashCounts}
+                                    setActiveTab={setActiveTab}
+                                    loadLeads={loadLeads}
+                                />
+                            ))}
                         </div>
                     </div>
-                )}
+                    );
+                })()}
 
                 {/* ════ محتوى التبويبات ════ */}
                 {activeTab === 'projects'    && hasPermission('projects')    && <ProjectsManage />}

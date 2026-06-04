@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v382
+// deploy: 2026-06-04-v383
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -1089,6 +1089,62 @@ switch ($action) {
             '_src'        => 'v2-wf',
             '_wf_count'   => count($wf_rows),
             '_wf_total'   => $wf_total,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'dashboard_trend':
+        // ─── اتجاه آخر 6 أشهر: إيرادات + مصروفات (للرسم البياني) ─────────────
+        set_time_limit(40);
+        $dk   = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $hh   = ["APIKEY: $dk", "Accept: application/json"];
+
+        $months = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $ts = strtotime("first day of -$i month");
+            $months[date('Y-m', $ts)] = [
+                'key'      => date('Y-m', $ts),
+                'label'    => ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][(int)date('n', $ts)-1],
+                'revenue'  => 0,
+                'expenses' => 0,
+            ];
+        }
+        $start = date('Y-m-01', strtotime('first day of -5 month'));
+        $end   = date('Y-m-d');
+
+        $fetch_paged = function($ep) use ($base, $hh) {
+            $all = []; $pg = 1;
+            while ($pg <= 15) {
+                $sep = strpos($ep,'?')!==false ? '&' : '?';
+                $ch = curl_init("$base/$ep{$sep}page=$pg&limit=100");
+                curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hh, CURLOPT_TIMEOUT=>10, CURLOPT_FOLLOWLOCATION=>true]);
+                $r = curl_exec($ch); curl_close($ch);
+                $d = json_decode($r, true);
+                if (!$d || empty($d['data'])) break;
+                $all = array_merge($all, $d['data']);
+                if (count($d['data']) < 100) break;
+                $pg++;
+            }
+            return $all;
+        };
+
+        $invoices = $fetch_paged("invoices.json?from_date=$start&to_date=$end");
+        $expenses = $fetch_paged("expenses.json?from_date=$start&to_date=$end");
+
+        foreach ($invoices as $r) {
+            $inv = $r['Invoice'] ?? $r;
+            $m = substr($inv['date'] ?? '', 0, 7);
+            if (isset($months[$m])) $months[$m]['revenue'] += (float)($inv['summary_total'] ?? $inv['grand_total'] ?? 0);
+        }
+        foreach ($expenses as $r) {
+            $e = $r['Expense'] ?? $r;
+            $m = substr($e['date'] ?? '', 0, 7);
+            if (isset($months[$m])) $months[$m]['expenses'] += (float)($e['amount'] ?? $e['total'] ?? 0);
+        }
+
+        echo json_encode([
+            'success' => true,
+            'trend'   => array_values($months),
         ], JSON_UNESCAPED_UNICODE);
         break;
 
