@@ -127,15 +127,40 @@ function ToolCard({ icon: Icon, label, badge, badgeLabel, color = 'slate', onCli
     );
 }
 
+// ─── شريحة إحصائية صغيرة ────────────────────────────────────────────────────
+function StatChip({ icon: Icon, label, value, color = 'slate', loading }) {
+    const colors = {
+        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        teal:    'bg-teal-50 text-teal-700 border-teal-200',
+        red:     'bg-red-50 text-red-700 border-red-200',
+        amber:   'bg-amber-50 text-amber-700 border-amber-200',
+        blue:    'bg-blue-50 text-blue-700 border-blue-200',
+        slate:   'bg-slate-50 text-slate-600 border-slate-200',
+    };
+    return (
+        <div className={`inline-flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${colors[color] || colors.slate}`}>
+            <Icon size={11} className="opacity-60 shrink-0"/>
+            <span className="opacity-60">{label}</span>
+            {loading
+                ? <span className="w-8 h-3 bg-current opacity-10 rounded animate-pulse"/>
+                : <span className="font-black">{value ?? '—'}</span>
+            }
+        </div>
+    );
+}
+
 // ─── بطاقة قسم ──────────────────────────────────────────────────────────────
-function DeptSection({ dept, hasPermission, dashCounts, setActiveTab, loadLeads }) {
+function DeptSection({ dept, hasPermission, dashCounts, deptStats, statsLoading, setActiveTab, loadLeads }) {
     const p = DEPT_PALETTE[dept.color] || DEPT_PALETTE.indigo;
     const tools = dept.tools.filter(t => hasPermission(t.permKey));
+    const stats = dept.statsKey ? (deptStats?.[dept.statsKey] ?? null) : null;
+
+    const fmt = (n) => n != null ? Number(n).toLocaleString('ar-SA') : '—';
 
     return (
         <div className={`rounded-2xl border ${p.wrap} overflow-hidden`}>
             {/* رأس القسم */}
-            <div className={`flex items-center gap-3 px-5 py-4 border-b border-current/10`}>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/60">
                 <div className={`w-9 h-9 ${p.icon} rounded-xl flex items-center justify-center shrink-0`}>
                     <dept.icon size={18}/>
                 </div>
@@ -173,6 +198,15 @@ function DeptSection({ dept, hasPermission, dashCounts, setActiveTab, loadLeads 
                     </div>
                 )}
             </div>
+
+            {/* ── أرقام دفترة مدمجة ─────────────────────────────────────── */}
+            {dept.statsChips && (
+                <div className="px-4 pb-4 flex flex-wrap gap-2 border-t border-white/80 pt-3">
+                    {dept.statsChips(stats, fmt, statsLoading).map((chip, i) =>
+                        chip ? <StatChip key={i} {...chip} loading={statsLoading}/> : null
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -184,8 +218,10 @@ export default function Dashboard({ onLogout }) {
     const [authLoading, setAuthLoading] = useState(true);
     const [leads, setLeads]         = useState([]);
     const [dataLoading, setDataLoading] = useState(false);
-    const [dashCounts, setDashCounts] = useState({});
-    const [dashTasks,  setDashTasks]  = useState([]);
+    const [dashCounts,  setDashCounts]  = useState({});
+    const [dashTasks,   setDashTasks]   = useState([]);
+    const [deptStats,   setDeptStats]   = useState(null);
+    const [statsLoading,setStatsLoading]= useState(false);
 
     const loadDashboardCounts = async () => {
         try {
@@ -195,7 +231,22 @@ export default function Dashboard({ onLogout }) {
         } catch {}
     };
 
-    useEffect(() => { if (activeTab === 'overview') loadDashboardCounts(); }, [activeTab]);
+    const loadDeptStats = async () => {
+        setStatsLoading(true);
+        try {
+            const res  = await fetch(`${API_URL}?action=dept_stats`);
+            const data = await res.json();
+            if (data.success) setDeptStats(data);
+        } catch {}
+        finally { setStatsLoading(false); }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'overview') {
+            loadDashboardCounts();
+            loadDeptStats();
+        }
+    }, [activeTab]);
 
     useEffect(() => {
         const verify = async () => {
@@ -236,56 +287,68 @@ export default function Dashboard({ onLogout }) {
     // ─── تعريف الأقسام ───────────────────────────────────────────────────────
     const DEPARTMENTS = [
         {
-            id:'sales', color:'teal', icon:TrendingUp,
+            id:'sales', color:'teal', icon:TrendingUp, statsKey:'sales',
             label:'المبيعات والتسويق',
             desc:'العملاء المحتملون · التواصل المباشر · تحليل الجدوى والتسعير',
             tools:[
-                { id:'leads',       tabId:'leads',       label:'العملاء المحتملون',    icon:Users,         permKey:'leads',       badge:'leads_new',            color:'teal'    },
-                { id:'whatsapp',    tabId:'whatsapp',    label:'صندوق الرسائل',         icon:MessageCircle, permKey:'whatsapp',                                  color:'green'   },
-                { id:'bot',         tabId:'bot',         label:'خدمة العملاء الذكية',  icon:Bot,           permKey:'bot',         badge:'bot_customers_today',   color:'amber', badgeLabel:'اليوم' },
-                { id:'feasibility', tabId:'feasibility', label:'الجدوى والتسعير',       icon:BarChart3,     permKey:'feasibility',                               color:'emerald' },
-            ]
+                { id:'leads',       tabId:'leads',       label:'العملاء المحتملون',   icon:Users,         permKey:'leads',       badge:'leads_new',           color:'teal'   },
+                { id:'whatsapp',    tabId:'whatsapp',    label:'صندوق الرسائل',        icon:MessageCircle, permKey:'whatsapp',                                 color:'green'  },
+                { id:'bot',         tabId:'bot',         label:'خدمة العملاء الذكية', icon:Bot,           permKey:'bot',         badge:'bot_customers_today', color:'amber', badgeLabel:'اليوم' },
+                { id:'feasibility', tabId:'feasibility', label:'الجدوى والتسعير',      icon:BarChart3,     permKey:'feasibility',                              color:'emerald'},
+            ],
+            statsChips: (s, fmt) => [
+                { icon:Users,      label:'إجمالي العملاء',   value: fmt(s?.clients),        color:'teal'    },
+                { icon:TrendingUp, label:'فواتير الشهر',     value: s?.invoices_month,      color:'blue'    },
+                { icon:DollarSign, label:'إيرادات الشهر',    value: fmt(s?.revenue_month) + ' ﷼', color:'emerald' },
+            ],
         },
         {
             id:'projects', color:'blue', icon:HardHat,
             label:'المشاريع والعمليات',
             desc:'الوحدات العقارية · تسجيل الملاك · التسليم والصيانة',
             tools:[
-                { id:'projects',   tabId:'projects',   label:'المشاريع والأبراج',    icon:Building,       permKey:'projects',                                color:'blue'   },
-                { id:'units',      tabId:'units',      label:'الوحدات والمخطط',      icon:Building2,      permKey:'units',                                   color:'sky'    },
-                { id:'units_edit', tabId:'units_edit', label:'تسجيل الملاك',         icon:Edit2,          permKey:'units_edit',                              color:'cyan'   },
-                { id:'maintenance',tabId:'maintenance',label:'الصيانة',              icon:Wrench,         permKey:'maintenance', badge:'maintenance_open',   color:'purple' },
-                { id:'inspection', tabId:'inspection', label:'محاضر التسليم',        icon:ClipboardCheck, permKey:'inspection',  badge:'inspections_pending',color:'indigo' },
-                { id:'snaglist',   tabId:'snaglist',   label:'تقارير الملاحظات',     icon:FileWarning,    permKey:'snaglist',                                color:'red'    },
-                { id:'qr',         tabId:'qr',         label:'رموز الوحدات',         icon:QrCode,         permKey:'qr',                                      color:'slate'  },
-            ]
+                { id:'projects',   tabId:'projects',   label:'المشاريع والأبراج', icon:Building,       permKey:'projects',                                color:'blue'   },
+                { id:'units',      tabId:'units',      label:'الوحدات والمخطط',   icon:Building2,      permKey:'units',                                   color:'sky'    },
+                { id:'units_edit', tabId:'units_edit', label:'تسجيل الملاك',      icon:Edit2,          permKey:'units_edit',                              color:'cyan'   },
+                { id:'maintenance',tabId:'maintenance',label:'الصيانة',           icon:Wrench,         permKey:'maintenance', badge:'maintenance_open',   color:'purple' },
+                { id:'inspection', tabId:'inspection', label:'محاضر التسليم',     icon:ClipboardCheck, permKey:'inspection',  badge:'inspections_pending',color:'indigo' },
+                { id:'snaglist',   tabId:'snaglist',   label:'تقارير الملاحظات',  icon:FileWarning,    permKey:'snaglist',                                color:'red'    },
+                { id:'qr',         tabId:'qr',         label:'رموز الوحدات',      icon:QrCode,         permKey:'qr',                                      color:'slate'  },
+            ],
         },
         {
-            id:'procurement', color:'amber', icon:Briefcase,
+            id:'procurement', color:'amber', icon:Briefcase, statsKey:'procurement',
             label:'المشتريات والتعاقدات',
             desc:'أوامر العمل · الموردون · متابعة مراحل التنفيذ',
             tools:[
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل', icon:ClipboardCheck, permKey:'finance', color:'amber' },
-            ]
+            ],
+            statsChips: (s, fmt) => [
+                { icon:Briefcase,   label:'الموردون',          value: fmt(s?.suppliers),  color:'amber' },
+                { icon:ClipboardCheck, label:'أوامر العمل',    value: fmt(s?.work_orders), color:'blue'  },
+                s?.open > 0 ? { icon:AlertTriangle, label:'مفتوحة', value: s?.open, color:'red' } : null,
+            ],
         },
         {
-            id:'finance', color:'emerald', icon:Landmark,
+            id:'finance', color:'emerald', icon:Landmark, statsKey:'finance',
             label:'الشؤون المالية والإدارية',
-            desc:'الإيرادات · المصروفات · التقارير المالية · الوثائق الرسمية',
+            desc:'الإيرادات · المصروفات · الوثائق الرسمية',
             tools:[
-                { id:'finance',         tabId:'finance',         label:'الإيرادات والمصروفات', icon:DollarSign,  permKey:'finance',     color:'emerald' },
-                { id:'daftra_explorer', tabId:'daftra_explorer', label:'التقارير المالية',      icon:BarChart3,   permKey:'finance',     color:'teal'    },
-                { id:'accounting',      tabId:'accounting',      label:'النظام المحاسبي',       icon:Calculator,  permKey:'accounting',  color:'slate',  isExternal:true, path:'https://semak.daftra.com/' },
-                { id:'letters',         tabId:'letters',         label:'الوثائق الرسمية',       icon:FilePenLine, permKey:'letters',     color:'rose',   isLink:true, path:'/admin/letter-generator' },
-            ]
+                { id:'finance',    tabId:'finance',    label:'الإيرادات والمصروفات', icon:DollarSign,  permKey:'finance',    color:'emerald' },
+                { id:'accounting', tabId:'accounting', label:'النظام المحاسبي',       icon:Calculator,  permKey:'accounting', color:'slate', isExternal:true, path:'https://semak.daftra.com/' },
+                { id:'letters',    tabId:'letters',    label:'الوثائق الرسمية',       icon:FilePenLine, permKey:'letters',    color:'rose',   isLink:true, path:'/admin/letter-generator' },
+            ],
+            statsChips: (s, fmt) => [
+                { icon:TrendingUp, label:'إيرادات الشهر',  value: fmt(s?.revenue_month)  + ' ﷼', color:'emerald' },
+                { icon:DollarSign, label:'مصروفات الشهر', value: fmt(s?.expenses_month) + ' ﷼', color:'red'     },
+                { icon:BarChart3,  label:'صافي الكل',      value: fmt(s?.net)            + ' ﷼', color: (s?.net ?? 0) >= 0 ? 'teal' : 'red' },
+            ],
         },
         {
             id:'it', color:'indigo', icon:Cpu,
             label:'تقنية المعلومات',
             desc:'الأنظمة الرقمية · الذكاء الاصطناعي · البنية التقنية',
-            tools:[
-                // قيد التطوير — يُضاف لاحقاً أدوات إدارة الأنظمة والتكاملات
-            ]
+            tools:[], // قيد التطوير
         },
         {
             id:'hr', color:'purple', icon:ShieldCheck,
@@ -293,7 +356,7 @@ export default function Dashboard({ onLogout }) {
             desc:'إدارة الفريق · الصلاحيات · الأدوار الوظيفية',
             tools:[
                 { id:'users', tabId:'users', label:'إدارة الفريق', icon:UserCircle, permKey:'users_manage', color:'purple' },
-            ]
+            ],
         },
     ];
 
@@ -372,9 +435,10 @@ export default function Dashboard({ onLogout }) {
                                 <h2 className="text-2xl md:text-3xl font-black text-[#1a365d]">مرحباً، {dbUser.name.split(' ')[0]}</h2>
                                 <p className="text-slate-500 text-sm mt-1">إليك ملخص النظام حسب الأقسام</p>
                             </div>
-                            <button onClick={loadDashboardCounts} className="bg-white border border-slate-200 hover:border-teal-500 text-slate-600 hover:text-teal-600 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
-                                <RefreshCw size={14}/> تحديث
-                            </button>
+                            <button onClick={() => { loadDashboardCounts(); loadDeptStats(); }}
+                            className="bg-white border border-slate-200 hover:border-teal-500 text-slate-600 hover:text-teal-600 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
+                            <RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''}/> تحديث
+                        </button>
                         </div>
 
                         {/* المهام المعلّقة */}
@@ -409,15 +473,17 @@ export default function Dashboard({ onLogout }) {
                         {/* ─── الأقسام ──────────────────────────────────── */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                             {DEPARTMENTS.map(dept => {
-                                // أظهر القسم فقط إذا كان للمستخدم صلاحية على أداة واحدة على الأقل
                                 const visible = dept.tools.filter(t => hasPermission(t.permKey));
-                                if (visible.length === 0 && dept.tools.length > 0) return null;
+                                const hasStats = !!dept.statsChips;
+                                if (visible.length === 0 && dept.tools.length > 0 && !hasStats) return null;
                                 return (
                                     <DeptSection
                                         key={dept.id}
                                         dept={dept}
                                         hasPermission={hasPermission}
                                         dashCounts={dashCounts}
+                                        deptStats={deptStats}
+                                        statsLoading={statsLoading}
                                         setActiveTab={setActiveTab}
                                         loadLeads={loadLeads}
                                     />

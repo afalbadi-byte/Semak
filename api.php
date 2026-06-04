@@ -974,6 +974,67 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'dept_stats':
+        // ─── إحصائيات سريعة لكل قسم (تُدمج في لوحة التحكم) ─────────────────
+        set_time_limit(40);
+        $dk   = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $hh   = ["APIKEY: $dk", "Accept: application/json"];
+
+        $qfetch = function($ep) use ($base, $hh) {
+            $ch = curl_init("$base/$ep");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => $hh,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            $r = curl_exec($ch); curl_close($ch);
+            return json_decode($r, true);
+        };
+
+        $month = date('Y-m-01');
+        $today = date('Y-m-d');
+
+        // ── جلب البيانات بالتوازي نسبياً ──
+        $r_clients   = $qfetch("clients.json?limit=1");
+        $r_suppliers = $qfetch("suppliers.json?limit=1");
+        $r_wo        = $qfetch("work_orders.json?limit=100");
+        $r_inv_all   = $qfetch("invoices.json?limit=100");
+        $r_inv_month = $qfetch("invoices.json?from_date=$month&to_date=$today&limit=100");
+        $r_exp_all   = $qfetch("expenses.json?limit=100");
+        $r_exp_month = $qfetch("expenses.json?from_date=$month&to_date=$today&limit=100");
+
+        // ── تحليل ──
+        $clients_total = (int)($r_clients['meta']['total'] ?? count($r_clients['data'] ?? []));
+        $suppliers_total = (int)($r_suppliers['meta']['total'] ?? count($r_suppliers['data'] ?? []));
+
+        $wo_rows    = $r_wo['data'] ?? [];
+        $wo_total   = count($wo_rows);
+        $wo_open    = count(array_filter($wo_rows, fn($x) => in_array($x['WorkOrder']['status'] ?? '', ['draft','open','pending','in_progress','new'])));
+
+        $sum_inv = function($rows) {
+            $t = 0; foreach ($rows as $r) $t += (float)($r['Invoice']['summary_total'] ?? $r['Invoice']['grand_total'] ?? 0); return $t;
+        };
+        $sum_exp = function($rows) {
+            $t = 0; foreach ($rows as $r) $t += (float)($r['Expense']['amount'] ?? $r['Expense']['total'] ?? 0); return $t;
+        };
+
+        $rev_all   = $sum_inv($r_inv_all['data']   ?? []);
+        $rev_month = $sum_inv($r_inv_month['data'] ?? []);
+        $exp_all   = $sum_exp($r_exp_all['data']   ?? []);
+        $exp_month = $sum_exp($r_exp_month['data'] ?? []);
+
+        $inv_month_count = count($r_inv_month['data'] ?? []);
+
+        echo json_encode([
+            'success'     => true,
+            'sales'       => ['clients' => $clients_total, 'invoices_month' => $inv_month_count, 'revenue_month' => $rev_month],
+            'procurement' => ['suppliers' => $suppliers_total, 'work_orders' => $wo_total, 'open' => $wo_open],
+            'finance'     => ['revenue_all' => $rev_all, 'expenses_all' => $exp_all, 'revenue_month' => $rev_month, 'expenses_month' => $exp_month, 'net' => $rev_all - $exp_all],
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_invoices':
         // قائمة الفواتير
         $daftra_key = "__DAFTRA_KEY__";
