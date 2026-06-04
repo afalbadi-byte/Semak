@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Calendar, User, DollarSign, Receipt,
   Edit3, Trash2, Eye, ChevronLeft, RefreshCw,
-  AlertTriangle, CheckCircle2, X, FileText, Printer
+  AlertTriangle, CheckCircle2, X, FileText, Printer, MessageCircle
 } from 'lucide-react';
+import { sendWhatsAppMessage, normalizePhone } from '../../services/whatsappService';
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
 import useTableControls from '../../utils/useTableControls';
@@ -119,6 +120,11 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   const [treasuries, setTreasuries]   = useState([]);
   const [paySaving, setPaySaving]     = useState(false);
   const [payForm, setPayForm]         = useState({ amount: '', date: today(), treasury_id: '', method: 'cash', notes: '' });
+
+  // ─── إرسال الفاتورة واتساب ───────────────────────────────────
+  const [waInvoice, setWaInvoice]     = useState(null);
+  const [waSending, setWaSending]     = useState(false);
+  const [waForm, setWaForm]           = useState({ phone: '', message: '' });
 
   const [filters, setFilters] = useState({
     from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
@@ -294,6 +300,40 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       notify('خطأ في الاتصال بالخادم', 'error');
     } finally {
       setPaySaving(false);
+    }
+  };
+
+  // ─── إرسال الفاتورة للعميل عبر واتساب ───────────────────────
+  const openWhatsApp = (inv) => {
+    const pdfLink = `${API_URL}?action=daftra_doc_pdf&type=invoice&id=${inv.id}`;
+    const total   = fmt(inv.total, inv.currency);
+    const msg =
+      `مرحباً ${inv.client || ''} 👋\n\n` +
+      `هذه فاتورتكم من *سماك العقارية*:\n` +
+      `🧾 رقم الفاتورة: #${inv.no || inv.id}\n` +
+      `💰 الإجمالي: ${total}\n` +
+      `📅 التاريخ: ${inv.date || ''}\n\n` +
+      `📄 لتحميل الفاتورة الرسمية (PDF):\n${pdfLink}\n\n` +
+      `شكراً لتعاملكم معنا 🌿`;
+    setWaForm({ phone: inv.phone || '', message: msg });
+    setWaInvoice(inv);
+  };
+
+  const submitWhatsApp = async () => {
+    if (!waForm.phone || waForm.phone.replace(/\D/g, '').length < 9) return notify('أدخل رقم جوال صحيح', 'error');
+    setWaSending(true);
+    try {
+      const res = await sendWhatsAppMessage(waForm.phone, waForm.message);
+      if (res?.success) {
+        notify('تم إرسال الفاتورة عبر واتساب');
+        setWaInvoice(null);
+      } else {
+        notify(res?.error || 'تعذّر الإرسال — قد يكون خارج نافذة 24 ساعة', 'error');
+      }
+    } catch {
+      notify('خطأ في الاتصال', 'error');
+    } finally {
+      setWaSending(false);
     }
   };
 
@@ -749,6 +789,13 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
             PDF رسمي (دفترة)
           </button>
           <button
+            onClick={() => openWhatsApp(inv)}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
+          >
+            <MessageCircle size={15} />
+            إرسال واتساب
+          </button>
+          <button
             onClick={() => window.print()}
             className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
           >
@@ -1103,6 +1150,42 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                 تأكيد الدفعة
               </button>
               <button onClick={() => setPayInvoice(null)} disabled={paySaving}
+                className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* مودال إرسال واتساب */}
+      {waInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !waSending && setWaInvoice(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
+            <div className="bg-green-600 text-white px-6 py-4 flex items-center justify-between">
+              <h3 className="font-black text-base flex items-center gap-2"><MessageCircle size={18}/> إرسال الفاتورة عبر واتساب</h3>
+              <button onClick={() => !waSending && setWaInvoice(null)} className="opacity-80 hover:opacity-100"><X size={18}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-black text-slate-500 mb-1 block">رقم جوال العميل *</label>
+                <input type="tel" dir="ltr" value={waForm.phone} onChange={e => setWaForm(f => ({ ...f, phone: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-green-500 outline-none text-right" placeholder="05XXXXXXXX"/>
+              </div>
+              <div>
+                <label className="text-xs font-black text-slate-500 mb-1 block">نص الرسالة</label>
+                <textarea rows={8} value={waForm.message} onChange={e => setWaForm(f => ({ ...f, message: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs leading-relaxed focus:border-green-500 outline-none resize-none"/>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                💡 يتضمّن رابط PDF الرسمي للفاتورة. ملاحظة: قد لا يصل النص خارج نافذة 24 ساعة ما لم يكن العميل قد راسلكم مؤخراً.
+              </p>
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button onClick={submitWhatsApp} disabled={waSending}
+                className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white px-5 py-3 rounded-xl font-bold text-sm transition-colors">
+                {waSending ? <RefreshCw size={15} className="animate-spin"/> : <MessageCircle size={15}/>}
+                إرسال
+              </button>
+              <button onClick={() => setWaInvoice(null)} disabled={waSending}
                 className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors">إلغاء</button>
             </div>
           </div>

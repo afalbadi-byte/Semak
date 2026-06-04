@@ -1222,6 +1222,7 @@ switch ($action) {
                 'date'         => $i['date'] ?? '',
                 'client_id'    => $i['client_id'] ?? '',
                 'client'       => $i['client_business_name'] ?? ($i['client_first_name'].' '.$i['client_last_name']),
+                'phone'        => $i['client_mobile'] ?? $i['client_phone1'] ?? $i['client_phone2'] ?? '',
                 'total'        => (float)($i['summary_total'] ?? $i['grand_total'] ?? 0),
                 'paid'         => (float)($i['summary_paid'] ?? 0),
                 'status'       => $i['status'] ?? '',
