@@ -1925,6 +1925,95 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_v2_work_cycle_single':
+        // ─── تفاصيل مشروع واحد كاملة من Daftra v2 API ───────────────────────
+        $wc_id = (int)($_GET['id'] ?? 0);
+        if (!$wc_id) { echo json_encode(['success' => false, 'message' => 'id مطلوب']); break; }
+        $dk = "__DAFTRA_KEY__";
+        $hh = ["APIKEY: $dk", "Accept: application/json"];
+
+        // التفاصيل الكاملة للمشروع
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/le_workflow-type-entity-1/$wc_id/1");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => $hh,
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($code !== 200) {
+            echo json_encode(['success' => false, 'http_code' => $code, 'message' => 'فشل جلب المشروع']);
+            break;
+        }
+        $detail = json_decode($res, true);
+
+        // ─── نجيب الملخص المالي المرتبط بنفس الـ id عبر api2 ─────────────────
+        $base2   = "https://semak.daftra.com/api2";
+        $fetch2  = function($ep) use ($base2, $hh) {
+            $ch = curl_init("$base2/$ep");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hh, CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
+            $r = curl_exec($ch); curl_close($ch);
+            return json_decode($r, true);
+        };
+
+        // الفواتير والمشتريات والمصروفات
+        $all_inv  = ($fetch2("invoices.json?limit=200"))['data']   ?? [];
+        $all_pur  = ($fetch2("purchase_invoices.json?limit=200"))['data'] ?? [];
+        $all_exp  = ($fetch2("expenses.json?limit=200"))['data']   ?? [];
+
+        $matched_inv = []; $rev = 0; $paid_rev = 0;
+        foreach ($all_inv as $r) {
+            $i = $r['Invoice'] ?? [];
+            if ((int)($i['work_order_id'] ?? 0) !== $wc_id) continue;
+            $matched_inv[] = ['id'=>$i['id'],'no'=>$i['no'],'date'=>$i['date'],'client'=>$i['client_business_name']??'','total'=>(float)($i['summary_total']??0),'paid'=>(float)($i['summary_paid']??0)];
+            $rev += (float)($i['summary_total']??0);
+            $paid_rev += (float)($i['summary_paid']??0);
+        }
+
+        $matched_pur = []; $purchases = 0;
+        foreach ($all_pur as $r) {
+            $p = $r['PurchaseOrder'] ?? [];
+            if ((int)($p['work_order_id'] ?? 0) !== $wc_id) continue;
+            $matched_pur[] = ['id'=>$p['id'],'no'=>$p['no'],'date'=>$p['date'],'supplier'=>$p['supplier_business_name']??'','total'=>(float)($p['summary_total']??0),'paid'=>(float)($p['summary_paid']??0)];
+            $purchases += (float)($p['summary_total']??0);
+        }
+
+        $matched_exp = []; $expenses = 0;
+        foreach ($all_exp as $r) {
+            $e = $r['Expense'] ?? [];
+            if ((int)($e['work_order_id'] ?? 0) !== $wc_id) continue;
+            $matched_exp[] = ['id'=>$e['id'],'date'=>$e['date'],'description'=>$e['description']??'','amount'=>(float)($e['amount']??0)];
+            $expenses += (float)($e['amount']??0);
+        }
+
+        $budget    = (float)($detail['budget'] ?? 0);
+        $total_cost = $purchases + $expenses;
+        $net        = $rev - $total_cost;
+        $used_pct   = $budget > 0 ? round($total_cost / $budget * 100, 1) : 0;
+
+        echo json_encode([
+            'success'   => true,
+            'data'      => $detail,
+            'finance'   => [
+                'revenue'        => $rev,
+                'paid_revenue'   => $paid_rev,
+                'purchases'      => $purchases,
+                'expenses'       => $expenses,
+                'net'            => $net,
+                'budget'         => $budget,
+                'total_cost'     => $total_cost,
+                'budget_used_pct'=> $used_pct,
+                'budget_left'    => $budget - $total_cost,
+            ],
+            'invoices'  => $matched_inv,
+            'purchases' => $matched_pur,
+            'expenses'  => $matched_exp,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'sync_daftra_work_cycles':
         // ─── استقبال بيانات من Bookmarklet في المتصفح ────────────────────────
         $payload = $input_data['data'] ?? null;

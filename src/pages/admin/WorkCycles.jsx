@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Layers, RefreshCw, ChevronLeft, Building2, DollarSign, ExternalLink,
-    TrendingUp, TrendingDown, AlertTriangle, CheckCircle2,
-    ShoppingCart, Search, Calendar, FileText, Receipt, User
+    TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, ShoppingCart,
+    Search, Calendar, FileText, Receipt, User, MapPin, Home,
+    ChevronDown, ChevronUp, Image, Eye, Hash, Briefcase,
+    Phone, Mail, CreditCard, Tag, Activity, Maximize2, X
 } from 'lucide-react';
 
 const API_URL = "https://semak.sa/api.php";
 
-/** لون badge حالة المتابعة بناءً على الاسم أو اللون المُرجَع من دفترة */
-function statusStyle(followUpStatus) {
-    if (!followUpStatus?.name) return { label: 'مفتوح', cls: 'bg-emerald-100 text-emerald-700' };
-    const colorMap = {
+/* ── حالة المشروع من follow_up_status ── */
+function statusStyle(fus) {
+    if (!fus?.name) return { label: 'مفتوح', cls: 'bg-emerald-100 text-emerald-700' };
+    const cm = {
         teal:   'bg-teal-100 text-teal-700',
         blue:   'bg-blue-100 text-blue-700',
         green:  'bg-emerald-100 text-emerald-700',
@@ -21,12 +23,14 @@ function statusStyle(followUpStatus) {
         grey:   'bg-slate-200 text-slate-700',
         gray:   'bg-slate-200 text-slate-700',
     };
-    return {
-        label: followUpStatus.name,
-        cls: colorMap[followUpStatus.color] || 'bg-slate-100 text-slate-600',
-    };
+    return { label: fus.name, cls: cm[fus.color] || 'bg-slate-100 text-slate-600' };
 }
 
+const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+/* ═══════════════════════════════════════════════════════════
+   الصفحة الرئيسية
+══════════════════════════════════════════════════════════════ */
 export default function WorkCycles() {
     const [workCycles, setWorkCycles] = useState([]);
     const [loading,    setLoading]    = useState(true);
@@ -35,18 +39,12 @@ export default function WorkCycles() {
     const [search,     setSearch]     = useState('');
 
     const load = useCallback(async () => {
-        setLoading(true);
-        setError('');
+        setLoading(true); setError('');
         try {
             const res = await fetch(`${API_URL}?action=daftra_v2_work_cycles`).then(r => r.json());
-            if (res.success) {
-                setWorkCycles(res.data || []);
-            } else {
-                setError(res.message || 'فشل الاتصال بدفترة');
-            }
-        } catch {
-            setError('خطأ في الاتصال بالسيرفر');
-        }
+            if (res.success) setWorkCycles(res.data || []);
+            else setError(res.message || 'فشل الاتصال بدفترة');
+        } catch { setError('خطأ في الاتصال بالسيرفر'); }
         setLoading(false);
     }, []);
 
@@ -58,13 +56,10 @@ export default function WorkCycles() {
         (wc.work_order_client?.business_name || '').toLowerCase().includes(search.toLowerCase())
     );
 
-    if (selected) {
-        return <CycleDetail wo={selected} onBack={() => setSelected(null)} />;
-    }
+    if (selected) return <CycleDetail wc={selected} onBack={() => setSelected(null)} />;
 
     return (
         <div className="space-y-6 p-4 md:p-6">
-
             {/* رأس الصفحة */}
             <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] rounded-[2rem] p-6 md:p-8 text-white shadow-xl">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -74,12 +69,15 @@ export default function WorkCycles() {
                         </div>
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black">المشاريع</h1>
-                            <p className="text-sm text-slate-300 mt-1">{workCycles.length > 0 ? `${workCycles.length} مشروع نشط` : 'دورات العمل والمشاريع'}</p>
+                            <p className="text-sm text-slate-300 mt-1">
+                                {loading ? 'جاري التحميل...' : `${workCycles.length} مشروع — يتزامن مباشرة مع دفترة`}
+                            </p>
                         </div>
                     </div>
-                    <a href="https://semak.daftra.com/le/workflow-type-entity-1/list" target="_blank" rel="noreferrer"
+                    <a href="https://semak.daftra.com/v2/owner/entity/workflow/le_workflow-type-entity-1/list"
+                        target="_blank" rel="noreferrer"
                         className="bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition">
-                        <ExternalLink size={14}/> إدارة المشاريع
+                        <ExternalLink size={14}/> إدارة المشاريع في دفترة
                     </a>
                 </div>
             </div>
@@ -88,324 +86,466 @@ export default function WorkCycles() {
             <div className="bg-white rounded-2xl shadow border border-slate-100 p-4 flex items-center gap-3">
                 <div className="relative flex-1">
                     <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                    <input
-                        type="text" placeholder="بحث بالاسم أو العميل..." value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 pr-9 pl-3 py-2.5 rounded-xl outline-none focus:border-blue-500"
+                    <input type="text" placeholder="بحث بالاسم أو اسم العميل..."
+                        value={search} onChange={e => setSearch(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 pr-9 pl-3 py-2.5 rounded-xl outline-none focus:border-blue-500 text-sm"
                     />
                 </div>
                 <button onClick={load} className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-2.5 rounded-xl transition" title="تحديث">
                     <RefreshCw size={16} className={loading ? 'animate-spin' : ''}/>
                 </button>
-                <span className="text-sm font-bold text-slate-500">{filtered.length} مشروع</span>
+                <span className="text-sm font-bold text-slate-500 shrink-0">{filtered.length} مشروع</span>
             </div>
 
-            {/* حالات التحميل / الخطأ / الفراغ */}
+            {/* القائمة */}
             {loading ? (
-                <div className="bg-white rounded-2xl p-12 text-center">
-                    <RefreshCw className="animate-spin inline mr-2 text-blue-600"/>
-                    جاري تحميل المشاريع...
+                <div className="bg-white rounded-2xl p-12 text-center text-slate-500">
+                    <RefreshCw className="animate-spin inline ml-2 text-blue-500"/>جاري التحميل...
                 </div>
             ) : error ? (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center text-red-700">
                     <AlertTriangle size={32} className="mx-auto mb-2"/>
                     <p className="font-bold">{error}</p>
-                    <button onClick={load} className="mt-3 bg-red-100 hover:bg-red-200 px-4 py-2 rounded-xl text-sm font-bold transition">
-                        إعادة المحاولة
-                    </button>
+                    <button onClick={load} className="mt-3 bg-red-100 hover:bg-red-200 px-4 py-2 rounded-xl text-sm font-bold transition">إعادة المحاولة</button>
                 </div>
             ) : filtered.length === 0 ? (
                 <div className="bg-white rounded-2xl p-12 text-center text-slate-400">
-                    <Layers size={48} className="mx-auto mb-3 opacity-50"/>
+                    <Layers size={48} className="mx-auto mb-3 opacity-40"/>
                     <p className="font-bold">لا توجد مشاريع</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filtered.map((wc, i) => (
-                        <WCCard key={wc.id ?? i} wc={wc} onOpen={() => setSelected(wc)}/>
-                    ))}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {filtered.map((wc, i) => <ProjectCard key={wc.id ?? i} wc={wc} onOpen={() => setSelected(wc)}/>)}
                 </div>
             )}
         </div>
     );
 }
 
-// ─────────────── بطاقة المشروع ────────────────────────────────────────────
-
-function WCCard({ wc, onOpen }) {
-    const st = statusStyle(wc.work_order_follow_up_status);
-    const client = wc.work_order_client?.business_name || '';
-    const custom = wc['le_workflow-type-entity-1_custom_data'] || {};
-    const activity = custom.activity || '';
-    const apartCount = custom.apartment_count;
-    const workType = custom.work_order_type1 || '';
+/* ═══════════════════════════════════════════════════════════
+   بطاقة المشروع في القائمة
+══════════════════════════════════════════════════════════════ */
+function ProjectCard({ wc, onOpen }) {
+    const st      = statusStyle(wc.work_order_follow_up_status);
+    const client  = wc.work_order_client?.business_name || '';
+    const custom  = wc['le_workflow-type-entity-1_custom_data'] || {};
+    const hasMap  = (() => { try { const m = JSON.parse(custom.map_location||'{}'); return m.lat && m.long; } catch { return false; } })();
 
     return (
-        <div
-            className="bg-white rounded-2xl shadow border border-slate-100 p-5 hover:shadow-md transition cursor-pointer"
-            onClick={onOpen}
-        >
-            {/* رأس البطاقة */}
-            <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 shrink-0 bg-[#1a365d] rounded-xl flex items-center justify-center">
-                        <Building2 size={22} className="text-[#c5a059]"/>
-                    </div>
-                    <div className="min-w-0">
-                        <h3 className="text-base font-black text-[#1a365d] truncate leading-tight">
-                            {wc.title || `مشروع #${wc.number}`}
-                        </h3>
-                        {wc.number && <p className="text-xs text-slate-400 font-mono">#{wc.number}</p>}
-                    </div>
+        <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden hover:shadow-md transition">
+            {/* شريط الحالة */}
+            <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Building2 size={18} className="text-[#c5a059]"/>
+                    <span className="text-white font-black text-sm">{wc.title || `مشروع #${wc.number}`}</span>
                 </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 ${st.cls}`}>
-                    {st.label}
-                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${st.cls}`}>{st.label}</span>
             </div>
 
-            {/* العميل */}
-            {client && (
-                <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2">
-                    <User size={11} className="text-slate-400 shrink-0"/>
-                    <span className="truncate">{client}</span>
+            {/* المحتوى */}
+            <div className="p-5 space-y-3">
+                {/* صف المعلومات الأساسية */}
+                <div className="grid grid-cols-2 gap-3">
+                    <InfoPill icon={Hash} label="رقم المشروع" value={`#${wc.number}`} color="slate"/>
+                    <InfoPill icon={User} label="العميل" value={client} color="blue"/>
+                    {wc.start_date && <InfoPill icon={Calendar} label="تاريخ البدء" value={wc.start_date} color="slate"/>}
+                    {wc.delivery_date && <InfoPill icon={Calendar} label="التسليم" value={wc.delivery_date} color="amber"/>}
+                    {custom.activity && <InfoPill icon={Home} label="النشاط" value={custom.activity} color="teal"/>}
+                    {custom.work_order_type1 && <InfoPill icon={Briefcase} label="نوع العمل" value={custom.work_order_type1} color="indigo"/>}
                 </div>
-            )}
 
-            {/* النشاط والنوع */}
-            {(activity || workType) && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                    {activity && <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{activity}</span>}
-                    {workType  && <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full">{workType}</span>}
-                </div>
-            )}
-
-            {/* التواريخ */}
-            {(wc.start_date || wc.delivery_date) && (
-                <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
-                    <Calendar size={11}/>
-                    {wc.start_date && <span>بدء: {wc.start_date}</span>}
-                    {wc.start_date && wc.delivery_date && <span className="mx-1">—</span>}
-                    {wc.delivery_date && <span>تسليم: {wc.delivery_date}</span>}
-                </div>
-            )}
-
-            {/* الميزانية وعدد الشقق */}
-            <div className="flex items-center justify-between mt-2">
-                {Number(wc.budget) > 0 ? (
-                    <div className="text-xs text-slate-500">
-                        💰 <span className="font-bold text-[#1a365d]">{Number(wc.budget).toLocaleString('en-US')} {wc.budget_currency || 'ريال'}</span>
+                {/* الميزانية + الوحدات */}
+                <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
+                    <div>
+                        <p className="text-[10px] text-slate-400 font-bold mb-0.5">الميزانية</p>
+                        <p className="text-lg font-black text-[#1a365d]">{Number(wc.budget||0).toLocaleString('en-US')} <span className="text-xs text-slate-400">{wc.budget_currency || 'ريال'}</span></p>
                     </div>
-                ) : <div/>}
-                {apartCount > 0 && (
-                    <span className="text-xs text-slate-500">🏢 {apartCount} وحدة</span>
-                )}
-            </div>
+                    {custom.apartment_count > 0 && (
+                        <div className="text-left">
+                            <p className="text-[10px] text-slate-400 font-bold mb-0.5">عدد الوحدات</p>
+                            <p className="text-lg font-black text-[#1a365d]">{custom.apartment_count} <span className="text-xs text-slate-400">وحدة</span></p>
+                        </div>
+                    )}
+                    {hasMap && (
+                        <span className="flex items-center gap-1 text-xs text-emerald-600 font-bold">
+                            <MapPin size={12}/> موقع محدد
+                        </span>
+                    )}
+                </div>
 
-            <div className="text-xs font-bold text-blue-600 pt-3 mt-2 border-t border-slate-100">
-                عرض الملخص المالي ←
+                {/* زر التفاصيل */}
+                <button onClick={onOpen}
+                    className="w-full bg-[#1a365d] hover:bg-[#0f2543] text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition">
+                    <Maximize2 size={15}/> عرض التفاصيل الكاملة
+                </button>
             </div>
         </div>
     );
 }
 
-// ─────────────── صفحة التفاصيل ───────────────────────────────────────────────
+/* ── InfoPill مصغّر للبطاقة ── */
+function InfoPill({ icon: Icon, label, value, color = 'slate' }) {
+    if (!value) return null;
+    const bg = {
+        slate:  'bg-slate-50  text-slate-600',
+        blue:   'bg-blue-50   text-blue-700',
+        amber:  'bg-amber-50  text-amber-700',
+        teal:   'bg-teal-50   text-teal-700',
+        indigo: 'bg-indigo-50 text-indigo-700',
+    };
+    return (
+        <div className={`${bg[color] || bg.slate} rounded-xl px-3 py-2`}>
+            <div className="flex items-center gap-1.5 mb-0.5">
+                <Icon size={11} className="opacity-60 shrink-0"/>
+                <span className="text-[10px] font-bold opacity-70 truncate">{label}</span>
+            </div>
+            <p className="text-xs font-black truncate">{value}</p>
+        </div>
+    );
+}
 
-function CycleDetail({ wo, onBack }) {
-    const [summary, setSummary] = useState(null);
-    const [loading, setLoading] = useState(true);
+/* ═══════════════════════════════════════════════════════════
+   صفحة التفاصيل الكاملة
+══════════════════════════════════════════════════════════════ */
+function CycleDetail({ wc, onBack }) {
+    const [detail,   setDetail]   = useState(null);
+    const [finance,  setFinance]  = useState(null);
+    const [invoices, setInvoices] = useState([]);
+    const [purchases,setPurchases]= useState([]);
+    const [loading,  setLoading]  = useState(true);
+    const [sections, setSections] = useState({
+        info: true, property: true, attachments: true,
+        client: false, finance: true, invoices: false, purchases: false
+    });
+    const [lightbox, setLightbox] = useState(null); // URL لمعاينة المرفق
 
-    const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    const toggle = key => setSections(p => ({ ...p, [key]: !p[key] }));
 
     useEffect(() => {
-        if (!wo?.id) { setLoading(false); return; }
-        fetch(`${API_URL}?action=daftra_work_order_summary&id=${wo.id}`)
+        if (!wc?.id) { setLoading(false); return; }
+        fetch(`${API_URL}?action=daftra_v2_work_cycle_single&id=${wc.id}`)
             .then(r => r.json())
             .then(j => {
-                if (j.success && j.summary) {
-                    setSummary({
-                        ...j.summary,
-                        invoices:  j.invoices  || [],
-                        purchases: j.purchases || [],
-                        expenses:  j.expenses  || [],
-                    });
+                if (j.success) {
+                    setDetail(j.data);
+                    setFinance(j.finance);
+                    setInvoices(j.invoices || []);
+                    setPurchases(j.purchases || []);
                 }
             })
             .catch(() => {})
             .finally(() => setLoading(false));
-    }, [wo?.id]);
+    }, [wc?.id]);
 
-    const st = statusStyle(wo.work_order_follow_up_status);
-    const client = wo.work_order_client?.business_name || '';
-    const custom = wo['le_workflow-type-entity-1_custom_data'] || {};
+    const d       = detail || wc;
+    const custom  = d['le_workflow-type-entity-1_custom_data'] || {};
+    const client  = d.work_order_client || {};
+    const st      = statusStyle(d.work_order_follow_up_status);
+    const staff   = d.staff || {};
+
+    // موقع الخريطة
+    let mapLat = null, mapLng = null;
+    try { const m = JSON.parse(custom.map_location || '{}'); mapLat = m.lat; mapLng = m.long; } catch {}
 
     return (
-        <div className="space-y-6 p-4 md:p-6">
-            <button onClick={onBack} className="flex items-center gap-2 text-[#1a365d] font-bold hover:text-blue-600 transition">
+        <div className="space-y-4 p-4 md:p-6">
+            {/* رجوع */}
+            <button onClick={onBack} className="flex items-center gap-2 text-[#1a365d] font-bold hover:text-blue-600 transition text-sm">
                 <ChevronLeft size={18}/> رجوع للمشاريع
             </button>
 
-            {/* رأس المشروع */}
+            {/* Header بانر */}
             <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] rounded-[2rem] p-6 text-white shadow-xl">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0">
-                        {wo.number && <div className="text-xs font-mono text-slate-400 mb-1">مشروع #{wo.number}</div>}
-                        <h2 className="text-2xl font-black mb-1">{wo.title || `مشروع #${wo.number}`}</h2>
-                        {client && (
-                            <div className="flex items-center gap-1.5 text-slate-300 text-sm mb-2">
-                                <User size={13}/> {client}
+                        {wc.number && <div className="text-xs font-mono text-slate-400 mb-1">مشروع #{wc.number}</div>}
+                        <h2 className="text-2xl font-black mb-1">{d.title}</h2>
+                        {client.business_name && (
+                            <div className="flex items-center gap-2 text-slate-300 text-sm mb-3">
+                                <User size={13}/> {client.business_name}
                             </div>
                         )}
-                        {wo.description && <p className="text-slate-300 text-sm mb-2">{wo.description}</p>}
-                        <div className="flex flex-wrap gap-3 text-xs text-slate-300">
-                            {wo.start_date    && <span>📅 بدء: {wo.start_date}</span>}
-                            {wo.delivery_date && <span>🏁 تسليم: {wo.delivery_date}</span>}
-                            {custom.activity  && <span>🏗️ {custom.activity}</span>}
-                            {custom.apartment_count > 0 && <span>🏢 {custom.apartment_count} وحدة</span>}
+                        <div className="flex flex-wrap gap-2 text-xs">
+                            {d.start_date    && <span className="bg-white/10 px-3 py-1 rounded-full">📅 بدء: {d.start_date}</span>}
+                            {d.delivery_date && <span className="bg-white/10 px-3 py-1 rounded-full">🏁 تسليم: {d.delivery_date}</span>}
+                            {custom.activity && <span className="bg-white/10 px-3 py-1 rounded-full">🏗️ {custom.activity}</span>}
+                            {custom.apartment_count > 0 && <span className="bg-white/10 px-3 py-1 rounded-full">🏢 {custom.apartment_count} وحدة</span>}
                         </div>
                     </div>
-                    <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${st.cls}`}>{st.label}</span>
+                    <div className="flex flex-col items-end gap-2">
+                        <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${st.cls}`}>{st.label}</span>
+                        {Number(d.budget) > 0 && (
+                            <div className="bg-white/10 px-3 py-1.5 rounded-xl text-right">
+                                <div className="text-[10px] text-slate-400">الميزانية</div>
+                                <div className="text-base font-black">{fmt(d.budget)} {d.budget_currency || 'ريال'}</div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* تحميل */}
-            {loading && (
-                <div className="bg-white rounded-2xl p-8 text-center">
-                    <RefreshCw className="animate-spin inline mr-2 text-blue-600"/>
-                    جاري جلب البيانات المالية...
-                </div>
-            )}
+            {/* ═══ معلومات المشروع ═══ */}
+            <Section title="معلومات المشروع" icon={FileText} color="blue" open={sections.info} onToggle={() => toggle('info')}>
+                <InfoRow icon={Hash}      label="رقم المشروع"   value={`#${d.number}`}/>
+                <InfoRow icon={Tag}       label="نوع العمل"      value={custom.work_order_type1}/>
+                <InfoRow icon={Calendar}  label="تاريخ البدء"   value={d.start_date}/>
+                <InfoRow icon={Calendar}  label="تاريخ التسليم" value={d.delivery_date}/>
+                <InfoRow icon={DollarSign} label="الميزانية"    value={Number(d.budget)>0 ? `${fmt(d.budget)} ${d.budget_currency||'ريال'}` : null}/>
+                <InfoRow icon={Building2} label="الفرع"          value={d.branch?.name}/>
+                <InfoRow icon={User}      label="أُضيف بواسطة"  value={staff.full_name}/>
+                <InfoRow icon={Activity}  label="الحالة"         value={st.label} valueClass={`font-bold px-2 py-0.5 rounded-lg text-xs ${st.cls}`}/>
+            </Section>
 
-            {/* الملخص المالي */}
-            {!loading && summary && (
-                <>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <BigStat label="الإيرادات"  value={fmt(summary.total_revenue)}   icon={TrendingUp}   color="emerald"/>
-                        <BigStat label="المشتريات"  value={fmt(summary.total_purchases)} icon={ShoppingCart} color="purple"/>
-                        <BigStat label="المصروفات"  value={fmt(summary.total_expenses)}  icon={TrendingDown} color="red"/>
-                        <BigStat label="صافي الربح" value={fmt(summary.net_profit)}      icon={DollarSign}
-                            color={Number(summary.net_profit) >= 0 ? 'emerald' : 'red'}/>
+            {/* ═══ تفاصيل العقار ═══ */}
+            <Section title="تفاصيل العقار والموقع" icon={Home} color="teal" open={sections.property} onToggle={() => toggle('property')}>
+                <InfoRow icon={Home}      label="النشاط"          value={custom.activity}/>
+                <InfoRow icon={Briefcase} label="نوع المشروع"     value={custom.work_order_type1}/>
+                <InfoRow icon={Building2} label="عدد الوحدات"     value={custom.apartment_count ? `${custom.apartment_count} وحدة` : null}/>
+                <InfoRow icon={MapPin}    label="اسم الموقع"       value={custom.site_location1}/>
+                <InfoRow icon={FileText}  label="اسم المشروع"     value={custom.project_name}/>
+                <InfoRow icon={Layers}    label="مساحة الموقع"    value={custom.location_space}/>
+                {mapLat && mapLng && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                        <a href={`https://www.google.com/maps?q=${mapLat},${mapLng}`}
+                            target="_blank" rel="noreferrer"
+                            className="flex items-center gap-2 text-emerald-600 hover:text-emerald-800 font-bold text-sm transition">
+                            <MapPin size={16}/> فتح الموقع في خرائط جوجل
+                        </a>
                     </div>
+                )}
+            </Section>
 
-                    {Number(summary.budget) > 0 && <BudgetBar summary={summary} fmt={fmt}/>}
+            {/* ═══ المرفقات ═══ */}
+            <Section title="المرفقات" icon={Image} color="purple" open={sections.attachments} onToggle={() => toggle('attachments')}>
+                <AttachRow
+                    icon={FileText} label="المخطط الهندسي"
+                    value={custom.engineering_chart}
+                    onView={url => setLightbox(url)}
+                />
+                <AttachRow
+                    icon={Image} label="صورة الموقع"
+                    value={custom.location_photo}
+                    isImage
+                    onView={url => setLightbox(url)}
+                />
+                {!custom.engineering_chart && !custom.location_photo && (
+                    <p className="text-center text-slate-400 text-sm py-4">
+                        لا توجد مرفقات مضافة لهذا المشروع في دفترة بعد
+                    </p>
+                )}
+            </Section>
 
-                    {/* قائمة الفواتير */}
-                    {summary.invoices?.length > 0 && (
-                        <TransactionTable
-                            title={`الفواتير (${summary.invoices.length})`}
-                            icon={Receipt}
-                            rows={summary.invoices}
-                            cols={[
-                                { key: 'no',     label: 'رقم' },
-                                { key: 'date',   label: 'التاريخ' },
-                                { key: 'client', label: 'العميل' },
-                                { key: 'total',  label: 'الإجمالي', fmt },
-                                { key: 'paid',   label: 'المدفوع',  fmt },
-                            ]}
-                        />
+            {/* ═══ بيانات العميل ═══ */}
+            <Section title="بيانات العميل" icon={User} color="indigo" open={sections.client} onToggle={() => toggle('client')}>
+                <InfoRow icon={User}     label="اسم المنشأة"   value={client.business_name}/>
+                <InfoRow icon={CreditCard} label="الرقم الضريبي" value={client.bn1}/>
+                <InfoRow icon={CreditCard} label="السجل التجاري" value={client.bn2}/>
+                <InfoRow icon={Phone}    label="الجوال"          value={client.phone2 || client.phone1}/>
+                <InfoRow icon={Mail}     label="البريد"           value={client.email}/>
+                <InfoRow icon={MapPin}   label="المدينة"         value={client.state}/>
+            </Section>
+
+            {/* ═══ الملخص المالي ═══ */}
+            {(loading || finance) && (
+                <Section title="الملخص المالي" icon={DollarSign} color="emerald" open={sections.finance} onToggle={() => toggle('finance')}>
+                    {loading ? (
+                        <div className="text-center py-6 text-slate-400">
+                            <RefreshCw size={20} className="animate-spin inline ml-2"/>جاري الحساب...
+                        </div>
+                    ) : finance ? (
+                        <>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                                <FinanceStat label="الإيرادات"  value={fmt(finance.revenue)}   icon={TrendingUp}   color="emerald"/>
+                                <FinanceStat label="المشتريات"  value={fmt(finance.purchases)} icon={ShoppingCart} color="purple"/>
+                                <FinanceStat label="المصروفات"  value={fmt(finance.expenses)}  icon={TrendingDown} color="red"/>
+                                <FinanceStat label="صافي الربح" value={fmt(finance.net)}       icon={DollarSign}   color={finance.net >= 0 ? 'emerald' : 'red'}/>
+                            </div>
+                            {finance.budget > 0 && <BudgetBar finance={finance}/>}
+                        </>
+                    ) : (
+                        <p className="text-center text-slate-400 text-sm py-4">لا توجد معاملات مالية بعد</p>
                     )}
-
-                    {/* قائمة المشتريات */}
-                    {summary.purchases?.length > 0 && (
-                        <TransactionTable
-                            title={`المشتريات (${summary.purchases.length})`}
-                            icon={ShoppingCart}
-                            rows={summary.purchases}
-                            cols={[
-                                { key: 'no',       label: 'رقم' },
-                                { key: 'date',     label: 'التاريخ' },
-                                { key: 'supplier', label: 'المورد' },
-                                { key: 'total',    label: 'الإجمالي', fmt },
-                            ]}
-                        />
-                    )}
-                </>
+                </Section>
             )}
 
-            {/* لا يوجد بيانات مالية */}
-            {!loading && !summary && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-slate-400">
-                    <FileText size={32} className="mx-auto mb-2 opacity-40"/>
-                    <p className="font-bold">لا توجد معاملات مالية مرتبطة بهذا المشروع بعد</p>
+            {/* ═══ الفواتير ═══ */}
+            {invoices.length > 0 && (
+                <Section title={`الفواتير (${invoices.length})`} icon={Receipt} color="blue" open={sections.invoices} onToggle={() => toggle('invoices')}>
+                    <TransTable
+                        rows={invoices}
+                        cols={[
+                            { key: 'no',     label: 'رقم' },
+                            { key: 'date',   label: 'التاريخ' },
+                            { key: 'client', label: 'العميل' },
+                            { key: 'total',  label: 'الإجمالي', fmt },
+                            { key: 'paid',   label: 'المدفوع',  fmt },
+                        ]}
+                    />
+                </Section>
+            )}
+
+            {/* ═══ المشتريات ═══ */}
+            {purchases.length > 0 && (
+                <Section title={`المشتريات (${purchases.length})`} icon={ShoppingCart} color="amber" open={sections.purchases} onToggle={() => toggle('purchases')}>
+                    <TransTable
+                        rows={purchases}
+                        cols={[
+                            { key: 'no',       label: 'رقم' },
+                            { key: 'date',     label: 'التاريخ' },
+                            { key: 'supplier', label: 'المورد' },
+                            { key: 'total',    label: 'الإجمالي', fmt },
+                        ]}
+                    />
+                </Section>
+            )}
+
+            {/* لايتبوكس المرفق */}
+            {lightbox && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+                    <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setLightbox(null)}
+                            className="absolute -top-10 left-0 text-white hover:text-red-300 flex items-center gap-1 font-bold text-sm">
+                            <X size={18}/> إغلاق
+                        </button>
+                        <img src={lightbox} alt="مرفق" className="w-full h-auto max-h-[85vh] object-contain rounded-2xl shadow-2xl"/>
+                    </div>
                 </div>
             )}
         </div>
     );
 }
 
-// ─────────────── مكوّنات مساعدة ──────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════
+   مكوّنات مساعدة
+══════════════════════════════════════════════════════════════ */
 
-function BigStat({ label, value, icon: Icon, color }) {
-    const c = {
-        slate:   'bg-slate-50   text-slate-700   border-slate-200',
-        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        blue:    'bg-blue-50    text-blue-700    border-blue-200',
-        purple:  'bg-purple-50  text-purple-700  border-purple-200',
-        red:     'bg-red-50     text-red-700     border-red-200',
-        gold:    'bg-amber-50   text-amber-700   border-amber-200',
+/* ── قسم قابل للطي ── */
+function Section({ title, icon: Icon, color = 'blue', open, onToggle, children }) {
+    const colors = {
+        blue:    'text-blue-600',
+        teal:    'text-teal-600',
+        emerald: 'text-emerald-600',
+        purple:  'text-purple-600',
+        indigo:  'text-indigo-600',
+        amber:   'text-amber-600',
+        red:     'text-red-600',
     };
     return (
-        <div className={`border rounded-2xl p-4 ${c[color] || c.slate}`}>
-            {Icon && <Icon size={18} className="mb-1 opacity-70"/>}
-            <div className="text-[10px] font-bold opacity-80">{label}</div>
-            <div className="text-2xl font-black">{value}</div>
+        <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
+            <button className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50/70 transition"
+                onClick={onToggle}>
+                <div className="flex items-center gap-2.5">
+                    <Icon size={18} className={colors[color] || 'text-slate-600'}/>
+                    <span className="font-black text-[#1a365d] text-sm">{title}</span>
+                </div>
+                {open
+                    ? <ChevronUp size={16} className="text-slate-400"/>
+                    : <ChevronDown size={16} className="text-slate-400"/>
+                }
+            </button>
+            {open && <div className="border-t border-slate-100 px-5 py-4">{children}</div>}
         </div>
     );
 }
 
-function BudgetBar({ summary, fmt }) {
-    const over = summary.budget_used_pct > 100;
+/* ── صف معلومة ── */
+function InfoRow({ icon: Icon, label, value, valueClass }) {
     return (
-        <div className={`rounded-2xl p-5 border ${over ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+        <div className="flex items-start justify-between py-2.5 border-b border-slate-50 last:border-0 gap-3">
+            <div className="flex items-center gap-2 text-slate-400 text-sm shrink-0">
+                {Icon && <Icon size={13}/>}
+                <span className="text-slate-500 font-medium">{label}</span>
+            </div>
+            <span className={valueClass || 'font-bold text-[#1a365d] text-sm text-left'}>
+                {value || <span className="text-slate-300 text-xs font-normal italic">غير محدد</span>}
+            </span>
+        </div>
+    );
+}
+
+/* ── صف مرفق ── */
+function AttachRow({ icon: Icon, label, value, isImage, onView }) {
+    return (
+        <div className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0 gap-3">
+            <div className="flex items-center gap-2 text-sm">
+                <Icon size={15} className={value ? 'text-blue-500' : 'text-slate-300'}/>
+                <span className={`font-medium ${value ? 'text-slate-700' : 'text-slate-400'}`}>{label}</span>
+            </div>
+            {value ? (
+                <button onClick={() => onView(value)}
+                    className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-xl transition">
+                    <Eye size={12}/> {isImage ? 'معاينة الصورة' : 'فتح الملف'}
+                </button>
+            ) : (
+                <span className="text-[11px] text-slate-300 italic">لم يُرفق بعد</span>
+            )}
+        </div>
+    );
+}
+
+/* ── بطاقة مالية ── */
+function FinanceStat({ label, value, icon: Icon, color }) {
+    const c = {
+        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        purple:  'bg-purple-50  text-purple-700  border-purple-200',
+        red:     'bg-red-50     text-red-700     border-red-200',
+        blue:    'bg-blue-50    text-blue-700    border-blue-200',
+    };
+    return (
+        <div className={`border rounded-2xl p-4 ${c[color] || c.blue}`}>
+            <Icon size={17} className="mb-1.5 opacity-70"/>
+            <div className="text-[10px] font-bold opacity-80 mb-0.5">{label}</div>
+            <div className="text-xl font-black">{value}</div>
+        </div>
+    );
+}
+
+/* ── شريط الميزانية ── */
+function BudgetBar({ finance }) {
+    const over = finance.budget_used_pct > 100;
+    return (
+        <div className={`rounded-2xl p-4 border mt-1 ${over ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
             <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                    {over ? <AlertTriangle className="text-red-600"/> : <CheckCircle2 className="text-emerald-600"/>}
-                    <h3 className={`font-black ${over ? 'text-red-900' : 'text-[#1a365d]'}`}>استهلاك الميزانية</h3>
+                <div className="flex items-center gap-1.5">
+                    {over ? <AlertTriangle size={15} className="text-red-600"/> : <CheckCircle2 size={15} className="text-emerald-600"/>}
+                    <span className={`text-sm font-black ${over ? 'text-red-900' : 'text-[#1a365d]'}`}>استهلاك الميزانية</span>
                 </div>
-                <div className={`text-2xl font-black ${over ? 'text-red-700' : 'text-emerald-700'}`}>{summary.budget_used_pct}%</div>
+                <span className={`text-xl font-black ${over ? 'text-red-700' : 'text-emerald-700'}`}>{finance.budget_used_pct}%</span>
             </div>
-            <div className="h-3 bg-white rounded-full overflow-hidden border border-slate-200">
-                <div
-                    className={`h-full transition-all ${over ? 'bg-gradient-to-l from-red-500 to-orange-500' : 'bg-gradient-to-l from-blue-500 to-blue-400'}`}
-                    style={{ width: `${Math.min(100, summary.budget_used_pct)}%` }}
-                />
+            <div className="h-2.5 bg-white rounded-full overflow-hidden border border-slate-200">
+                <div className={`h-full ${over ? 'bg-red-500' : 'bg-emerald-500'} transition-all`}
+                    style={{ width: `${Math.min(100, finance.budget_used_pct)}%` }}/>
             </div>
-            <div className="flex justify-between text-xs mt-2 font-bold">
-                <span className="text-slate-600">استُهلك: {fmt(summary.total_cost)} ريال</span>
-                <span className={summary.budget_left >= 0 ? 'text-emerald-600' : 'text-red-600'}>
-                    {summary.budget_left >= 0 ? 'متبقي' : 'تجاوز'}: {fmt(Math.abs(summary.budget_left))} ريال
+            <div className="flex justify-between text-xs font-bold mt-2">
+                <span className="text-slate-500">استُهلك: {fmt(finance.total_cost)} ريال</span>
+                <span className={finance.budget_left >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                    {finance.budget_left >= 0 ? 'متبقي' : 'تجاوز'}: {fmt(Math.abs(finance.budget_left))} ريال
                 </span>
             </div>
         </div>
     );
 }
 
-function TransactionTable({ title, icon: Icon, rows, cols }) {
+/* ── جدول المعاملات ── */
+function TransTable({ rows, cols }) {
     return (
-        <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/40">
-                {Icon && <Icon size={16} className="text-slate-600"/>}
-                <h3 className="font-black text-[#1a365d] text-sm">{title}</h3>
-            </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-right text-sm">
-                    <thead className="bg-slate-50 text-xs text-slate-500">
-                        <tr>
-                            {cols.map(c => <th key={c.key} className="px-3 py-2 font-bold">{c.label}</th>)}
+        <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <table className="w-full text-right text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-500 border-b border-slate-100">
+                    <tr>{cols.map(c => <th key={c.key} className="px-3 py-2.5 font-bold">{c.label}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                    {rows.map((row, i) => (
+                        <tr key={i} className="hover:bg-slate-50/60">
+                            {cols.map(c => (
+                                <td key={c.key} className="px-3 py-2.5 text-slate-700">
+                                    {c.fmt ? c.fmt(row[c.key]) : (row[c.key] || '—')}
+                                </td>
+                            ))}
                         </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {rows.map((row, i) => (
-                            <tr key={i} className="hover:bg-slate-50/50">
-                                {cols.map(c => (
-                                    <td key={c.key} className="px-3 py-2 text-slate-700">
-                                        {c.fmt ? c.fmt(row[c.key]) : (row[c.key] || '—')}
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 }
