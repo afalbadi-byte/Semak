@@ -71,6 +71,20 @@ $conn->query("CREATE TABLE IF NOT EXISTS daftra_sync_log (
     synced_by   VARCHAR(128)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ─── auto-migrate: إعدادات الربط (كوكي جلسة دفترة وغيره) ────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS daftra_config (
+    k          VARCHAR(64) PRIMARY KEY,
+    v          LONGTEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// مُساعد: استرجاع كوكي جلسة دفترة (من قاعدة البيانات أولاً ثم من السيكرت)
+function daftra_session_cookie($conn) {
+    $r = $conn->query("SELECT v FROM daftra_config WHERE k='session_cookie' LIMIT 1");
+    if ($r && ($row = $r->fetch_assoc()) && !empty(trim($row['v']))) return trim($row['v']);
+    return "__DAFTRA_SESSION__";
+}
+
 // ─── auto-migrate: WhatsApp bot conversation history ────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -1413,6 +1427,39 @@ switch ($action) {
         break;
 
     // ══════════════════════════════════════════════════════════════════════
+    // إعدادات الربط — حفظ/حالة كوكي جلسة دفترة (خدمة ذاتية بدون redeploy)
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_save_cookie':
+        $body   = json_decode(file_get_contents('php://input'), true) ?? [];
+        $cookie = trim($body['cookie'] ?? '');
+        if ($cookie === '') { echo json_encode(['success'=>false,'message'=>'الكوكي فارغ']); break; }
+        $esc = $conn->real_escape_string($cookie);
+        $conn->query("INSERT INTO daftra_config (k,v) VALUES ('session_cookie','$esc')
+                      ON DUPLICATE KEY UPDATE v='$esc'");
+        // اختبار فوري على فاتورة معروفة (id=13) للتأكد أن الكوكي صالح
+        $ok = false; $ctype = '';
+        $ch = curl_init("https://semak.daftra.com/owner/invoices/view/13.pdf");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
+            CURLOPT_HTTPHEADER=>["Cookie: $cookie"], CURLOPT_USERAGENT=>'Mozilla/5.0 SemakProxy']);
+        $b = curl_exec($ch); $ctype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE); curl_close($ch);
+        $ok = ($b && (stripos($ctype,'pdf')!==false || substr($b,0,4)==='%PDF'));
+        echo json_encode(['success'=>true,'valid'=>$ok,'message'=>$ok?'تم الحفظ والكوكي صالح ✓':'تم الحفظ لكن الكوكي قد يكون غير صالح'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_cookie_status':
+        $r = $conn->query("SELECT v, updated_at FROM daftra_config WHERE k='session_cookie' LIMIT 1");
+        $row = $r ? $r->fetch_assoc() : null;
+        $set = $row && !empty(trim($row['v']));
+        echo json_encode([
+            'success'    => true,
+            'set'        => $set,
+            'updated_at' => $row['updated_at'] ?? null,
+            'preview'    => $set ? substr($row['v'],0,14).'…' : '',
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
     // PDF الرسمي من دفترة (عربي صحيح + ZATCA QR) — proxy بالجلسة المخزّنة
     // ══════════════════════════════════════════════════════════════════════
 
@@ -1420,7 +1467,7 @@ switch ($action) {
         // type: invoice | estimate | purchase   id: رقم المستند
         $type    = $_GET['type'] ?? 'invoice';
         $doc_id  = (int)($_GET['id'] ?? 0);
-        $session = "__DAFTRA_SESSION__";
+        $session = daftra_session_cookie($conn);
         if (!$doc_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
 
         // مسارات الطباعة المرشّحة حسب نوع المستند (دفترة تولّد PDF عربي + QR)

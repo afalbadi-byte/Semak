@@ -6,7 +6,7 @@ import {
     AlertTriangle, DollarSign, ArrowLeft, CheckCircle2, Coins, ShieldCheck,
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
-    Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers
+    Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2
 } from 'lucide-react';
 
 import UnitInspection   from './UnitInspection';
@@ -37,6 +37,7 @@ import RentalsManage    from './RentalsManage';
 import PaymentsManage   from './PaymentsManage';
 import AccountingHub    from './AccountingHub';
 import NotesReturns     from './NotesReturns';
+import DaftraLink       from './DaftraLink';
 
 const API_URL = "https://semak.sa/api.php";
 
@@ -521,7 +522,9 @@ export default function Dashboard({ onLogout }) {
             id:'it', color:'indigo', icon:Cpu,
             label:'تقنية المعلومات',
             desc:'الأنظمة الرقمية · الذكاء الاصطناعي · البنية التقنية',
-            tools:[], // قيد التطوير
+            tools:[
+                { id:'daftra_link', tabId:'daftra_link', label:'ربط دفترة', icon:Link2, permKey:'finance', color:'indigo' },
+            ],
         },
         {
             id:'hr', color:'purple', icon:ShieldCheck,
@@ -545,7 +548,7 @@ export default function Dashboard({ onLogout }) {
         quotations:'عروض الأسعار', expenses:'المصروفات', cheques:'الشيكات',
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
         rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
-        accounting:'المحاسبة', notes:'الإشعارات والمرتجعات',
+        accounting:'المحاسبة', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
     };
 
     if (authLoading) return (
@@ -715,6 +718,7 @@ export default function Dashboard({ onLogout }) {
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}
                 {activeTab === 'accounting'  && hasPermission('finance')     && <div className="animate-fadeIn"><AccountingHub /></div>}
                 {activeTab === 'notes'       && hasPermission('finance')     && <div className="animate-fadeIn"><NotesReturns /></div>}
+                {activeTab === 'daftra_link' && hasPermission('finance')     && <div className="animate-fadeIn"><DaftraLink /></div>}
                 {activeTab === 'cheques'     && hasPermission('finance')     && <div className="animate-fadeIn"><ChequesManage /></div>}
                 {activeTab === 'treasury'    && hasPermission('finance')     && <div className="animate-fadeIn"><TreasuryManage /></div>}
                 {activeTab === 'reports'     && hasPermission('finance')     && <div className="animate-fadeIn"><ReportsHub /></div>}
