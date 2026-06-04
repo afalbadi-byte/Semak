@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v383
+// deploy: 2026-06-04-v384
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -2101,6 +2101,60 @@ switch ($action) {
         $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
         $data = json_decode($res, true) ?? [];
         echo json_encode(['success'=>true,'data'=>$data['data']??[],'meta'=>$data['meta']??[],'http_code'=>$code], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // المحاسبة + الأصول + الإشعارات والمرتجعات — passthrough مرن
+    // (يُرجع البيانات الخام + http_code، والواجهة تعرض الحقول ديناميكيًا)
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'daftra_generic_get':
+        // جلب عام لأي مورد دفترة — endpoint مُمرّر عبر allowlist للأمان
+        $dk    = "__DAFTRA_KEY__";
+        $key   = $_GET['resource'] ?? '';
+        $page  = (int)($_GET['page'] ?? 1);
+        $from  = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
+
+        // خريطة الموارد المسموحة → [نمط الرابط, مفتاح السجل]
+        $map = [
+            // المحاسبة (api2)
+            'journals'        => ['https://semak.daftra.com/api2/journals.json',          'Journal'],
+            'journal_accounts'=> ['https://semak.daftra.com/api2/journal_accounts.json',  'JournalAccount'],
+            'cost_centers'    => ['https://semak.daftra.com/api2/cost_centers.json',       'CostCenter'],
+            'assets'          => ['https://semak.daftra.com/api2/assets.json',             'Asset'],
+            // الإشعارات والمرتجعات (api2)
+            'credit_notes'    => ['https://semak.daftra.com/api2/credit_notes.json',       'CreditNote'],
+            'refund_receipts' => ['https://semak.daftra.com/api2/refund_receipts.json',    'RefundReceipt'],
+            // الكيانات (v2)
+            'purchase_refund'    => ['https://semak.daftra.com/v2/api/entity/purchase_refund/list/{page}',     null],
+            'purchase_debit_note'=> ['https://semak.daftra.com/v2/api/entity/purchase_debit_note/list/{page}', null],
+            'employee_custody'   => ['https://semak.daftra.com/v2/api/entity/employee_custody/list/{page}',    null],
+        ];
+
+        if (!isset($map[$key])) { echo json_encode(['success'=>false,'message'=>'مورد غير معروف']); break; }
+        [$urlPattern, $recKey] = $map[$key];
+
+        $is_v2 = strpos($urlPattern, '{page}') !== false;
+        if ($is_v2) {
+            $url = str_replace('{page}', $page, $urlPattern);
+        } else {
+            $qp = "page=$page&limit=50";
+            if ($from) $qp .= "&from_date=$from";
+            if ($to)   $qp .= "&to_date=$to";
+            $url = "$urlPattern?$qp";
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>18, CURLOPT_FOLLOWLOCATION=>true]);
+        $res  = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+
+        // تسطيح السجلات (إزالة الغلاف مثل Journal{} إن وُجد)
+        $rows = [];
+        foreach ($data['data'] ?? [] as $r) {
+            $rows[] = ($recKey && isset($r[$recKey])) ? $r[$recKey] : $r;
+        }
+        echo json_encode(['success'=>true,'resource'=>$key,'data'=>$rows,'meta'=>$data['meta']??[],'http_code'=>$code], JSON_UNESCAPED_UNICODE);
         break;
 
     // ══════════════════════════════════════════════════════════════════════
