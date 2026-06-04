@@ -36,6 +36,7 @@ import ChequesManage    from './ChequesManage';
 import RentalsManage    from './RentalsManage';
 import PaymentsManage   from './PaymentsManage';
 import AccountingHub    from './AccountingHub';
+import LedgerHub        from './LedgerHub';
 import NotesReturns     from './NotesReturns';
 import DaftraLink       from './DaftraLink';
 
@@ -512,9 +513,10 @@ export default function Dashboard({ onLogout }) {
         {
             id:'accounting', color:'indigo', icon:BookOpen,
             label:'المحاسبة',
-            desc:'دليل الحسابات · القيود اليومية · مراكز التكلفة · الأصول · الإشعارات والمرتجعات',
+            desc:'الدفترة المستقلة · دليل الحسابات · القيود اليومية · التقارير المالية · مراكز التكلفة · الإشعارات والمرتجعات',
             tools:[
-                { id:'accounting', tabId:'accounting', label:'دفتر المحاسبة',        icon:BookOpen, permKey:'finance', color:'indigo' },
+                { id:'ledger',     tabId:'ledger',     label:'الدفترة المستقلة',     icon:BookOpen, permKey:'finance', color:'indigo' },
+                { id:'accounting', tabId:'accounting', label:'دفتر المحاسبة (دفترة)', icon:FileText, permKey:'finance', color:'slate'  },
                 { id:'notes',      tabId:'notes',      label:'الإشعارات والمرتجعات', icon:FileText, permKey:'finance', color:'rose'   },
             ],
         },
@@ -548,7 +550,7 @@ export default function Dashboard({ onLogout }) {
         quotations:'عروض الأسعار', expenses:'المصروفات', cheques:'الشيكات',
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
         rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
-        accounting:'المحاسبة', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
+        ledger:'الدفترة المستقلة', accounting:'دفتر المحاسبة (دفترة)', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
     };
 
     if (authLoading) return (
@@ -716,6 +718,7 @@ export default function Dashboard({ onLogout }) {
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}
+                {activeTab === 'ledger'      && hasPermission('finance')     && <div className="animate-fadeIn"><LedgerHub /></div>}
                 {activeTab === 'accounting'  && hasPermission('finance')     && <div className="animate-fadeIn"><AccountingHub /></div>}
                 {activeTab === 'notes'       && hasPermission('finance')     && <div className="animate-fadeIn"><NotesReturns /></div>}
                 {activeTab === 'daftra_link' && hasPermission('finance')     && <div className="animate-fadeIn"><DaftraLink /></div>}
