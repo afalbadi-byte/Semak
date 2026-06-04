@@ -1085,6 +1085,9 @@ switch ($action) {
             'sales'       => ['clients' => $clients_total, 'invoices_month' => $inv_month_count, 'revenue_month' => $rev_month],
             'procurement' => ['suppliers' => $suppliers_total, 'work_orders' => $wo_total, 'open' => $wo_open],
             'finance'     => ['revenue_all' => $rev_all, 'expenses_all' => $exp_all, 'revenue_month' => $rev_month, 'expenses_month' => $exp_month, 'net' => $rev_all - $exp_all],
+            '_src'        => 'v2-wf',
+            '_wf_count'   => count($wf_rows),
+            '_wf_total'   => $wf_total,
         ], JSON_UNESCAPED_UNICODE);
         break;
 
