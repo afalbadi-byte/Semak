@@ -1056,7 +1056,8 @@ switch ($action) {
         $wf_raw = curl_exec($wf_ch); curl_close($wf_ch);
         $wf_data = json_decode($wf_raw, true);
         $wf_rows = $wf_data['data'] ?? [];
-        $wf_total = (int)($wf_data['total'] ?? count($wf_rows));
+        // نستخدم count($wf_rows) فقط — حقل total قد يعني عدد الصفحات لا السجلات
+        $wf_total = count($wf_rows);
 
         // ── تحليل ──
         $clients_total   = (int)($r_clients['meta']['total'] ?? count($r_clients['data'] ?? []));
