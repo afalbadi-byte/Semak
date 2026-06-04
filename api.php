@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v396
+// deploy: 2026-06-05-v397
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -1492,6 +1492,27 @@ switch ($action) {
             "expenses_by_category" => $expenses_by_category,
             "invoices_by_client"   => $invoices_by_client,
         ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_balances':
+        // استكشاف (قراءة فقط): أي نقاط أرصدة تُتيحها دفترة لبناء القيد الافتتاحي آليًا (خزائن/موردون/حسابات)
+        set_time_limit(60);
+        $dk = "__DAFTRA_KEY__"; $base = "https://semak.daftra.com/api2"; $hh = ["APIKEY: $dk", "Accept: application/json"];
+        $probe = function($ep) use ($base,$hh){
+            $ch=curl_init("$base/$ep");
+            curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$hh,CURLOPT_TIMEOUT=>20]);
+            $r=curl_exec($ch); $code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE); curl_close($ch);
+            $j=json_decode($r,true);
+            $data = is_array($j['data']??null) ? $j['data'] : null;
+            $first = $data && isset($data[0]) ? $data[0] : null;
+            // نُظهر مفاتيح أول عنصر فقط (اكتشاف شكل البيانات) دون إغراق
+            $firstKeys = null;
+            if (is_array($first)) { $inner = (count($first)===1 && is_array(reset($first))) ? reset($first) : $first; $firstKeys = array_keys($inner); }
+            return ['http'=>$code,'data_count'=>$data!==null?count($data):null,'top_keys'=>is_array($j)?array_keys($j):null,'first_item_keys'=>$firstKeys];
+        };
+        $out=[];
+        foreach (['treasuries.json','suppliers.json','products.json','journals.json','journal_accounts.json','accounts.json','account_balances.json','expenses.json'] as $ep) $out[$ep]=$probe($ep);
+        echo json_encode(['success'=>true,'probe'=>$out], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'discover_workflows':
