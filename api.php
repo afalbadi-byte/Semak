@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v392
+// deploy: 2026-06-04-v393
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -3172,6 +3172,35 @@ switch ($action) {
         }
         acc_audit($conn, $tid, 'settings', null, 'save', "saved $n keys", $by);
         echo json_encode(['success'=>true,'saved'=>$n,'message'=>'تم حفظ إعدادات المنشأة'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'zatca_selftest':
+        // فحص قدرات التشفير على الخادم — هل ندعم secp256k1 والتوقيع الذي تتطلبه هيئة الزكاة؟ (قراءة فقط)
+        $z = ['php' => PHP_VERSION, 'openssl_ext' => extension_loaded('openssl')];
+        $z['openssl_version'] = defined('OPENSSL_VERSION_TEXT') ? OPENSSL_VERSION_TEXT : null;
+        $curves = function_exists('openssl_get_curve_names') ? openssl_get_curve_names() : [];
+        $z['has_secp256k1_curve'] = in_array('secp256k1', $curves, true);
+        $z['curve_count'] = count($curves);
+        // محاولة فعلية لإنشاء مفتاح secp256k1 وتوقيع عيّنة والتحقق منها
+        $z['can_generate_key'] = false; $z['can_sign_verify'] = false; $z['key_bits'] = null; $z['error'] = null;
+        if ($z['openssl_ext']) {
+            $pk = @openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'secp256k1']);
+            if ($pk) {
+                $z['can_generate_key'] = true;
+                $det = openssl_pkey_get_details($pk);
+                $z['key_bits'] = $det['bits'] ?? null;
+                $z['key_type_ec'] = isset($det['ec']);
+                $sig = ''; $sample = 'ZATCA-secp256k1-selftest';
+                if (@openssl_sign($sample, $sig, $pk, OPENSSL_ALGO_SHA256)) {
+                    $pub = openssl_pkey_get_public($det['key']);
+                    $z['can_sign_verify'] = ($pub && openssl_verify($sample, $sig, $pub, OPENSSL_ALGO_SHA256) === 1);
+                }
+            } else {
+                $z['error'] = openssl_error_string();
+            }
+        }
+        $z['sha256'] = in_array('sha256', array_map('strtolower', hash_algos()), true);
+        echo json_encode(['success' => true, 'zatca' => $z], JSON_UNESCAPED_UNICODE);
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
