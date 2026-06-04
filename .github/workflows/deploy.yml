@@ -59,6 +59,8 @@ jobs:
           port: 21
           local-dir: ./dist/
           server-dir: ./
+          timeout: 600000
+          log-level: minimal
           exclude: |
             **/.git*
             **/.git*/**
