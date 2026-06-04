@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-04-v386
+// deploy: 2026-06-04-v387
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -2097,7 +2097,7 @@ switch ($action) {
     case 'daftra_rental_units':
         $dk = "__DAFTRA_KEY__";
         $page = (int)($_GET['page'] ?? 1);
-        $ch = curl_init("https://semak.daftra.com/v2/api/rental/units?page=$page&limit=50");
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/rental_unit/list/$page");
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
         $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
         $data = json_decode($res, true) ?? [];
@@ -2107,7 +2107,7 @@ switch ($action) {
     case 'daftra_reservation_orders':
         $dk = "__DAFTRA_KEY__";
         $page = (int)($_GET['page'] ?? 1);
-        $ch = curl_init("https://semak.daftra.com/v2/api/rental/reservation-orders?page=$page&limit=50");
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/booking/list/$page");
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
         $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
         $data = json_decode($res, true) ?? [];
@@ -2179,7 +2179,7 @@ switch ($action) {
             'journals'        => ['https://semak.daftra.com/api2/journals.json',          'Journal'],
             'journal_accounts'=> ['https://semak.daftra.com/api2/journal_accounts.json',  'JournalAccount'],
             'cost_centers'    => ['https://semak.daftra.com/api2/cost_centers.json',       'CostCenter'],
-            'assets'          => ['https://semak.daftra.com/api2/assets.json',             'Asset'],
+            'assets'          => ['https://semak.daftra.com/v2/api/entity/asset/list/{page}', null],
             // الإشعارات والمرتجعات (api2)
             'credit_notes'    => ['https://semak.daftra.com/api2/credit_notes.json',       'CreditNote'],
             'refund_receipts' => ['https://semak.daftra.com/api2/refund_receipts.json',    'RefundReceipt'],
