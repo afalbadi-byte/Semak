@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v400
+// deploy: 2026-06-05-v401
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -3242,21 +3242,30 @@ switch ($action) {
         break;
 
     case 'gl_party_reclass':
-        // إعادة تصنيف أطراف بالجملة عبر daftra_id (مثلاً تحويل "عملاء" وهميين إلى شركاء) — تغيير النوع فقط، بلا حذف
+        // إعادة تصنيف أطراف بالجملة — تغيير النوع فقط بلا حذف. الاستهداف بالأولوية: ids (مفتاح أساسي، دقيق) ثم daftra_ids.
+        // ملاحظة: daftra_id غير فريد بين الأنواع (عميل#11 ≠ مورّد#11) — لذا استخدم from_type أو ids لتفادي التصادم.
         $tid  = (int)($input_data['tenant_id'] ?? $_GET['tenant_id'] ?? $_GET['tenant'] ?? 1);
         $type = $conn->real_escape_string($input_data['type'] ?? $_GET['type'] ?? '');
         if (!in_array($type, ['customer','supplier','partner'])) { echo json_encode(['success'=>false,'message'=>'type يجب أن يكون customer أو supplier أو partner']); break; }
-        $ids = $input_data['daftra_ids'] ?? $_GET['daftra_ids'] ?? null;
-        if (is_string($ids)) $ids = array_filter(array_map('trim', explode(',', $ids)), 'strlen');
-        if (!is_array($ids) || !$ids) { echo json_encode(['success'=>false,'message'=>'مرّر daftra_ids (مصفوفة أو قائمة مفصولة بفواصل)']); break; }
-        $esc = array_map(function($v) use ($conn){ return "'".$conn->real_escape_string((string)$v)."'"; }, $ids);
-        $inList = implode(',', $esc);
-        $before = []; $rb = $conn->query("SELECT daftra_id,name,type FROM acc_parties WHERE tenant_id=$tid AND daftra_id IN ($inList)");
+        $fromType = $input_data['from_type'] ?? $_GET['from_type'] ?? '';
+        $pkids = $input_data['ids'] ?? $_GET['ids'] ?? null;
+        if (is_string($pkids)) $pkids = array_filter(array_map('trim', explode(',', $pkids)), 'strlen');
+        $dids  = $input_data['daftra_ids'] ?? $_GET['daftra_ids'] ?? null;
+        if (is_string($dids)) $dids = array_filter(array_map('trim', explode(',', $dids)), 'strlen');
+        $where = "tenant_id=$tid";
+        if (is_array($pkids) && $pkids) {
+            $where .= " AND id IN (".implode(',', array_map('intval', $pkids)).")";
+        } elseif (is_array($dids) && $dids) {
+            $esc = array_map(function($v) use ($conn){ return "'".$conn->real_escape_string((string)$v)."'"; }, $dids);
+            $where .= " AND daftra_id IN (".implode(',', $esc).")";
+        } else { echo json_encode(['success'=>false,'message'=>'مرّر ids (مفتاح أساسي) أو daftra_ids']); break; }
+        if (in_array($fromType, ['customer','supplier','partner'])) $where .= " AND type='".$conn->real_escape_string($fromType)."'";
+        $before = []; $rb = $conn->query("SELECT id,daftra_id,name,type FROM acc_parties WHERE $where");
         while ($rb && ($x=$rb->fetch_assoc())) $before[] = $x;
-        $conn->query("UPDATE acc_parties SET type='$type' WHERE tenant_id=$tid AND daftra_id IN ($inList)");
+        $conn->query("UPDATE acc_parties SET type='$type' WHERE $where");
         $affected = $conn->affected_rows;
-        $changed = []; foreach ($before as $b) $changed[] = $b['name'].' ('.$b['type'].'→'.$type.')';
-        acc_audit($conn,$tid,'reclass',null,'parties','type='.$type.' ids='.implode(',',$ids).' affected='.$affected,$input_data['actor']??null);
+        $changed = []; foreach ($before as $b) $changed[] = '#'.$b['id'].' '.$b['name'].' ('.$b['type'].'→'.$type.')';
+        acc_audit($conn,$tid,'reclass',null,'parties','to='.$type.' from='.$fromType.' affected='.$affected,$input_data['actor']??null);
         echo json_encode(['success'=>true,'reclassified'=>$affected,'to_type'=>$type,'details'=>$changed], JSON_UNESCAPED_UNICODE);
         break;
 
