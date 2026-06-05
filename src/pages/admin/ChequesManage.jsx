@@ -19,11 +19,11 @@ const monthStart = () => new Date(new Date().getFullYear(), new Date().getMonth(
 
 // ─── تعريفات الحالات ──────────────────────────────────────────────
 const STATUS_CONFIG = {
-  pending:   { label: 'معلق',     cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  collected: { label: 'محصّل',    cls: 'bg-green-100 text-green-700 border-green-200'  },
-  paid:      { label: 'مسدّد',    cls: 'bg-green-100 text-green-700 border-green-200'  },
-  returned:  { label: 'مرتجع',   cls: 'bg-red-100 text-red-700 border-red-200'        },
-  postponed: { label: 'مؤجل',    cls: 'bg-slate-100 text-slate-600 border-slate-200'  },
+  pending:   { label: 'معلق',     cls: 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-300 dark:border-yellow-500/30' },
+  collected: { label: 'محصّل',    cls: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-300 dark:border-green-500/30'  },
+  paid:      { label: 'مسدّد',    cls: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-300 dark:border-green-500/30'  },
+  returned:  { label: 'مرتجع',   cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30'        },
+  postponed: { label: 'مؤجل',    cls: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-brand-800 dark:text-brand-400 dark:border-brand-700'  },
 };
 
 // أسماء الحالات المتوافقة مع نوع الشيك
@@ -59,13 +59,13 @@ function Toast({ msg, type, onClose }) {
 // ─── شريحة ملخص ──────────────────────────────────────────────────
 function SummaryChip({ icon: Icon, label, value, color }) {
   return (
-    <div className="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 px-4 py-3 flex-1 min-w-[160px]">
+    <div className="flex items-center gap-3 bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 px-4 py-3 flex-1 min-w-[160px]">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
         <Icon size={20} className="text-white" />
       </div>
       <div>
-        <p className="text-xs text-slate-400 font-medium">{label}</p>
-        <p className="text-sm font-black text-slate-700">{value}</p>
+        <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">{label}</p>
+        <p className="text-sm font-black text-slate-700 dark:text-brand-300">{value}</p>
       </div>
     </div>
   );
@@ -73,7 +73,7 @@ function SummaryChip({ icon: Icon, label, value, color }) {
 
 // ─── شارة الحالة ─────────────────────────────────────────────────
 function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] || { label: status || '—', cls: 'bg-slate-100 text-slate-500 border-slate-200' };
+  const cfg = STATUS_CONFIG[status] || { label: status || '—', cls: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-brand-800 dark:text-brand-400 dark:border-brand-700' };
   return (
     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${cfg.cls}`}>
       {cfg.label}
@@ -97,10 +97,10 @@ function ChequeRow({ cheque, type, onStatusChange, updatingId }) {
   const dueDate = c.due_date || c.date || '—';
 
   return (
-    <tr className="hover:bg-slate-50/60 transition-colors">
+    <tr className="hover:bg-slate-50/60 dark:hover:bg-brand-800 transition-colors">
       {/* رقم الشيك */}
       <td className="px-5 py-3.5">
-        <span className="text-xs font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded font-bold">
+        <span className="text-xs font-mono text-slate-700 dark:text-brand-300 bg-slate-100 dark:bg-brand-800 px-2 py-0.5 rounded font-bold">
           {c.cheque_number || c.number || `#${id}`}
         </span>
       </td>
@@ -108,28 +108,28 @@ function ChequeRow({ cheque, type, onStatusChange, updatingId }) {
       {/* الجهة */}
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-2">
-          <Building size={14} className="text-slate-400 flex-shrink-0" />
-          <span className="font-medium text-slate-700 text-sm max-w-[160px] truncate block">
+          <Building size={14} className="text-slate-400 dark:text-brand-400 flex-shrink-0" />
+          <span className="font-medium text-slate-700 dark:text-brand-300 text-sm max-w-[160px] truncate block">
             {partyName}
           </span>
         </div>
       </td>
 
       {/* المبلغ */}
-      <td className="px-5 py-3.5 font-bold text-[#1a365d]">
+      <td className="px-5 py-3.5 font-bold text-brand-800 dark:text-brand-100">
         {fmt(c.amount || c.total)}
       </td>
 
       {/* تاريخ الاستحقاق */}
       <td className="px-5 py-3.5">
-        <div className="flex items-center gap-1.5 text-slate-600 text-sm">
-          <Calendar size={13} className="text-[#c5a059]" />
+        <div className="flex items-center gap-1.5 text-slate-600 dark:text-brand-300 text-sm">
+          <Calendar size={13} className="text-gold-500" />
           <span dir="ltr">{dueDate}</span>
         </div>
       </td>
 
       {/* البنك */}
-      <td className="px-5 py-3.5 text-slate-600 text-sm">
+      <td className="px-5 py-3.5 text-slate-600 dark:text-brand-300 text-sm">
         {c.bank_name || c.bank || '—'}
       </td>
 
@@ -147,17 +147,17 @@ function ChequeRow({ cheque, type, onStatusChange, updatingId }) {
             onChange={e => onStatusChange(id, type, e.target.value)}
             className={`appearance-none text-xs font-bold border rounded-xl px-3 py-2 pr-7 outline-none cursor-pointer transition
               ${isUpdating
-                ? 'opacity-50 cursor-wait bg-slate-50 border-slate-200 text-slate-400'
-                : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-[#c5a059] focus:border-[#1a365d]'
+                ? 'opacity-50 cursor-wait bg-slate-50 dark:bg-brand-900 border-slate-200 dark:border-brand-700 text-slate-400 dark:text-brand-500'
+                : 'bg-slate-50 dark:bg-brand-900 border-slate-200 dark:border-brand-700 text-slate-700 dark:text-brand-50 hover:border-gold-500 focus:border-brand-800'
               }`}
           >
             {statusOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <ChevronDown size={13} className="absolute top-1/2 -translate-y-1/2 left-2.5 text-slate-400 pointer-events-none" />
+          <ChevronDown size={13} className="absolute top-1/2 -translate-y-1/2 left-2.5 text-slate-400 dark:text-brand-400 pointer-events-none" />
           {isUpdating && (
-            <RefreshCw size={12} className="absolute top-1/2 -translate-y-1/2 right-2 animate-spin text-[#c5a059]" />
+            <RefreshCw size={12} className="absolute top-1/2 -translate-y-1/2 right-2 animate-spin text-gold-500" />
           )}
         </div>
       </td>
@@ -297,14 +297,14 @@ export default function ChequesManage({ user, navigateTo }) {
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* ─── رأس الصفحة ─── */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 p-6 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-[#1a365d] rounded-2xl flex items-center justify-center shadow">
-            <CreditCard size={24} className="text-[#c5a059]" />
+          <div className="w-12 h-12 bg-brand-800 rounded-2xl flex items-center justify-center shadow">
+            <CreditCard size={24} className="text-gold-500" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-[#1a365d]">الشيكات</h1>
-            <p className="text-xs text-slate-400 font-medium mt-0.5">
+            <h1 className="text-xl font-black text-brand-800 dark:text-brand-100">الشيكات</h1>
+            <p className="text-xs text-slate-400 dark:text-brand-400 font-medium mt-0.5">
               إدارة الشيكات المستلمة والمدفوعة من دفترة
             </p>
           </div>
@@ -324,7 +324,7 @@ export default function ChequesManage({ user, navigateTo }) {
           />
           <button
             onClick={() => loadAll(appliedFilters)}
-            className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition text-slate-500"
+            className="p-2.5 bg-slate-50 dark:bg-brand-800/40 hover:bg-slate-100 dark:hover:bg-brand-800 rounded-xl border border-slate-200 dark:border-brand-700 transition text-slate-500 dark:text-brand-400"
             title="تحديث"
           >
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
@@ -343,8 +343,8 @@ export default function ChequesManage({ user, navigateTo }) {
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold border transition ${
               activeTab === tab.key
-                ? 'bg-[#1a365d] text-white border-[#1a365d] shadow-md'
-                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                ? 'bg-brand-800 text-white border-brand-800 shadow-md'
+                : 'bg-white dark:bg-brand-900 text-slate-600 dark:text-brand-300 border-slate-200 dark:border-brand-700 hover:bg-slate-50 dark:hover:bg-brand-800'
             }`}
           >
             <CreditCard size={16} />
@@ -352,7 +352,7 @@ export default function ChequesManage({ user, navigateTo }) {
             <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
               activeTab === tab.key
                 ? 'bg-white/20 text-white'
-                : 'bg-slate-100 text-slate-500'
+                : 'bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400'
             }`}>
               {tab.count}
             </span>
@@ -366,13 +366,13 @@ export default function ChequesManage({ user, navigateTo }) {
           icon={CreditCard}
           label={activeTab === 'receivable' ? 'شيكات مستلمة' : 'شيكات مدفوعة'}
           value={`${summary.total} شيك`}
-          color="bg-[#1a365d]"
+          color="bg-brand-800"
         />
         <SummaryChip
           icon={DollarSign}
           label="إجمالي المبالغ"
           value={fmt(summary.totalAmount)}
-          color="bg-[#c5a059]"
+          color="bg-gold-500"
         />
         <SummaryChip
           icon={AlertTriangle}
@@ -383,33 +383,33 @@ export default function ChequesManage({ user, navigateTo }) {
       </div>
 
       {/* ─── فلتر التاريخ ─── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-col sm:flex-row items-end gap-3">
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-4 mb-4 flex flex-col sm:flex-row items-end gap-3">
         <div className="flex items-center gap-2 flex-1">
-          <Calendar size={16} className="text-[#c5a059] flex-shrink-0" />
-          <span className="text-xs font-bold text-slate-500 whitespace-nowrap">من تاريخ:</span>
+          <Calendar size={16} className="text-gold-500 flex-shrink-0" />
+          <span className="text-xs font-bold text-slate-500 dark:text-brand-400 whitespace-nowrap">من تاريخ:</span>
           <input
             type="date"
             value={filters.from}
             onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-[#c5a059] transition"
+            className="flex-1 bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-gold-500 transition"
             dir="ltr"
           />
         </div>
         <div className="flex items-center gap-2 flex-1">
-          <Calendar size={16} className="text-[#c5a059] flex-shrink-0" />
-          <span className="text-xs font-bold text-slate-500 whitespace-nowrap">إلى تاريخ:</span>
+          <Calendar size={16} className="text-gold-500 flex-shrink-0" />
+          <span className="text-xs font-bold text-slate-500 dark:text-brand-400 whitespace-nowrap">إلى تاريخ:</span>
           <input
             type="date"
             value={filters.to}
             onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-[#c5a059] transition"
+            className="flex-1 bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-gold-500 transition"
             dir="ltr"
           />
         </div>
         <button
           onClick={applyFilters}
           disabled={loading}
-          className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#152d50] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow-sm disabled:opacity-60 whitespace-nowrap"
+          className="flex items-center gap-2 bg-brand-800 hover:bg-[#152d50] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow-sm disabled:opacity-60 whitespace-nowrap"
         >
           <Search size={15} />
           تصفية
@@ -417,25 +417,25 @@ export default function ChequesManage({ user, navigateTo }) {
       </div>
 
       {/* ─── الجدول ─── */}
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-20 gap-3 text-slate-400">
+          <div className="flex items-center justify-center py-20 gap-3 text-slate-400 dark:text-brand-400">
             <RefreshCw size={24} className="animate-spin" />
             <span className="font-bold text-sm">جاري التحميل...</span>
           </div>
         ) : currentList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-brand-400 gap-3">
             <CreditCard size={40} className="opacity-30" />
             <p className="font-bold text-sm">
               {activeTab === 'receivable' ? 'لا توجد شيكات مستلمة' : 'لا توجد شيكات مدفوعة'}
             </p>
-            <p className="text-xs text-slate-300">جرب تغيير نطاق التاريخ</p>
+            <p className="text-xs text-slate-300 dark:text-brand-600">جرب تغيير نطاق التاريخ</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
-              <thead className="bg-slate-50 border-b border-slate-100">
-                <tr className="text-[#1a365d] font-black text-xs">
+              <thead className="bg-slate-50 dark:bg-brand-800/60 border-b border-slate-100 dark:border-brand-700">
+                <tr className="text-brand-800 dark:text-brand-100 font-black text-xs">
                   <th className="px-5 py-4">رقم الشيك</th>
                   <th className="px-5 py-4">
                     {activeTab === 'receivable' ? 'العميل' : 'المورد'}
@@ -447,7 +447,7 @@ export default function ChequesManage({ user, navigateTo }) {
                   <th className="px-5 py-4 text-center">تغيير الحالة</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-50 dark:divide-brand-700">
                 {currentList.map((cheque, idx) => {
                   const c = cheque.Cheque || cheque;
                   return (
@@ -468,7 +468,7 @@ export default function ChequesManage({ user, navigateTo }) {
 
       {/* ─── تعليمة أسفل الصفحة ─── */}
       {!loading && currentList.length > 0 && (
-        <p className="text-center text-xs text-slate-300 font-medium mt-4">
+        <p className="text-center text-xs text-slate-300 dark:text-brand-600 font-medium mt-4">
           تُنشأ الشيكات تلقائياً من المعاملات في دفترة — لا يمكن إضافتها يدوياً هنا.
         </p>
       )}

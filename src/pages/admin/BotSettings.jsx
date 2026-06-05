@@ -35,7 +35,7 @@ export default function BotSettings() {
 
     if (loading || !stats) {
         return (
-            <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 p-12 text-center">
+            <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-brand-700 p-12 text-center">
                 <RefreshCw className="animate-spin inline mr-2 text-teal-600" /> جاري تحميل بيانات البوت...
             </div>
         );
@@ -97,79 +97,79 @@ export default function BotSettings() {
 
             {/* الكلفة والاستهلاك */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white rounded-[1.5rem] shadow border border-slate-100 p-6">
+                <div className="bg-white dark:bg-brand-900 rounded-[1.5rem] shadow border border-slate-100 dark:border-brand-700 p-6">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-black text-[#1a365d] flex items-center gap-2">
+                            <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
                                 <DollarSign size={20} className="text-emerald-600" />
                                 الكلفة التقديرية
                             </h3>
-                            <p className="text-xs text-slate-400 mt-1">تقدير محلي بناءً على عدد الرسائل والأحرف</p>
+                            <p className="text-xs text-slate-400 dark:text-brand-400 mt-1">تقدير محلي بناءً على عدد الرسائل والأحرف</p>
                         </div>
                     </div>
                     <div className="text-4xl font-black text-emerald-600 mb-3">
                         ${stats.estimated_cost_usd}
                     </div>
-                    <div className="text-xs text-slate-500 leading-relaxed space-y-1">
-                        <div>عدد استدعاءات Claude: <span className="font-bold text-slate-700">{formatNum(stats.bot_calls)}</span></div>
-                        <div>توكنات الإدخال (تقدير): <span className="font-bold text-slate-700">{formatNum(stats.estimated_input_tokens)}</span></div>
-                        <div>توكنات الإخراج (تقدير): <span className="font-bold text-slate-700">{formatNum(stats.estimated_output_tokens)}</span></div>
+                    <div className="text-xs text-slate-500 dark:text-brand-400 leading-relaxed space-y-1">
+                        <div>عدد استدعاءات Claude: <span className="font-bold text-slate-700 dark:text-brand-300">{formatNum(stats.bot_calls)}</span></div>
+                        <div>توكنات الإدخال (تقدير): <span className="font-bold text-slate-700 dark:text-brand-300">{formatNum(stats.estimated_input_tokens)}</span></div>
+                        <div>توكنات الإخراج (تقدير): <span className="font-bold text-slate-700 dark:text-brand-300">{formatNum(stats.estimated_output_tokens)}</span></div>
                     </div>
-                    <div className="mt-4 pt-3 border-t border-slate-100">
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-brand-700">
                         <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-600 hover:underline">
                             عرض الرصيد الفعلي في حساب Anthropic ←
                         </a>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-[1.5rem] shadow border border-slate-100 p-6">
+                <div className="bg-white dark:bg-brand-900 rounded-[1.5rem] shadow border border-slate-100 dark:border-brand-700 p-6">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-black text-[#1a365d] flex items-center gap-2">
+                            <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
                                 <Zap size={20} className="text-amber-600" />
                                 معدل التحويل
                             </h3>
-                            <p className="text-xs text-slate-400 mt-1">نسبة المهتمين الذين تحولوا لمشترين</p>
+                            <p className="text-xs text-slate-400 dark:text-brand-400 mt-1">نسبة المهتمين الذين تحولوا لمشترين</p>
                         </div>
                     </div>
                     <div className="text-4xl font-black text-amber-600 mb-3">
                         {conversionRate}<span className="text-2xl">%</span>
                     </div>
-                    <div className="bg-slate-100 rounded-full h-3 overflow-hidden">
+                    <div className="bg-slate-100 dark:bg-brand-800 rounded-full h-3 overflow-hidden">
                         <div className="bg-gradient-to-l from-amber-500 to-amber-400 h-full transition-all" style={{ width: `${Math.min(conversionRate, 100)}%` }} />
                     </div>
-                    <div className="text-xs text-slate-500 mt-3">
+                    <div className="text-xs text-slate-500 dark:text-brand-400 mt-3">
                         {formatNum(stats.conversions_from_bot)} مبيعة من {formatNum(stats.leads_from_bot)} مهتم
                     </div>
                 </div>
             </div>
 
             {/* إعدادات الاتصال */}
-            <div className="bg-white rounded-[1.5rem] shadow border border-slate-100 p-6">
-                <h3 className="text-lg font-black text-[#1a365d] flex items-center gap-2 mb-4">
+            <div className="bg-white dark:bg-brand-900 rounded-[1.5rem] shadow border border-slate-100 dark:border-brand-700 p-6">
+                <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 flex items-center gap-2 mb-4">
                     <Activity size={20} className="text-teal-600" />
                     إعدادات الاتصال
                 </h3>
                 <div className="space-y-3 text-sm">
-                    <div className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-slate-50 rounded-xl">
-                        <span className="font-bold text-slate-600 md:w-40 shrink-0">عنوان الـ Webhook:</span>
-                        <code className="text-xs font-mono bg-white px-3 py-1 rounded border border-slate-200 text-slate-700 break-all">{stats.config.webhook}</code>
+                    <div className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-slate-50 dark:bg-brand-800/40 rounded-xl">
+                        <span className="font-bold text-slate-600 dark:text-brand-300 md:w-40 shrink-0">عنوان الـ Webhook:</span>
+                        <code className="text-xs font-mono bg-white dark:bg-brand-900 px-3 py-1 rounded border border-slate-200 dark:border-brand-700 text-slate-700 dark:text-brand-300 break-all">{stats.config.webhook}</code>
                     </div>
-                    <div className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-slate-50 rounded-xl">
-                        <span className="font-bold text-slate-600 md:w-40 shrink-0">منصة الواتساب:</span>
-                        <span className="text-slate-700 font-bold">Mottasl / Azeer</span>
+                    <div className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-slate-50 dark:bg-brand-800/40 rounded-xl">
+                        <span className="font-bold text-slate-600 dark:text-brand-300 md:w-40 shrink-0">منصة الواتساب:</span>
+                        <span className="text-slate-700 dark:text-brand-300 font-bold">Mottasl / Azeer</span>
                     </div>
-                    <div className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-slate-50 rounded-xl">
-                        <span className="font-bold text-slate-600 md:w-40 shrink-0">المعالج بالذكاء الاصطناعي:</span>
-                        <span className="text-slate-700 font-bold">Anthropic Claude API</span>
+                    <div className="flex flex-col md:flex-row md:items-center gap-2 p-3 bg-slate-50 dark:bg-brand-800/40 rounded-xl">
+                        <span className="font-bold text-slate-600 dark:text-brand-300 md:w-40 shrink-0">المعالج بالذكاء الاصطناعي:</span>
+                        <span className="text-slate-700 dark:text-brand-300 font-bold">Anthropic Claude API</span>
                     </div>
                 </div>
             </div>
 
             {/* المحادثات الأخيرة */}
-            <div className="bg-white rounded-[1.5rem] shadow border border-slate-100 p-6">
+            <div className="bg-white dark:bg-brand-900 rounded-[1.5rem] shadow border border-slate-100 dark:border-brand-700 p-6">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                    <h3 className="text-lg font-black text-[#1a365d] flex items-center gap-2">
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
                         <MessageSquare size={20} className="text-blue-600" />
                         آخر المحادثات
                     </h3>
@@ -185,17 +185,17 @@ export default function BotSettings() {
                         {conversations.length === 0 ? (
                             <p className="text-slate-400 text-center py-8">لا توجد محادثات بعد.</p>
                         ) : conversations.map((c, i) => (
-                            <div key={i} className={`flex gap-3 p-3 rounded-xl border ${c.role === 'user' ? 'bg-blue-50/50 border-blue-100' : 'bg-amber-50/50 border-amber-100'}`}>
+                            <div key={i} className={`flex gap-3 p-3 rounded-xl border ${c.role === 'user' ? 'bg-blue-50/50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/30' : 'bg-amber-50/50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/30'}`}>
                                 <div className="text-[10px] font-bold shrink-0 text-slate-500" style={{ writingMode: 'horizontal-tb' }}>
                                     {c.role === 'user' ? '👤' : '🤖'}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <span className="text-xs font-bold text-slate-600">{c.role === 'user' ? 'العميل' : 'فهد'}</span>
-                                        <span className="text-[10px] font-mono text-slate-400" dir="ltr">{c.phone}</span>
-                                        <span className="text-[10px] text-slate-400">{formatDate(c.created_at)}</span>
+                                        <span className="text-xs font-bold text-slate-600 dark:text-brand-300">{c.role === 'user' ? 'العميل' : 'فهد'}</span>
+                                        <span className="text-[10px] font-mono text-slate-400 dark:text-brand-400" dir="ltr">{c.phone}</span>
+                                        <span className="text-[10px] text-slate-400 dark:text-brand-400">{formatDate(c.created_at)}</span>
                                     </div>
-                                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-words">{c.message}</div>
+                                    <div className="text-sm text-slate-700 dark:text-brand-300 leading-relaxed whitespace-pre-wrap break-words">{c.message}</div>
                                 </div>
                             </div>
                         ))}
@@ -215,12 +215,12 @@ export default function BotSettings() {
 
 function StatCard({ icon: Icon, label, value, color }) {
     const colors = {
-        blue:    'bg-blue-50 text-blue-700 border-blue-200',
-        indigo:  'bg-indigo-50 text-indigo-700 border-indigo-200',
-        purple:  'bg-purple-50 text-purple-700 border-purple-200',
-        teal:    'bg-teal-50 text-teal-700 border-teal-200',
-        amber:   'bg-amber-50 text-amber-700 border-amber-200',
-        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        blue:    'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30',
+        indigo:  'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30',
+        purple:  'bg-purple-50 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/30',
+        teal:    'bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-500/30',
+        amber:   'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30',
+        emerald: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30',
     };
     return (
         <div className={`rounded-2xl border p-3 md:p-4 ${colors[color]}`}>

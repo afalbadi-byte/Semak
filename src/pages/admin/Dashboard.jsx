@@ -45,16 +45,16 @@ import EntryDetail      from './EntryDetail';
 import InvoiceDetail    from './InvoiceDetail';
 
 import { API_URL } from '../../lib/api/client';
-import { ToastProvider, useToast } from '../../components/ui';
+import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
 const DEPT_PALETTE = {
-    teal:    { wrap:'border-teal-200 bg-teal-50/30',    strip:'bg-teal-500', icon:'bg-teal-100 text-teal-700', title:'text-teal-800' },
-    blue:    { wrap:'border-blue-200 bg-blue-50/30',    strip:'bg-blue-500', icon:'bg-blue-100 text-blue-700', title:'text-blue-800' },
-    amber:   { wrap:'border-amber-200 bg-amber-50/30',  strip:'bg-amber-500', icon:'bg-amber-100 text-amber-700', title:'text-amber-800' },
-    emerald: { wrap:'border-emerald-200 bg-emerald-50/30', strip:'bg-emerald-600', icon:'bg-emerald-100 text-emerald-700', title:'text-emerald-800' },
-    indigo:  { wrap:'border-indigo-200 bg-indigo-50/30', strip:'bg-indigo-500', icon:'bg-indigo-100 text-indigo-700', title:'text-indigo-800' },
-    purple:  { wrap:'border-purple-200 bg-purple-50/30', strip:'bg-purple-500', icon:'bg-purple-100 text-purple-700', title:'text-purple-800' },
+    teal:    { wrap:'border-teal-200 bg-teal-50/30 dark:border-teal-500/20 dark:bg-teal-500/5',    strip:'bg-teal-500', icon:'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300', title:'text-teal-800 dark:text-teal-300' },
+    blue:    { wrap:'border-blue-200 bg-blue-50/30 dark:border-blue-500/20 dark:bg-blue-500/5',    strip:'bg-blue-500', icon:'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300', title:'text-blue-800 dark:text-blue-300' },
+    amber:   { wrap:'border-amber-200 bg-amber-50/30 dark:border-amber-500/20 dark:bg-amber-500/5',  strip:'bg-amber-500', icon:'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300', title:'text-amber-800 dark:text-amber-300' },
+    emerald: { wrap:'border-emerald-200 bg-emerald-50/30 dark:border-emerald-500/20 dark:bg-emerald-500/5', strip:'bg-emerald-600', icon:'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300', title:'text-emerald-800 dark:text-emerald-300' },
+    indigo:  { wrap:'border-indigo-200 bg-indigo-50/30 dark:border-indigo-500/20 dark:bg-indigo-500/5', strip:'bg-indigo-500', icon:'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300', title:'text-indigo-800 dark:text-indigo-300' },
+    purple:  { wrap:'border-purple-200 bg-purple-50/30 dark:border-purple-500/20 dark:bg-purple-500/5', strip:'bg-purple-500', icon:'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300', title:'text-purple-800 dark:text-purple-300' },
 };
 
 // ─── QR Section ─────────────────────────────────────────────────────────────
@@ -76,29 +76,29 @@ function QrSection() {
     }, []);
     return (
         <div className="animate-fadeIn p-6 md:p-8 max-w-6xl mx-auto">
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden mb-12">
-                <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-card border border-brand-100/70 dark:border-brand-700 overflow-hidden mb-12">
+                <div className="p-8 border-b border-brand-100/70 dark:border-brand-700 bg-brand-50/50 dark:bg-brand-800/40 flex justify-between items-center">
                     <div>
-                        <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><QrCode className="text-slate-800" /> رموز الوحدات للعملاء</h3>
-                        <p className="text-slate-500 text-sm mt-1">طباعة هذه الرموز ولصقها داخل كل وحدة لتسهيل طلب الصيانة.</p>
+                        <h3 className="text-2xl font-black text-brand-800 dark:text-brand-50 flex items-center gap-3"><QrCode className="text-gold-500" /> رموز الوحدات للعملاء</h3>
+                        <p className="text-slate-500 dark:text-brand-300 text-sm mt-1">طباعة هذه الرموز ولصقها داخل كل وحدة لتسهيل طلب الصيانة.</p>
                     </div>
-                    <button onClick={() => window.print()} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-900 transition flex items-center gap-2 shadow-md">
+                    <button onClick={() => window.print()} className="btn btn-primary px-6 py-3 flex items-center gap-2">
                         <Printer size={18} /> طباعة
                     </button>
                 </div>
                 <div className="p-8">
                     {loading ? (
-                        <div className="text-center py-12 text-slate-400"><RefreshCw className="animate-spin mx-auto mb-2" size={28} /></div>
+                        <div className="text-center py-12 text-slate-400 dark:text-brand-400"><RefreshCw className="animate-spin mx-auto mb-2" size={28} /></div>
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                             {units.map(unit => {
                                 const url   = `${window.location.origin}/maintenance?unit=${encodeURIComponent(unit)}`;
                                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}&margin=10`;
                                 return (
-                                    <div key={unit} className="bg-white p-6 rounded-3xl border border-slate-200 text-center shadow-sm flex flex-col items-center">
-                                        <h4 className="font-black text-[#1a365d] text-xl mb-1">{unit}</h4>
-                                        <p className="text-xs text-slate-400 mb-4">مسح لطلب الصيانة</p>
-                                        <img src={qrUrl} alt={`QR ${unit}`} className="w-full max-w-[150px] mb-4 border-2 border-slate-100 rounded-xl" crossOrigin="anonymous" />
+                                    <div key={unit} className="bg-white dark:bg-brand-800 p-6 rounded-3xl border border-brand-100/70 dark:border-brand-700 text-center shadow-sm flex flex-col items-center">
+                                        <h4 className="font-black text-brand-800 dark:text-brand-50 text-xl mb-1">{unit}</h4>
+                                        <p className="text-xs text-slate-400 dark:text-brand-400 mb-4">مسح لطلب الصيانة</p>
+                                        <img src={qrUrl} alt={`QR ${unit}`} className="w-full max-w-[150px] mb-4 border-2 border-brand-100 dark:border-brand-700 rounded-xl bg-white p-1" crossOrigin="anonymous" />
                                     </div>
                                 );
                             })}
@@ -132,20 +132,20 @@ function ToolCard({ icon: Icon, label, badge, badgeLabel, color = 'slate', onCli
         <button
             onClick={disabled ? undefined : onClick}
             disabled={disabled}
-            className={`group bg-white rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:-translate-y-0.5 hover:border-slate-200 transition-all p-3 md:p-4 flex flex-col items-center justify-center text-center min-h-[100px] md:min-h-[120px] relative ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+            className={`group bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-brand-100/70 dark:border-brand-700 hover:shadow-md hover:-translate-y-0.5 hover:border-gold-300 dark:hover:border-gold-500/50 transition-all p-3 md:p-4 flex flex-col items-center justify-center text-center min-h-[100px] md:min-h-[120px] relative ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
         >
             {hasBadge && (
-                <span className={`absolute -top-1.5 -right-1.5 ${c.bdg} text-white text-[10px] font-black rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center shadow-md ring-2 ring-white`}>
+                <span className={`absolute -top-1.5 -right-1.5 ${c.bdg} text-white text-[10px] font-black rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-brand-900`}>
                     {badge}
                 </span>
             )}
             {badgeLabel && (
-                <span className="absolute top-1 left-1 text-[9px] font-bold text-slate-400">{badgeLabel}</span>
+                <span className="absolute top-1 left-1 text-[9px] font-bold text-slate-400 dark:text-brand-400">{badgeLabel}</span>
             )}
             <div className={`w-11 h-11 md:w-13 md:h-13 ${c.bg} ${c.text} ${disabled ? '' : c.hbg} group-hover:text-white rounded-2xl flex items-center justify-center mb-2 transition-colors`}>
                 <Icon size={20}/>
             </div>
-            <div className="text-[11px] md:text-xs font-black text-[#1a365d] leading-tight">{label}</div>
+            <div className="text-[11px] md:text-xs font-black text-brand-800 dark:text-brand-100 leading-tight">{label}</div>
         </button>
     );
 }
@@ -153,12 +153,12 @@ function ToolCard({ icon: Icon, label, badge, badgeLabel, color = 'slate', onCli
 // ─── شريحة إحصائية صغيرة ────────────────────────────────────────────────────
 function StatChip({ icon: Icon, label, value, color = 'slate', loading }) {
     const colors = {
-        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        teal:    'bg-teal-50 text-teal-700 border-teal-200',
-        red:     'bg-red-50 text-red-700 border-red-200',
-        amber:   'bg-amber-50 text-amber-700 border-amber-200',
-        blue:    'bg-blue-50 text-blue-700 border-blue-200',
-        slate:   'bg-slate-50 text-slate-600 border-slate-200',
+        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30',
+        teal:    'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:border-teal-500/30',
+        red:     'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30',
+        amber:   'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30',
+        blue:    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/30',
+        slate:   'bg-slate-50 text-slate-600 border-slate-200 dark:bg-brand-800 dark:text-brand-300 dark:border-brand-700',
     };
     return (
         <div className={`inline-flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${colors[color] || colors.slate}`}>
@@ -271,7 +271,7 @@ function TrendChart({ data, loading }) {
             <div className="h-64 flex items-end gap-3 px-2">
                 {[...Array(6)].map((_, i) => (
                     <div key={i} className="flex-1 flex flex-col items-center gap-1.5 justify-end">
-                        <div className="w-full bg-slate-100 rounded-t-lg animate-pulse" style={{ height: `${30 + (i*11)%50}%` }}/>
+                        <div className="w-full bg-slate-100 dark:bg-brand-800 rounded-t-lg animate-pulse" style={{ height: `${30 + (i*11)%50}%` }}/>
                     </div>
                 ))}
             </div>
@@ -299,7 +299,7 @@ function TrendChart({ data, loading }) {
                                     <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-black text-rose-500 opacity-0 group-hover:opacity-100 transition whitespace-nowrap">{fmtK(r.expenses||0)}</span>
                                 </div>
                             </div>
-                            <span className="text-[10px] md:text-[11px] font-bold text-slate-400 mt-2">{r.label}</span>
+                            <span className="text-[10px] md:text-[11px] font-bold text-slate-400 dark:text-brand-400 mt-2">{r.label}</span>
                         </div>
                     );
                 })}
@@ -320,8 +320,8 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
                     <dept.icon size={15}/>
                 </div>
                 <h3 className={`text-sm font-black ${p.title}`}>{dept.label}</h3>
-                <div className="flex-1 h-px bg-slate-200/70"/>
-                <span className="text-[11px] font-bold text-slate-400">{tools.length} أدوات</span>
+                <div className="flex-1 h-px bg-slate-200/70 dark:bg-brand-700"/>
+                <span className="text-[11px] font-bold text-slate-400 dark:text-brand-400">{tools.length} أدوات</span>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5 md:gap-3">
                 {tools.map(tool => (
@@ -578,55 +578,56 @@ function DashboardInner({ onLogout }) {
     };
 
     if (authLoading) return (
-        <div className="flex h-screen items-center justify-center bg-slate-50 flex-col gap-5 font-cairo">
-            <Loader2 className="animate-spin text-[#1a365d]" size={48}/>
-            <p className="text-xl font-bold text-[#1a365d]">جاري التحقق من الهوية...</p>
+        <div className="flex h-screen items-center justify-center bg-brand-50/50 dark:bg-brand-950 flex-col gap-5 font-cairo">
+            <Loader2 className="animate-spin text-brand-800 dark:text-gold-400" size={48}/>
+            <p className="text-xl font-bold text-brand-800 dark:text-brand-100">جاري التحقق من الهوية...</p>
         </div>
     );
     if (!dbUser) return null;
 
     return (
-        <div className="flex flex-col h-screen bg-slate-50 font-cairo overflow-hidden" dir="rtl">
+        <div className="flex flex-col h-screen bg-brand-50/40 dark:bg-brand-950 font-cairo overflow-hidden" dir="rtl">
 
             {/* ─── الهيدر ─────────────────────────────────────────────────── */}
-            <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 z-30 shrink-0 shadow-sm">
+            <header className="h-20 bg-white/90 dark:bg-brand-900/90 backdrop-blur border-b border-brand-100/70 dark:border-brand-700 flex items-center justify-between px-4 md:px-8 z-30 shrink-0 shadow-sm">
                 <button onClick={() => setActiveTab('overview')} className="flex items-center gap-3 hover:opacity-80 transition">
                     <img src="/images/logo-main.png" alt="سماك" className="h-12 md:h-14 w-auto object-contain"/>
-                    <div className="hidden sm:block border-r border-slate-200 pr-3 text-right">
-                        <div className="text-[11px] font-bold text-slate-500">لوحة الإدارة</div>
-                        <div className="text-sm font-black text-[#1a365d]">{TAB_LABELS[activeTab] || 'لوحة التحكم'}</div>
+                    <div className="hidden sm:block border-r border-brand-100 dark:border-brand-700 pr-3 text-right">
+                        <div className="text-[11px] font-bold text-slate-500 dark:text-brand-300">لوحة الإدارة</div>
+                        <div className="text-sm font-black text-brand-800 dark:text-brand-50">{TAB_LABELS[activeTab] || 'لوحة التحكم'}</div>
                     </div>
                 </button>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 border-l border-slate-200 pl-3 md:pl-4">
-                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
+                    <ThemeToggle />
+                    <div className="flex items-center gap-2 border-l border-brand-100 dark:border-brand-700 pl-3 md:pl-4">
+                        <div className="w-10 h-10 bg-gold-50 text-gold-600 dark:bg-gold-500/15 dark:text-gold-300 rounded-full flex items-center justify-center">
                             <UserCircle size={22}/>
                         </div>
                         <div className="hidden md:block text-right">
-                            <p className="text-sm font-black text-[#1a365d] leading-tight">{dbUser.name}</p>
-                            <p className="text-[10px] font-bold text-slate-400">{dbUser.role === 'admin' ? 'مدير النظام' : dbUser.job || 'موظف'}</p>
+                            <p className="text-sm font-black text-brand-800 dark:text-brand-50 leading-tight">{dbUser.name}</p>
+                            <p className="text-[10px] font-bold text-slate-400 dark:text-brand-400">{dbUser.role === 'admin' ? 'مدير النظام' : dbUser.job || 'موظف'}</p>
                         </div>
                     </div>
-                    <button onClick={handleForceLogout} className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-3 md:px-4 py-2 rounded-xl font-bold transition flex items-center gap-2 text-sm">
+                    <button onClick={handleForceLogout} className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-600 dark:hover:text-white px-3 md:px-4 py-2 rounded-xl font-bold transition flex items-center gap-2 text-sm">
                         <LogOut size={16}/><span className="hidden md:inline">خروج</span>
                     </button>
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto bg-slate-50 custom-scrollbar">
+            <main className="flex-1 overflow-y-auto bg-transparent custom-scrollbar">
 
                 {/* ─── شريط التنقل ───────────────────────────────────────── */}
                 {activeTab !== 'overview' && (
-                    <div className="sticky top-0 z-20 bg-white/95 backdrop-blur px-4 md:px-8 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
+                    <div className="sticky top-0 z-20 bg-white/95 dark:bg-brand-900/95 backdrop-blur px-4 md:px-8 py-3 border-b border-brand-100/70 dark:border-brand-700 flex items-center justify-between gap-3">
                         <button
                             onClick={() => setActiveTab('overview')}
-                            className="flex items-center gap-2 text-sm font-bold text-[#1a365d] hover:text-teal-600 transition bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-500 px-3 md:px-4 py-2 rounded-xl"
+                            className="flex items-center gap-2 text-sm font-bold text-brand-800 dark:text-brand-100 hover:text-gold-600 dark:hover:text-gold-400 transition bg-brand-50 dark:bg-brand-800 hover:bg-gold-50 dark:hover:bg-brand-700 border border-brand-100 dark:border-brand-700 hover:border-gold-400 px-3 md:px-4 py-2 rounded-xl"
                         >
                             <ArrowLeft size={16}/>
                             <span className="hidden sm:inline">الرئيسية</span>
                             <span className="sm:hidden">رجوع</span>
                         </button>
-                        <h2 className="text-sm md:text-base font-black text-[#1a365d] truncate">{TAB_LABELS[activeTab]}</h2>
+                        <h2 className="text-sm md:text-base font-black text-brand-800 dark:text-brand-50 truncate">{TAB_LABELS[activeTab]}</h2>
                     </div>
                 )}
 
@@ -643,11 +644,11 @@ function DashboardInner({ onLogout }) {
                         {/* الترحيب */}
                         <div className="flex items-center justify-between flex-wrap gap-3">
                             <div>
-                                <h2 className="text-2xl md:text-3xl font-black text-[#1a365d]">مرحباً، {dbUser.name.split(' ')[0]}</h2>
-                                <p className="text-slate-500 text-sm mt-1">نظرة شاملة على أداء المنشأة</p>
+                                <h2 className="text-2xl md:text-3xl font-black text-brand-800 dark:text-brand-50">مرحباً، {dbUser.name.split(' ')[0]}</h2>
+                                <p className="text-slate-500 dark:text-brand-300 text-sm mt-1">نظرة شاملة على أداء المنشأة</p>
                             </div>
                             <button onClick={() => { loadDashboardCounts(); loadDeptStats(); loadTrend(); }}
-                                className="bg-white border border-slate-200 hover:border-teal-500 text-slate-600 hover:text-teal-600 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
+                                className="bg-white dark:bg-brand-800 border border-brand-100 dark:border-brand-700 hover:border-gold-400 text-slate-600 dark:text-brand-200 hover:text-gold-600 dark:hover:text-gold-400 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
                                 <RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''}/> تحديث
                             </button>
                         </div>
@@ -667,18 +668,18 @@ function DashboardInner({ onLogout }) {
                         {/* ─── الرسم البياني + المهام ───────────────────── */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                             {/* الرسم البياني */}
-                            <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-sm p-5 md:p-6">
+                            <div className="lg:col-span-2 bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6">
                                 <div className="flex items-center justify-between mb-5">
-                                    <h3 className="text-base font-black text-[#1a365d] flex items-center gap-2">
-                                        <BarChart3 size={18} className="text-[#c5a059]"/> الإيرادات والمصروفات — آخر 6 أشهر
+                                    <h3 className="text-base font-black text-brand-800 dark:text-brand-50 flex items-center gap-2">
+                                        <BarChart3 size={18} className="text-gold-500"/> الإيرادات والمصروفات — آخر 6 أشهر
                                     </h3>
                                 </div>
                                 <TrendChart data={trend} loading={trendLoading}/>
                             </div>
 
                             {/* المهام المعلّقة */}
-                            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 md:p-6 flex flex-col">
-                                <h3 className="text-base font-black text-[#1a365d] flex items-center gap-2 mb-4">
+                            <div className="bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6 flex flex-col">
+                                <h3 className="text-base font-black text-brand-800 dark:text-brand-50 flex items-center gap-2 mb-4">
                                     <AlertTriangle size={18} className="text-amber-500"/> مهام تحتاج إنجاز
                                 </h3>
                                 {dashTasks.length > 0 ? (
@@ -686,21 +687,21 @@ function DashboardInner({ onLogout }) {
                                         {dashTasks.map((t, i) => (
                                             <li key={i}
                                                 onClick={() => { setActiveTab(t.tab); if (t.tab === 'leads') loadLeads(); }}
-                                                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer transition border border-transparent hover:border-slate-200"
+                                                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-800 cursor-pointer transition border border-transparent hover:border-brand-100 dark:hover:border-brand-700"
                                             >
                                                 <span className={`w-2 h-2 rounded-full bg-${t.color}-500 shrink-0`}/>
-                                                <span className="text-[13px] text-slate-700 font-bold flex-1 leading-tight">{t.text}</span>
-                                                <ChevronRight size={14} className="text-slate-300 shrink-0"/>
+                                                <span className="text-[13px] text-slate-700 dark:text-brand-200 font-bold flex-1 leading-tight">{t.text}</span>
+                                                <ChevronRight size={14} className="text-slate-300 dark:text-brand-500 shrink-0"/>
                                             </li>
                                         ))}
                                     </ul>
                                 ) : (
                                     <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
-                                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-3">
-                                            <CheckCircle2 size={24} className="text-emerald-600"/>
+                                        <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-500/15 rounded-2xl flex items-center justify-center mb-3">
+                                            <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400"/>
                                         </div>
-                                        <h4 className="text-sm font-black text-emerald-900">كل شيء تحت السيطرة</h4>
-                                        <p className="text-xs text-slate-400 mt-1">لا توجد مهام معلّقة حالياً</p>
+                                        <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-300">كل شيء تحت السيطرة</h4>
+                                        <p className="text-xs text-slate-400 dark:text-brand-400 mt-1">لا توجد مهام معلّقة حالياً</p>
                                     </div>
                                 )}
                             </div>

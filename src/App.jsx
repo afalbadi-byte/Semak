@@ -104,7 +104,7 @@ const MainApp = () => {
 
   return (
     <Router>
-      <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-slate-900 bg-slate-50">
+      <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-brand-950 dark:text-brand-50 bg-transparent">
 
         <GlobalStyles />
         <ToastNotification />

@@ -28,15 +28,15 @@ export default function EntityLink({
     };
 
     const base = muted
-        ? 'text-slate-600 hover:text-[#c5a059]'
-        : 'text-[#1a365d] hover:text-[#c5a059]';
+        ? 'text-slate-600 dark:text-brand-300 hover:text-gold-600 dark:hover:text-gold-400'
+        : 'text-brand-800 dark:text-brand-100 hover:text-gold-600 dark:hover:text-gold-400';
 
     return (
         <a
             href={href}
             onClick={handle}
             title={title}
-            className={`inline-flex items-center gap-1 font-bold hover:underline underline-offset-2 decoration-[#c5a059]/60 transition cursor-pointer ${base} ${className}`}
+            className={`inline-flex items-center gap-1 font-bold hover:underline underline-offset-2 decoration-gold-500/60 transition cursor-pointer ${base} ${className}`}
         >
             {Icon ? <Icon size={13} className="opacity-60 shrink-0" /> : null}
             {children}

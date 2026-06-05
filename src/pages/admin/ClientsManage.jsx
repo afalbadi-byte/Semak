@@ -61,13 +61,13 @@ function ConfirmDialog({ msg, onConfirm, onCancel }) {
 // ─── SummaryChip ─────────────────────────────────────────────────
 function SummaryChip({ icon: Icon, label, value, color }) {
   return (
-    <div className="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 px-4 py-3 flex-1 min-w-[160px]">
+    <div className="flex items-center gap-3 bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 px-4 py-3 flex-1 min-w-[160px]">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
         <Icon size={20} className="text-white" />
       </div>
       <div>
-        <p className="text-xs text-slate-400 font-medium">{label}</p>
-        <p className="text-sm font-black text-slate-700">{value}</p>
+        <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">{label}</p>
+        <p className="text-sm font-black text-slate-700 dark:text-brand-300">{value}</p>
       </div>
     </div>
   );
@@ -257,7 +257,7 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
   // ─── عرض القائمة ─────────────────────────────────────────────
   if (view === 'list') {
     return (
-      <div className="pt-24 pb-20 bg-slate-50 min-h-screen" dir="rtl">
+      <div className="pt-24 pb-20 bg-transparent min-h-screen" dir="rtl">
         {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         {confirmId && (
           <ConfirmDialog
@@ -269,22 +269,22 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
 
         <div className="container mx-auto px-4 max-w-7xl">
           {/* ─── Header ─── */}
-          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-sm border border-slate-100 dark:border-brand-700 p-6 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex items-center gap-4">
               {navigateTo && (
                 <button
                   onClick={() => navigateTo('dashboard')}
-                  className="p-3 bg-slate-50 hover:bg-slate-100 rounded-full border border-slate-200 transition hidden md:block"
+                  className="p-3 bg-slate-50 dark:bg-brand-800 hover:bg-slate-100 dark:hover:bg-brand-800 rounded-full border border-slate-200 dark:border-brand-700 transition hidden md:block"
                 >
-                  <ChevronRight size={22} className="text-slate-500" />
+                  <ChevronRight size={22} className="text-slate-500 dark:text-brand-300" />
                 </button>
               )}
               <div>
-                <h1 className="text-2xl font-black text-[#1a365d] flex items-center gap-2">
-                  <Users className="text-[#c5a059]" size={28} />
+                <h1 className="text-2xl font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
+                  <Users className="text-gold-500" size={28} />
                   إدارة العملاء
                 </h1>
-                <p className="text-slate-400 text-sm font-bold mt-0.5">قائمة عملاء دفترة</p>
+                <p className="text-slate-400 dark:text-brand-400 text-sm font-bold mt-0.5">قائمة عملاء دفترة</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -301,7 +301,7 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
               />
               <button
                 onClick={() => { setForm(emptyForm()); setView('create'); }}
-                className="flex items-center gap-2 bg-[#1a365d] hover:bg-blue-900 text-white px-6 py-3 rounded-xl font-bold transition shadow-md"
+                className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 text-white px-6 py-3 rounded-xl font-bold transition shadow-md"
               >
                 <Plus size={18} /> إضافة عميل
               </button>
@@ -314,7 +314,7 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
               icon={Users}
               label="إجمالي العملاء"
               value={clients.length}
-              color="bg-[#1a365d]"
+              color="bg-brand-800"
             />
             <SummaryChip
               icon={DollarSign}
@@ -333,19 +333,19 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="البحث بالاسم أو الهاتف أو البريد..."
-                className="w-full bg-white border border-slate-200 rounded-xl pr-10 pl-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-[#c5a059] transition"
+                className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl pr-10 pl-4 py-3 text-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-gold-500 transition"
               />
             </div>
             <button
               type="submit"
-              className="bg-[#c5a059] hover:bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold transition flex items-center gap-2"
+              className="bg-gold-500 hover:bg-amber-600 text-white px-5 py-3 rounded-xl font-bold transition flex items-center gap-2"
             >
               <Search size={16} /> بحث
             </button>
             <button
               type="button"
               onClick={() => { setSearch(''); setPage(1); loadClients(1, ''); }}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-3 rounded-xl font-bold transition"
+              className="bg-slate-100 dark:bg-brand-800 hover:bg-slate-200 dark:hover:bg-brand-800 text-slate-600 dark:text-brand-300 px-4 py-3 rounded-xl font-bold transition"
               title="إعادة تعيين"
             >
               <RefreshCw size={16} />
@@ -355,20 +355,20 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
           {/* ─── Table ─── */}
           {loading ? (
             <div className="text-center py-20">
-              <RefreshCw className="animate-spin mx-auto text-[#1a365d] mb-3" size={36} />
-              <p className="text-slate-400 font-bold">جاري التحميل...</p>
+              <RefreshCw className="animate-spin mx-auto text-brand-800 dark:text-brand-300 mb-3" size={36} />
+              <p className="text-slate-400 dark:text-brand-400 font-bold">جاري التحميل...</p>
             </div>
           ) : clients.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-[2rem] border border-slate-100">
+            <div className="text-center py-20 bg-white dark:bg-brand-900 rounded-[2rem] border border-slate-100 dark:border-brand-700">
               <Users size={48} className="mx-auto text-slate-200 mb-3" />
-              <p className="text-slate-400 font-bold">لا يوجد عملاء</p>
+              <p className="text-slate-400 dark:text-brand-400 font-bold">لا يوجد عملاء</p>
             </div>
           ) : (
-            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+            <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-100">
-                    <tr className="text-[#1a365d] font-black text-xs">
+                  <thead className="bg-slate-50 dark:bg-brand-800/60 border-b border-slate-100 dark:border-brand-700">
+                    <tr className="text-brand-800 dark:text-brand-100 font-black text-xs">
                       <SortHeader label="الاسم"            sortKey="name"    activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                       <SortHeader label="الهاتف"           sortKey="phone"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                       <SortHeader label="البريد الإلكتروني" sortKey="email"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
@@ -376,18 +376,18 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
                       <th className="p-4 text-center">الإجراءات</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-50 dark:divide-brand-700">
                     {tc.pageRows.map((cl, idx) => {
                       const c = cl._raw;
                       return (
                         <tr
                           key={cl.id || idx}
-                          className="hover:bg-slate-50/70 transition cursor-pointer"
+                          className="hover:bg-slate-50/70 dark:hover:bg-brand-800 transition cursor-pointer"
                           onClick={() => openDetail(c)}
                         >
-                          <td className="p-4 font-black text-[#1a365d]">{cl.name}</td>
-                          <td className="p-4 text-slate-500 font-medium" dir="ltr">{cl.phone || '—'}</td>
-                          <td className="p-4 text-slate-500 font-medium">{cl.email || '—'}</td>
+                          <td className="p-4 font-black text-brand-800 dark:text-brand-100">{cl.name}</td>
+                          <td className="p-4 text-slate-500 dark:text-brand-400 font-medium" dir="ltr">{cl.phone || '—'}</td>
+                          <td className="p-4 text-slate-500 dark:text-brand-400 font-medium">{cl.email || '—'}</td>
                           <td className="p-4 text-center">
                             <span
                               className={`font-black text-sm ${
@@ -405,21 +405,21 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 onClick={() => openDetail(c)}
-                                className="p-2 rounded-lg bg-slate-100 hover:bg-[#1a365d] hover:text-white text-slate-500 transition"
+                                className="p-2 rounded-lg bg-slate-100 dark:bg-brand-800 hover:bg-brand-800 hover:text-white text-slate-500 dark:text-brand-300 transition"
                                 title="عرض"
                               >
                                 <Eye size={15} />
                               </button>
                               <button
                                 onClick={() => openEdit(c)}
-                                className="p-2 rounded-lg bg-slate-100 hover:bg-[#c5a059] hover:text-white text-slate-500 transition"
+                                className="p-2 rounded-lg bg-slate-100 dark:bg-brand-800 hover:bg-gold-500 hover:text-white text-slate-500 dark:text-brand-300 transition"
                                 title="تعديل"
                               >
                                 <Edit3 size={15} />
                               </button>
                               <button
                                 onClick={() => setConfirmId(cl.id)}
-                                className="p-2 rounded-lg bg-slate-100 hover:bg-red-500 hover:text-white text-slate-500 transition"
+                                className="p-2 rounded-lg bg-slate-100 dark:bg-brand-800 hover:bg-red-500 hover:text-white text-slate-500 dark:text-brand-300 transition"
                                 title="حذف"
                               >
                                 <Trash2 size={15} />
@@ -440,19 +440,19 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
               </div>
 
               {/* ─── Pagination (server) ─── */}
-              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-brand-700 bg-slate-50/50 dark:bg-brand-800/40">
                 <button
                   disabled={page === 1}
                   onClick={() => { const p = page - 1; setPage(p); loadClients(p, search); }}
-                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 text-sm font-bold text-slate-600 dark:text-brand-300 hover:bg-slate-100 dark:hover:bg-brand-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
                   <ChevronRight size={16} /> السابق
                 </button>
-                <span className="text-sm font-bold text-slate-500">صفحة {page}</span>
+                <span className="text-sm font-bold text-slate-500 dark:text-brand-400">صفحة {page}</span>
                 <button
                   disabled={!hasNextPage}
                   onClick={() => { const p = page + 1; setPage(p); loadClients(p, search); }}
-                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 text-sm font-bold text-slate-600 dark:text-brand-300 hover:bg-slate-100 dark:hover:bg-brand-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
                   التالي <ChevronLeft size={16} />
                 </button>
@@ -467,7 +467,7 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
   // ─── عرض التفاصيل ─────────────────────────────────────────────
   if (view === 'detail' && selected) {
     return (
-      <div className="pt-24 pb-20 bg-slate-50 min-h-screen" dir="rtl">
+      <div className="pt-24 pb-20 bg-transparent min-h-screen" dir="rtl">
         {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         {confirmId && (
           <ConfirmDialog
@@ -482,19 +482,19 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
           <div className="flex items-center gap-3 mb-6">
             <button
               onClick={() => setView('list')}
-              className="p-3 bg-white rounded-full border border-slate-200 hover:bg-slate-100 transition"
+              className="p-3 bg-white dark:bg-brand-900 rounded-full border border-slate-200 dark:border-brand-700 hover:bg-slate-100 dark:hover:bg-brand-800 transition"
             >
-              <ChevronRight size={22} className="text-slate-500" />
+              <ChevronRight size={22} className="text-slate-500 dark:text-brand-300" />
             </button>
-            <h2 className="text-xl font-black text-[#1a365d]">تفاصيل العميل</h2>
+            <h2 className="text-xl font-black text-brand-800 dark:text-brand-100">تفاصيل العميل</h2>
           </div>
 
           {/* Card */}
-          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden mb-6">
+          <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden mb-6">
             {/* Top banner */}
-            <div className="bg-[#1a365d] p-8 flex flex-col md:flex-row items-center gap-6">
-              <div className="w-20 h-20 rounded-full bg-[#c5a059]/20 border-4 border-[#c5a059]/40 flex items-center justify-center">
-                <Users size={40} className="text-[#c5a059]" />
+            <div className="bg-brand-800 p-8 flex flex-col md:flex-row items-center gap-6">
+              <div className="w-20 h-20 rounded-full bg-gold-500/20 border-4 border-gold-500/40 flex items-center justify-center">
+                <Users size={40} className="text-gold-500" />
               </div>
               <div className="text-center md:text-right">
                 <h3 className="text-2xl font-black text-white">{selected.name}</h3>
@@ -515,36 +515,36 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
             {/* Info rows */}
             <div className="p-6 space-y-4">
               {selected.phone && (
-                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <Phone size={18} className="text-[#c5a059]" />
+                <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-brand-800/40 rounded-xl border border-slate-100 dark:border-brand-700">
+                  <Phone size={18} className="text-gold-500" />
                   <div>
-                    <p className="text-xs text-slate-400 font-medium">الهاتف</p>
-                    <p className="font-black text-[#1a365d]" dir="ltr">{selected.phone}</p>
+                    <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">الهاتف</p>
+                    <p className="font-black text-brand-800 dark:text-brand-100" dir="ltr">{selected.phone}</p>
                   </div>
                 </div>
               )}
               {selected.email && (
-                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <Mail size={18} className="text-[#c5a059]" />
+                <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-brand-800/40 rounded-xl border border-slate-100 dark:border-brand-700">
+                  <Mail size={18} className="text-gold-500" />
                   <div>
-                    <p className="text-xs text-slate-400 font-medium">البريد الإلكتروني</p>
-                    <p className="font-black text-[#1a365d]">{selected.email}</p>
+                    <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">البريد الإلكتروني</p>
+                    <p className="font-black text-brand-800 dark:text-brand-100">{selected.email}</p>
                   </div>
                 </div>
               )}
               {selected.address && (
-                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <MapPin size={18} className="text-[#c5a059]" />
+                <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-brand-800/40 rounded-xl border border-slate-100 dark:border-brand-700">
+                  <MapPin size={18} className="text-gold-500" />
                   <div>
-                    <p className="text-xs text-slate-400 font-medium">العنوان</p>
-                    <p className="font-black text-[#1a365d]">{selected.address}</p>
+                    <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">العنوان</p>
+                    <p className="font-black text-brand-800 dark:text-brand-100">{selected.address}</p>
                   </div>
                 </div>
               )}
               {selected.notes && (
-                <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                  <p className="text-xs text-amber-600 font-bold mb-1">ملاحظات</p>
-                  <p className="text-sm text-slate-700 font-medium">{selected.notes}</p>
+                <div className="p-4 bg-amber-50 dark:bg-amber-500/15 rounded-xl border border-amber-100 dark:border-amber-500/30">
+                  <p className="text-xs text-amber-600 dark:text-amber-300 font-bold mb-1">ملاحظات</p>
+                  <p className="text-sm text-slate-700 dark:text-brand-300 font-medium">{selected.notes}</p>
                 </div>
               )}
             </div>
@@ -554,7 +554,7 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
           <div className="flex gap-3">
             <button
               onClick={() => openEdit({ Client: selected, ...selected })}
-              className="flex-1 flex items-center justify-center gap-2 bg-[#1a365d] hover:bg-blue-900 text-white py-4 rounded-2xl font-black transition shadow-md"
+              className="flex-1 flex items-center justify-center gap-2 bg-brand-800 hover:bg-brand-900 text-white py-4 rounded-2xl font-black transition shadow-md"
             >
               <Edit3 size={18} /> تعديل
             </button>
@@ -573,7 +573,7 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
   // ─── عرض الإنشاء / التعديل ───────────────────────────────────
   const isEdit = view === 'edit';
   return (
-    <div className="pt-24 pb-20 bg-slate-50 min-h-screen" dir="rtl">
+    <div className="pt-24 pb-20 bg-transparent min-h-screen" dir="rtl">
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="container mx-auto px-4 max-w-2xl">
@@ -581,19 +581,19 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
         <div className="flex items-center gap-3 mb-6">
           <button
             onClick={() => setView(isEdit ? 'detail' : 'list')}
-            className="p-3 bg-white rounded-full border border-slate-200 hover:bg-slate-100 transition"
+            className="p-3 bg-white dark:bg-brand-900 rounded-full border border-slate-200 dark:border-brand-700 hover:bg-slate-100 dark:hover:bg-brand-800 transition"
           >
-            <ChevronRight size={22} className="text-slate-500" />
+            <ChevronRight size={22} className="text-slate-500 dark:text-brand-300" />
           </button>
-          <h2 className="text-xl font-black text-[#1a365d]">
+          <h2 className="text-xl font-black text-brand-800 dark:text-brand-100">
             {isEdit ? 'تعديل بيانات العميل' : 'إضافة عميل جديد'}
           </h2>
         </div>
 
-        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 md:p-8 space-y-5">
+        <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-sm border border-slate-100 dark:border-brand-700 p-6 md:p-8 space-y-5">
           {/* الاسم */}
           <div>
-            <label className="block text-xs font-black text-[#1a365d] mb-1.5">
+            <label className="block text-xs font-black text-brand-800 dark:text-brand-100 mb-1.5">
               الاسم (اسم الشركة / العميل) <span className="text-red-500">*</span>
             </label>
             <input
@@ -601,13 +601,13 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
               value={form.business_name}
               onChange={(e) => setForm({ ...form, business_name: e.target.value })}
               placeholder="اسم العميل..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-[#c5a059] transition"
+              className="w-full bg-slate-50 dark:bg-brand-800/40 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-gold-500 transition"
             />
           </div>
 
           {/* الهاتف */}
           <div>
-            <label className="block text-xs font-black text-[#1a365d] mb-1.5 flex items-center gap-1">
+            <label className="block text-xs font-black text-brand-800 dark:text-brand-100 mb-1.5 flex items-center gap-1">
               <Phone size={13} /> الهاتف
             </label>
             <input
@@ -616,13 +616,13 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               placeholder="05xxxxxxxx"
               dir="ltr"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-[#c5a059] transition"
+              className="w-full bg-slate-50 dark:bg-brand-800/40 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-gold-500 transition"
             />
           </div>
 
           {/* البريد */}
           <div>
-            <label className="block text-xs font-black text-[#1a365d] mb-1.5 flex items-center gap-1">
+            <label className="block text-xs font-black text-brand-800 dark:text-brand-100 mb-1.5 flex items-center gap-1">
               <Mail size={13} /> البريد الإلكتروني
             </label>
             <input
@@ -631,13 +631,13 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="example@domain.com"
               dir="ltr"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-[#c5a059] transition"
+              className="w-full bg-slate-50 dark:bg-brand-800/40 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-gold-500 transition"
             />
           </div>
 
           {/* العنوان */}
           <div>
-            <label className="block text-xs font-black text-[#1a365d] mb-1.5 flex items-center gap-1">
+            <label className="block text-xs font-black text-brand-800 dark:text-brand-100 mb-1.5 flex items-center gap-1">
               <MapPin size={13} /> العنوان
             </label>
             <input
@@ -645,19 +645,19 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
               placeholder="المدينة، الحي..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-[#c5a059] transition"
+              className="w-full bg-slate-50 dark:bg-brand-800/40 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-gold-500 transition"
             />
           </div>
 
           {/* ملاحظات */}
           <div>
-            <label className="block text-xs font-black text-[#1a365d] mb-1.5">ملاحظات</label>
+            <label className="block text-xs font-black text-brand-800 dark:text-brand-100 mb-1.5">ملاحظات</label>
             <textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               placeholder="أي ملاحظات إضافية..."
               rows={3}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-[#c5a059] transition resize-none"
+              className="w-full bg-slate-50 dark:bg-brand-800/40 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-gold-500 transition resize-none"
             />
           </div>
 
@@ -665,7 +665,7 @@ export default function ClientsManage({ user, navigateTo, showToast: externalToa
           <button
             onClick={isEdit ? handleUpdate : handleCreate}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 bg-[#1a365d] hover:bg-blue-900 text-white py-4 rounded-2xl font-black transition shadow-md disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-2 bg-brand-800 hover:bg-brand-900 text-white py-4 rounded-2xl font-black transition shadow-md disabled:opacity-60"
           >
             {saving ? (
               <RefreshCw size={18} className="animate-spin" />

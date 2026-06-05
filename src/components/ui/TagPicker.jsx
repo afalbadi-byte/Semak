@@ -19,24 +19,24 @@ import { apiGet, apiPost } from '../../lib/api/client';
 
 // لوحة ألوان ثابتة (لدعم Tailwind purge) — اسم اللون ↔ أصناف.
 export const TAG_COLORS = {
-    slate:   'bg-slate-100 text-slate-700 border-slate-200',
-    red:     'bg-red-100 text-red-700 border-red-200',
-    orange:  'bg-orange-100 text-orange-700 border-orange-200',
-    amber:   'bg-amber-100 text-amber-700 border-amber-200',
-    yellow:  'bg-yellow-100 text-yellow-700 border-yellow-200',
-    lime:    'bg-lime-100 text-lime-700 border-lime-200',
-    green:   'bg-green-100 text-green-700 border-green-200',
-    emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    teal:    'bg-teal-100 text-teal-700 border-teal-200',
-    cyan:    'bg-cyan-100 text-cyan-700 border-cyan-200',
-    sky:     'bg-sky-100 text-sky-700 border-sky-200',
-    blue:    'bg-blue-100 text-blue-700 border-blue-200',
-    indigo:  'bg-indigo-100 text-indigo-700 border-indigo-200',
-    violet:  'bg-violet-100 text-violet-700 border-violet-200',
-    purple:  'bg-purple-100 text-purple-700 border-purple-200',
-    fuchsia: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
-    pink:    'bg-pink-100 text-pink-700 border-pink-200',
-    rose:    'bg-rose-100 text-rose-700 border-rose-200',
+    slate:   'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:border-slate-500/30',
+    red:     'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30',
+    orange:  'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30',
+    amber:   'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30',
+    yellow:  'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-300 dark:border-yellow-500/30',
+    lime:    'bg-lime-100 text-lime-700 border-lime-200 dark:bg-lime-500/15 dark:text-lime-300 dark:border-lime-500/30',
+    green:   'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-300 dark:border-green-500/30',
+    emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
+    teal:    'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-500/15 dark:text-teal-300 dark:border-teal-500/30',
+    cyan:    'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/30',
+    sky:     'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-500/30',
+    blue:    'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30',
+    indigo:  'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/30',
+    violet:  'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30',
+    purple:  'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30',
+    fuchsia: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200 dark:bg-fuchsia-500/15 dark:text-fuchsia-300 dark:border-fuchsia-500/30',
+    pink:    'bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-500/15 dark:text-pink-300 dark:border-pink-500/30',
+    rose:    'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30',
 };
 const COLOR_NAMES = Object.keys(TAG_COLORS);
 
@@ -158,7 +158,7 @@ export default function TagPicker({
         return (
             <div className={`flex flex-wrap gap-1 ${className}`}>
                 {selected.length === 0
-                    ? <span className="text-slate-300 text-xs">—</span>
+                    ? <span className="text-slate-300 dark:text-brand-600 text-xs">—</span>
                     : selected.map(t => <TagChip key={t.id} tag={t} size={size} />)}
             </div>
         );
@@ -166,16 +166,16 @@ export default function TagPicker({
 
     return (
         <div ref={boxRef} className={`relative ${className}`}>
-            <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] px-2.5 py-2 rounded-xl border border-slate-200 bg-white focus-within:border-[#c5a059] focus-within:ring-2 focus-within:ring-[#c5a059]/20 transition">
+            <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] px-2.5 py-2 rounded-xl border border-slate-200 dark:border-brand-700 bg-white dark:bg-brand-900 focus-within:border-gold-400 focus-within:ring-2 focus-within:ring-gold-400/20 transition">
                 {selected.map(t => <TagChip key={t.id} tag={t} size={size} onRemove={remove} />)}
                 <button type="button" onClick={() => setOpen(o => !o)}
-                    className="inline-flex items-center gap-1 text-[12px] font-bold text-[#c5a059] hover:text-[#a8843f] transition">
+                    className="inline-flex items-center gap-1 text-[12px] font-bold text-gold-600 dark:text-gold-400 hover:text-gold-700 dark:hover:text-gold-300 transition">
                     <Tag size={13} /> {selected.length ? 'إضافة' : 'وسم'}
                 </button>
             </div>
 
             {open && (
-                <div className="absolute z-50 mt-1 w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-2 custom-scrollbar" dir="rtl">
+                <div className="absolute z-50 mt-1 w-72 bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl shadow-xl p-2 custom-scrollbar" dir="rtl">
                     <div className="flex items-center gap-1.5 mb-2">
                         <input
                             value={query}
@@ -183,11 +183,11 @@ export default function TagPicker({
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createTag(); } }}
                             placeholder="ابحث أو أنشئ وسمًا..."
                             autoFocus
-                            className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none text-sm font-bold text-[#1a365d] focus:border-[#c5a059]"
+                            className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-brand-700 bg-white dark:bg-brand-800 outline-none text-sm font-bold text-brand-800 dark:text-brand-50 focus:border-gold-400"
                         />
                         <button type="button" onClick={createTag} disabled={!query.trim() || busy}
                             title="إنشاء وسم جديد"
-                            className="shrink-0 w-8 h-8 grid place-items-center rounded-lg bg-[#c5a059] text-white disabled:opacity-40 hover:bg-[#a8843f] transition">
+                            className="shrink-0 w-8 h-8 grid place-items-center rounded-lg bg-gold-500 text-white dark:text-brand-950 disabled:opacity-40 hover:bg-gold-600 transition">
                             <Plus size={16} />
                         </button>
                     </div>
@@ -198,28 +198,28 @@ export default function TagPicker({
                             {COLOR_NAMES.map(c => (
                                 <button key={c} type="button" onClick={() => setColor(c)}
                                     title={c}
-                                    className={`w-5 h-5 rounded-full ${SWATCH[c]} transition ${color === c ? 'ring-2 ring-offset-1 ring-[#1a365d]' : 'opacity-70 hover:opacity-100'}`} />
+                                    className={`w-5 h-5 rounded-full ${SWATCH[c]} transition ${color === c ? 'ring-2 ring-offset-1 dark:ring-offset-brand-900 ring-brand-800 dark:ring-gold-400' : 'opacity-70 hover:opacity-100'}`} />
                             ))}
                         </div>
                     )}
 
                     <ul className="max-h-52 overflow-auto custom-scrollbar -mx-0.5">
                         {filtered.length === 0 && !query.trim() && (
-                            <li className="px-2 py-3 text-center text-xs text-slate-400 font-bold">لا توجد وسوم بعد</li>
+                            <li className="px-2 py-3 text-center text-xs text-slate-400 dark:text-brand-400 font-bold">لا توجد وسوم بعد</li>
                         )}
                         {filtered.map(t => (
                             <li key={t.id}
                                 onClick={() => toggle(t)}
-                                className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 transition">
+                                className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-brand-800 transition">
                                 <TagChip tag={t} size={size} />
-                                {isSel(t) && <Check size={15} className="text-emerald-600 shrink-0" />}
+                                {isSel(t) && <Check size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />}
                             </li>
                         ))}
                         {query.trim() && !exactExists && (
                             <li onClick={createTag}
-                                className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 transition text-[12px] font-bold text-[#1a365d]">
-                                <Plus size={13} className="text-[#c5a059]" />
-                                إنشاء «<span className="text-[#c5a059]">{query.trim()}</span>»
+                                className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-brand-800 transition text-[12px] font-bold text-brand-800 dark:text-brand-100">
+                                <Plus size={13} className="text-gold-500" />
+                                إنشاء «<span className="text-gold-600 dark:text-gold-400">{query.trim()}</span>»
                             </li>
                         )}
                     </ul>

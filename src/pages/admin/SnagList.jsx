@@ -125,19 +125,19 @@ export default function SnagList() {
             )}
 
             {/* 🖥️ واجهة الداش بورد */}
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white dark:bg-brand-900 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-brand-700">
                 <div>
-                    <h1 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><FileWarning className="text-orange-500" size={28} /> مركز تقارير السناق ليست</h1>
-                    <p className="text-slate-500 font-bold text-sm mt-1">الوحدات التي تحتوي على ملاحظات وتحتاج صيانة من المقاول</p>
+                    <h1 className="text-2xl font-black text-brand-800 dark:text-brand-100 flex items-center gap-3"><FileWarning className="text-orange-500" size={28} /> مركز تقارير السناق ليست</h1>
+                    <p className="text-slate-500 dark:text-brand-300 font-bold text-sm mt-1">الوحدات التي تحتوي على ملاحظات وتحتاج صيانة من المقاول</p>
                 </div>
                 <div className="relative w-full md:w-auto">
-                    <input type="text" placeholder="ابحث برقم الوحدة..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full md:w-72 bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-xl outline-none focus:border-orange-400 font-bold text-sm" />
+                    <input type="text" placeholder="ابحث برقم الوحدة..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full md:w-72 bg-slate-50 dark:bg-brand-800/40 border border-slate-200 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500 pl-10 pr-4 py-3 rounded-xl outline-none focus:border-orange-400 font-bold text-sm" />
                     <Search className="absolute left-3 top-3.5 text-slate-400" size={18} />
                 </div>
             </div>
 
             {loading ? (
-                <div className="text-center py-20"><RefreshCw className="animate-spin mx-auto text-orange-500 mb-4" size={40} /><p className="text-slate-500 font-bold">جاري تجميع التقارير...</p></div>
+                <div className="text-center py-20"><RefreshCw className="animate-spin mx-auto text-orange-500 mb-4" size={40} /><p className="text-slate-500 dark:text-brand-300 font-bold">جاري تجميع التقارير...</p></div>
             ) : filteredUnits.length === 0 ? (
                 <div className="bg-emerald-50 border border-emerald-100 rounded-[2rem] p-10 text-center">
                     <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle size={40}/></div>
@@ -148,31 +148,31 @@ export default function SnagList() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredUnits.map((unitData, index) => {
                         return (
-                            <div key={index} className="bg-white rounded-[2rem] shadow-sm border border-red-100 overflow-hidden hover:shadow-md transition">
-                                <div className="p-6 bg-red-50/30 border-b border-red-50 flex justify-between items-start">
+                            <div key={index} className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-sm border border-red-100 dark:border-brand-700 overflow-hidden hover:shadow-md transition">
+                                <div className="p-6 bg-red-50/30 dark:bg-brand-800/20 border-b border-red-50 dark:border-brand-700 flex justify-between items-start">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <h3 className="text-2xl font-black text-[#1a365d]">{unitData.unit}</h3>
+                                            <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100">{unitData.unit}</h3>
                                             <span className="bg-red-100 text-red-600 px-3 py-1 rounded-lg text-xs font-black flex items-center gap-1"><AlertTriangle size={14}/> {unitData.totalSnags} أخطاء</span>
                                         </div>
-                                        <p className="text-slate-500 font-bold text-sm flex items-center gap-1"><Building size={14}/> {unitData.project}</p>
+                                        <p className="text-slate-500 dark:text-brand-300 font-bold text-sm flex items-center gap-1"><Building size={14}/> {unitData.project}</p>
                                     </div>
-                                    <button onClick={() => handlePrint(unitData)} className="p-3 bg-white text-[#1a365d] hover:text-white hover:bg-[#1a365d] border border-slate-200 rounded-xl transition shadow-sm" title="طباعة للمقاول"><Printer size={20}/></button>
+                                    <button onClick={() => handlePrint(unitData)} className="p-3 bg-white dark:bg-brand-800 text-brand-800 dark:text-brand-300 hover:text-white hover:bg-brand-800 border border-slate-200 dark:border-brand-700 rounded-xl transition shadow-sm" title="طباعة للمقاول"><Printer size={20}/></button>
                                 </div>
 
                                 <div className="p-6">
                                     <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
                                         {unitData.categories.map(([catName, snags], cIdx) => (
-                                            <div key={cIdx} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-                                                <div className="bg-slate-100 px-4 py-2 font-black text-[#1a365d] text-sm flex justify-between">
-                                                    {catName} <span className="bg-white px-2 py-0.5 rounded text-xs text-slate-500 border border-slate-200">{snags.length}</span>
+                                            <div key={cIdx} className="bg-slate-50 dark:bg-brand-800/40 rounded-xl border border-slate-200 dark:border-brand-700 overflow-hidden">
+                                                <div className="bg-slate-100 dark:bg-brand-800/60 px-4 py-2 font-black text-brand-800 dark:text-brand-100 text-sm flex justify-between">
+                                                    {catName} <span className="bg-white dark:bg-brand-900 px-2 py-0.5 rounded text-xs text-slate-500 dark:text-brand-400 border border-slate-200 dark:border-brand-700">{snags.length}</span>
                                                 </div>
                                                 <div className="p-4 space-y-3">
                                                     {snags.map((snag, sIdx) => (
-                                                        <div key={sIdx} className="flex flex-col gap-1 border-b border-slate-100 last:border-0 pb-2 last:pb-0">
+                                                        <div key={sIdx} className="flex flex-col gap-1 border-b border-slate-100 dark:border-brand-700 last:border-0 pb-2 last:pb-0">
                                                             <div className="flex justify-between items-center">
                                                                 <span className="text-xs font-black bg-orange-100 text-orange-700 px-2 py-1 rounded">{snag.space}</span>
-                                                                <span className="text-xs font-bold text-slate-500">{snag.item}</span>
+                                                                <span className="text-xs font-bold text-slate-500 dark:text-brand-400">{snag.item}</span>
                                                             </div>
                                                             <p className="text-sm font-bold text-red-600 mt-1">"{snag.note || 'لا يوجد تفاصيل'}"</p>
                                                         </div>

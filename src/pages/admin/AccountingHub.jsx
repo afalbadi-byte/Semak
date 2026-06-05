@@ -39,16 +39,16 @@ function FieldDisplay({ fieldKey, value }) {
     if (fieldKey === '__typename' || fieldKey === '__v') return null;
 
     if (value === null || value === undefined || value === '') {
-        return <span className="text-slate-300 italic text-xs">—</span>;
+        return <span className="text-slate-300 dark:text-brand-600 italic text-xs">—</span>;
     }
 
     if (Array.isArray(value)) {
-        return <span className="text-slate-500 text-xs">[{value.length} عنصر]</span>;
+        return <span className="text-slate-500 dark:text-brand-400 text-xs">[{value.length} عنصر]</span>;
     }
     if (typeof value === 'object') {
         const s = JSON.stringify(value);
         return (
-            <span className="text-slate-500 text-xs font-mono">
+            <span className="text-slate-500 dark:text-brand-400 text-xs font-mono">
                 {s.slice(0, 60)}{s.length > 60 ? '…' : ''}
             </span>
         );
@@ -61,8 +61,8 @@ function FieldDisplay({ fieldKey, value }) {
         const d = new Date(str);
         if (!isNaN(d)) {
             return (
-                <span className="inline-flex items-center gap-1 text-[#1a365d] font-medium text-sm">
-                    <Calendar size={12} className="text-[#c5a059]" />
+                <span className="inline-flex items-center gap-1 text-brand-800 dark:text-brand-300 font-medium text-sm">
+                    <Calendar size={12} className="text-gold-500" />
                     {d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' })}
                 </span>
             );
@@ -76,16 +76,16 @@ function FieldDisplay({ fieldKey, value }) {
             <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-sm">
                 <DollarSign size={11} />
                 {num.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                <span className="text-xs font-normal text-slate-500">ريال</span>
+                <span className="text-xs font-normal text-slate-500 dark:text-brand-400">ريال</span>
             </span>
         );
     }
 
     if (str.length > 60) {
-        return <span title={str} className="text-slate-700 text-sm">{str.slice(0, 60)}…</span>;
+        return <span title={str} className="text-slate-700 dark:text-brand-300 text-sm">{str.slice(0, 60)}…</span>;
     }
 
-    return <span className="text-slate-700 text-sm">{str}</span>;
+    return <span className="text-slate-700 dark:text-brand-300 text-sm">{str}</span>;
 }
 
 // ─── شارة الحالة ─────────────────────────────────────────────────────────────
@@ -95,27 +95,27 @@ function StatusBadge({ value }) {
 
     if (v === 'active' || v === 'نشط' || v === '1' || v === 'posted' || v === 'مرحّل' || v === 'open' || v === 'مفتوح') {
         return (
-            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold px-2 py-0.5 rounded-full">
+            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
                 {value}
             </span>
         );
     }
     if (v === 'inactive' || v === 'غير نشط' || v === '0' || v === 'false' || v === 'closed' || v === 'مغلق') {
         return (
-            <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 text-xs font-bold px-2 py-0.5 rounded-full">
+            <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 dark:bg-brand-800 dark:text-brand-400 dark:border-brand-700 text-xs font-bold px-2 py-0.5 rounded-full">
                 {value}
             </span>
         );
     }
     if (v === 'draft' || v === 'مسودة' || v === 'pending' || v === 'معلّق') {
         return (
-            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold px-2 py-0.5 rounded-full">
+            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
                 {value}
             </span>
         );
     }
     return (
-        <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold px-2 py-0.5 rounded-full">
+        <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30 text-xs font-bold px-2 py-0.5 rounded-full">
             {value}
         </span>
     );
@@ -125,21 +125,21 @@ function StatusBadge({ value }) {
 function Pagination({ page, totalPages, onPrev, onNext }) {
     if (totalPages <= 1) return null;
     return (
-        <div className="flex items-center justify-center gap-3 py-4 border-t border-slate-100">
+        <div className="flex items-center justify-center gap-3 py-4 border-t border-slate-100 dark:border-brand-700">
             <button
                 onClick={onPrev}
                 disabled={page <= 1}
-                className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-[#1a365d] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 hover:bg-brand-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
             >
                 <ChevronRight size={16} /> السابق
             </button>
-            <span className="text-sm font-bold text-slate-500">
-                صفحة <span className="text-[#1a365d] font-black">{page}</span> من {totalPages}
+            <span className="text-sm font-bold text-slate-500 dark:text-brand-400">
+                صفحة <span className="text-brand-800 dark:text-brand-300 font-black">{page}</span> من {totalPages}
             </span>
             <button
                 onClick={onNext}
                 disabled={page >= totalPages}
-                className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-[#1a365d] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                className="flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 hover:bg-brand-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
             >
                 التالي <ChevronLeft size={16} />
             </button>
@@ -150,7 +150,7 @@ function Pagination({ page, totalPages, onPrev, onNext }) {
 // ─── حالة فارغة ──────────────────────────────────────────────────────────────
 function EmptyState({ message = 'لا توجد بيانات' }) {
     return (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-brand-500">
             <Package size={48} className="mb-4 opacity-30" />
             <p className="text-lg font-bold">{message}</p>
             <p className="text-sm mt-1">تحقق من اتصال API أو أضف بيانات في دفترة</p>
@@ -161,9 +161,9 @@ function EmptyState({ message = 'لا توجد بيانات' }) {
 // ─── حالة تحميل ──────────────────────────────────────────────────────────────
 function LoadingState() {
     return (
-        <div className="flex flex-col items-center justify-center py-20 text-[#1a365d]">
+        <div className="flex flex-col items-center justify-center py-20 text-brand-800 dark:text-brand-300">
             <RefreshCw size={36} className="animate-spin mb-4 opacity-60" />
-            <p className="text-sm font-bold text-slate-500">جاري التحميل من دفترة…</p>
+            <p className="text-sm font-bold text-slate-500 dark:text-brand-400">جاري التحميل من دفترة…</p>
         </div>
     );
 }
@@ -174,9 +174,9 @@ function ErrorState({ error, httpCode }) {
         <div className="flex flex-col items-center justify-center py-16 text-red-600">
             <AlertTriangle size={40} className="mb-3 opacity-70" />
             <p className="font-bold text-lg">فشل تحميل البيانات</p>
-            <p className="text-sm mt-1 bg-red-50 border border-red-200 rounded-xl px-4 py-2 font-mono">{error}</p>
+            <p className="text-sm mt-1 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl px-4 py-2 font-mono">{error}</p>
             {httpCode !== null && httpCode !== undefined && (
-                <p className="text-xs mt-2 text-slate-500 font-mono">
+                <p className="text-xs mt-2 text-slate-500 dark:text-brand-400 font-mono">
                     رمز الاستجابة: <span className="font-bold text-red-700">HTTP {httpCode}</span>
                 </p>
             )}
@@ -233,7 +233,7 @@ function RefreshBtn({ loading, onClick }) {
     return (
         <button
             onClick={onClick}
-            className="flex items-center gap-2 bg-[#1a365d] text-white hover:bg-[#0f2543] px-4 py-2 rounded-xl text-sm font-bold transition shadow"
+            className="flex items-center gap-2 bg-brand-800 text-white hover:bg-brand-900 px-4 py-2 rounded-xl text-sm font-bold transition shadow"
             title="تحديث"
         >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -251,7 +251,7 @@ function ExpandableRow({ row, columns, highlightKeys = [] }) {
         <>
             <tr
                 onClick={() => setOpen(!open)}
-                className="hover:bg-slate-50/70 cursor-pointer border-b border-slate-100 transition"
+                className="hover:bg-slate-50/70 dark:hover:bg-brand-800 cursor-pointer border-b border-slate-100 dark:border-brand-700 transition"
             >
                 {columns.map(col => (
                     <td
@@ -265,18 +265,18 @@ function ExpandableRow({ row, columns, highlightKeys = [] }) {
                     </td>
                 ))}
                 <td className="px-3 py-2.5 text-center">
-                    <span className="text-[#c5a059] text-xs font-bold select-none">
+                    <span className="text-gold-500 text-xs font-bold select-none">
                         {open ? '▲' : '▼'}
                     </span>
                 </td>
             </tr>
             {open && (
-                <tr className="bg-slate-50/60">
+                <tr className="bg-slate-50/60 dark:bg-brand-800/40">
                     <td colSpan={columns.length + 1} className="px-6 py-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
                             {allEntries.map(([k, v]) => (
-                                <div key={k} className="flex items-start gap-2 text-xs border-b border-slate-100 pb-1">
-                                    <span className="font-bold text-slate-400 shrink-0 w-32 truncate font-mono">{translateKey(k)}</span>
+                                <div key={k} className="flex items-start gap-2 text-xs border-b border-slate-100 dark:border-brand-700 pb-1">
+                                    <span className="font-bold text-slate-400 dark:text-brand-500 shrink-0 w-32 truncate font-mono">{translateKey(k)}</span>
                                     <span className="flex-1">
                                         {k === 'status'
                                             ? <StatusBadge value={v} />
@@ -296,10 +296,10 @@ function ExpandableRow({ row, columns, highlightKeys = [] }) {
 // ─── جدول بيانات عام قابل للتوسيع ───────────────────────────────────────────
 function DataTable({ rows, columns, highlightKeys }) {
     return (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow overflow-hidden">
+        <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="w-full text-right text-sm">
-                    <thead className="bg-[#1a365d] text-white text-xs">
+                    <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
                         <tr>
                             {columns.map(col => (
                                 <th key={col} className="px-3 py-3 font-bold whitespace-nowrap">
@@ -362,7 +362,7 @@ function useResource(resource, { showToast, extraParams } = {}) {
 // ─── شريط فلتر التواريخ ──────────────────────────────────────────────────────
 function DateFilterBar({ from, to, setFrom, setTo, onApply }) {
     return (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-wrap gap-3 items-end">
+        <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm p-4 flex flex-wrap gap-3 items-end">
             <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">من تاريخ</label>
                 <div className="relative">
@@ -371,7 +371,7 @@ function DateFilterBar({ from, to, setFrom, setTo, onApply }) {
                         type="date"
                         value={from}
                         onChange={e => setFrom(e.target.value)}
-                        className="bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059] w-44"
+                        className="bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059] w-44 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500"
                     />
                 </div>
             </div>
@@ -383,13 +383,13 @@ function DateFilterBar({ from, to, setFrom, setTo, onApply }) {
                         type="date"
                         value={to}
                         onChange={e => setTo(e.target.value)}
-                        className="bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059] w-44"
+                        className="bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059] w-44 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500"
                     />
                 </div>
             </div>
             <button
                 onClick={onApply}
-                className="flex items-center gap-2 bg-[#c5a059] text-white hover:bg-[#b08c45] px-4 py-2 rounded-xl text-sm font-bold transition"
+                className="flex items-center gap-2 bg-gold-500 text-white hover:bg-[#b08c45] px-4 py-2 rounded-xl text-sm font-bold transition"
             >
                 <Search size={14} /> تطبيق
             </button>
@@ -407,7 +407,7 @@ function SearchBar({ value, onChange, placeholder }) {
                 placeholder={placeholder}
                 value={value}
                 onChange={e => onChange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]"
+                className="w-full bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059] dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500"
             />
         </div>
     );
@@ -441,7 +441,7 @@ function TabJournalAccounts({ showToast }) {
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <SearchBar value={search} onChange={setSearch} placeholder="بحث في دليل الحسابات…" />
                 <div className="flex items-center gap-2">
-                    {data && <span className="text-sm text-slate-500">{meta.total || rows.length} حساب</span>}
+                    {data && <span className="text-sm text-slate-500 dark:text-brand-400">{meta.total || rows.length} حساب</span>}
                     <RefreshBtn loading={loading} onClick={() => load(page)} />
                 </div>
             </div>
@@ -498,7 +498,7 @@ function TabJournals({ showToast }) {
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <SearchBar value={search} onChange={setSearch} placeholder="بحث في القيود…" />
                 <div className="flex items-center gap-2">
-                    {data && <span className="text-sm text-slate-500">{meta.total || rows.length} قيد</span>}
+                    {data && <span className="text-sm text-slate-500 dark:text-brand-400">{meta.total || rows.length} قيد</span>}
                     <RefreshBtn loading={loading} onClick={() => load(page, buildExtra())} />
                 </div>
             </div>
@@ -542,7 +542,7 @@ function TabCostCenters({ showToast }) {
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <SearchBar value={search} onChange={setSearch} placeholder="بحث في مراكز التكلفة…" />
                 <div className="flex items-center gap-2">
-                    {data && <span className="text-sm text-slate-500">{meta.total || rows.length} مركز</span>}
+                    {data && <span className="text-sm text-slate-500 dark:text-brand-400">{meta.total || rows.length} مركز</span>}
                     <RefreshBtn loading={loading} onClick={() => load(page)} />
                 </div>
             </div>
@@ -586,7 +586,7 @@ function TabAssets({ showToast }) {
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <SearchBar value={search} onChange={setSearch} placeholder="بحث في الأصول الثابتة…" />
                 <div className="flex items-center gap-2">
-                    {data && <span className="text-sm text-slate-500">{meta.total || rows.length} أصل</span>}
+                    {data && <span className="text-sm text-slate-500 dark:text-brand-400">{meta.total || rows.length} أصل</span>}
                     <RefreshBtn loading={loading} onClick={() => load(page)} />
                 </div>
             </div>
@@ -630,7 +630,7 @@ function TabEmployeeCustody({ showToast }) {
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <SearchBar value={search} onChange={setSearch} placeholder="بحث في العُهَد…" />
                 <div className="flex items-center gap-2">
-                    {data && <span className="text-sm text-slate-500">{meta.total || rows.length} عهدة</span>}
+                    {data && <span className="text-sm text-slate-500 dark:text-brand-400">{meta.total || rows.length} عهدة</span>}
                     <RefreshBtn loading={loading} onClick={() => load(page)} />
                 </div>
             </div>
@@ -690,8 +690,8 @@ export default function AccountingHub({ showToast }) {
             </div>
 
             {/* شريط التبويبات */}
-            <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
-                <div className="flex overflow-x-auto border-b border-slate-100 scrollbar-hide">
+            <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 overflow-hidden">
+                <div className="flex overflow-x-auto border-b border-slate-100 dark:border-brand-700 scrollbar-hide">
                     {TABS.map(tab => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.id;
@@ -701,11 +701,11 @@ export default function AccountingHub({ showToast }) {
                                 onClick={() => handleTabClick(tab.id)}
                                 className={`flex items-center gap-2 px-4 md:px-6 py-4 text-sm font-bold whitespace-nowrap border-b-2 transition flex-shrink-0 ${
                                     isActive
-                                        ? 'border-[#c5a059] text-[#1a365d] bg-amber-50/50'
-                                        : 'border-transparent text-slate-500 hover:text-[#1a365d] hover:bg-slate-50'
+                                        ? 'border-[#c5a059] text-brand-800 dark:text-brand-100 bg-amber-50/50 dark:bg-brand-800/40'
+                                        : 'border-transparent text-slate-500 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 hover:bg-slate-50 dark:hover:bg-brand-800'
                                 }`}
                             >
-                                <Icon size={16} className={isActive ? 'text-[#c5a059]' : ''} />
+                                <Icon size={16} className={isActive ? 'text-gold-500' : ''} />
                                 {tab.label}
                             </button>
                         );

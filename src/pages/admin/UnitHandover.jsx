@@ -347,23 +347,23 @@ export default function UnitHandover() {
 
   // ── شاشات الحالة ──
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 font-cairo">
-      <Loader2 className="animate-spin text-[#c5a059]" size={48} />
+    <div className="min-h-screen flex items-center justify-center bg-transparent font-cairo">
+      <Loader2 className="animate-spin text-gold-500" size={48} />
     </div>
   );
 
   if (error) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 font-cairo p-4 text-center">
-      <div className="bg-white p-8 rounded-[2rem] shadow-xl max-w-md w-full">
+    <div className="min-h-screen flex items-center justify-center bg-transparent font-cairo p-4 text-center">
+      <div className="bg-white dark:bg-brand-900 p-8 rounded-[2rem] shadow-xl max-w-md w-full">
         <XCircle className="text-red-500 mx-auto mb-4" size={60} />
-        <h2 className="text-xl font-black text-[#1a365d] mb-2">تنبيه</h2>
-        <p className="text-slate-500 font-bold">{error}</p>
+        <h2 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-2">تنبيه</h2>
+        <p className="text-slate-500 dark:text-brand-400 font-bold">{error}</p>
       </div>
     </div>
   );
 
   if (isSuccess) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#1a365d] font-cairo p-4">
+    <div className="min-h-screen flex items-center justify-center bg-brand-800 font-cairo p-4">
       {/* وثيقة الاستلام — مخفية عن الشاشة، تُطبع فقط */}
       <div style={{ display: 'none' }}>
         <HandoverDocument
@@ -379,23 +379,23 @@ export default function UnitHandover() {
         />
       </div>
 
-      <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center">
+      <div className="bg-white dark:bg-brand-900 p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center">
         <ShieldCheck className="text-emerald-500 mx-auto mb-4" size={70} />
-        <h2 className="text-3xl font-black text-[#1a365d] mb-2">تم الاستلام الرسمي 🎉</h2>
-        <p className="text-slate-500 font-bold mb-1">
-          الوحدة <span className="text-emerald-600 font-black">{unitCode}</span> استُلمت بنجاح
+        <h2 className="text-3xl font-black text-brand-800 dark:text-brand-100 mb-2">تم الاستلام الرسمي 🎉</h2>
+        <p className="text-slate-500 dark:text-brand-400 font-bold mb-1">
+          الوحدة <span className="text-emerald-600 dark:text-emerald-300 font-black">{unitCode}</span> استُلمت بنجاح
         </p>
-        <p className="text-slate-400 text-sm mb-2">بدأ سريان الضمان الشامل</p>
+        <p className="text-slate-400 dark:text-brand-400 text-sm mb-2">بدأ سريان الضمان الشامل</p>
 
-        <div className="bg-slate-50 rounded-2xl p-4 mb-6 text-sm text-right space-y-1.5 border border-slate-100">
-          <div className="flex justify-between"><span className="text-slate-400">المالك</span><span className="font-bold text-[#1a365d]">{formData.owner_name}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">رقم الهوية</span><span className="font-bold text-[#1a365d]">{formData.id_number}</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">تاريخ الاستلام</span><span className="font-bold text-[#1a365d] text-xs">{acceptedAtDisplay}</span></div>
+        <div className="bg-slate-50 dark:bg-brand-800/40 rounded-2xl p-4 mb-6 text-sm text-right space-y-1.5 border border-slate-100 dark:border-brand-700">
+          <div className="flex justify-between"><span className="text-slate-400 dark:text-brand-400">المالك</span><span className="font-bold text-brand-800 dark:text-brand-100">{formData.owner_name}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400 dark:text-brand-400">رقم الهوية</span><span className="font-bold text-brand-800 dark:text-brand-100">{formData.id_number}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400 dark:text-brand-400">تاريخ الاستلام</span><span className="font-bold text-brand-800 dark:text-brand-100 text-xs">{acceptedAtDisplay}</span></div>
         </div>
 
         <button
           onClick={handlePrint}
-          className="w-full flex items-center justify-center gap-2 bg-[#1a365d] hover:bg-[#1a365d]/90 text-white font-black py-3.5 rounded-xl transition shadow-lg"
+          className="w-full flex items-center justify-center gap-2 bg-brand-800 hover:bg-brand-800/90 text-white font-black py-3.5 rounded-xl transition shadow-lg"
         >
           <Download size={18} /> تحميل محضر الاستلام PDF
         </button>
@@ -404,28 +404,28 @@ export default function UnitHandover() {
   );
 
   if (hasSnagsSubmitted) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 font-cairo p-4 text-center">
-      <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full border border-orange-100">
+    <div className="min-h-screen flex items-center justify-center bg-transparent font-cairo p-4 text-center">
+      <div className="bg-white dark:bg-brand-900 p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full border border-orange-100 dark:border-orange-500/30">
         <FileWarning className="text-orange-500 mx-auto mb-4" size={70} />
-        <h2 className="text-2xl font-black text-[#1a365d] mb-2">تم رفع الملاحظات 🛠️</h2>
-        <p className="text-slate-500 font-bold leading-relaxed">شكراً لك! تم استلام تقرير الملاحظات وسيقوم فريق الصيانة بمعالجتها في أقرب وقت.</p>
+        <h2 className="text-2xl font-black text-brand-800 dark:text-brand-100 mb-2">تم رفع الملاحظات 🛠️</h2>
+        <p className="text-slate-500 dark:text-brand-400 font-bold leading-relaxed">شكراً لك! تم استلام تقرير الملاحظات وسيقوم فريق الصيانة بمعالجتها في أقرب وقت.</p>
       </div>
     </div>
   );
 
   if (totalItems === 0) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 font-cairo p-4 text-center">
-      <div className="bg-white p-8 rounded-[2rem] shadow-xl max-w-md w-full">
-        <XCircle className="text-slate-400 mx-auto mb-4" size={60} />
-        <h2 className="text-xl font-black text-[#1a365d] mb-2">عذراً</h2>
-        <p className="text-slate-500 font-bold">لا توجد بنود جاهزة للمراجعة حالياً.</p>
+    <div className="min-h-screen flex items-center justify-center bg-transparent font-cairo p-4 text-center">
+      <div className="bg-white dark:bg-brand-900 p-8 rounded-[2rem] shadow-xl max-w-md w-full">
+        <XCircle className="text-slate-400 dark:text-brand-400 mx-auto mb-4" size={60} />
+        <h2 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-2">عذراً</h2>
+        <p className="text-slate-500 dark:text-brand-400 font-bold">لا توجد بنود جاهزة للمراجعة حالياً.</p>
       </div>
     </div>
   );
 
   // ── الصفحة الرئيسية ──
   return (
-    <div className="min-h-screen py-12 flex flex-col items-center bg-slate-50 font-cairo px-4 animate-fadeIn">
+    <div className="min-h-screen py-12 flex flex-col items-center bg-transparent font-cairo px-4 animate-fadeIn">
       <div className="max-w-2xl w-full">
 
         {/* Header / Progress */}
@@ -453,17 +453,17 @@ export default function UnitHandover() {
 
             const isExpanded = expandedSpace === space;
             return (
-              <div key={idx} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+              <div key={idx} className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-sm border border-slate-200 dark:border-brand-700 overflow-hidden">
                 <button
                   onClick={() => setExpandedSpace(isExpanded ? null : space)}
-                  className="w-full p-5 flex justify-between items-center hover:bg-slate-50 transition-colors"
+                  className="w-full p-5 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-brand-800 transition-colors"
                 >
-                  <h3 className="font-black text-lg text-[#1a365d]">{space}</h3>
-                  <ChevronDown className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} size={20} />
+                  <h3 className="font-black text-lg text-brand-800 dark:text-brand-100">{space}</h3>
+                  <ChevronDown className={`text-slate-400 dark:text-brand-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} size={20} />
                 </button>
 
                 {isExpanded && (
-                  <div className="p-5 pt-0 border-t border-slate-100 bg-slate-50/30 space-y-6">
+                  <div className="p-5 pt-0 border-t border-slate-100 dark:border-brand-700 bg-slate-50/30 dark:bg-brand-800/40 space-y-6">
                     {globalTemplate.map((cat, cIdx) => {
                       const hasVisible = cat.items.some(item => {
                         const d = inspectionData[`${space}_${cat.name}_${item.name}`];
@@ -479,15 +479,15 @@ export default function UnitHandover() {
                               const data = inspectionData[key];
                               if (!data?.isSelected || data?.passed === null || data?.clientVisible === false) return null;
                               return (
-                                <div key={iIdx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all">
-                                  <p className="text-sm font-bold text-[#1a365d] mb-3">{item.name}</p>
+                                <div key={iIdx} className="bg-white dark:bg-brand-900 p-4 rounded-xl border border-slate-200 dark:border-brand-700 shadow-sm hover:shadow-md transition-all">
+                                  <p className="text-sm font-bold text-brand-800 dark:text-brand-100 mb-3">{item.name}</p>
                                   <div className="flex gap-2 mb-2">
                                     <button onClick={() => setItemStatus(key, true)}
-                                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.client_passed === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-emerald-100'}`}>
+                                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.client_passed === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/15'}`}>
                                       <Check size={16} /> سليم
                                     </button>
                                     <button onClick={() => setItemStatus(key, false)}
-                                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.client_passed === false ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-orange-100'}`}>
+                                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${data.client_passed === false ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400 hover:bg-orange-100 dark:hover:bg-orange-500/15'}`}>
                                       <X size={16} /> ملاحظة
                                     </button>
                                   </div>
@@ -497,7 +497,7 @@ export default function UnitHandover() {
                                         value={data.client_notes || ''}
                                         onChange={e => setItemNote(key, e.target.value)}
                                         placeholder="اكتب وصف المشكلة هنا..."
-                                        className="w-full bg-orange-50/50 border border-orange-100 p-3 rounded-lg text-xs font-bold outline-none focus:border-orange-400 resize-none"
+                                        className="w-full bg-orange-50/50 dark:bg-orange-500/10 border border-orange-100 dark:border-orange-500/30 p-3 rounded-lg text-xs font-bold outline-none focus:border-orange-400 resize-none dark:text-brand-50 dark:placeholder-brand-500"
                                         rows={2}
                                       />
                                     </div>
@@ -510,8 +510,8 @@ export default function UnitHandover() {
                       );
                     })}
                     {notesAllowed && (
-                      <div className="mt-6 pt-4 border-t border-slate-200">
-                        <label className="flex items-center gap-2 text-[#1a365d] font-bold text-sm mb-3">
+                      <div className="mt-6 pt-4 border-t border-slate-200 dark:border-brand-700">
+                        <label className="flex items-center gap-2 text-brand-800 dark:text-brand-100 font-bold text-sm mb-3">
                           <PlusCircle size={18} className="text-emerald-500" />
                           هل لديك ملاحظات أخرى في ({space})؟
                         </label>
@@ -519,7 +519,7 @@ export default function UnitHandover() {
                           value={inspectionData[`custom_client_note_${space}`] || ''}
                           onChange={e => setCustomNote(space, e.target.value)}
                           placeholder={`اكتب أي ملاحظة إضافية تخص ${space}...`}
-                          className="w-full bg-white border border-slate-200 p-4 rounded-xl text-sm font-medium outline-none focus:border-emerald-400 shadow-inner resize-none"
+                          className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 p-4 rounded-xl text-sm font-medium outline-none focus:border-emerald-400 shadow-inner resize-none dark:text-brand-50 dark:placeholder-brand-500"
                           rows={3}
                         />
                       </div>
@@ -533,53 +533,53 @@ export default function UnitHandover() {
 
         {/* ── إقرار الاستلام النهائي (100%) ── */}
         {isAllAnswered && progressScore === 100 && (
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-emerald-100">
+          <div className="bg-white dark:bg-brand-900 p-8 rounded-[2.5rem] shadow-xl border border-emerald-100 dark:border-emerald-500/30">
             <div className="flex items-center gap-3 mb-6">
               <FileCheck className="text-emerald-500 flex-shrink-0" size={28} />
-              <h3 className="text-xl font-black text-[#1a365d]">إقرار الاستلام الرسمي</h3>
+              <h3 className="text-xl font-black text-brand-800 dark:text-brand-100">إقرار الاستلام الرسمي</h3>
             </div>
 
             <form onSubmit={submitInspection} className="space-y-4">
 
               {/* الاسم */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">الاسم الرباعي للمالك</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1.5">الاسم الرباعي للمالك</label>
                 <input required type="text"
                   value={formData.owner_name}
                   onChange={e => setFormData({ ...formData, owner_name: e.target.value })}
                   placeholder="مثال: أحمد محمد علي الغامدي"
-                  className="w-full bg-slate-50 border border-slate-200 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold text-[#1a365d]"
+                  className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold text-brand-800 dark:text-brand-50 dark:placeholder-brand-500"
                 />
               </div>
 
               {/* رقم الهوية */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">رقم الهوية الوطنية / الإقامة</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1.5">رقم الهوية الوطنية / الإقامة</label>
                 <input required type="text" inputMode="numeric"
                   value={formData.id_number}
                   onChange={e => setFormData({ ...formData, id_number: e.target.value })}
                   placeholder="١٠ أرقام"
-                  className="w-full bg-slate-50 border border-slate-200 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold text-[#1a365d]"
+                  className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold text-brand-800 dark:text-brand-50 dark:placeholder-brand-500"
                   dir="ltr"
                 />
               </div>
 
               {/* الجوال */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5">رقم الجوال</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1.5">رقم الجوال</label>
                 <input required type="tel"
                   value={formData.owner_phone}
                   onChange={e => setFormData({ ...formData, owner_phone: e.target.value })}
                   placeholder="05XXXXXXXX"
-                  className="w-full bg-slate-50 border border-slate-200 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold text-[#1a365d]"
+                  className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-5 py-3.5 rounded-xl outline-none focus:border-emerald-500 font-bold text-brand-800 dark:text-brand-50 dark:placeholder-brand-500"
                   dir="ltr"
                 />
               </div>
 
               {/* التوقيع */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1.5">
-                  <Pen size={13} className="text-[#c5a059]" />
+                <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1.5 flex items-center gap-1.5">
+                  <Pen size={13} className="text-gold-500" />
                   التوقيع الإلكتروني
                 </label>
                 <SignaturePad ref={sigRef} onChange={setSignatureData} />
@@ -597,10 +597,10 @@ export default function UnitHandover() {
               </div>
 
               {/* نص الإقرار */}
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-xs font-bold text-slate-600 leading-relaxed flex items-start gap-3">
+              <div className="bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-100 dark:border-emerald-500/30 rounded-xl p-4 text-xs font-bold text-slate-600 dark:text-emerald-300 leading-relaxed flex items-start gap-3">
                 <CalendarCheck2 size={18} className="text-emerald-500 flex-shrink-0 mt-0.5" />
                 <span>
-                  بتوقيعي أعلاه أقرّ بأنني عاينت الوحدة رقم <strong className="text-[#1a365d]">{unitCode}</strong> وفحصت
+                  بتوقيعي أعلاه أقرّ بأنني عاينت الوحدة رقم <strong className="text-brand-800 dark:text-brand-100">{unitCode}</strong> وفحصت
                   جميع البنود ({totalItems} بند) وأنها مطابقة للمواصفات، وأستلمها رسمياً ويبدأ سريان الضمان الشامل.
                 </span>
               </div>
@@ -616,10 +616,10 @@ export default function UnitHandover() {
 
         {/* ── رفع الملاحظات (< 100%) ── */}
         {isAllAnswered && progressScore < 100 && (
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-orange-200 text-center">
+          <div className="bg-white dark:bg-brand-900 p-8 rounded-[2.5rem] shadow-xl border border-orange-200 dark:border-orange-500/30 text-center">
             <FileWarning className="text-orange-500 mx-auto mb-4" size={40} />
-            <h3 className="text-lg font-black text-[#1a365d] mb-2">إرسال قائمة الملاحظات</h3>
-            <p className="text-sm font-bold text-slate-500 mb-6">سيتم إرسالها كتقرير (Snag List) لفريق الصيانة.</p>
+            <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-2">إرسال قائمة الملاحظات</h3>
+            <p className="text-sm font-bold text-slate-500 dark:text-brand-400 mb-6">سيتم إرسالها كتقرير (Snag List) لفريق الصيانة.</p>
             <button onClick={submitInspection} disabled={saving}
               className="w-full bg-orange-500 text-white py-4 rounded-xl font-black text-lg hover:bg-orange-600 transition shadow-xl flex justify-center items-center gap-2">
               {saving ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}

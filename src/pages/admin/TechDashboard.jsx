@@ -19,7 +19,7 @@ const APP_MODULES = [
   { id: "leads", label: "سجل المهتمين (Leads)", icon: Users, color: "text-teal-600", bg: "bg-teal-50" },
   { id: "accounting", label: "النظام المحاسبي (دفترة)", icon: Calculator, color: "text-emerald-600", bg: "bg-emerald-50" },
   { id: "inspection", label: "فحص واستلام الوحدات", icon: ClipboardCheck, color: "text-indigo-600", bg: "bg-indigo-50" },
-  { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-[#1a365d]", bg: "bg-blue-50" }
+  { id: "users_manage", label: "إدارة الموظفين والصلاحيات", icon: Shield, color: "text-brand-800", bg: "bg-blue-50" }
 ];
 
 export default function TechDashboard(props) {
@@ -53,10 +53,10 @@ export default function TechDashboard(props) {
 
   if (!activeUser) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-            <Lock size={48} className="text-slate-300 mb-4 animate-bounce" />
-            <p className="text-[#1a365d] font-bold text-xl mb-4">الرجاء تسجيل الدخول للوصول للبوابة...</p>
-            <button onClick={() => navigate("/login")} className="bg-[#c5a059] text-white px-6 py-2 rounded-xl font-bold shadow-lg">الذهاب لصفحة الدخول</button>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-transparent">
+            <Lock size={48} className="text-slate-300 dark:text-brand-600 mb-4 animate-bounce" />
+            <p className="text-brand-800 dark:text-brand-100 font-bold text-xl mb-4">الرجاء تسجيل الدخول للوصول للبوابة...</p>
+            <button onClick={() => navigate("/login")} className="bg-gold-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg">الذهاب لصفحة الدخول</button>
         </div>
       );
   }
@@ -278,36 +278,36 @@ export default function TechDashboard(props) {
   ];
 
   const renderTicketCard = (ticket) => (
-    <div key={ticket.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 hover:shadow-md transition group">
+    <div key={ticket.id} className="bg-white dark:bg-brand-900 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-brand-700 mb-4 hover:shadow-md transition group">
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-1">
-          <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
+          <span className="bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 px-2 py-1 rounded text-[10px] font-black tracking-wider">#{ticket.id}</span>
           <span title={ticket.wa_sent == 1 ? "تم إرسال الواتساب" : "لم يُرسل بعد"} className="text-sm">{ticket.wa_sent == 1 ? "✅" : "⬜"}</span>
         </div>
-        <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
+        <span className="bg-gold-500/10 text-gold-500 px-2 py-1 rounded-full text-[10px] font-bold">{ticket.type} | {ticket.unit}</span>
       </div>
-      <p className="text-xs text-slate-500 mb-3 line-clamp-2 bg-slate-50 p-2 rounded-lg border border-slate-100">{ticket.desc}</p>
-      
-      <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-3 mt-4">
+      <p className="text-xs text-slate-500 dark:text-brand-400 mb-3 line-clamp-2 bg-slate-50 dark:bg-brand-800/40 p-2 rounded-lg border border-slate-100 dark:border-brand-700">{ticket.desc}</p>
+
+      <div className="bg-blue-50/50 dark:bg-blue-500/10 p-3 rounded-xl border border-blue-100 dark:border-blue-500/30 space-y-3 mt-4">
         <div className="flex items-center gap-2 mb-1">
-          <CalendarDays size={14} className="text-blue-600" />
-          <span className="text-xs font-bold text-blue-800">إدارة الموعد والتكليف</span>
+          <CalendarDays size={14} className="text-blue-600 dark:text-blue-400" />
+          <span className="text-xs font-bold text-blue-800 dark:text-blue-300">إدارة الموعد والتكليف</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] text-slate-500 font-bold block mb-1">تاريخ الزيارة</label>
-            <input type="date" value={ticket.scheduleDate || ""} onChange={(e) => updateTicketStatus(ticket.id, "scheduleDate", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-400 bg-white" />
+            <label className="text-[10px] text-slate-500 dark:text-brand-400 font-bold block mb-1">تاريخ الزيارة</label>
+            <input type="date" value={ticket.scheduleDate || ""} onChange={(e) => updateTicketStatus(ticket.id, "scheduleDate", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-400" />
           </div>
           <div>
-            <label className="text-[10px] text-slate-500 font-bold block mb-1">وقت الزيارة</label>
-            <select value={ticket.scheduleTime || "غير محدد"} onChange={(e) => updateTicketStatus(ticket.id, "scheduleTime", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-400 bg-white">
+            <label className="text-[10px] text-slate-500 dark:text-brand-400 font-bold block mb-1">وقت الزيارة</label>
+            <select value={ticket.scheduleTime || "غير محدد"} onChange={(e) => updateTicketStatus(ticket.id, "scheduleTime", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-400">
               <option value="غير محدد" disabled>اختر الوقت</option>
               {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
         </div>
-        <div className="space-y-2 pt-2 border-t border-blue-100">
-          <select value={ticket.technician || "لم يتم التعيين"} onChange={(e) => updateTicketStatus(ticket.id, "technician", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg bg-white border border-slate-200 outline-none focus:border-blue-400 text-slate-700">
+        <div className="space-y-2 pt-2 border-t border-blue-100 dark:border-blue-500/30">
+          <select value={ticket.technician || "لم يتم التعيين"} onChange={(e) => updateTicketStatus(ticket.id, "technician", e.target.value)} className="w-full text-xs font-bold p-2 rounded-lg bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 outline-none focus:border-blue-400">
             <option value="لم يتم التعيين" disabled>-- إسناد لفني --</option>
             {techList.map(tech => <option key={tech} value={tech}>{tech}</option>)}
           </select>
@@ -344,18 +344,18 @@ export default function TechDashboard(props) {
   }, {});
 
   return (
-    <div className="pt-20 pb-20 bg-slate-50 min-h-screen">
+    <div className="pt-20 pb-20 bg-transparent min-h-screen">
       <div className="container mx-auto px-6">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 bg-white dark:bg-brand-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700">
           <div>
-            <h1 className="text-3xl font-black text-[#1a365d]">لوحة الخدمات</h1>
-            <p className="text-slate-500 mt-1">أهلاً بك، <span className="font-bold text-[#c5a059]">{activeUser?.name}</span></p>
+            <h1 className="text-3xl font-black text-brand-800 dark:text-brand-100">لوحة الخدمات</h1>
+            <p className="text-slate-500 dark:text-brand-400 mt-1">أهلاً بك، <span className="font-bold text-gold-500">{activeUser?.name}</span></p>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setActiveTab("settings")} className="bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-bold hover:bg-slate-200 transition flex items-center gap-2">
+            <button onClick={() => setActiveTab("settings")} className="bg-slate-100 dark:bg-brand-800 text-slate-700 dark:text-brand-300 px-5 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-brand-700 transition flex items-center gap-2">
               <Lock size={16} /> إعدادات الحساب
             </button>
-            <button onClick={handleLogout} className="bg-red-50 text-red-600 px-5 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2 shadow-sm">
+            <button onClick={handleLogout} className="bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-300 px-5 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition flex items-center gap-2 shadow-sm">
               <LogOut size={16} /> تسجيل خروج
             </button>
           </div>
@@ -363,115 +363,115 @@ export default function TechDashboard(props) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
           {hasPerm("users_manage") && (
-            <div onClick={loadUsers} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-[#1a365d]" />
-              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-xl text-[#1a365d] mb-4 group-hover:bg-[#1a365d] group-hover:text-white transition-colors">
+            <div onClick={loadUsers} className="bg-white dark:bg-brand-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-brand-700 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-brand-800" />
+              <div className="w-12 h-12 bg-blue-50 dark:bg-blue-500/15 rounded-xl flex items-center justify-center text-xl text-brand-800 dark:text-blue-300 mb-4 group-hover:bg-brand-800 group-hover:text-white transition-colors">
                 <Shield size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[#1a365d] mb-1">الموظفين والصلاحيات</h3>
-              <p className="text-slate-500 text-sm">إدارة حسابات الموظفين وتحديد صلاحياتهم.</p>
+              <h3 className="text-lg font-bold text-brand-800 dark:text-brand-100 mb-1">الموظفين والصلاحيات</h3>
+              <p className="text-slate-500 dark:text-brand-400 text-sm">إدارة حسابات الموظفين وتحديد صلاحياتهم.</p>
             </div>
           )}
 
           {hasPerm("leads") && (
-            <div onClick={loadLeads} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
+            <div onClick={loadLeads} className="bg-white dark:bg-brand-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-brand-700 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-teal-500" />
-              <div className="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center text-xl text-teal-600 mb-4 group-hover:bg-teal-500 group-hover:text-white transition-colors">
+              <div className="w-12 h-12 bg-teal-50 dark:bg-teal-500/15 rounded-xl flex items-center justify-center text-xl text-teal-600 dark:text-teal-300 mb-4 group-hover:bg-teal-500 group-hover:text-white transition-colors">
                 <Users size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[#1a365d] mb-1">سجل المهتمين (Leads)</h3>
-              <p className="text-slate-500 text-sm">متابعة الطلبات الواردة من الموقع الإلكتروني.</p>
+              <h3 className="text-lg font-bold text-brand-800 dark:text-brand-100 mb-1">سجل المهتمين (Leads)</h3>
+              <p className="text-slate-500 dark:text-brand-400 text-sm">متابعة الطلبات الواردة من الموقع الإلكتروني.</p>
             </div>
           )}
 
           {hasPerm("maintenance") && (
-            <div onClick={loadMaintenance} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
+            <div onClick={loadMaintenance} className="bg-white dark:bg-brand-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-brand-700 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-purple-500" />
-              <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center text-xl text-purple-600 mb-4 group-hover:bg-purple-500 group-hover:text-white transition-colors">
+              <div className="w-12 h-12 bg-purple-50 dark:bg-purple-500/15 rounded-xl flex items-center justify-center text-xl text-purple-600 dark:text-purple-300 mb-4 group-hover:bg-purple-500 group-hover:text-white transition-colors">
                 <Wrench size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[#1a365d] mb-1">طلبات الصيانة</h3>
-              <p className="text-slate-500 text-sm">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
+              <h3 className="text-lg font-bold text-brand-800 dark:text-brand-100 mb-1">طلبات الصيانة</h3>
+              <p className="text-slate-500 dark:text-brand-400 text-sm">توزيع آلي، تقويم، ولوحة مهام احترافية.</p>
             </div>
           )}
 
           {hasPerm("letters") && (
-            <div onClick={() => navigate("/letter-generator")} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-[#c5a059]" />
-              <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-xl text-[#c5a059] mb-4 group-hover:bg-[#c5a059] group-hover:text-white transition-colors">
+            <div onClick={() => navigate("/letter-generator")} className="bg-white dark:bg-brand-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-brand-700 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gold-500" />
+              <div className="w-12 h-12 bg-orange-50 dark:bg-amber-500/15 rounded-xl flex items-center justify-center text-xl text-gold-500 dark:text-amber-300 mb-4 group-hover:bg-gold-500 group-hover:text-white transition-colors">
                 <FilePenLine size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[#1a365d] mb-1">منشئ الخطابات</h3>
-              <p className="text-slate-500 text-sm">إنشاء وطباعة خطابات رسمية.</p>
+              <h3 className="text-lg font-bold text-brand-800 dark:text-brand-100 mb-1">منشئ الخطابات</h3>
+              <p className="text-slate-500 dark:text-brand-400 text-sm">إنشاء وطباعة خطابات رسمية.</p>
             </div>
           )}
 
           {hasPerm("accounting") && (
-            <div onClick={() => window.open("https://semak.daftra.com/", "_blank")} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
+            <div onClick={() => window.open("https://semak.daftra.com/", "_blank")} className="bg-white dark:bg-brand-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-brand-700 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
-              <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-xl text-emerald-600 mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+              <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-500/15 rounded-xl flex items-center justify-center text-xl text-emerald-600 dark:text-emerald-300 mb-4 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
                 <Calculator size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[#1a365d] mb-1">النظام المحاسبي</h3>
-              <p className="text-slate-500 text-sm">الدخول إلى منصة دفترة لإدارة الحسابات والفواتير.</p>
+              <h3 className="text-lg font-bold text-brand-800 dark:text-brand-100 mb-1">النظام المحاسبي</h3>
+              <p className="text-slate-500 dark:text-brand-400 text-sm">الدخول إلى منصة دفترة لإدارة الحسابات والفواتير.</p>
             </div>
           )}
 
           {hasPerm("qr") && (
-            <div onClick={() => setActiveTab("qr")} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
+            <div onClick={() => setActiveTab("qr")} className="bg-white dark:bg-brand-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-brand-700 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-slate-800" />
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-xl text-slate-800 mb-4 group-hover:bg-slate-800 group-hover:text-white transition-colors">
+              <div className="w-12 h-12 bg-slate-100 dark:bg-brand-800 rounded-xl flex items-center justify-center text-xl text-slate-800 dark:text-brand-300 mb-4 group-hover:bg-slate-800 group-hover:text-white transition-colors">
                 <QrCode size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[#1a365d] mb-1">رموز الوحدات (QR)</h3>
-              <p className="text-slate-500 text-sm">توليد وطباعة رموز QR للعملاء.</p>
+              <h3 className="text-lg font-bold text-brand-800 dark:text-brand-100 mb-1">رموز الوحدات (QR)</h3>
+              <p className="text-slate-500 dark:text-brand-400 text-sm">توليد وطباعة رموز QR للعملاء.</p>
             </div>
           )}
 
           {hasPerm("inspection") && (
-            <div onClick={() => navigate("/inspection")} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
+            <div onClick={() => navigate("/inspection")} className="bg-white dark:bg-brand-900 p-6 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-brand-700 hover:-translate-y-1 hover:shadow-lg transition duration-300 cursor-pointer group relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500" />
-              <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-xl text-indigo-600 mb-4 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+              <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-500/15 rounded-xl flex items-center justify-center text-xl text-indigo-600 dark:text-indigo-300 mb-4 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
                 <ClipboardCheck size={24} />
               </div>
-              <h3 className="text-lg font-bold text-[#1a365d] mb-1">فحص واستلام الوحدات</h3>
-              <p className="text-slate-500 text-sm">قائمة تدقيق للغرف والأعمال الإنشائية.</p>
+              <h3 className="text-lg font-bold text-brand-800 dark:text-brand-100 mb-1">فحص واستلام الوحدات</h3>
+              <p className="text-slate-500 dark:text-brand-400 text-sm">قائمة تدقيق للغرف والأعمال الإنشائية.</p>
             </div>
           )}
         </div>
 
         {/* الموظفين والصلاحيات */}
         {activeTab === "users" && hasPerm("users_manage") && (
-          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
-            <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+          <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-brand-700 overflow-hidden mb-12 animate-fade-in-up">
+            <div className="p-8 border-b border-slate-100 dark:border-brand-700 bg-slate-50 dark:bg-brand-800/40 flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-blue-600" /> قائمة الموظفين</h3>
+                <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100 flex items-center gap-3"><Users className="text-blue-600 dark:text-blue-400" /> قائمة الموظفين</h3>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setShowAddUser(!showAddUser)} className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition">
+                <button onClick={() => setShowAddUser(!showAddUser)} className="bg-brand-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition">
                   {showAddUser ? "إغلاق النموذج" : "إضافة موظف جديد +"}
                 </button>
-                <button onClick={loadUsers} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl hover:bg-slate-300 transition">
+                <button onClick={loadUsers} className="bg-slate-200 dark:bg-brand-800 text-slate-700 dark:text-brand-300 px-4 py-2 rounded-xl hover:bg-slate-300 dark:hover:bg-brand-700 transition">
                   <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
                 </button>
               </div>
             </div>
 
             {showAddUser && (
-              <div className="p-8 bg-blue-50 border-b border-slate-100 animate-fadeIn">
+              <div className="p-8 bg-blue-50 dark:bg-blue-500/10 border-b border-slate-100 dark:border-brand-700 animate-fadeIn">
                 <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">الاسم</label><input required name="name" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400" /></div>
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">المسمى الوظيفي</label><input required name="job" type="text" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400" /></div>
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">البريد الإلكتروني</label><input required name="email" type="email" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 dark:text-brand-400 mb-1 block">الاسم</label><input required name="name" type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-400" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 dark:text-brand-400 mb-1 block">المسمى الوظيفي</label><input required name="job" type="text" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-400" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 dark:text-brand-400 mb-1 block">البريد الإلكتروني</label><input required name="email" type="email" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-400" /></div>
                   <div>
-                    <label className="text-xs font-bold text-slate-500 mb-1 block">الصلاحية</label>
-                    <select name="role" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400">
+                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 mb-1 block">الصلاحية</label>
+                    <select name="role" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-400">
                       <option value="employee">موظف (تخصيص الصلاحيات)</option>
                       <option value="admin">مدير (صلاحيات كاملة)</option>
                       <option value="technician">فني صيانة (بوابة الفنيين)</option>
                     </select>
                   </div>
-                  <div><label className="text-xs font-bold text-slate-500 mb-1 block">كلمة المرور</label><input required name="password" type="password" minLength={8} placeholder="8 أحرف على الأقل" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400" /></div>
+                  <div><label className="text-xs font-bold text-slate-500 dark:text-brand-400 mb-1 block">كلمة المرور</label><input required name="password" type="password" minLength={8} placeholder="8 أحرف على الأقل" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-blue-400" /></div>
                   <div className="flex items-end"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-md">حفظ الموظف</button></div>
                 </form>
               </div>
@@ -479,23 +479,23 @@ export default function TechDashboard(props) {
 
             <div className="overflow-x-auto">
               <table className="w-full text-right">
-                <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
-                  <tr><th className="px-6 py-4 border-b border-slate-200">الاسم</th><th className="px-6 py-4 border-b border-slate-200">المنصب</th><th className="px-6 py-4 border-b border-slate-200">الصلاحية</th><th className="px-6 py-4 border-b border-slate-200">إجراءات</th></tr>
+                <thead className="bg-slate-50 dark:bg-brand-800/60 text-slate-600 dark:text-brand-300 text-sm uppercase tracking-wider">
+                  <tr><th className="px-6 py-4 border-b border-slate-200 dark:border-brand-700">الاسم</th><th className="px-6 py-4 border-b border-slate-200 dark:border-brand-700">المنصب</th><th className="px-6 py-4 border-b border-slate-200 dark:border-brand-700">الصلاحية</th><th className="px-6 py-4 border-b border-slate-200 dark:border-brand-700">إجراءات</th></tr>
                 </thead>
-                <tbody className="text-slate-700 divide-y divide-slate-100">
+                <tbody className="text-slate-700 dark:text-brand-300 divide-y divide-slate-100 dark:divide-brand-700">
                   {usersList.map((u) => (
                     <React.Fragment key={u.id}>
-                      <tr className="hover:bg-slate-50 transition">
-                        <td className="px-6 py-4 font-bold text-[#1a365d]">{u.name}</td>
-                        <td className="px-6 py-4 text-slate-500">{u.job} <br/><span className="text-[10px] text-slate-400 font-mono">{u.email}</span></td>
+                      <tr className="hover:bg-slate-50 dark:hover:bg-brand-800 transition">
+                        <td className="px-6 py-4 font-bold text-brand-800 dark:text-brand-100">{u.name}</td>
+                        <td className="px-6 py-4 text-slate-500 dark:text-brand-400">{u.job} <br/><span className="text-[10px] text-slate-400 dark:text-brand-500 font-mono">{u.email}</span></td>
                         <td className="px-6 py-4">
-                          {u.role === "admin" ? <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold border border-blue-200">مدير نظام</span> : 
-                           u.role === "technician" ? <span className="bg-[#c5a059]/10 text-[#c5a059] px-3 py-1 rounded-lg text-xs font-bold border border-[#c5a059]/20">فني صيانة</span> :
-                           <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold border border-slate-200">موظف</span>}
+                          {u.role === "admin" ? <span className="bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-lg text-xs font-bold border border-blue-200 dark:border-blue-500/30">مدير نظام</span> :
+                           u.role === "technician" ? <span className="bg-gold-500/10 text-gold-500 px-3 py-1 rounded-lg text-xs font-bold border border-gold-500/20">فني صيانة</span> :
+                           <span className="bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 px-3 py-1 rounded-lg text-xs font-bold border border-slate-200 dark:border-brand-700">موظف</span>}
                         </td>
                         <td className="px-6 py-4">
                           {u.role !== "admin" && (
-                            <button onClick={() => setSelectedUserForPerms(selectedUserForPerms?.id === u.id ? null : u)} className="text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-600 hover:text-white transition flex items-center gap-2 border border-indigo-100">
+                            <button onClick={() => setSelectedUserForPerms(selectedUserForPerms?.id === u.id ? null : u)} className="text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/15 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-600 hover:text-white transition flex items-center gap-2 border border-indigo-100 dark:border-indigo-500/30">
                               <Shield size={14} /> تعديل الصلاحيات
                             </button>
                           )}
@@ -530,7 +530,7 @@ export default function TechDashboard(props) {
                               <div className="flex justify-end gap-3 border-t border-slate-700 pt-6">
                                 <button onClick={() => setSelectedUserForPerms(null)} className="px-6 py-2 text-slate-300 font-bold hover:text-white transition text-sm">إلغاء وتراجع</button>
                                 <button onClick={() => handleSavePermissions(u.id, selectedUserForPerms.tempPerms || [])} className="bg-indigo-500 text-white px-8 py-2 rounded-xl font-bold hover:bg-indigo-400 transition flex items-center gap-2 text-sm shadow-lg">
-                                  {loading ? <RefreshCw size={16} className="animate-spin" /> : <Shield size={16} />} حفظ الصلاحيات 
+                                  {loading ? <RefreshCw size={16} className="animate-spin" /> : <Shield size={16} />} حفظ الصلاحيات
                                 </button>
                               </div>
                             </div>
@@ -547,35 +547,35 @@ export default function TechDashboard(props) {
 
         {/* باقي التابات (المهتمين، الصيانة، الإعدادات، الخ) ... نفس الكود تماماً بدون أي نقص */}
         {activeTab === "leads" && hasPerm("leads") && (
-          <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fade-in-up">
-            <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+          <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-brand-700 overflow-hidden mb-12 animate-fade-in-up">
+            <div className="p-8 border-b border-slate-100 dark:border-brand-700 bg-slate-50 dark:bg-brand-800/40 flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3"><Users className="text-teal-600" /> سجل المهتمين</h3>
+                <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100 flex items-center gap-3"><Users className="text-teal-600 dark:text-teal-400" /> سجل المهتمين</h3>
               </div>
               <button onClick={loadLeads} className="bg-teal-500 text-white px-6 py-2 rounded-xl font-bold hover:bg-teal-600 transition flex items-center gap-2 shadow-md">
                 {loading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />} تحديث البيانات
               </button>
             </div>
-            <div className="p-6 bg-white flex justify-between items-center border-b border-slate-100">
+            <div className="p-6 bg-white dark:bg-brand-900 flex justify-between items-center border-b border-slate-100 dark:border-brand-700">
               <div className="relative w-96">
-                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="text" placeholder="بحث بالاسم أو الجوال..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 pl-4 outline-none focus:border-teal-500 transition" />
+                <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-500" size={18} />
+                <input type="text" placeholder="بحث بالاسم أو الجوال..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl py-3 pr-12 pl-4 outline-none focus:border-teal-500 transition" />
               </div>
-              <div className="text-slate-400 text-sm font-bold">العدد الكلي: <span className="text-[#1a365d] text-lg">{leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).length}</span></div>
+              <div className="text-slate-400 dark:text-brand-400 text-sm font-bold">العدد الكلي: <span className="text-brand-800 dark:text-brand-100 text-lg">{leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).length}</span></div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-right">
-                <thead className="bg-slate-50 text-slate-600 text-sm uppercase tracking-wider">
-                  <tr><th className="px-6 py-4 border-b">#</th><th className="px-6 py-4 border-b">الاسم الكريم</th><th className="px-6 py-4 border-b">رقم الجوال</th><th className="px-6 py-4 border-b">الوحدة المهتم بها</th><th className="px-6 py-4 border-b">تاريخ التسجيل</th><th className="px-6 py-4 border-b text-center">واتساب</th></tr>
+                <thead className="bg-slate-50 dark:bg-brand-800/60 text-slate-600 dark:text-brand-300 text-sm uppercase tracking-wider">
+                  <tr><th className="px-6 py-4 border-b dark:border-brand-700">#</th><th className="px-6 py-4 border-b dark:border-brand-700">الاسم الكريم</th><th className="px-6 py-4 border-b dark:border-brand-700">رقم الجوال</th><th className="px-6 py-4 border-b dark:border-brand-700">الوحدة المهتم بها</th><th className="px-6 py-4 border-b dark:border-brand-700">تاريخ التسجيل</th><th className="px-6 py-4 border-b dark:border-brand-700 text-center">واتساب</th></tr>
                 </thead>
-                <tbody className="text-slate-700 divide-y divide-slate-50">
+                <tbody className="text-slate-700 dark:text-brand-300 divide-y divide-slate-50 dark:divide-brand-700">
                   {loading ? <tr><td colSpan="6" className="text-center py-12 text-teal-500"><RefreshCw className="animate-spin inline mr-2" /> جاري التحميل...</td></tr> : leads.filter(l => String(l.name).includes(searchQuery) || String(l.phone).includes(searchQuery)).map((lead, i) => (
-                    <tr key={i} className="hover:bg-teal-50/30 transition-colors">
-                      <td className="px-6 py-4 text-slate-400 text-xs font-mono">{leads.length - i}</td>
-                      <td className="px-6 py-4 font-bold text-[#1a365d]">{lead.name}</td>
-                      <td className="px-6 py-4 font-sans text-slate-600 font-medium" dir="ltr">{lead.phone}</td>
-                      <td className="px-6 py-4"><span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-xs font-bold border border-teal-200">{lead.unit}</span></td>
-                      <td className="px-6 py-4 text-sm text-slate-400 font-sans" dir="ltr">{String(lead.date).substring(0, 16)}</td>
+                    <tr key={i} className="hover:bg-teal-50/30 dark:hover:bg-brand-800 transition-colors">
+                      <td className="px-6 py-4 text-slate-400 dark:text-brand-500 text-xs font-mono">{leads.length - i}</td>
+                      <td className="px-6 py-4 font-bold text-brand-800 dark:text-brand-100">{lead.name}</td>
+                      <td className="px-6 py-4 font-sans text-slate-600 dark:text-brand-300 font-medium" dir="ltr">{lead.phone}</td>
+                      <td className="px-6 py-4"><span className="bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-full text-xs font-bold border border-teal-200 dark:border-teal-500/30">{lead.unit}</span></td>
+                      <td className="px-6 py-4 text-sm text-slate-400 dark:text-brand-400 font-sans" dir="ltr">{String(lead.date).substring(0, 16)}</td>
                       <td className="px-6 py-4 text-center">
                         {lead.wa_sent == 1
                           ? <span className="text-green-500 text-lg" title="تم إرسال الواتساب">✅</span>

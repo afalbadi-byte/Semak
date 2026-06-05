@@ -43,12 +43,12 @@ export default function Services() {
   return (
     <>
     <PageMeta title="خدماتنا" description="خدمات سماك العقارية — تطوير عقاري، إدارة أملاك، تشطيبات فاخرة، ومنازل ذكية في مكة المكرمة." />
-    <div className="bg-slate-50 min-h-screen animate-fadeIn pb-20 pt-32">
+    <div className="bg-slate-50 dark:bg-brand-900/40 min-h-screen animate-fadeIn pb-20 pt-32">
       {/* رأس الصفحة */}
       <div className="container mx-auto px-6 mb-16 text-center">
-        <h2 className="text-[#c5a059] font-black tracking-[0.3em] uppercase text-sm mb-4">مجالات التميز</h2>
-        <h3 className="text-4xl md:text-5xl font-black text-[#1a365d] mb-6">خدماتنا المتكاملة</h3>
-        <p className="text-slate-500 text-lg max-w-2xl mx-auto leading-relaxed">
+        <h2 className="text-gold-500 font-black tracking-[0.3em] uppercase text-sm mb-4">مجالات التميز</h2>
+        <h3 className="text-4xl md:text-5xl font-black text-brand-800 dark:text-brand-100 mb-6">خدماتنا المتكاملة</h3>
+        <p className="text-slate-500 dark:text-brand-300 text-lg max-w-2xl mx-auto leading-relaxed">
           في سماك العقارية، لا نبني مجرد جدران، بل نصنع أسلوب حياة. نقدم باقة من الخدمات الشاملة لضمان راحة عملائنا ونجاح استثماراتهم.
         </p>
       </div>
@@ -59,23 +59,23 @@ export default function Services() {
           {servicesList.map((srv, idx) => {
             const Icon = srv.icon;
             return (
-              <div key={idx} className="bg-white p-8 rounded-[2rem] shadow-sm border-b-4 border-transparent hover:border-[#c5a059] hover:shadow-xl transition-all duration-300 group cursor-pointer">
-                <div className="w-16 h-16 bg-[#1a365d]/5 text-[#1a365d] rounded-2xl flex items-center justify-center mb-6 group-hover:bg-[#1a365d] group-hover:text-white transition-colors duration-300">
+              <div key={idx} className="bg-white dark:bg-brand-900 p-8 rounded-[2rem] shadow-sm border-b-4 border-transparent hover:border-gold-500 hover:shadow-xl transition-all duration-300 group cursor-pointer">
+                <div className="w-16 h-16 bg-brand-800/5 text-brand-800 dark:text-brand-300 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-brand-800 group-hover:text-white transition-colors duration-300">
                   <Icon size={32} />
                 </div>
-                <h4 className="text-2xl font-black text-[#1a365d] mb-4">{srv.title}</h4>
-                <p className="text-slate-500 leading-loose">{srv.desc}</p>
+                <h4 className="text-2xl font-black text-brand-800 dark:text-brand-100 mb-4">{srv.title}</h4>
+                <p className="text-slate-500 dark:text-brand-300 leading-loose">{srv.desc}</p>
               </div>
             );
           })}
         </div>
 
         {/* دعوة لاتخاذ إجراء */}
-        <div className="mt-20 bg-[#1a365d] rounded-[3rem] p-10 md:p-16 text-center text-white shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[#c5a059]/20 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10" />
+        <div className="mt-20 bg-brand-800 rounded-[3rem] p-10 md:p-16 text-center text-white shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gold-500/20 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10" />
           <h3 className="text-3xl md:text-4xl font-black mb-6 relative z-10">هل تبحث عن شريك استراتيجي لعقارك؟</h3>
           <p className="text-slate-300 mb-10 max-w-2xl mx-auto relative z-10">تواصل معنا اليوم ودعنا نناقش كيف يمكننا في سماك العقارية تلبية احتياجاتك بأعلى معايير الجودة والاحترافية.</p>
-          <button onClick={() => navigate('/contact')} className="bg-[#c5a059] text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-yellow-600 transition shadow-[0_0_20px_rgba(197,160,89,0.4)] relative z-10 flex items-center gap-3 mx-auto">
+          <button onClick={() => navigate('/contact')} className="bg-gold-500 text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-yellow-600 transition shadow-[0_0_20px_rgba(197,160,89,0.4)] relative z-10 flex items-center gap-3 mx-auto">
             تواصل معنا الآن <ArrowLeft size={20} />
           </button>
         </div>

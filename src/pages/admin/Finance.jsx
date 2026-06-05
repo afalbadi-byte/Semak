@@ -33,17 +33,17 @@ export default function Finance() {
 
     if (loading) {
         return (
-            <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 p-12 text-center">
+            <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-brand-700 p-12 text-center">
                 <RefreshCw className="animate-spin inline mr-2 text-emerald-600"/> جاري جلب البيانات من دفترة...
             </div>
         );
     }
     if (error || !data) {
         return (
-            <div className="bg-red-50 border border-red-200 rounded-[2rem] p-8">
-                <AlertCircle className="text-red-600 mb-2"/>
-                <p className="font-bold text-red-900">تعذّر الاتصال بدفترة</p>
-                <p className="text-sm text-red-700 mt-2">{error}</p>
+            <div className="bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-[2rem] p-8">
+                <AlertCircle className="text-red-600 dark:text-red-300 mb-2"/>
+                <p className="font-bold text-red-900 dark:text-red-300">تعذّر الاتصال بدفترة</p>
+                <p className="text-sm text-red-700 dark:text-red-400 mt-2">{error}</p>
             </div>
         );
     }
@@ -72,7 +72,7 @@ export default function Finance() {
             </div>
 
             {/* تبويبات */}
-            <div className="flex gap-2 flex-wrap bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex gap-2 flex-wrap bg-white dark:bg-brand-900 p-2 rounded-2xl border border-slate-200 dark:border-brand-700 shadow-sm">
                 <Tab active={tab==='overview'}  onClick={()=>setTab('overview')}  icon={DollarSign}>الملخص</Tab>
                 <Tab active={tab==='sales'}     onClick={()=>setTab('sales')}     icon={Receipt}>المبيعات</Tab>
                 <Tab active={tab==='purchases'} onClick={()=>setTab('purchases')} icon={ShoppingCart}>المشتريات</Tab>
@@ -92,8 +92,8 @@ export default function Finance() {
                     </div>
 
                     {/* الموقف المالي */}
-                    <div className="bg-white rounded-2xl shadow border border-slate-100 p-6">
-                        <h3 className="text-lg font-black text-[#1a365d] mb-4">الموقف المالي</h3>
+                    <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 p-6">
+                        <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-4">الموقف المالي</h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <Stat label="مستحق على العملاء (لنا)" value={fmt(sales.unpaid)} positive />
                             <Stat label="مستحق علينا للموردين" value={fmt(purchases.unpaid)} negative />
@@ -105,8 +105,8 @@ export default function Finance() {
             )}
 
             {tab === 'sales' && (
-                <div className="bg-white rounded-2xl shadow border border-slate-100 p-6">
-                    <h3 className="text-lg font-black text-[#1a365d] mb-4 flex items-center gap-2"><Receipt size={20}/> الفواتير الصادرة حسب العميل</h3>
+                <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 p-6">
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2"><Receipt size={20}/> الفواتير الصادرة حسب العميل</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                         <SmallStat label="عدد الفواتير" value={sales.count}/>
                         <SmallStat label="إجمالي" value={fmt(sales.total)} color="blue"/>
@@ -115,12 +115,12 @@ export default function Finance() {
                     </div>
                     <Table head={["العميل","عدد","إجمالي","مسدد","مستحق"]}>
                         {Object.entries(invoices_by_client || {}).sort((a,b)=>b[1].total-a[1].total).map(([cid,c])=>(
-                            <tr key={cid} className="hover:bg-slate-50/50">
-                                <td className="px-4 py-3 font-bold text-[#1a365d]">{c.name}</td>
-                                <td className="px-4 py-3 text-center font-bold">{c.count}</td>
-                                <td className="px-4 py-3 text-center font-bold">{fmt(c.total)}</td>
-                                <td className="px-4 py-3 text-center text-emerald-600 font-bold">{fmt(c.paid)}</td>
-                                <td className={`px-4 py-3 text-center font-bold ${c.unpaid>0?'text-amber-600':'text-slate-400'}`}>{fmt(c.unpaid)}</td>
+                            <tr key={cid} className="hover:bg-slate-50/50 dark:hover:bg-brand-800">
+                                <td className="px-4 py-3 font-bold text-brand-800 dark:text-brand-100">{c.name}</td>
+                                <td className="px-4 py-3 text-center font-bold dark:text-brand-100">{c.count}</td>
+                                <td className="px-4 py-3 text-center font-bold dark:text-brand-100">{fmt(c.total)}</td>
+                                <td className="px-4 py-3 text-center text-emerald-600 dark:text-emerald-300 font-bold">{fmt(c.paid)}</td>
+                                <td className={`px-4 py-3 text-center font-bold ${c.unpaid>0?'text-amber-600 dark:text-amber-300':'text-slate-400 dark:text-brand-400'}`}>{fmt(c.unpaid)}</td>
                             </tr>
                         ))}
                     </Table>
@@ -128,8 +128,8 @@ export default function Finance() {
             )}
 
             {tab === 'purchases' && (
-                <div className="bg-white rounded-2xl shadow border border-slate-100 p-6">
-                    <h3 className="text-lg font-black text-[#1a365d] mb-4 flex items-center gap-2"><ShoppingCart size={20}/> فواتير الشراء حسب المورد</h3>
+                <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 p-6">
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2"><ShoppingCart size={20}/> فواتير الشراء حسب المورد</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                         <SmallStat label="عدد الفواتير" value={purchases.count}/>
                         <SmallStat label="إجمالي" value={fmt(purchases.total)} color="purple"/>
@@ -138,12 +138,12 @@ export default function Finance() {
                     </div>
                     <Table head={["المورد","عدد","إجمالي","مسدد","مستحق علينا"]}>
                         {Object.entries(purchases_by_supplier || {}).sort((a,b)=>b[1].total-a[1].total).map(([sid,s])=>(
-                            <tr key={sid} className="hover:bg-slate-50/50">
-                                <td className="px-4 py-3 font-bold text-[#1a365d]">{s.name}</td>
-                                <td className="px-4 py-3 text-center font-bold">{s.count}</td>
-                                <td className="px-4 py-3 text-center font-bold">{fmt(s.total)}</td>
-                                <td className="px-4 py-3 text-center text-emerald-600 font-bold">{fmt(s.paid)}</td>
-                                <td className={`px-4 py-3 text-center font-bold ${s.unpaid>0?'text-red-600':'text-slate-400'}`}>{fmt(s.unpaid)}</td>
+                            <tr key={sid} className="hover:bg-slate-50/50 dark:hover:bg-brand-800">
+                                <td className="px-4 py-3 font-bold text-brand-800 dark:text-brand-100">{s.name}</td>
+                                <td className="px-4 py-3 text-center font-bold dark:text-brand-100">{s.count}</td>
+                                <td className="px-4 py-3 text-center font-bold dark:text-brand-100">{fmt(s.total)}</td>
+                                <td className="px-4 py-3 text-center text-emerald-600 dark:text-emerald-300 font-bold">{fmt(s.paid)}</td>
+                                <td className={`px-4 py-3 text-center font-bold ${s.unpaid>0?'text-red-600 dark:text-red-300':'text-slate-400 dark:text-brand-400'}`}>{fmt(s.unpaid)}</td>
                             </tr>
                         ))}
                     </Table>
@@ -151,15 +151,15 @@ export default function Finance() {
             )}
 
             {tab === 'suppliers' && (
-                <div className="bg-white rounded-2xl shadow border border-slate-100 p-6">
-                    <h3 className="text-lg font-black text-[#1a365d] mb-4 flex items-center gap-2"><Truck size={20}/> سجل الموردين ({suppliers.length})</h3>
+                <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 p-6">
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2"><Truck size={20}/> سجل الموردين ({suppliers.length})</h3>
                     <Table head={["الاسم","الجوال","الإيميل","الرصيد المبدئي"]}>
                         {suppliers.map((s,i)=>(
-                            <tr key={i} className="hover:bg-slate-50/50">
-                                <td className="px-4 py-3 font-bold text-[#1a365d]">{s.name}</td>
-                                <td className="px-4 py-3 font-mono text-sm" dir="ltr">{s.phone || '—'}</td>
-                                <td className="px-4 py-3 text-sm">{s.email || '—'}</td>
-                                <td className="px-4 py-3 text-center font-bold">{fmt(s.balance)}</td>
+                            <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-brand-800">
+                                <td className="px-4 py-3 font-bold text-brand-800 dark:text-brand-100">{s.name}</td>
+                                <td className="px-4 py-3 font-mono text-sm dark:text-brand-300" dir="ltr">{s.phone || '—'}</td>
+                                <td className="px-4 py-3 text-sm dark:text-brand-300">{s.email || '—'}</td>
+                                <td className="px-4 py-3 text-center font-bold dark:text-brand-100">{fmt(s.balance)}</td>
                             </tr>
                         ))}
                     </Table>
@@ -188,20 +188,20 @@ export default function Finance() {
             )}
 
             {tab === 'expenses' && (
-                <div className="bg-white rounded-2xl shadow border border-slate-100 p-6">
-                    <h3 className="text-lg font-black text-[#1a365d] mb-4 flex items-center gap-2"><TrendingDown size={20}/> المصروفات حسب التصنيف</h3>
+                <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 p-6">
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2"><TrendingDown size={20}/> المصروفات حسب التصنيف</h3>
                     {Object.entries(expenses_by_category || {}).sort((a,b)=>b[1].total-a[1].total).map(([cat,d],i)=>{
                         const pct = (d.total/expenses.total)*100;
                         const isUncat = !cat || cat.trim()==='';
                         return (
                             <div key={i} className="mb-3">
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className={`font-bold ${isUncat?'text-amber-700':'text-[#1a365d]'}`}>
-                                        {isUncat?'⚠️ بدون تصنيف':cat} <span className="text-xs text-slate-400">({d.count})</span>
+                                    <span className={`font-bold ${isUncat?'text-amber-700 dark:text-amber-300':'text-brand-800 dark:text-brand-100'}`}>
+                                        {isUncat?'⚠️ بدون تصنيف':cat} <span className="text-xs text-slate-400 dark:text-brand-400">({d.count})</span>
                                     </span>
-                                    <span className="font-black text-[#1a365d]">{fmt(d.total)} <span className="text-xs text-slate-500">({pct.toFixed(1)}%)</span></span>
+                                    <span className="font-black text-brand-800 dark:text-brand-100">{fmt(d.total)} <span className="text-xs text-slate-500 dark:text-brand-400">({pct.toFixed(1)}%)</span></span>
                                 </div>
-                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-2 bg-slate-100 dark:bg-brand-800 rounded-full overflow-hidden">
                                     <div className={`h-full ${isUncat?'bg-amber-500':'bg-gradient-to-l from-red-500 to-red-400'}`} style={{width:`${pct}%`}}/>
                                 </div>
                             </div>
@@ -222,7 +222,7 @@ export default function Finance() {
 function Tab({ active, onClick, icon:Icon, children }) {
     return (
         <button onClick={onClick}
-            className={`px-4 py-2 rounded-xl font-bold text-sm transition flex items-center gap-2 ${active ? 'bg-[#1a365d] text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>
+            className={`px-4 py-2 rounded-xl font-bold text-sm transition flex items-center gap-2 ${active ? 'bg-brand-800 text-white shadow-md' : 'text-slate-600 dark:text-brand-300 hover:bg-slate-100 dark:hover:bg-brand-800'}`}>
             <Icon size={16}/> {children}
         </button>
     );
@@ -246,21 +246,21 @@ function BigCard({ color, icon:Icon, title, value, sub }) {
 }
 
 function Stat({ label, value, positive, negative }) {
-    const cls = positive ? 'text-emerald-700' : negative ? 'text-red-700' : 'text-[#1a365d]';
+    const cls = positive ? 'text-emerald-700 dark:text-emerald-300' : negative ? 'text-red-700 dark:text-red-300' : 'text-brand-800 dark:text-brand-100';
     return (
-        <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
-            <div className="text-xs font-bold text-slate-500">{label}</div>
+        <div className="bg-slate-50 dark:bg-brand-800/40 border border-slate-100 dark:border-brand-700 rounded-xl p-4">
+            <div className="text-xs font-bold text-slate-500 dark:text-brand-400">{label}</div>
             <div className={`text-2xl font-black mt-1 ${cls}`}>{value} <span className="text-xs">SAR</span></div>
         </div>
     );
 }
 
 function SmallStat({ label, value, color }) {
-    const colors = { blue:'text-blue-700', emerald:'text-emerald-700', amber:'text-amber-700', red:'text-red-700', purple:'text-purple-700' };
+    const colors = { blue:'text-blue-700 dark:text-blue-300', emerald:'text-emerald-700 dark:text-emerald-300', amber:'text-amber-700 dark:text-amber-300', red:'text-red-700 dark:text-red-300', purple:'text-purple-700 dark:text-purple-300' };
     return (
-        <div className="bg-slate-50 rounded-xl p-3">
-            <div className="text-[10px] font-bold text-slate-500">{label}</div>
-            <div className={`text-lg font-black ${colors[color]||'text-[#1a365d]'}`}>{value}</div>
+        <div className="bg-slate-50 dark:bg-brand-800/40 rounded-xl p-3">
+            <div className="text-[10px] font-bold text-slate-500 dark:text-brand-400">{label}</div>
+            <div className={`text-lg font-black ${colors[color]||'text-brand-800 dark:text-brand-100'}`}>{value}</div>
         </div>
     );
 }
@@ -269,10 +269,10 @@ function Table({ head, children }) {
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
-                <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
+                <thead className="bg-slate-50 dark:bg-brand-800/60 text-slate-600 dark:text-brand-300 text-xs uppercase">
                     <tr>{head.map((h,i)=>(<th key={i} className={`px-4 py-2 ${i===0?'':'text-center'}`}>{h}</th>))}</tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">{children}</tbody>
+                <tbody className="divide-y divide-slate-100 dark:divide-brand-700">{children}</tbody>
             </table>
         </div>
     );

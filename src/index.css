@@ -1,3 +1,69 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ════════════════════════════════════════════════════════════════════════
+   نظام تصميم سماك — هوية موحّدة احترافية (كحلي #1a365d + ذهبي #c5a059)
+   مستوحى من نظام بوابة اكناف، مضبوط على هوية سماك، بوضعين فاتح وداكن.
+   ════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  html { font-family: 'Cairo', 'Tajawal', system-ui, sans-serif; }
+
+  body {
+    @apply bg-gradient-to-br from-brand-50/50 via-white to-gold-50/30 text-brand-950 antialiased;
+    @apply dark:from-brand-950 dark:via-brand-900 dark:to-brand-950 dark:text-brand-50;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4 { @apply font-display tracking-tight; }
+
+  /* أشرطة التمرير */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { @apply bg-brand-300 dark:bg-brand-700 rounded-full; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+}
+
+@layer components {
+  /* ── الأزرار ───────────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+  .btn-primary   { @apply btn bg-brand-800 hover:bg-brand-700 text-white shadow-soft hover:shadow-card dark:bg-gold-500 dark:hover:bg-gold-400 dark:text-brand-950; }
+  .btn-gold      { @apply btn bg-gold-500 hover:bg-gold-600 text-white shadow-soft hover:shadow-card; }
+  .btn-secondary { @apply btn bg-white border border-brand-200 text-brand-800 hover:bg-brand-50 dark:bg-brand-800 dark:border-brand-700 dark:text-brand-100 dark:hover:bg-brand-700; }
+  .btn-ghost     { @apply btn text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-800; }
+  .btn-danger    { @apply btn bg-red-600 hover:bg-red-700 text-white shadow-soft; }
+
+  /* ── الحقول ────────────────────────────────────────────────────────── */
+  .input {
+    @apply w-full bg-white border border-brand-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 focus:border-gold-400 transition placeholder:text-brand-400;
+    @apply dark:bg-brand-800 dark:border-brand-600 dark:text-brand-50 dark:placeholder:text-brand-500 dark:focus:ring-gold-500 dark:focus:border-gold-500;
+  }
+  .label { @apply block text-sm font-bold text-brand-800 mb-1.5 dark:text-brand-200; }
+
+  /* ── البطاقات ──────────────────────────────────────────────────────── */
+  .card      { @apply bg-white rounded-2xl shadow-card border border-brand-100/70 overflow-hidden dark:bg-brand-900 dark:border-brand-700/60 dark:shadow-none; }
+  .card-body { @apply p-6; }
+
+  /* ── الشارات (الحالات) ─────────────────────────────────────────────── */
+  .badge          { @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold; }
+  .badge-neutral  { @apply badge bg-brand-100 text-brand-700 dark:bg-brand-800 dark:text-brand-300; }
+  .badge-pending  { @apply badge bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300; }
+  .badge-success  { @apply badge bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300; }
+  .badge-approved { @apply badge bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300; }
+  .badge-danger   { @apply badge bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300; }
+  .badge-rejected { @apply badge bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300; }
+  .badge-info     { @apply badge bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300; }
+  .badge-gold     { @apply badge bg-gold-100 text-gold-800 dark:bg-gold-900/40 dark:text-gold-300; }
+
+  /* ── بطاقة إحصاء ───────────────────────────────────────────────────── */
+  .stat-card { @apply card card-body relative overflow-hidden; }
+  .stat-card::before {
+    content: '';
+    @apply absolute -top-8 -left-8 w-24 h-24 rounded-full bg-brand-500/5;
+  }
+
+  /* سطح مرتفع داكن لطيف للعناصر فوق الخلفية المتدرجة */
+  .surface { @apply bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700/60; }
+}

@@ -112,18 +112,18 @@ export default function ProjectsManage({ showToast }) {
     };
 
     return (
-        <div className="bg-slate-50 min-h-[600px] rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 animate-fadeIn relative">
+        <div className="bg-white dark:bg-brand-900 min-h-[600px] rounded-[2rem] shadow-xl border border-slate-100 dark:border-brand-700 overflow-hidden mb-12 animate-fadeIn relative">
             
             {qrModalData && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-                    <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full relative text-center border border-slate-100">
-                        <button onClick={() => setQrModalData(null)} className="absolute top-4 left-4 text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full transition">
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl p-8 max-w-sm w-full relative text-center border border-slate-100 dark:border-brand-700">
+                        <button onClick={() => setQrModalData(null)} className="absolute top-4 left-4 text-slate-400 dark:text-brand-400 hover:text-red-500 bg-slate-100 dark:bg-brand-800 p-2 rounded-full transition">
                             <X size={20} />
                         </button>
                         
                         <div id="qr-print-area" className="flex flex-col items-center">
-                            <h3 className="text-xl font-black text-[#1a365d] mb-2">رمز طلب الصيانة</h3>
-                            <p className="text-sm text-[#c5a059] mb-6 font-black bg-slate-50 px-4 py-1.5 rounded-lg inline-block border border-slate-100">
+                            <h3 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-2">رمز طلب الصيانة</h3>
+                            <p className="text-sm text-gold-500 mb-6 font-black bg-slate-50 dark:bg-brand-800/40 px-4 py-1.5 rounded-lg inline-block border border-slate-100 dark:border-brand-700">
                                 وحدة: {qrModalData.unit_code}
                             </p>
 
@@ -137,10 +137,10 @@ export default function ProjectsManage({ showToast }) {
                                     level="H"
                                 />
                             </div>
-                            <p className="text-xs text-slate-400 mb-6 font-bold px-4">امسح الرمز لتقديم طلب صيانة لهذه الوحدة مباشرة عبر النظام</p>
+                            <p className="text-xs text-slate-400 dark:text-brand-400 mb-6 font-bold px-4">امسح الرمز لتقديم طلب صيانة لهذه الوحدة مباشرة عبر النظام</p>
                         </div>
 
-                        <button onClick={handlePrintQR} className="w-full bg-[#1a365d] text-white py-4 rounded-xl font-black hover:bg-blue-800 transition flex items-center justify-center gap-2 shadow-lg">
+                        <button onClick={handlePrintQR} className="w-full bg-brand-800 text-white py-4 rounded-xl font-black hover:bg-blue-800 transition flex items-center justify-center gap-2 shadow-lg">
                             <Printer size={20} /> طباعة الرمز
                         </button>
                     </div>
@@ -149,33 +149,33 @@ export default function ProjectsManage({ showToast }) {
 
             {!activeProject && (
                 <div className="p-8">
-                    <div className="flex flex-col mb-8 gap-4 border-b border-slate-200 pb-6">
-                        <h3 className="text-2xl md:text-3xl font-black text-[#1a365d] flex items-center gap-3 mb-4"><Building className="text-rose-600" size={32}/> إدارة المشاريع والوحدات</h3>
-                        <form onSubmit={handleAddProject} className="flex flex-col md:flex-row gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                            <input type="text" required value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="اسم المشروع الجديد..." className="px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-rose-500 font-bold text-sm flex-1" />
-                            <input type="text" value={newProjectDesc} onChange={e => setNewProjectDesc(e.target.value)} placeholder="الوصف (اختياري)" className="px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-rose-500 font-bold text-sm flex-1" />
-                            <button type="submit" disabled={localLoading} className="bg-[#1a365d] text-white px-8 py-3 rounded-xl font-bold hover:bg-rose-600 transition flex items-center justify-center gap-2">
+                    <div className="flex flex-col mb-8 gap-4 border-b border-slate-200 dark:border-brand-700 pb-6">
+                        <h3 className="text-2xl md:text-3xl font-black text-brand-800 dark:text-brand-100 flex items-center gap-3 mb-4"><Building className="text-rose-600" size={32}/> إدارة المشاريع والوحدات</h3>
+                        <form onSubmit={handleAddProject} className="flex flex-col md:flex-row gap-3 bg-white dark:bg-brand-900 p-5 rounded-2xl border border-slate-200 dark:border-brand-700 shadow-sm">
+                            <input type="text" required value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="اسم المشروع الجديد..." className="px-4 py-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-rose-500 font-bold text-sm flex-1" />
+                            <input type="text" value={newProjectDesc} onChange={e => setNewProjectDesc(e.target.value)} placeholder="الوصف (اختياري)" className="px-4 py-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-rose-500 font-bold text-sm flex-1" />
+                            <button type="submit" disabled={localLoading} className="bg-brand-800 text-white px-8 py-3 rounded-xl font-bold hover:bg-rose-600 transition flex items-center justify-center gap-2">
                                 {localLoading ? <RefreshCw size={18} className="animate-spin" /> : <Plus size={18} />} تأسيس
                             </button>
                         </form>
                     </div>
 
                     {loading ? (
-                        <div className="text-center py-20 text-slate-400 font-bold"><RefreshCw className="animate-spin mx-auto mb-4 text-rose-500" size={40}/> جاري تحميل المشاريع...</div>
+                        <div className="text-center py-20 text-slate-400 dark:text-brand-400 font-bold"><RefreshCw className="animate-spin mx-auto mb-4 text-rose-500" size={40}/> جاري تحميل المشاريع...</div>
                     ) : projectsList.length === 0 ? (
-                        <div className="text-center py-20 text-slate-400 font-bold bg-white rounded-2xl border border-slate-100 shadow-sm">لا توجد مشاريع مسجلة حالياً.</div>
+                        <div className="text-center py-20 text-slate-400 dark:text-brand-400 font-bold bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm">لا توجد مشاريع مسجلة حالياً.</div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {projectsList.map(p => (
-                                <div key={p.id} onClick={() => setActiveProject(p)} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-rose-300 transition-all cursor-pointer group relative">
-                                    <button onClick={(e) => handleDuplicateProject(e, p.id)} className="absolute top-6 left-6 p-2 rounded-lg bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-100 transition shadow-sm border border-slate-100" title="استنساخ المشروع بجميع وحداته"><Copy size={16} /></button>
+                                <div key={p.id} onClick={() => setActiveProject(p)} className="bg-white dark:bg-brand-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 hover:shadow-md hover:border-rose-300 transition-all cursor-pointer group relative">
+                                    <button onClick={(e) => handleDuplicateProject(e, p.id)} className="absolute top-6 left-6 p-2 rounded-lg bg-slate-50 dark:bg-brand-800 text-slate-400 dark:text-brand-400 hover:text-blue-600 hover:bg-blue-100 transition shadow-sm border border-slate-100 dark:border-brand-700" title="استنساخ المشروع بجميع وحداته"><Copy size={16} /></button>
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition"><Building size={24} /></div>
-                                        <span className="bg-slate-100 text-[#1a365d] px-3 py-1 rounded-full text-xs font-black mr-auto ml-10">{p.units_details?.length || 0} وحدة</span>
+                                        <span className="bg-slate-100 dark:bg-brand-800 text-brand-800 dark:text-brand-100 px-3 py-1 rounded-full text-xs font-black mr-auto ml-10">{p.units_details?.length || 0} وحدة</span>
                                     </div>
-                                    <h4 className="text-xl font-black text-[#1a365d] mb-1">{p.name}</h4>
-                                    <p className="text-xs text-slate-500 mb-4">{p.description || 'بدون وصف'}</p>
-                                    <p className="text-xs text-slate-400 font-bold flex items-center gap-1 group-hover:text-rose-500 transition">انقر لإدارة بطاقات الوحدات والفراغات <ChevronRight size={14}/></p>
+                                    <h4 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-1">{p.name}</h4>
+                                    <p className="text-xs text-slate-500 dark:text-brand-300 mb-4">{p.description || 'بدون وصف'}</p>
+                                    <p className="text-xs text-slate-400 dark:text-brand-400 font-bold flex items-center gap-1 group-hover:text-rose-500 transition">انقر لإدارة بطاقات الوحدات والفراغات <ChevronRight size={14}/></p>
                                 </div>
                             ))}
                         </div>
@@ -184,7 +184,7 @@ export default function ProjectsManage({ showToast }) {
             )}
 
             {activeProject && (
-                <div className="animate-fadeIn bg-slate-100 min-h-full pb-10 relative">
+                <div className="animate-fadeIn bg-slate-100 dark:bg-brand-800 min-h-full pb-10 relative">
                     <div className="bg-[#1a365d] p-6 text-white shadow-md relative z-10">
                         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                             <div className="flex items-center gap-4">
@@ -203,9 +203,9 @@ export default function ProjectsManage({ showToast }) {
                         {isEditingProjInfo && (
                             <form onSubmit={handleUpdateProjectInfo} className="mt-6 bg-white/10 p-5 rounded-2xl border border-white/20 animate-fadeIn">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                    <input required type="text" value={projInfoEdit.name} onChange={e => setProjInfoEdit({...projInfoEdit, name: e.target.value})} className="p-3 rounded-xl bg-white text-[#1a365d] font-bold outline-none" placeholder="اسم المشروع" />
-                                    <input type="text" value={projInfoEdit.description} onChange={e => setProjInfoEdit({...projInfoEdit, description: e.target.value})} className="p-3 rounded-xl bg-white text-[#1a365d] outline-none" placeholder="الوصف" />
-                                    <select value={projInfoEdit.status || 'نشط'} onChange={e => setProjInfoEdit({...projInfoEdit, status: e.target.value})} className="p-3 rounded-xl bg-white text-[#1a365d] font-bold outline-none">
+                                    <input required type="text" value={projInfoEdit.name} onChange={e => setProjInfoEdit({...projInfoEdit, name: e.target.value})} className="p-3 rounded-xl bg-white text-brand-800 font-bold outline-none" placeholder="اسم المشروع" />
+                                    <input type="text" value={projInfoEdit.description} onChange={e => setProjInfoEdit({...projInfoEdit, description: e.target.value})} className="p-3 rounded-xl bg-white text-brand-800 outline-none" placeholder="الوصف" />
+                                    <select value={projInfoEdit.status || 'نشط'} onChange={e => setProjInfoEdit({...projInfoEdit, status: e.target.value})} className="p-3 rounded-xl bg-white text-brand-800 font-bold outline-none">
                                         <option value="نشط">نشط</option><option value="مكتمل">مكتمل</option><option value="مغلق">مغلق</option>
                                     </select>
                                 </div>
@@ -215,31 +215,31 @@ export default function ProjectsManage({ showToast }) {
                     </div>
 
                     <div className="p-6 md:p-8">
-                        <form onSubmit={handleAddUnitCard} className="bg-white p-4 md:p-5 rounded-[1.5rem] border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 mb-8 items-center max-w-3xl mx-auto">
-                            <span className="font-bold text-[#1a365d] whitespace-nowrap hidden md:block">إضافة بطاقة وحدة يدوياً:</span>
-                            <div className="flex-1 w-full"><input type="text" required value={newUnitCode} onChange={e => setNewUnitCode(e.target.value)} placeholder="مثال: VILLA-01" className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-rose-500 font-black text-center sm:text-right bg-slate-50 focus:bg-white transition" /></div>
+                        <form onSubmit={handleAddUnitCard} className="bg-white dark:bg-brand-900 p-4 md:p-5 rounded-[1.5rem] border border-slate-200 dark:border-brand-700 shadow-sm flex flex-col sm:flex-row gap-3 mb-8 items-center max-w-3xl mx-auto">
+                            <span className="font-bold text-brand-800 dark:text-brand-100 whitespace-nowrap hidden md:block">إضافة بطاقة وحدة يدوياً:</span>
+                            <div className="flex-1 w-full"><input type="text" required value={newUnitCode} onChange={e => setNewUnitCode(e.target.value)} placeholder="مثال: VILLA-01" className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-rose-500 font-black text-center sm:text-right bg-slate-50 focus:bg-white transition" /></div>
                             <button type="submit" disabled={localLoading} className="w-full sm:w-auto bg-rose-600 text-white px-8 py-3 rounded-xl font-black hover:bg-rose-700 transition flex items-center justify-center gap-2 shadow-lg">
                                 {localLoading ? <RefreshCw size={18} className="animate-spin" /> : <LayoutGrid size={18} />} إضافة البطاقة
                             </button>
                         </form>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                            {(!activeProject.units_details || activeProject.units_details.length === 0) && <div className="col-span-full text-center py-10 text-slate-400 font-bold bg-white rounded-3xl border border-slate-200">لم يتم إنشاء أي بطاقات وحدات لهذا المشروع.</div>}
+                            {(!activeProject.units_details || activeProject.units_details.length === 0) && <div className="col-span-full text-center py-10 text-slate-400 dark:text-brand-400 font-bold bg-white dark:bg-brand-900 rounded-3xl border border-slate-200 dark:border-brand-700">لم يتم إنشاء أي بطاقات وحدات لهذا المشروع.</div>}
                             {(activeProject.units_details || []).map(unit => (
-                                <div key={unit.id} className="bg-white p-5 rounded-[1.5rem] shadow-sm border border-slate-200 flex flex-col hover:shadow-md transition group relative overflow-hidden">
+                                <div key={unit.id} className="bg-white dark:bg-brand-900 p-5 rounded-[1.5rem] shadow-sm border border-slate-200 dark:border-brand-700 flex flex-col hover:shadow-md transition group relative overflow-hidden">
                                     
                                     {unit.owner_name && <div className="absolute top-0 right-0 w-full h-1 bg-emerald-500"></div>}
 
-                                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                                        <h4 className="text-lg font-black text-[#1a365d] flex items-center gap-2">
+                                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 dark:border-brand-700 pb-3">
+                                        <h4 className="text-lg font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
                                             <div className={`w-3 h-3 rounded-full ${unit.owner_name ? 'bg-emerald-500' : 'bg-rose-500'}`}></div> {unit.unit_code}
                                         </h4>
                                         <div className="flex items-center gap-1">
-                                            <button onClick={() => setQrModalData(unit)} className="text-slate-400 hover:text-[#1a365d] hover:bg-slate-100 p-2 rounded-lg transition" title="عرض وطباعة باركود الصيانة">
+                                            <button onClick={() => setQrModalData(unit)} className="text-slate-400 dark:text-brand-400 hover:text-brand-800 hover:bg-slate-100 dark:hover:bg-brand-800 p-2 rounded-lg transition" title="عرض وطباعة باركود الصيانة">
                                                 <QrIcon size={16} />
                                             </button>
-                                            
-                                            <button onClick={() => copyUnitData(unit, activeProject.name)} className="text-slate-400 hover:text-[#1a365d] hover:bg-slate-100 p-2 rounded-lg transition" title="نسخ بيانات الوحدة">
+
+                                            <button onClick={() => copyUnitData(unit, activeProject.name)} className="text-slate-400 dark:text-brand-400 hover:text-brand-800 hover:bg-slate-100 dark:hover:bg-brand-800 p-2 rounded-lg transition" title="نسخ بيانات الوحدة">
                                                 {copiedId === `unit_${unit.id}` ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
                                             </button>
                                             <button onClick={() => handleDuplicateUnit(unit)} className="text-blue-500 bg-blue-50 hover:bg-blue-600 hover:text-white p-2 rounded-lg transition shadow-sm" title="استنساخ الوحدة بفراغاتها"><Copy size={16} /></button>
@@ -255,20 +255,20 @@ export default function ProjectsManage({ showToast }) {
                                     )}
 
                                     <div className="flex-1 mb-6 min-h-[80px]">
-                                        {(!unit.spaces || unit.spaces.length === 0) && <p className="text-xs text-slate-400 font-medium italic text-center mt-6">لا يوجد فراغات، قم بإضافتها بالأسفل.</p>}
+                                        {(!unit.spaces || unit.spaces.length === 0) && <p className="text-xs text-slate-400 dark:text-brand-400 font-medium italic text-center mt-6">لا يوجد فراغات، قم بإضافتها بالأسفل.</p>}
                                         <div className="flex flex-wrap gap-2">
                                             {(unit.spaces || []).map((space, idx) => (
-                                                <div key={idx} className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg hover:border-slate-300 transition animate-fadeIn">
-                                                    <span className="text-xs font-bold text-slate-700">{space}</span>
-                                                    <button onClick={() => handleRemoveSpaceFromUnit(unit, idx)} className="text-slate-300 hover:text-red-500 ml-1"><Trash2 size={12}/></button>
+                                                <div key={idx} className="flex items-center gap-1 bg-slate-50 dark:bg-brand-800/40 border border-slate-200 dark:border-brand-700 px-3 py-1.5 rounded-lg hover:border-slate-300 dark:hover:border-brand-600 transition animate-fadeIn">
+                                                    <span className="text-xs font-bold text-slate-700 dark:text-brand-300">{space}</span>
+                                                    <button onClick={() => handleRemoveSpaceFromUnit(unit, idx)} className="text-slate-300 dark:text-brand-500 hover:text-red-500 ml-1"><Trash2 size={12}/></button>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
 
-                                    <div className="flex gap-2 mt-auto bg-slate-50 p-2 rounded-xl border border-slate-100 focus-within:border-blue-300 transition-colors">
-                                        <input type="text" value={spaceInputs[unit.id] || ""} onChange={e => setSpaceInputs({...spaceInputs, [unit.id]: e.target.value})} onKeyPress={e => {if(e.key === 'Enter') { e.preventDefault(); handleAddSpaceToUnit(unit); }}} placeholder="اكتب اسم الفراغ (صالة...)" className="flex-1 px-3 py-2 rounded-lg border-none bg-transparent text-xs outline-none font-bold text-slate-700 placeholder-slate-400" />
-                                        <button type="button" onClick={(e) => { e.preventDefault(); handleAddSpaceToUnit(unit); }} className="bg-[#1a365d] text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-800 transition shadow-sm">إضافة</button>
+                                    <div className="flex gap-2 mt-auto bg-slate-50 dark:bg-brand-800/40 p-2 rounded-xl border border-slate-100 dark:border-brand-700 focus-within:border-blue-300 transition-colors">
+                                        <input type="text" value={spaceInputs[unit.id] || ""} onChange={e => setSpaceInputs({...spaceInputs, [unit.id]: e.target.value})} onKeyPress={e => {if(e.key === 'Enter') { e.preventDefault(); handleAddSpaceToUnit(unit); }}} placeholder="اكتب اسم الفراغ (صالة...)" className="flex-1 px-3 py-2 rounded-lg border-none bg-transparent text-xs outline-none font-bold text-slate-700 dark:text-brand-300 placeholder-slate-400 dark:placeholder-brand-500" />
+                                        <button type="button" onClick={(e) => { e.preventDefault(); handleAddSpaceToUnit(unit); }} className="bg-brand-800 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-800 transition shadow-sm">إضافة</button>
                                     </div>
                                 </div>
                             ))}

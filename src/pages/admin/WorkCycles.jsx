@@ -72,25 +72,25 @@ export default function WorkCycles() {
             </div>
 
             {/* بحث */}
-            <div className="bg-white rounded-2xl shadow border border-slate-100 p-3 flex items-center gap-3">
+            <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 p-3 flex items-center gap-3">
                 <div className="relative flex-1">
-                    <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                    <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-400"/>
                     <input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث..."
-                        className="w-full bg-slate-50 border border-slate-200 pr-9 pl-3 py-2 rounded-xl outline-none focus:border-blue-400 text-sm"/>
+                        className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 pr-9 pl-3 py-2 rounded-xl outline-none focus:border-blue-400 text-sm dark:text-brand-50 dark:placeholder-brand-500"/>
                 </div>
-                <span className="text-xs font-bold text-slate-400 shrink-0">{filtered.length} مشروع</span>
+                <span className="text-xs font-bold text-slate-400 dark:text-brand-400 shrink-0">{filtered.length} مشروع</span>
             </div>
 
             {/* الحالات */}
             {loading ? (
-                <div className="bg-white rounded-2xl p-10 text-center text-slate-400 text-sm">
+                <div className="bg-white dark:bg-brand-900 rounded-2xl p-10 text-center text-slate-400 dark:text-brand-400 text-sm">
                     <RefreshCw className="animate-spin inline ml-2 text-blue-500" size={18}/>تحميل...
                 </div>
             ) : error ? (
-                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center text-red-700">
+                <div className="bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-500/30 rounded-2xl p-6 text-center text-red-700 dark:text-red-300">
                     <AlertTriangle size={28} className="mx-auto mb-2"/>
                     <p className="font-bold text-sm">{error}</p>
-                    <button onClick={load} className="mt-3 bg-red-100 px-4 py-2 rounded-xl text-sm font-bold">إعادة المحاولة</button>
+                    <button onClick={load} className="mt-3 bg-red-100 dark:bg-red-500/20 px-4 py-2 rounded-xl text-sm font-bold">إعادة المحاولة</button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -108,7 +108,7 @@ function Card({ wc, onOpen }) {
     const custom = wc['le_workflow-type-entity-1_custom_data'] || {};
 
     return (
-        <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden hover:shadow-md transition cursor-pointer" onClick={onOpen}>
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 overflow-hidden hover:shadow-md transition cursor-pointer" onClick={onOpen}>
             {/* شريط العنوان */}
             <div className="bg-gradient-to-l from-[#1a365d] to-[#152d55] px-5 py-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
@@ -132,9 +132,9 @@ function Card({ wc, onOpen }) {
 
                 {/* الميزانية */}
                 {Number(wc.budget) > 0 && (
-                    <div className="bg-slate-50 rounded-xl px-4 py-2.5 flex items-center justify-between">
-                        <span className="text-xs text-slate-400 font-bold">الميزانية</span>
-                        <span className="text-base font-black text-[#1a365d]">
+                    <div className="bg-slate-50 dark:bg-brand-800/40 rounded-xl px-4 py-2.5 flex items-center justify-between">
+                        <span className="text-xs text-slate-400 dark:text-brand-400 font-bold">الميزانية</span>
+                        <span className="text-base font-black text-brand-800 dark:text-brand-100">
                             {fmt(wc.budget)} <span className="text-xs text-slate-400 font-normal">{wc.budget_currency || 'ريال'}</span>
                         </span>
                     </div>
@@ -155,7 +155,7 @@ function Row({ icon: Icon, label, value, highlight }) {
                 <Icon size={12}/>
                 <span className="text-xs">{label}</span>
             </div>
-            <span className={`text-xs font-bold ${highlight ? 'text-amber-700' : 'text-slate-700'}`}>{value}</span>
+            <span className={`text-xs font-bold ${highlight ? 'text-amber-700 dark:text-amber-300' : 'text-slate-700 dark:text-brand-300'}`}>{value}</span>
         </div>
     );
 }
@@ -211,7 +211,7 @@ function Detail({ wc, onBack }) {
         <div className="space-y-4 p-4 md:p-6">
             {/* رجوع */}
             <div className="flex items-center justify-between">
-                <button onClick={onBack} className="flex items-center gap-2 text-[#1a365d] font-bold hover:text-blue-600 transition text-sm">
+                <button onClick={onBack} className="flex items-center gap-2 text-brand-800 dark:text-brand-300 font-bold hover:text-blue-600 transition text-sm">
                     <ChevronLeft size={18}/> رجوع للمشاريع
                 </button>
                 <a href={`${DAFTRA}/v2/owner/entity/workflow/le_workflow-type-entity-1/${wc.id}/edit`}
@@ -374,15 +374,15 @@ function Sec({ title, icon: Icon, color='blue', open, onToggle, children }) {
     const clr = { blue:'text-blue-600', teal:'text-teal-600', emerald:'text-emerald-600',
         purple:'text-purple-600', indigo:'text-indigo-600', amber:'text-amber-600', red:'text-red-600' };
     return (
-        <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
-            <button className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50/60 transition" onClick={onToggle}>
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 overflow-hidden">
+            <button className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50/60 dark:hover:bg-brand-800/40 transition" onClick={onToggle}>
                 <div className="flex items-center gap-2.5">
                     <Icon size={17} className={clr[color]||'text-slate-500'}/>
-                    <span className="font-black text-[#1a365d] text-sm">{title}</span>
+                    <span className="font-black text-brand-800 dark:text-brand-100 text-sm">{title}</span>
                 </div>
                 {open ? <ChevronUp size={15} className="text-slate-400"/> : <ChevronDown size={15} className="text-slate-400"/>}
             </button>
-            {open && <div className="border-t border-slate-100 px-5 py-4">{children}</div>}
+            {open && <div className="border-t border-slate-100 dark:border-brand-700 px-5 py-4">{children}</div>}
         </div>
     );
 }
@@ -390,19 +390,19 @@ function Sec({ title, icon: Icon, color='blue', open, onToggle, children }) {
 function IRow({ icon: Icon, label, value, valueCls }) {
     if (value === null || value === undefined || value === '') return null;
     return (
-        <div className="flex items-start justify-between py-2.5 border-b border-slate-50 last:border-0 gap-4">
-            <div className="flex items-center gap-2 text-slate-400 shrink-0">
+        <div className="flex items-start justify-between py-2.5 border-b border-slate-50 dark:border-brand-700/40 last:border-0 gap-4">
+            <div className="flex items-center gap-2 text-slate-400 dark:text-brand-400 shrink-0">
                 {Icon && <Icon size={12}/>}
-                <span className="text-xs text-slate-500">{label}</span>
+                <span className="text-xs text-slate-500 dark:text-brand-400">{label}</span>
             </div>
-            <span className={valueCls || 'font-bold text-[#1a365d] text-sm text-left'}>{value}</span>
+            <span className={valueCls || 'font-bold text-brand-800 dark:text-brand-100 text-sm text-left'}>{value}</span>
         </div>
     );
 }
 
 function FStat({ label, value, icon: Icon, color }) {
-    const c = { emerald:'bg-emerald-50 text-emerald-700 border-emerald-200', purple:'bg-purple-50 text-purple-700 border-purple-200',
-        red:'bg-red-50 text-red-700 border-red-200', blue:'bg-blue-50 text-blue-700 border-blue-200' };
+    const c = { emerald:'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30', purple:'bg-purple-50 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/30',
+        red:'bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30', blue:'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30' };
     return (
         <div className={`border rounded-2xl p-3.5 ${c[color]||c.blue}`}>
             <Icon size={16} className="mb-1.5 opacity-70"/>
@@ -415,19 +415,19 @@ function FStat({ label, value, icon: Icon, color }) {
 function BudgetBar({ f }) {
     const over = f.budget_used_pct > 100;
     return (
-        <div className={`rounded-2xl p-4 border ${over ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
+        <div className={`rounded-2xl p-4 border ${over ? 'bg-red-50 dark:bg-red-500/15 border-red-200 dark:border-red-500/30' : 'bg-slate-50 dark:bg-brand-800/40 border-slate-100 dark:border-brand-700'}`}>
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                     {over ? <AlertTriangle size={14} className="text-red-600"/> : <CheckCircle2 size={14} className="text-emerald-600"/>}
-                    <span className={`text-sm font-black ${over ? 'text-red-900' : 'text-[#1a365d]'}`}>استهلاك الميزانية</span>
+                    <span className={`text-sm font-black ${over ? 'text-red-900 dark:text-red-300' : 'text-brand-800 dark:text-brand-100'}`}>استهلاك الميزانية</span>
                 </div>
                 <span className={`text-xl font-black ${over ? 'text-red-700' : 'text-emerald-700'}`}>{f.budget_used_pct}%</span>
             </div>
-            <div className="h-2.5 bg-white rounded-full overflow-hidden border border-slate-200 mb-2">
+            <div className="h-2.5 bg-white dark:bg-brand-800 rounded-full overflow-hidden border border-slate-200 dark:border-brand-700 mb-2">
                 <div className={`h-full ${over ? 'bg-red-500' : 'bg-emerald-500'}`} style={{width:`${Math.min(100,f.budget_used_pct)}%`}}/>
             </div>
             <div className="flex justify-between text-xs font-bold">
-                <span className="text-slate-500">استُهلك: {fmt(f.total_cost)} ريال</span>
+                <span className="text-slate-500 dark:text-brand-400">استُهلك: {fmt(f.total_cost)} ريال</span>
                 <span className={f.budget_left >= 0 ? 'text-emerald-600' : 'text-red-600'}>
                     {f.budget_left >= 0 ? 'متبقي' : 'تجاوز'}: {fmt(Math.abs(f.budget_left))} ريال
                 </span>
@@ -438,15 +438,15 @@ function BudgetBar({ f }) {
 
 function TTable({ rows, cols }) {
     return (
-        <div className="overflow-x-auto rounded-xl border border-slate-100">
+        <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-brand-700">
             <table className="w-full text-right text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-400 border-b border-slate-100">
+                <thead className="bg-slate-50 dark:bg-brand-800/60 text-xs text-slate-400 dark:text-brand-400 border-b border-slate-100 dark:border-brand-700">
                     <tr>{cols.map(c => <th key={c.key} className="px-3 py-2.5 font-bold">{c.label}</th>)}</tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-slate-50 dark:divide-brand-700">
                     {rows.map((row, i) => (
-                        <tr key={i} className="hover:bg-slate-50/60">
-                            {cols.map(c => <td key={c.key} className="px-3 py-2.5 text-slate-700">{c.fmt ? c.fmt(row[c.key]) : (row[c.key]||'—')}</td>)}
+                        <tr key={i} className="hover:bg-slate-50/60 dark:hover:bg-brand-800">
+                            {cols.map(c => <td key={c.key} className="px-3 py-2.5 text-slate-700 dark:text-brand-300">{c.fmt ? c.fmt(row[c.key]) : (row[c.key]||'—')}</td>)}
                         </tr>
                     ))}
                 </tbody>

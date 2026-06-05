@@ -70,14 +70,14 @@ export default function Home() {
         />
 
         <div className="bg-slate-900/80 backdrop-blur-xl rounded-[3rem] border border-white/10 shadow-2xl p-8 md:p-12 max-w-4xl w-full text-center relative overflow-hidden">
-          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-[#c5a059]/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-gold-500/20 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="inline-block px-4 py-1.5 rounded-full bg-[#c5a059]/20 border border-[#c5a059]/40 text-[#c5a059] font-bold text-xs md:text-sm mb-4 animate-pulse tracking-wide">
+          <div className="inline-block px-4 py-1.5 rounded-full bg-gold-500/20 border border-gold-500/40 text-gold-500 font-bold text-xs md:text-sm mb-4 animate-pulse tracking-wide">
             فرصة استثمارية وسكنية حصرية
           </div>
 
           <h1 className="text-2xl md:text-4xl font-black text-white mb-4 leading-tight">
-            تحفة معمارية.. <span className="text-[#c5a059] text-glow">بـ 7 وحدات فقط</span>
+            تحفة معمارية.. <span className="text-gold-500 text-glow">بـ 7 وحدات فقط</span>
           </h1>
 
           <p className="text-slate-300 text-sm md:text-base mb-8 max-w-2xl mx-auto leading-relaxed font-light">
@@ -89,26 +89,26 @@ export default function Home() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 divide-white/5 mb-10 md:divide-x md:divide-x-reverse">
             <div className="px-2">
               <span className="block text-3xl md:text-4xl font-black text-white mb-1">07</span>
-              <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">وحدات سكنية</p>
+              <p className="text-gold-500 font-bold uppercase text-[10px] md:text-xs tracking-widest">وحدات سكنية</p>
             </div>
             <div className="px-2">
               <span className="block text-3xl md:text-4xl font-black text-white mb-1">+200</span>
-              <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">م² مساحة</p>
+              <p className="text-gold-500 font-bold uppercase text-[10px] md:text-xs tracking-widest">م² مساحة</p>
             </div>
             <div className="px-2">
               <span className="block text-3xl md:text-4xl font-black text-white mb-1">10</span>
-              <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">سنوات ضمان</p>
+              <p className="text-gold-500 font-bold uppercase text-[10px] md:text-xs tracking-widest">سنوات ضمان</p>
             </div>
             <div className="px-2 border-none">
               <span className="block text-3xl md:text-4xl font-black text-white mb-1">100%</span>
-              <p className="text-[#c5a059] font-bold uppercase text-[10px] md:text-xs tracking-widest">تملك حر</p>
+              <p className="text-gold-500 font-bold uppercase text-[10px] md:text-xs tracking-widest">تملك حر</p>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button
               onClick={() => navigate("/contact")}
-              className="bg-[#c5a059] text-white px-8 py-3 rounded-2xl font-bold text-lg hover:bg-yellow-600 transition shadow-lg shadow-[#c5a059]/20 transform hover:-translate-y-1"
+              className="bg-gold-500 text-white px-8 py-3 rounded-2xl font-bold text-lg hover:bg-yellow-600 transition shadow-lg shadow-gold-500/20 transform hover:-translate-y-1"
             >
               احجز معاينتك اليوم
             </button>
@@ -124,28 +124,28 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ المميزات ══════════════════════════ */}
-    <div className="bg-white py-24">
+    <div className="bg-white dark:bg-brand-900 py-24">
       <div className="container mx-auto px-6 max-w-6xl">
         <div className="text-center mb-16">
-          <p className="text-[#c5a059] font-black tracking-[0.3em] text-xs uppercase mb-3">لماذا سماك؟</p>
-          <h2 className="text-3xl md:text-4xl font-black text-[#1a365d]">مسكن يفوق التوقعات</h2>
+          <p className="text-gold-500 font-black tracking-[0.3em] text-xs uppercase mb-3">لماذا سماك؟</p>
+          <h2 className="text-3xl md:text-4xl font-black text-brand-800 dark:text-brand-100">مسكن يفوق التوقعات</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {features.map((f, i) => {
             const Icon = f.icon;
             const colorMap = {
-              blue:  { bg: 'bg-blue-50',  text: 'text-[#1a365d]',  hover: 'group-hover:bg-[#1a365d] group-hover:text-white' },
+              blue:  { bg: 'bg-blue-50',  text: 'text-brand-800',  hover: 'group-hover:bg-brand-800 group-hover:text-white' },
               red:   { bg: 'bg-red-50',   text: 'text-red-600',    hover: 'group-hover:bg-red-600 group-hover:text-white'   },
-              amber: { bg: 'bg-amber-50', text: 'text-[#c5a059]',  hover: 'group-hover:bg-[#c5a059] group-hover:text-white' },
+              amber: { bg: 'bg-amber-50', text: 'text-gold-500',   hover: 'group-hover:bg-gold-500 group-hover:text-white' },
             };
             const c = colorMap[f.color];
             return (
-              <div key={i} className="group bg-slate-50 hover:bg-white p-8 rounded-[2rem] border border-transparent hover:border-[#c5a059]/20 hover:shadow-xl transition-all duration-300 cursor-default text-right">
+              <div key={i} className="group bg-slate-50 dark:bg-brand-900/40 hover:bg-white dark:hover:bg-brand-800 p-8 rounded-[2rem] border border-transparent hover:border-gold-500/20 hover:shadow-xl transition-all duration-300 cursor-default text-right">
                 <div className={`w-14 h-14 ${c.bg} ${c.text} rounded-2xl flex items-center justify-center mb-6 transition-colors duration-300 ${c.hover}`}>
                   <Icon size={28} />
                 </div>
-                <h3 className="text-xl font-black text-[#1a365d] mb-3">{f.title}</h3>
-                <p className="text-slate-500 leading-loose text-sm">{f.desc}</p>
+                <h3 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-3">{f.title}</h3>
+                <p className="text-slate-500 dark:text-brand-300 leading-loose text-sm">{f.desc}</p>
               </div>
             );
           })}
@@ -157,7 +157,7 @@ export default function Home() {
     <div className="bg-[#0a0f1e] py-24">
       <div className="container mx-auto px-6 max-w-6xl">
         <div className="text-center mb-16">
-          <p className="text-[#c5a059] font-black tracking-[0.3em] text-xs uppercase mb-3">الموقع الاستراتيجي</p>
+          <p className="text-gold-500 font-black tracking-[0.3em] text-xs uppercase mb-3">الموقع الاستراتيجي</p>
           <h2 className="text-3xl md:text-4xl font-black text-white">في قلب مكة المكرمة</h2>
           <p className="text-slate-400 mt-4 max-w-xl mx-auto text-sm leading-relaxed">
             حي البوابة — على مقربة من كل ما يهمك، ومرفقاتك الأساسية بالقرب منك.
@@ -168,8 +168,8 @@ export default function Home() {
             const Icon = l.icon;
             return (
               <div key={i} className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-6 text-center transition-all group">
-                <div className="w-12 h-12 bg-[#c5a059]/10 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-[#c5a059]/20 transition">
-                  <Icon size={22} className="text-[#c5a059]" />
+                <div className="w-12 h-12 bg-gold-500/10 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-gold-500/20 transition">
+                  <Icon size={22} className="text-gold-500" />
                 </div>
                 <p className="text-white font-black text-lg">{l.label}</p>
                 <p className="text-slate-400 text-xs mt-1">{l.sub}</p>
@@ -180,7 +180,7 @@ export default function Home() {
         <div className="text-center">
           <button
             onClick={() => navigate('/projects')}
-            className="inline-flex items-center gap-2 text-[#c5a059] font-bold text-sm hover:underline"
+            className="inline-flex items-center gap-2 text-gold-500 font-bold text-sm hover:underline"
           >
             شاهد الموقع على الخريطة <ArrowLeft size={16} />
           </button>
@@ -189,16 +189,16 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ تيزر الوحدات ══════════════════════════ */}
-    <div className="bg-slate-50 py-24">
+    <div className="bg-slate-50 dark:bg-brand-900/40 py-24">
       <div className="container mx-auto px-6 max-w-6xl">
         <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
           <div>
-            <p className="text-[#c5a059] font-black tracking-[0.3em] text-xs uppercase mb-3">مشاريعنا</p>
-            <h2 className="text-3xl md:text-4xl font-black text-[#1a365d]">سماك — البوابة 1</h2>
+            <p className="text-gold-500 font-black tracking-[0.3em] text-xs uppercase mb-3">مشاريعنا</p>
+            <h2 className="text-3xl md:text-4xl font-black text-brand-800 dark:text-brand-100">سماك — البوابة 1</h2>
           </div>
           <button
             onClick={() => navigate('/projects')}
-            className="flex items-center gap-2 text-[#1a365d] font-bold text-sm border-2 border-[#1a365d]/20 px-5 py-2.5 rounded-full hover:border-[#c5a059] hover:text-[#c5a059] transition"
+            className="flex items-center gap-2 text-brand-800 dark:text-brand-300 font-bold text-sm border-2 border-brand-800/20 dark:border-brand-700 px-5 py-2.5 rounded-full hover:border-gold-500 hover:text-gold-500 transition"
           >
             جميع الوحدات <ArrowLeft size={16} />
           </button>
@@ -208,18 +208,18 @@ export default function Home() {
             <div
               key={u.id}
               onClick={() => navigate('/projects')}
-              className="bg-white rounded-[2rem] p-7 border border-slate-100 hover:border-[#c5a059]/30 hover:shadow-xl transition-all duration-300 cursor-pointer group"
+              className="bg-white dark:bg-brand-900 rounded-[2rem] p-7 border border-slate-100 dark:border-brand-700 hover:border-gold-500/30 hover:shadow-xl transition-all duration-300 cursor-pointer group"
             >
               {u.special && (
-                <span className="inline-block bg-[#c5a059]/10 text-[#c5a059] text-xs font-black px-3 py-1 rounded-full mb-4">
+                <span className="inline-block bg-gold-500/10 text-gold-500 text-xs font-black px-3 py-1 rounded-full mb-4">
                   مميزة
                 </span>
               )}
-              <h3 className="text-2xl font-black text-[#1a365d] mb-1">{u.id}</h3>
-              <p className="text-slate-400 text-sm mb-4">{u.floor} — {u.badge}</p>
+              <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100 mb-1">{u.id}</h3>
+              <p className="text-slate-400 dark:text-brand-400 text-sm mb-4">{u.floor} — {u.badge}</p>
               <div className="flex items-center justify-between">
-                <span className="text-[#c5a059] font-black text-lg">{u.price} <span className="text-sm font-bold">ريال</span></span>
-                <span className="text-xs text-slate-400 group-hover:text-[#c5a059] transition flex items-center gap-1 font-bold">
+                <span className="text-gold-500 font-black text-lg">{u.price} <span className="text-sm font-bold">ريال</span></span>
+                <span className="text-xs text-slate-400 dark:text-brand-400 group-hover:text-gold-500 transition flex items-center gap-1 font-bold">
                   التفاصيل <ArrowLeft size={12} />
                 </span>
               </div>
@@ -229,7 +229,7 @@ export default function Home() {
         <div className="mt-10 text-center">
           <button
             onClick={() => navigate('/projects')}
-            className="bg-[#1a365d] text-white px-10 py-4 rounded-2xl font-bold text-base hover:bg-[#c5a059] transition-all shadow-lg hover:-translate-y-0.5 inline-flex items-center gap-2"
+            className="bg-brand-800 dark:bg-brand-800 text-white px-10 py-4 rounded-2xl font-bold text-base hover:bg-gold-500 transition-all shadow-lg hover:-translate-y-0.5 inline-flex items-center gap-2"
           >
             استعرض جميع الوحدات والمخططات <ArrowLeft size={18} />
           </button>
@@ -240,18 +240,18 @@ export default function Home() {
     {/* ══════════════════════════ CTA نهائي ══════════════════════════ */}
     <div className="relative py-28 bg-[#0a0f1e] overflow-hidden">
       {/* توهج ذهبي خلفي */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-[#c5a059]/8 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-gold-500/8 rounded-full blur-[120px] pointer-events-none" />
       {/* خطوط زخرفية */}
       <div className="absolute inset-0 opacity-[0.03]"
         style={{ backgroundImage: 'repeating-linear-gradient(90deg, #c5a059 0px, #c5a059 1px, transparent 1px, transparent 80px), repeating-linear-gradient(0deg, #c5a059 0px, #c5a059 1px, transparent 1px, transparent 80px)' }}
       />
       <div className="container mx-auto px-6 relative z-10 text-center max-w-3xl">
-        <div className="inline-flex items-center gap-2 bg-[#c5a059]/20 border border-[#c5a059]/40 text-[#c5a059] font-bold text-xs px-4 py-1.5 rounded-full mb-6">
+        <div className="inline-flex items-center gap-2 bg-gold-500/20 border border-gold-500/40 text-gold-500 font-bold text-xs px-4 py-1.5 rounded-full mb-6">
           <CheckCircle2 size={14} /> فرصة محدودة — 7 وحدات فقط
         </div>
         <h2 className="text-3xl md:text-5xl font-black text-white mb-6 leading-tight">
           هل أنت مستعد لامتلاك<br />
-          <span className="text-[#c5a059]">منزل أحلامك؟</span>
+          <span className="text-gold-500">منزل أحلامك؟</span>
         </h2>
         <p className="text-slate-300 text-base mb-10 leading-relaxed max-w-xl mx-auto">
           تواصل معنا اليوم واحصل على استشارة مجانية من فريق مبيعاتنا المتخصص.

@@ -224,9 +224,9 @@ export default function LetterGenerator() {
 
   if (loadingAuth) {
     return (
-      <div className="w-full h-64 flex flex-col items-center justify-center bg-white rounded-[2rem] shadow-sm font-cairo">
-        <Loader2 className="animate-spin text-[#c5a059] mb-4" size={48} />
-        <p className="font-bold text-lg text-[#1a365d]">جاري تجهيز صانع الخطابات...</p>
+      <div className="w-full h-64 flex flex-col items-center justify-center bg-white dark:bg-brand-900 rounded-[2rem] shadow-sm font-cairo">
+        <Loader2 className="animate-spin text-gold-500 mb-4" size={48} />
+        <p className="font-bold text-lg text-brand-800 dark:text-brand-100">جاري تجهيز صانع الخطابات...</p>
       </div>
     );
   }
@@ -241,7 +241,7 @@ export default function LetterGenerator() {
       {/* ========================================================= */}
       {/* 1. نسخة العرض على الشاشة (الداشبورد) */}
       {/* ========================================================= */}
-      <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px]">
+      <div className="w-full flex flex-col md:flex-row gap-6 font-cairo mb-10 animate-fadeIn min-h-[800px] bg-transparent">
         
         {/* اللوحة الجانبية (أدوات التحكم) */}
         <div className="w-full md:w-[350px] bg-gradient-to-b from-[#112240] to-[#0a192f] text-white flex flex-col rounded-[2rem] shadow-2xl overflow-hidden border border-white/5">
@@ -347,7 +347,7 @@ export default function LetterGenerator() {
         </div>
 
         {/* 📄 مساحة عرض الورقة الفخمة على الشاشة */}
-        <div className="flex-1 bg-gradient-to-br from-slate-200 to-slate-300 rounded-[2rem] overflow-y-auto p-4 md:p-10 flex justify-center items-start shadow-inner border border-slate-300 relative">
+        <div className="flex-1 bg-gradient-to-br from-slate-200 to-slate-300 dark:from-brand-900 dark:to-brand-950 rounded-[2rem] overflow-y-auto p-4 md:p-10 flex justify-center items-start shadow-inner border border-slate-300 dark:border-brand-700 relative">
           <div className="a4-page bg-white text-black shadow-[0_20px_50px_rgba(0,0,0,0.15)] relative overflow-hidden flex flex-col transition-all duration-500 ring-1 ring-slate-900/5" style={{ width: '210mm', minHeight: '297mm', padding: '0', margin: '0' }}>
             
             {/* 🌟 Header الفخم */}

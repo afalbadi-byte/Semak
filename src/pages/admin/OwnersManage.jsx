@@ -115,11 +115,11 @@ export default function OwnersManage({ showToast }) {
     };
 
     return (
-        <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden mb-12 p-6 md:p-8 animate-fadeIn">
+        <div className="bg-white dark:bg-brand-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-brand-700 overflow-hidden mb-12 p-6 md:p-8 animate-fadeIn">
             
             {/* --- الهيدر --- */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-100 pb-6 gap-4">
-                <h3 className="text-2xl font-black text-[#1a365d] flex items-center gap-3">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-100 dark:border-brand-700 pb-6 gap-4">
+                <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100 flex items-center gap-3">
                     <UserCheck className="text-emerald-600" size={28}/> سجل ملاك الوحدات
                 </h3>
                 <button onClick={() => { setShowAddOwner(!showAddOwner); setEditingOwner(null); }} className="bg-emerald-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center gap-2">
@@ -133,13 +133,13 @@ export default function OwnersManage({ showToast }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                         <div>
                             <label className="text-xs font-bold text-emerald-800 block mb-2">اختر المشروع أولاً</label>
-                            <select value={newOwner.project_id} onChange={(e) => setNewOwner({...newOwner, project_id: e.target.value, unit_code: ""})} className="w-full p-3 rounded-xl border border-emerald-200 outline-none focus:border-emerald-500 bg-white">
+                            <select value={newOwner.project_id} onChange={(e) => setNewOwner({...newOwner, project_id: e.target.value, unit_code: ""})} className="w-full p-3 rounded-xl border border-emerald-200 outline-none focus:border-emerald-500 bg-white dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50">
                                 {projectsData.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="text-xs font-bold text-emerald-800 block mb-2">اختر الوحدة (المتاحة)</label>
-                            <select required value={newOwner.unit_code} onChange={(e) => setNewOwner({...newOwner, unit_code: e.target.value})} className="w-full p-3 rounded-xl border border-emerald-200 outline-none focus:border-emerald-500 font-bold bg-white">
+                            <select required value={newOwner.unit_code} onChange={(e) => setNewOwner({...newOwner, unit_code: e.target.value})} className="w-full p-3 rounded-xl border border-emerald-200 outline-none focus:border-emerald-500 font-bold bg-white dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50">
                                 <option value="" disabled>-- حدد الوحدة من هنا --</option>
                                 {projectsData.find(p => p.id.toString() === newOwner.project_id.toString())?.units.map(u => (
                                     <option key={u} value={u}>{u}</option>
@@ -149,9 +149,9 @@ export default function OwnersManage({ showToast }) {
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-                        <div><label className="text-xs font-bold text-slate-600 block mb-2">اسم المالك (رب الأسرة)</label><input required type="text" value={newOwner.name} onChange={(e) => setNewOwner({...newOwner, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500" placeholder="الاسم الرباعي" /></div>
-                        <div><label className="text-xs font-bold text-slate-600 block mb-2">رقم الجوال</label><input required type="tel" value={newOwner.phone} onChange={(e) => setNewOwner({...newOwner, phone: e.target.value})} dir="ltr" placeholder="05XXXXXXXX" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500 text-left" /></div>
-                        <div><label className="text-xs font-bold text-slate-600 block mb-2">البريد الإلكتروني (اختياري)</label><input type="email" value={newOwner.email} onChange={(e) => setNewOwner({...newOwner, email: e.target.value})} dir="ltr" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500 text-left" placeholder="email@example.com" /></div>
+                        <div><label className="text-xs font-bold text-slate-600 dark:text-brand-300 block mb-2">اسم المالك (رب الأسرة)</label><input required type="text" value={newOwner.name} onChange={(e) => setNewOwner({...newOwner, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-emerald-500" placeholder="الاسم الرباعي" /></div>
+                        <div><label className="text-xs font-bold text-slate-600 dark:text-brand-300 block mb-2">رقم الجوال</label><input required type="tel" value={newOwner.phone} onChange={(e) => setNewOwner({...newOwner, phone: e.target.value})} dir="ltr" placeholder="05XXXXXXXX" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-emerald-500 text-left" /></div>
+                        <div><label className="text-xs font-bold text-slate-600 dark:text-brand-300 block mb-2">البريد الإلكتروني (اختياري)</label><input type="email" value={newOwner.email} onChange={(e) => setNewOwner({...newOwner, email: e.target.value})} dir="ltr" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 outline-none focus:border-emerald-500 text-left" placeholder="email@example.com" /></div>
                     </div>
                     
                     <button type="submit" disabled={localLoading} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-black text-lg hover:bg-emerald-700 transition flex justify-center items-center gap-2 shadow-lg disabled:opacity-50">
@@ -169,13 +169,13 @@ export default function OwnersManage({ showToast }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 border-b border-blue-200 pb-5">
                         <div>
                             <label className="text-xs font-bold text-blue-800 block mb-2">نقل المالك لمشروع آخر؟</label>
-                            <select value={editingOwner.project_id} onChange={(e) => setEditingOwner({...editingOwner, project_id: e.target.value, unit_code: ""})} className="w-full p-3 rounded-xl border border-blue-200 outline-none focus:border-blue-500 bg-white">
+                            <select value={editingOwner.project_id} onChange={(e) => setEditingOwner({...editingOwner, project_id: e.target.value, unit_code: ""})} className="w-full p-3 rounded-xl border border-blue-200 outline-none focus:border-blue-500 bg-white dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50">
                                 {projectsData.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="text-xs font-bold text-blue-800 block mb-2">تغيير الوحدة</label>
-                            <select required value={editingOwner.unit_code} onChange={(e) => setEditingOwner({...editingOwner, unit_code: e.target.value})} className="w-full p-3 rounded-xl border border-blue-200 outline-none focus:border-blue-500 font-bold bg-white">
+                            <select required value={editingOwner.unit_code} onChange={(e) => setEditingOwner({...editingOwner, unit_code: e.target.value})} className="w-full p-3 rounded-xl border border-blue-200 outline-none focus:border-blue-500 font-bold bg-white dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50">
                                 <option value="" disabled>-- اختر الوحدة --</option>
                                 {projectsData.find(p => p.id.toString() === editingOwner.project_id.toString())?.units.map(u => (
                                     <option key={u} value={u}>{u}</option>
@@ -185,9 +185,9 @@ export default function OwnersManage({ showToast }) {
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-                        <div><label className="text-xs font-bold text-slate-600 block mb-2">اسم المالك</label><input required type="text" value={editingOwner.name} onChange={(e) => setEditingOwner({...editingOwner, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500" /></div>
-                        <div><label className="text-xs font-bold text-slate-600 block mb-2">رقم الجوال</label><input required type="tel" value={editingOwner.phone} onChange={(e) => setEditingOwner({...editingOwner, phone: e.target.value})} dir="ltr" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500 text-left" /></div>
-                        <div><label className="text-xs font-bold text-slate-600 block mb-2">البريد الإلكتروني</label><input type="email" value={editingOwner.email} onChange={(e) => setEditingOwner({...editingOwner, email: e.target.value})} dir="ltr" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500 text-left" /></div>
+                        <div><label className="text-xs font-bold text-slate-600 dark:text-brand-300 block mb-2">اسم المالك</label><input required type="text" value={editingOwner.name} onChange={(e) => setEditingOwner({...editingOwner, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-500" /></div>
+                        <div><label className="text-xs font-bold text-slate-600 dark:text-brand-300 block mb-2">رقم الجوال</label><input required type="tel" value={editingOwner.phone} onChange={(e) => setEditingOwner({...editingOwner, phone: e.target.value})} dir="ltr" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-500 text-left" /></div>
+                        <div><label className="text-xs font-bold text-slate-600 dark:text-brand-300 block mb-2">البريد الإلكتروني</label><input type="email" value={editingOwner.email} onChange={(e) => setEditingOwner({...editingOwner, email: e.target.value})} dir="ltr" className="w-full p-3 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-blue-500 text-left" /></div>
                     </div>
                     
                     <button type="submit" disabled={localLoading} className="w-full bg-blue-600 text-white py-4 rounded-xl font-black text-lg hover:bg-blue-700 transition flex justify-center items-center gap-2 shadow-lg disabled:opacity-50">
@@ -199,10 +199,10 @@ export default function OwnersManage({ showToast }) {
             {/* --- جدول الملاك --- */}
             <div className="overflow-x-auto">
                 {loading ? (
-                    <div className="text-center py-12 text-slate-400 font-bold"><RefreshCw className="animate-spin mx-auto mb-3 text-emerald-500" size={32}/> جاري تحميل السجل...</div>
+                    <div className="text-center py-12 text-slate-400 dark:text-brand-400 font-bold"><RefreshCw className="animate-spin mx-auto mb-3 text-emerald-500" size={32}/> جاري تحميل السجل...</div>
                 ) : (
                     <table className="w-full text-right">
-                        <thead className="bg-slate-50 text-slate-600 text-xs md:text-sm uppercase tracking-wider">
+                        <thead className="bg-slate-50 dark:bg-brand-800/60 text-slate-600 dark:text-brand-400 text-xs md:text-sm uppercase tracking-wider">
                             <tr>
                                 <th className="p-4 rounded-tr-xl">بيانات المالك والاتصال</th>
                                 <th className="p-4">المشروع والوحدة</th>
@@ -210,19 +210,19 @@ export default function OwnersManage({ showToast }) {
                                 <th className="p-4 rounded-tl-xl text-center">إجراءات</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {ownersList.length === 0 ? <tr><td colSpan="4" className="text-center p-8 text-slate-400 font-bold">لا يوجد ملاك مسجلين في النظام حالياً.</td></tr> : null}
+                        <tbody className="divide-y divide-slate-100 dark:divide-brand-700">
+                            {ownersList.length === 0 ? <tr><td colSpan="4" className="text-center p-8 text-slate-400 dark:text-brand-400 font-bold">لا يوجد ملاك مسجلين في النظام حالياً.</td></tr> : null}
                             {ownersList.map(o => (
-                                <tr key={o.id} className="hover:bg-emerald-50/50 transition group">
+                                <tr key={o.id} className="hover:bg-emerald-50/50 dark:hover:bg-brand-800 transition group">
                                     <td className="p-4">
-                                        <span className="font-bold text-[#1a365d] text-base group-hover:text-emerald-700 transition">{o.owner_name}</span><br/>
-                                        <span className="text-xs text-slate-500 font-mono" dir="ltr">{o.owner_phone}</span>
+                                        <span className="font-bold text-brand-800 dark:text-brand-100 text-base group-hover:text-emerald-700 transition">{o.owner_name}</span><br/>
+                                        <span className="text-xs text-slate-500 dark:text-brand-400 font-mono" dir="ltr">{o.owner_phone}</span>
                                     </td>
                                     <td className="p-4">
                                         <span className="text-sm font-black text-emerald-700 bg-emerald-100 px-3 py-1 rounded-lg border border-emerald-200 shadow-sm">{o.unit_code}</span><br/>
-                                        <span className="text-[11px] text-slate-500 mt-1 inline-block">{o.project_name || 'مشروع غير محدد'}</span>
+                                        <span className="text-[11px] text-slate-500 dark:text-brand-400 mt-1 inline-block">{o.project_name || 'مشروع غير محدد'}</span>
                                     </td>
-                                    <td className="p-4 text-xs text-slate-400 font-mono text-center" dir="ltr">
+                                    <td className="p-4 text-xs text-slate-400 dark:text-brand-400 font-mono text-center" dir="ltr">
                                         {o.created_at?.substring(0,10)}
                                     </td>
                                     <td className="p-4 text-center">

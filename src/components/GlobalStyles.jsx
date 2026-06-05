@@ -8,7 +8,7 @@ export default function GlobalStyles() {
       .font-cairo { font-family: 'Cairo', sans-serif; }
       .font-amiri { font-family: 'Amiri', serif; }
       
-      body { font-family: 'Cairo', sans-serif; overflow-x: hidden; background-color: #f8fafc; }
+      body { font-family: 'Cairo', sans-serif; overflow-x: hidden; }
       .hero-gradient { background: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.6)); }
       .text-glow { text-shadow: 0 0 15px rgba(197, 160, 89, 0.4); }
       .card-hover { transition: all 0.3s ease; }

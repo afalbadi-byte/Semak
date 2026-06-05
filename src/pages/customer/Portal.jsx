@@ -15,12 +15,12 @@ import { API_URL } from '../../utils/helpers';
 
 /* ─── الحالات وألوانها ─── */
 const STATUS_STYLE = {
-  'قيد الانتظار':          'bg-amber-100 text-amber-700 border-amber-200',
-  'تم التعيين':            'bg-blue-100 text-blue-700 border-blue-200',
-  'تم اعتماد الموعد':      'bg-blue-100 text-blue-700 border-blue-200',
-  'تم اقتراح موعد بديل':  'bg-purple-100 text-purple-700 border-purple-200',
-  'جاري العمل':            'bg-indigo-100 text-indigo-700 border-indigo-200',
-  'مكتمل':                 'bg-green-100 text-green-700 border-green-200',
+  'قيد الانتظار':          'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30',
+  'تم التعيين':            'bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30',
+  'تم اعتماد الموعد':      'bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30',
+  'تم اقتراح موعد بديل':  'bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/30',
+  'جاري العمل':            'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30',
+  'مكتمل':                 'bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-300 border-green-200 dark:border-green-500/30',
 };
 
 const STATUS_STEP = {
@@ -120,18 +120,18 @@ function WarrantyCard({ handoverDate, onRequestMaintenance }) {
   const hasAnyActive = WARRANTY_CATS.some(c => calcWarranty(start, c.years).isActive);
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-      <div className="h-1.5 bg-gradient-to-r from-[#c5a059] via-amber-400 to-[#c5a059]" />
+    <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-xl overflow-hidden">
+      <div className="h-1.5 bg-gradient-to-r from-gold-500 via-amber-400 to-gold-500" />
       <div className="p-5">
 
         {/* العنوان */}
         <div className="flex items-center gap-2.5 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-[#c5a059]/10 flex items-center justify-center flex-shrink-0">
-            <ShieldCheck size={20} className="text-[#c5a059]" />
+          <div className="w-10 h-10 rounded-xl bg-gold-500/10 flex items-center justify-center flex-shrink-0">
+            <ShieldCheck size={20} className="text-gold-500" />
           </div>
           <div>
-            <p className="text-[#1a365d] font-black text-sm">ضمانات وحدتك</p>
-            <p className="text-slate-400 text-xs font-bold">من تاريخ التسليم: {fmt(start)}</p>
+            <p className="text-brand-800 dark:text-brand-100 font-black text-sm">ضمانات وحدتك</p>
+            <p className="text-slate-400 dark:text-brand-400 text-xs font-bold">من تاريخ التسليم: {fmt(start)}</p>
           </div>
         </div>
 
@@ -141,15 +141,15 @@ function WarrantyCard({ handoverDate, onRequestMaintenance }) {
             const { end, isActive, usedPct, remainDays, remainYears } = calcWarranty(start, years);
             const c = COLOR_MAP[color];
             return (
-              <div key={key} className={`rounded-xl border p-3.5 ${isActive ? 'border-slate-100' : 'border-red-100 opacity-60'}`}>
+              <div key={key} className={`rounded-xl border p-3.5 ${isActive ? 'border-slate-100 dark:border-brand-700' : 'border-red-100 dark:border-red-500/30 opacity-60'}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className={`w-8 h-8 rounded-lg ${c.icon} flex items-center justify-center flex-shrink-0`}>
                       <Icon size={15} className={c.text} />
                     </div>
                     <div>
-                      <p className="text-[#1a365d] font-black text-xs">{label}</p>
-                      <p className="text-slate-400 text-[10px] font-bold">{items.join(' · ')}</p>
+                      <p className="text-brand-800 dark:text-brand-100 font-black text-xs">{label}</p>
+                      <p className="text-slate-400 dark:text-brand-400 text-[10px] font-bold">{items.join(' · ')}</p>
                     </div>
                   </div>
                   <div className="text-left flex-shrink-0">
@@ -183,8 +183,8 @@ function WarrantyCard({ handoverDate, onRequestMaintenance }) {
           onClick={onRequestMaintenance}
           className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all ${
             hasAnyActive
-              ? 'bg-[#1a365d] hover:bg-[#c5a059] text-white shadow-md hover:-translate-y-0.5'
-              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              ? 'bg-brand-800 hover:bg-gold-500 text-white shadow-md hover:-translate-y-0.5'
+              : 'bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400 hover:bg-slate-200 dark:hover:bg-brand-700'
           }`}
         >
           <Wrench size={16} />
@@ -258,7 +258,7 @@ export default function Portal() {
         {/* ─── Header ─── */}
         <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="text-[#c5a059] text-xs font-bold tracking-widest uppercase mb-0.5">بوابة الملاك</p>
+            <p className="text-gold-500 text-xs font-bold tracking-widest uppercase mb-0.5">بوابة الملاك</p>
             <h1 className="text-white text-2xl font-black">
               أهلاً، {firstName} 👋
             </h1>
@@ -274,8 +274,8 @@ export default function Portal() {
         {/* ─── بطاقة الوحدة ─── */}
         <div className="bg-white/10 border border-white/10 rounded-2xl p-5 flex items-center justify-between backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-[#c5a059]/20 flex items-center justify-center flex-shrink-0">
-              <Building2 size={20} className="text-[#c5a059]" />
+            <div className="w-11 h-11 rounded-xl bg-gold-500/20 flex items-center justify-center flex-shrink-0">
+              <Building2 size={20} className="text-gold-500" />
             </div>
             <div>
               <p className="text-slate-400 text-xs font-bold">وحدتك العقارية</p>
@@ -292,7 +292,7 @@ export default function Portal() {
 
         {/* ══════════ رحلة التسليم ══════════ */}
         <div className="bg-white/8 border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
-          <p className="text-[#c5a059] text-xs font-bold tracking-widest uppercase mb-4 flex items-center gap-2">
+          <p className="text-gold-500 text-xs font-bold tracking-widest uppercase mb-4 flex items-center gap-2">
             <Star size={12} /> رحلة وحدتك
           </p>
 
@@ -307,14 +307,14 @@ export default function Portal() {
                   <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300
                       ${done    ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : ''}
-                      ${current ? 'bg-[#c5a059] text-white shadow-lg shadow-[#c5a059]/40 scale-110' : ''}
+                      ${current ? 'bg-gold-500 text-white shadow-lg shadow-gold-500/40 scale-110' : ''}
                       ${pending ? 'bg-white/10 text-white/30' : ''}
                     `}>
                       {done ? <CheckCircle2 size={18} /> : <Icon size={16} />}
                     </div>
                     <p className={`text-[10px] font-bold text-center leading-tight w-14
                       ${done ? 'text-green-400' : ''}
-                      ${current ? 'text-[#c5a059]' : ''}
+                      ${current ? 'text-gold-500' : ''}
                       ${pending ? 'text-white/30' : ''}
                     `}>{label}</p>
                   </div>
@@ -342,7 +342,7 @@ export default function Portal() {
               <Clock size={16} /> تم استلام ملاحظاتك — الفريق يعمل على معالجتها
             </div>
           ) : isClientReady ? (
-            <div className="flex items-center gap-2 bg-[#c5a059]/10 text-[#c5a059] text-sm font-bold px-3 py-2 rounded-xl border border-[#c5a059]/20">
+            <div className="flex items-center gap-2 bg-gold-500/10 text-gold-500 text-sm font-bold px-3 py-2 rounded-xl border border-gold-500/20">
               <Bell size={16} className="animate-pulse" /> وحدتك جاهزة — ابدأ مراجعتك الآن
             </div>
           ) : inspection === false ? (
@@ -358,7 +358,7 @@ export default function Portal() {
 
         {/* ══════════ بطاقة مراجعة الوحدة (عند الجاهزية) ══════════ */}
         {isClientReady && (
-          <div className="bg-gradient-to-l from-[#c5a059] to-[#e8c97a] rounded-2xl p-5 shadow-xl shadow-[#c5a059]/20">
+          <div className="bg-gradient-to-l from-[#c5a059] to-[#e8c97a] rounded-2xl p-5 shadow-xl shadow-gold-500/20">
             <div className="flex items-start gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
                 <FileCheck size={20} className="text-white" />
@@ -372,7 +372,7 @@ export default function Portal() {
             </div>
             <button
               onClick={() => navigate(`/handover?unit=${encodeURIComponent(customer.unit)}`)}
-              className="w-full bg-white text-[#1a365d] py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-[#1a365d] hover:text-white transition-all duration-200 shadow-lg"
+              className="w-full bg-white text-brand-800 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-brand-800 hover:text-white transition-all duration-200 shadow-lg"
             >
               ابدأ مراجعة وحدتك <ArrowLeft size={16} />
             </button>
@@ -407,7 +407,7 @@ export default function Portal() {
         {/* ─── إحصائيات ─── */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center backdrop-blur-sm">
-            <p className="text-3xl font-black text-[#c5a059]">{tickets.length}</p>
+            <p className="text-3xl font-black text-gold-500">{tickets.length}</p>
             <p className="text-slate-400 text-xs font-bold mt-1">إجمالي الطلبات</p>
           </div>
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center backdrop-blur-sm">
@@ -419,30 +419,30 @@ export default function Portal() {
         {/* ─── متابع الطلب النشط ─── */}
         {dataLoading ? (
           <div className="bg-white/5 rounded-2xl p-8 flex justify-center">
-            <Loader2 className="animate-spin text-[#c5a059]" size={32} />
+            <Loader2 className="animate-spin text-gold-500" size={32} />
           </div>
         ) : latestActive ? (
-          <div className="bg-white rounded-2xl p-5 shadow-xl">
+          <div className="bg-white dark:bg-brand-900 rounded-2xl p-5 shadow-xl">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <p className="text-xs text-slate-400 font-bold mb-0.5">الطلب النشط</p>
-                <p className="text-[#1a365d] font-black text-lg">#{latestActive.id} — {latestActive.type}</p>
+                <p className="text-xs text-slate-400 dark:text-brand-400 font-bold mb-0.5">الطلب النشط</p>
+                <p className="text-brand-800 dark:text-brand-100 font-black text-lg">#{latestActive.id} — {latestActive.type}</p>
                 {latestActive.technician && latestActive.technician !== 'لم يتم التعيين' && (
-                  <p className="text-slate-500 text-xs font-bold mt-0.5">الفني: {latestActive.technician}</p>
+                  <p className="text-slate-500 dark:text-brand-300 text-xs font-bold mt-0.5">الفني: {latestActive.technician}</p>
                 )}
               </div>
-              <span className={`text-xs px-3 py-1.5 rounded-full font-bold border flex-shrink-0 ${STATUS_STYLE[latestActive.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+              <span className={`text-xs px-3 py-1.5 rounded-full font-bold border flex-shrink-0 ${STATUS_STYLE[latestActive.status] || 'bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 border-slate-200 dark:border-brand-700'}`}>
                 {latestActive.status}
               </span>
             </div>
             <div className="flex items-center gap-1 mb-3">
               {MAINT_STEPS.map(({ Icon }, i) => (
                 <React.Fragment key={i}>
-                  <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${i <= activeStep ? 'bg-[#c5a059] text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
+                  <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${i <= activeStep ? 'bg-gold-500 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
                     <Icon size={15} />
                   </div>
                   {i < MAINT_STEPS.length - 1 && (
-                    <div className={`flex-1 h-1 rounded-full transition-colors ${i < activeStep ? 'bg-[#c5a059]' : 'bg-slate-100'}`} />
+                    <div className={`flex-1 h-1 rounded-full transition-colors ${i < activeStep ? 'bg-gold-500' : 'bg-slate-100'}`} />
                   )}
                 </React.Fragment>
               ))}
@@ -460,7 +460,7 @@ export default function Portal() {
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={() => navigate('/maintenance')}
-            className="bg-[#c5a059] hover:bg-[#d4b570] text-white rounded-2xl p-5 flex flex-col items-center gap-2 font-bold transition shadow-lg shadow-[#c5a059]/20 hover:-translate-y-0.5 active:scale-95"
+            className="bg-gold-500 hover:bg-[#d4b570] text-white rounded-2xl p-5 flex flex-col items-center gap-2 font-bold transition shadow-lg shadow-gold-500/20 hover:-translate-y-0.5 active:scale-95"
           >
             <Wrench size={24} />
             <span className="text-sm">طلب صيانة</span>
@@ -478,26 +478,26 @@ export default function Portal() {
 
         {/* ─── آخر الطلبات ─── */}
         {tickets.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-[#1a365d] font-black text-base">آخر الطلبات</h3>
+          <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-brand-700 flex items-center justify-between">
+              <h3 className="text-brand-800 dark:text-brand-100 font-black text-base">آخر الطلبات</h3>
               <button
                 onClick={() => navigate('/maintenance')}
-                className="text-[#c5a059] text-xs font-bold flex items-center gap-1 hover:underline"
+                className="text-gold-500 text-xs font-bold flex items-center gap-1 hover:underline"
               >
                 عرض الكل <ChevronLeft size={13} />
               </button>
             </div>
-            <div className="divide-y divide-slate-50">
+            <div className="divide-y divide-slate-50 dark:divide-brand-800">
               {tickets.slice(0, 4).map(t => (
                 <div key={t.id} className="px-5 py-3.5 flex items-center justify-between">
                   <div>
-                    <p className="text-[#1a365d] font-black text-sm">{t.type}</p>
-                    <p className="text-slate-400 text-xs font-bold flex items-center gap-1 mt-0.5">
+                    <p className="text-brand-800 dark:text-brand-100 font-black text-sm">{t.type}</p>
+                    <p className="text-slate-400 dark:text-brand-400 text-xs font-bold flex items-center gap-1 mt-0.5">
                       <Clock size={10} /> #{t.id} · {t.date?.split(' ')[0] || ''}
                     </p>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold border flex-shrink-0 ${STATUS_STYLE[t.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold border flex-shrink-0 ${STATUS_STYLE[t.status] || 'bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 border-slate-200 dark:border-brand-700'}`}>
                     {t.status || 'قيد الانتظار'}
                   </span>
                 </div>
@@ -511,8 +511,8 @@ export default function Portal() {
           href="tel:920032842"
           className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl px-5 py-4 text-slate-300 hover:text-white transition group"
         >
-          <div className="w-10 h-10 rounded-xl bg-[#c5a059]/10 group-hover:bg-[#c5a059]/20 flex items-center justify-center flex-shrink-0 transition-colors">
-            <Phone size={18} className="text-[#c5a059]" />
+          <div className="w-10 h-10 rounded-xl bg-gold-500/10 group-hover:bg-gold-500/20 flex items-center justify-center flex-shrink-0 transition-colors">
+            <Phone size={18} className="text-gold-500" />
           </div>
           <div>
             <p className="text-xs text-slate-500 font-bold">الهاتف الموحد</p>

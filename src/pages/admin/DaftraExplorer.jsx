@@ -169,7 +169,7 @@ export default function DaftraExplorer() {
             <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] rounded-[2rem] p-6 md:p-8 text-white shadow-xl">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-[#c5a059] rounded-2xl flex items-center justify-center shadow-lg">
+                        <div className="w-16 h-16 bg-gold-500 rounded-2xl flex items-center justify-center shadow-lg">
                             <Database size={32}/>
                         </div>
                         <div>
@@ -200,9 +200,9 @@ export default function DaftraExplorer() {
 
             {/* شريط الفلاتر */}
             {filterRef && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2 flex-wrap text-sm">
-                    <Filter size={14} className="text-amber-700"/>
-                    <span className="font-bold text-amber-900">يعرض: {filterRef.sourceLabel} لـ <span className="bg-white px-2 py-0.5 rounded font-mono">{filterRef.label}</span></span>
+                <div className="bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 flex items-center gap-2 flex-wrap text-sm">
+                    <Filter size={14} className="text-amber-700 dark:text-amber-300"/>
+                    <span className="font-bold text-amber-900 dark:text-amber-300">يعرض: {filterRef.sourceLabel} لـ <span className="bg-white dark:bg-brand-900 px-2 py-0.5 rounded font-mono dark:text-brand-300">{filterRef.label}</span></span>
                     <button onClick={() => setFilterRef(null)} className="bg-white text-amber-700 hover:bg-amber-100 px-2 py-0.5 rounded-lg text-xs font-bold flex items-center gap-1">
                         <X size={12}/> إزالة
                     </button>
@@ -224,14 +224,14 @@ export default function DaftraExplorer() {
             )}
 
             {/* محتوى الوحدة */}
-            <div className="bg-white rounded-2xl shadow border border-slate-100 overflow-hidden">
-                <div className="p-4 md:p-6 border-b border-slate-100">
+            <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 overflow-hidden">
+                <div className="p-4 md:p-6 border-b border-slate-100 dark:border-brand-700">
                     <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
                         <div className="flex items-center gap-3">
                             {moduleConfig && <moduleConfig.icon size={24} className={`text-${moduleConfig.color}-600`}/>}
-                            <h3 className="text-lg md:text-xl font-black text-[#1a365d]">
+                            <h3 className="text-lg md:text-xl font-black text-brand-800 dark:text-brand-100">
                                 {moduleConfig?.label}
-                                {moduleData && <span className="text-sm font-bold text-slate-500 mr-2">({filtered.length} / {moduleData.count})</span>}
+                                {moduleData && <span className="text-sm font-bold text-slate-500 dark:text-brand-400 mr-2">({filtered.length} / {moduleData.count})</span>}
                             </h3>
                         </div>
                         <button onClick={reload} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 p-2 rounded-xl transition" title="تحديث">
@@ -242,34 +242,34 @@ export default function DaftraExplorer() {
                     {/* الفلاتر */}
                     <div className="flex flex-wrap gap-2 items-end">
                         <div className="flex-1 min-w-[180px]">
-                            <label className="text-[10px] font-bold text-slate-500 block mb-1">بحث في كل الحقول</label>
+                            <label className="text-[10px] font-bold text-slate-500 dark:text-brand-400 block mb-1">بحث في كل الحقول</label>
                             <div className="relative">
-                                <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                                <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-400"/>
                                 <input type="text" placeholder="بحث..." value={search} onChange={e=>setSearch(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                    className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500 dark:text-brand-50 dark:placeholder-brand-500"/>
                             </div>
                         </div>
                         {showFinanceFilters && (
                             <>
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">من تاريخ</label>
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-brand-400 block mb-1">من تاريخ</label>
                                     <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)}
-                                        className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                        className="bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500 dark:text-brand-50"/>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">إلى تاريخ</label>
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-brand-400 block mb-1">إلى تاريخ</label>
                                     <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)}
-                                        className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                        className="bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500 dark:text-brand-50"/>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">أقل قيمة</label>
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-brand-400 block mb-1">أقل قيمة</label>
                                     <input type="number" placeholder="0" value={filterMinAmount} onChange={e=>setFilterMinAmount(e.target.value)}
-                                        className="w-24 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                        className="w-24 bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500 dark:text-brand-50"/>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">أعلى قيمة</label>
+                                    <label className="text-[10px] font-bold text-slate-500 dark:text-brand-400 block mb-1">أعلى قيمة</label>
                                     <input type="number" placeholder="∞" value={filterMaxAmount} onChange={e=>setFilterMaxAmount(e.target.value)}
-                                        className="w-24 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500"/>
+                                        className="w-24 bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-3 py-2 rounded-xl text-sm outline-none focus:border-emerald-500 dark:text-brand-50"/>
                                 </div>
                             </>
                         )}
@@ -282,26 +282,26 @@ export default function DaftraExplorer() {
                 </div>
 
                 {loading[activeModule] ? (
-                    <div className="p-12 text-center text-slate-400">
+                    <div className="p-12 text-center text-slate-400 dark:text-brand-400">
                         <RefreshCw className="animate-spin inline mr-2"/> جاري التحميل من دفترة...
                     </div>
                 ) : filtered.length === 0 ? (
-                    <div className="p-12 text-center text-slate-400">لا توجد سجلات مطابقة</div>
+                    <div className="p-12 text-center text-slate-400 dark:text-brand-400">لا توجد سجلات مطابقة</div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-right text-sm">
-                            <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
+                            <thead className="bg-slate-50 dark:bg-brand-800/60 text-slate-600 dark:text-brand-300 text-xs uppercase">
                                 <tr>
                                     {fields.map(f => (<th key={f} className="px-3 py-2 font-bold whitespace-nowrap">{translateField(f)}</th>))}
                                     {drillLink && <th className="px-3 py-2 text-center">{drillLink.label}</th>}
                                     <th className="px-3 py-2 text-center w-16">تفاصيل</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-slate-100 dark:divide-brand-700">
                                 {filtered.slice(0, 300).map((row, i) => (
-                                    <tr key={i} className="hover:bg-slate-50/50">
+                                    <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-brand-800">
                                         {fields.map(f => (
-                                            <td key={f} className="px-3 py-2 whitespace-nowrap text-slate-700">{fmt(row[f])}</td>
+                                            <td key={f} className="px-3 py-2 whitespace-nowrap text-slate-700 dark:text-brand-300">{fmt(row[f])}</td>
                                         ))}
                                         {drillLink && (
                                             <td className="px-3 py-2 text-center">
@@ -321,7 +321,7 @@ export default function DaftraExplorer() {
                             </tbody>
                         </table>
                         {filtered.length > 300 && (
-                            <div className="p-3 text-center text-xs text-slate-500 bg-slate-50 border-t">
+                            <div className="p-3 text-center text-xs text-slate-500 dark:text-brand-400 bg-slate-50 dark:bg-brand-800/40 border-t dark:border-brand-700">
                                 عرض أول 300 من {filtered.length} سجل — ضيّق بالفلاتر
                             </div>
                         )}
@@ -359,40 +359,40 @@ function DetailModal({ row, detail, detailLoading, module, onClose }) {
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-                <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center z-10">
-                    <h3 className="font-black text-[#1a365d]">
+            <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                <div className="sticky top-0 bg-white dark:bg-brand-900 border-b border-slate-200 dark:border-brand-700 p-4 flex justify-between items-center z-10">
+                    <h3 className="font-black text-brand-800 dark:text-brand-100">
                         {isInvoice ? `تفاصيل ${row.no ? '#' + row.no : 'الفاتورة'}` : 'تفاصيل السجل'}
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
+                    <button onClick={onClose} className="text-slate-400 dark:text-brand-400 hover:text-red-500"><X size={20}/></button>
                 </div>
 
                 {/* ملخص رأس الفاتورة */}
                 {isInvoice && (
-                    <div className="p-4 bg-gradient-to-l from-slate-50 to-blue-50 border-b border-slate-200">
+                    <div className="p-4 bg-gradient-to-l from-slate-50 dark:from-brand-800/40 to-blue-50 dark:to-blue-500/10 border-b border-slate-200 dark:border-brand-700">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                            <div><div className="text-[10px] font-bold text-slate-500">رقم</div><div className="font-black text-[#1a365d]">{row.no || '—'}</div></div>
-                            <div><div className="text-[10px] font-bold text-slate-500">التاريخ</div><div className="font-bold">{row.date || '—'}</div></div>
-                            <div><div className="text-[10px] font-bold text-slate-500">{module === 'purchase_invoices' ? 'المورد' : 'العميل'}</div>
-                                <div className="font-bold">{row.supplier_business_name || row.client_business_name || '—'}</div></div>
-                            <div><div className="text-[10px] font-bold text-slate-500">الإجمالي</div>
-                                <div className="font-black text-emerald-700">{fmt(row.summary_total)} <span className="text-xs">ريال</span></div></div>
+                            <div><div className="text-[10px] font-bold text-slate-500 dark:text-brand-400">رقم</div><div className="font-black text-brand-800 dark:text-brand-100">{row.no || '—'}</div></div>
+                            <div><div className="text-[10px] font-bold text-slate-500 dark:text-brand-400">التاريخ</div><div className="font-bold dark:text-brand-100">{row.date || '—'}</div></div>
+                            <div><div className="text-[10px] font-bold text-slate-500 dark:text-brand-400">{module === 'purchase_invoices' ? 'المورد' : 'العميل'}</div>
+                                <div className="font-bold dark:text-brand-100">{row.supplier_business_name || row.client_business_name || '—'}</div></div>
+                            <div><div className="text-[10px] font-bold text-slate-500 dark:text-brand-400">الإجمالي</div>
+                                <div className="font-black text-emerald-700 dark:text-emerald-300">{fmt(row.summary_total)} <span className="text-xs">ريال</span></div></div>
                         </div>
                     </div>
                 )}
 
                 {/* الأصناف */}
                 {isInvoice && (
-                    <div className="p-4 border-b border-slate-100">
-                        <h4 className="font-bold text-[#1a365d] mb-2 flex items-center gap-2"><Package size={16}/> الأصناف</h4>
+                    <div className="p-4 border-b border-slate-100 dark:border-brand-700">
+                        <h4 className="font-bold text-brand-800 dark:text-brand-100 mb-2 flex items-center gap-2"><Package size={16}/> الأصناف</h4>
                         {detailLoading ? (
-                            <div className="py-6 text-center text-slate-400"><RefreshCw className="animate-spin inline mr-2"/> جاري جلب الأصناف...</div>
+                            <div className="py-6 text-center text-slate-400 dark:text-brand-400"><RefreshCw className="animate-spin inline mr-2"/> جاري جلب الأصناف...</div>
                         ) : itemsArray.length === 0 ? (
-                            <p className="text-slate-400 text-sm py-3">لا توجد أصناف</p>
+                            <p className="text-slate-400 dark:text-brand-400 text-sm py-3">لا توجد أصناف</p>
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-right text-sm">
-                                    <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
+                                    <thead className="bg-slate-50 dark:bg-brand-800/60 text-slate-600 dark:text-brand-300 text-xs uppercase">
                                         <tr>
                                             <th className="px-3 py-2">الصنف</th>
                                             <th className="px-3 py-2">الوصف</th>
@@ -401,19 +401,19 @@ function DetailModal({ row, detail, detailLoading, module, onClose }) {
                                             <th className="px-3 py-2 text-center">الإجمالي</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
+                                    <tbody className="divide-y divide-slate-100 dark:divide-brand-700">
                                         {itemsArray.map((it, idx) => {
                                             const item = it.InvoiceItem || it.PurchaseOrderItem || it.EstimateItem || it;
                                             const qty   = parseFloat(item.quantity || 0);
                                             const price = parseFloat(item.unit_price || 0);
                                             const total = parseFloat(item.subtotal || item.summary_subtotal || (qty * price));
                                             return (
-                                                <tr key={idx} className="hover:bg-slate-50/50">
-                                                    <td className="px-3 py-2 font-bold">{item.name || '—'}</td>
-                                                    <td className="px-3 py-2 text-slate-600 text-xs">{item.description || '—'}</td>
-                                                    <td className="px-3 py-2 text-center font-bold">{fmt(qty)}</td>
-                                                    <td className="px-3 py-2 text-center">{fmt(price)}</td>
-                                                    <td className="px-3 py-2 text-center font-black text-emerald-700">{fmt(total)}</td>
+                                                <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-brand-800">
+                                                    <td className="px-3 py-2 font-bold dark:text-brand-100">{item.name || '—'}</td>
+                                                    <td className="px-3 py-2 text-slate-600 dark:text-brand-300 text-xs">{item.description || '—'}</td>
+                                                    <td className="px-3 py-2 text-center font-bold dark:text-brand-300">{fmt(qty)}</td>
+                                                    <td className="px-3 py-2 text-center dark:text-brand-300">{fmt(price)}</td>
+                                                    <td className="px-3 py-2 text-center font-black text-emerald-700 dark:text-emerald-300">{fmt(total)}</td>
                                                 </tr>
                                             );
                                         })}
@@ -425,18 +425,18 @@ function DetailModal({ row, detail, detailLoading, module, onClose }) {
                 )}
 
                 {/* كل الحقول */}
-                <details className="border-b border-slate-100">
-                    <summary className="p-4 cursor-pointer font-bold text-slate-700 hover:bg-slate-50 select-none">
+                <details className="border-b border-slate-100 dark:border-brand-700">
+                    <summary className="p-4 cursor-pointer font-bold text-slate-700 dark:text-brand-300 hover:bg-slate-50 dark:hover:bg-brand-800/40 select-none">
                         كل الحقول الخام
                     </summary>
-                    <div className="p-4 bg-slate-50 space-y-1">
+                    <div className="p-4 bg-slate-50 dark:bg-brand-800/40 space-y-1">
                         {Object.entries(row).map(([k, v]) => (
-                            <div key={k} className="flex flex-col md:flex-row md:items-center gap-1 py-1 border-b border-slate-200 last:border-0">
-                                <div className="md:w-1/3 text-xs font-bold text-slate-500 font-mono">{k}</div>
-                                <div className="md:w-2/3 text-sm text-slate-800 break-all">
-                                    {v === null ? <em className="text-slate-300">null</em>
-                                     : typeof v === 'object' ? <pre className="text-xs bg-white p-2 rounded">{JSON.stringify(v, null, 2)}</pre>
-                                     : String(v) || <em className="text-slate-300">فارغ</em>}
+                            <div key={k} className="flex flex-col md:flex-row md:items-center gap-1 py-1 border-b border-slate-200 dark:border-brand-700 last:border-0">
+                                <div className="md:w-1/3 text-xs font-bold text-slate-500 dark:text-brand-400 font-mono">{k}</div>
+                                <div className="md:w-2/3 text-sm text-slate-800 dark:text-brand-300 break-all">
+                                    {v === null ? <em className="text-slate-300 dark:text-brand-500">null</em>
+                                     : typeof v === 'object' ? <pre className="text-xs bg-white dark:bg-brand-900 dark:text-brand-300 p-2 rounded">{JSON.stringify(v, null, 2)}</pre>
+                                     : String(v) || <em className="text-slate-300 dark:text-brand-500">فارغ</em>}
                                 </div>
                             </div>
                         ))}
@@ -449,10 +449,10 @@ function DetailModal({ row, detail, detailLoading, module, onClose }) {
 
 function SumCard({ label, value, color, suffix }) {
     const colors = {
-        slate: 'bg-slate-50 text-slate-700 border-slate-200',
-        blue: 'bg-blue-50 text-blue-700 border-blue-200',
-        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        red: 'bg-red-50 text-red-700 border-red-200',
+        slate: 'bg-slate-50 dark:bg-brand-800/40 text-slate-700 dark:text-brand-300 border-slate-200 dark:border-brand-700',
+        blue: 'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30',
+        emerald: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30',
+        red: 'bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30',
     };
     return (
         <div className={`border rounded-xl p-3 ${colors[color]}`}>
@@ -465,18 +465,18 @@ function SumCard({ label, value, color, suffix }) {
 function ModuleCard({ active, count, loading, module: m, onClick, onPrefetch }) {
     const Icon = m.icon;
     const colors = {
-        blue: 'bg-blue-50 text-blue-700 border-blue-200',
-        indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-        purple: 'bg-purple-50 text-purple-700 border-purple-200',
-        teal: 'bg-teal-50 text-teal-700 border-teal-200',
-        amber: 'bg-amber-50 text-amber-700 border-amber-200',
-        cyan: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-        sky: 'bg-sky-50 text-sky-700 border-sky-200',
-        slate: 'bg-slate-100 text-slate-700 border-slate-200',
-        emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        red: 'bg-red-50 text-red-700 border-red-200',
-        rose: 'bg-rose-50 text-rose-700 border-rose-200',
-        orange: 'bg-orange-50 text-orange-700 border-orange-200',
+        blue: 'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30',
+        indigo: 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30',
+        purple: 'bg-purple-50 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/30',
+        teal: 'bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-500/30',
+        amber: 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30',
+        cyan: 'bg-cyan-50 dark:bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/30',
+        sky: 'bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/30',
+        slate: 'bg-slate-100 dark:bg-brand-800 text-slate-700 dark:text-brand-300 border-slate-200 dark:border-brand-700',
+        emerald: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30',
+        red: 'bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30',
+        rose: 'bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30',
+        orange: 'bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-500/30',
     };
     const activeColors = {
         blue: 'bg-blue-600', indigo: 'bg-indigo-600', purple: 'bg-purple-600',

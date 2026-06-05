@@ -153,10 +153,10 @@ export default function WhatsAppInbox() {
   const selectedConv = conversations.find(c => c.from_phone === selectedPhone);
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] bg-white rounded-2xl shadow overflow-hidden border border-gray-100 mx-4 my-4">
+    <div className="flex h-[calc(100vh-6rem)] bg-white dark:bg-brand-900 rounded-2xl shadow overflow-hidden border border-gray-100 dark:border-brand-700 mx-4 my-4">
 
       {/* ─── Sidebar ──────────────────────────────────────────── */}
-      <div className="w-80 border-l border-gray-200 flex flex-col bg-gray-50 flex-shrink-0">
+      <div className="w-80 border-l border-gray-200 dark:border-brand-700 flex flex-col bg-gray-50 dark:bg-brand-900 flex-shrink-0">
 
         {/* Header */}
         <div className="p-4 bg-[#1a365d]">
@@ -184,12 +184,12 @@ export default function WhatsAppInbox() {
         </button>
 
         {showNewPhone && (
-          <div className="mx-3 mt-2 p-3 bg-white rounded-xl border border-green-200">
-            <p className="text-xs font-bold text-gray-500 mb-1">رقم الجوال (مثال: 966501234567)</p>
+          <div className="mx-3 mt-2 p-3 bg-white dark:bg-brand-900 rounded-xl border border-green-200 dark:border-brand-700">
+            <p className="text-xs font-bold text-gray-500 dark:text-brand-400 mb-1">رقم الجوال (مثال: 966501234567)</p>
             <input
               type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)}
               placeholder="966XXXXXXXXX" dir="ltr"
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-green-400"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-brand-700 text-sm outline-none focus:border-green-400 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500"
             />
           </div>
         )}
@@ -206,8 +206,8 @@ export default function WhatsAppInbox() {
             <button
               key={conv.from_phone}
               onClick={() => { setSelectedPhone(conv.from_phone); setShowNewPhone(false); }}
-              className={`w-full text-right px-4 py-3 flex items-center gap-3 hover:bg-gray-100 transition border-b border-gray-100 ${
-                conv.from_phone === selectedPhone ? "bg-white border-r-4 border-r-[#25D366]" : ""
+              className={`w-full text-right px-4 py-3 flex items-center gap-3 hover:bg-gray-100 dark:hover:bg-brand-800 transition border-b border-gray-100 dark:border-brand-700 ${
+                conv.from_phone === selectedPhone ? "bg-white dark:bg-brand-800 border-r-4 border-r-[#25D366]" : ""
               }`}
             >
               <div className="w-10 h-10 rounded-full bg-[#25D366] flex-shrink-0 flex items-center justify-center text-white font-bold text-sm">
@@ -215,7 +215,7 @@ export default function WhatsAppInbox() {
               </div>
               <div className="flex-1 min-w-0 text-right">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-gray-800 text-sm truncate">{conv.from_name || "عميل"}</span>
+                  <span className="font-bold text-gray-800 dark:text-brand-100 text-sm truncate">{conv.from_name || "عميل"}</span>
                   {conv.unread > 0 && (
                     <span className="w-5 h-5 rounded-full bg-[#25D366] text-white text-xs flex items-center justify-center flex-shrink-0 mr-1">
                       {conv.unread}
@@ -234,21 +234,21 @@ export default function WhatsAppInbox() {
         {(selectedPhone || showNewPhone) ? (
           <>
             {/* Chat Header */}
-            <div className="px-5 py-3 bg-[#f0f2f5] border-b border-gray-200 flex items-center gap-3 flex-shrink-0">
+            <div className="px-5 py-3 bg-[#f0f2f5] dark:bg-brand-900 border-b border-gray-200 dark:border-brand-700 flex items-center gap-3 flex-shrink-0">
               {selectedPhone ? (
                 <>
                   <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center text-white font-bold">
                     {(selectedConv?.from_name || selectedPhone)[0]?.toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-bold text-gray-800 text-sm">{selectedConv?.from_name || "عميل"}</p>
-                    <p className="text-xs text-gray-500 font-mono">{selectedPhone}</p>
+                    <p className="font-bold text-gray-800 dark:text-brand-100 text-sm">{selectedConv?.from_name || "عميل"}</p>
+                    <p className="text-xs text-gray-500 dark:text-brand-400 font-mono">{selectedPhone}</p>
                   </div>
                 </>
               ) : (
                 <div>
-                  <p className="font-bold text-gray-800 text-sm">رسالة جديدة</p>
-                  <p className="text-xs text-gray-500 font-mono">{newPhone || "أدخل رقم الجوال"}</p>
+                  <p className="font-bold text-gray-800 dark:text-brand-100 text-sm">رسالة جديدة</p>
+                  <p className="text-xs text-gray-500 dark:text-brand-400 font-mono">{newPhone || "أدخل رقم الجوال"}</p>
                 </div>
               )}
 
@@ -267,7 +267,7 @@ export default function WhatsAppInbox() {
 
             {/* قائمة القوالب (dropdown) */}
             {showTemplates && (
-              <div className="bg-white border-b border-gray-200 p-4 max-h-60 overflow-y-auto">
+              <div className="bg-white dark:bg-brand-900 border-b border-gray-200 dark:border-brand-700 p-4 max-h-60 overflow-y-auto">
                 {templates.length === 0 ? (
                   <p className="text-center text-gray-400 text-sm py-4">لا توجد قوالب معتمدة في حسابك</p>
                 ) : (
@@ -276,17 +276,17 @@ export default function WhatsAppInbox() {
                       <button
                         key={tpl.id || tpl.name}
                         onClick={() => handleSelectTemplate(tpl)}
-                        className="text-right px-4 py-3 rounded-xl border border-gray-200 hover:border-[#25D366] hover:bg-green-50 transition"
+                        className="text-right px-4 py-3 rounded-xl border border-gray-200 dark:border-brand-700 hover:border-[#25D366] hover:bg-green-50 dark:hover:bg-green-500/10 transition"
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-gray-800 text-sm">{tpl.name}</span>
+                          <span className="font-bold text-gray-800 dark:text-brand-100 text-sm">{tpl.name}</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                            tpl.category === "UTILITY" ? "bg-blue-100 text-blue-700" :
-                            tpl.category === "MARKETING" ? "bg-purple-100 text-purple-700" :
-                            "bg-gray-100 text-gray-600"
+                            tpl.category === "UTILITY" ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300" :
+                            tpl.category === "MARKETING" ? "bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300" :
+                            "bg-gray-100 dark:bg-brand-800 text-gray-600 dark:text-brand-300"
                           }`}>{tpl.category}</span>
                         </div>
-                        <p className="text-xs text-gray-500 line-clamp-2">
+                        <p className="text-xs text-gray-500 dark:text-brand-400 line-clamp-2">
                           {tpl.components?.find(c => c.type === "BODY")?.text || ""}
                         </p>
                       </button>
@@ -298,14 +298,14 @@ export default function WhatsAppInbox() {
 
             {/* القالب المختار */}
             {selectedTemplate && (
-              <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
+              <div className="bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/30 px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-blue-700 flex items-center gap-1">
                     <LayoutTemplate size={12} /> قالب: {selectedTemplate.name}
                   </span>
                   <button onClick={handleClearTemplate} className="text-xs text-red-500 hover:text-red-700 font-bold">✕ إلغاء</button>
                 </div>
-                <p className="text-xs text-gray-600 mb-2 bg-white p-2 rounded-lg border border-blue-100">
+                <p className="text-xs text-gray-600 dark:text-brand-300 mb-2 bg-white dark:bg-brand-900 p-2 rounded-lg border border-blue-100 dark:border-brand-700">
                   {selectedTemplate.components?.find(c => c.type === "BODY")?.text || ""}
                 </p>
                 {templateVars.length > 0 && (
@@ -320,7 +320,7 @@ export default function WhatsAppInbox() {
                             nv[i] = e.target.value;
                             setTemplateVars(nv);
                           }}
-                          className="w-full px-2 py-1.5 rounded-lg border border-blue-200 text-xs outline-none focus:border-blue-400"
+                          className="w-full px-2 py-1.5 rounded-lg border border-blue-200 dark:border-brand-700 text-xs outline-none focus:border-blue-400 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500"
                         />
                       </div>
                     ))}
@@ -355,7 +355,7 @@ export default function WhatsAppInbox() {
             </div>
 
             {/* Reply Box */}
-            <div className="p-3 bg-[#f0f2f5] border-t border-gray-200 flex items-end gap-2 flex-shrink-0">
+            <div className="p-3 bg-[#f0f2f5] dark:bg-brand-900 border-t border-gray-200 dark:border-brand-700 flex items-end gap-2 flex-shrink-0">
               {!selectedTemplate && (
                 <textarea
                   value={replyText}
@@ -363,7 +363,7 @@ export default function WhatsAppInbox() {
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                   placeholder="اكتب رسالتك أو اختر قالباً..."
                   rows={2}
-                  className="flex-1 px-4 py-2 rounded-2xl border border-gray-300 resize-none outline-none text-sm focus:border-[#25D366] transition"
+                  className="flex-1 px-4 py-2 rounded-2xl border border-gray-300 dark:border-brand-700 resize-none outline-none text-sm focus:border-[#25D366] transition dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500"
                 />
               )}
               {selectedTemplate && (

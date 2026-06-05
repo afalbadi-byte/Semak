@@ -41,13 +41,13 @@ function Toast({ msg, type, onClose }) {
 // ─── شريحة ملخص ──────────────────────────────────────────────────
 function SummaryChip({ icon: Icon, label, value, color }) {
   return (
-    <div className="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 px-4 py-3 flex-1 min-w-[160px]">
+    <div className="flex items-center gap-3 bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 px-4 py-3 flex-1 min-w-[160px]">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
         <Icon size={20} className="text-white" />
       </div>
       <div>
-        <p className="text-xs text-slate-400 font-medium">{label}</p>
-        <p className="text-sm font-black text-slate-700">{value}</p>
+        <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">{label}</p>
+        <p className="text-sm font-black text-slate-700 dark:text-brand-300">{value}</p>
       </div>
     </div>
   );
@@ -246,11 +246,11 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-[#1a365d] to-[#2d5299] rounded-2xl flex items-center justify-center shadow-lg">
-            <ShoppingCart size={20} className="text-[#c5a059]" />
+            <ShoppingCart size={20} className="text-gold-500" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-[#1a365d]">فواتير الشراء</h1>
-            <p className="text-xs text-slate-400 font-medium">إدارة أوامر الشراء والموردين</p>
+            <h1 className="text-xl font-black text-brand-800 dark:text-brand-100">فواتير الشراء</h1>
+            <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">إدارة أوامر الشراء والموردين</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -267,7 +267,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
           />
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 bg-[#c5a059] hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
+            className="flex items-center gap-2 bg-gold-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors"
           >
             <Plus size={16} />
             أمر شراء جديد
@@ -276,34 +276,34 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       </div>
 
       {/* شريط الفلاتر */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-4 mb-4">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400 font-bold">من</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">من</label>
             <div className="relative">
               <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
                 type="date"
                 value={filters.from}
                 onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
-                className="pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400 font-bold">إلى</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">إلى</label>
             <div className="relative">
               <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
                 type="date"
                 value={filters.to}
                 onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
-                className="pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
-            <label className="text-xs text-slate-400 font-bold">بحث</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">بحث</label>
             <div className="relative">
               <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
@@ -311,13 +311,13 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                 placeholder="رقم أمر أو اسم مورد..."
                 value={filters.search}
                 onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                className="w-full pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="w-full pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <button
             onClick={() => setAppliedFilters({ ...filters })}
-            className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#2d5299] text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+            className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
           >
             <RefreshCw size={14} />
             تطبيق
@@ -327,7 +327,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
 
       {/* شرائح الملخص */}
       <div className="flex flex-wrap gap-3 mb-5">
-        <SummaryChip icon={ShoppingCart} label="إجمالي الأوامر"   value={displayed.length}       color="bg-[#1a365d]" />
+        <SummaryChip icon={ShoppingCart} label="إجمالي الأوامر"   value={displayed.length}       color="bg-brand-800" />
         <SummaryChip icon={DollarSign}   label="إجمالي المشتريات" value={fmt(totalAmount)}        color="bg-indigo-500" />
         <SummaryChip icon={CheckCircle2} label="المدفوع"           value={fmt(totalPaid)}          color="bg-green-500" />
         <SummaryChip icon={AlertTriangle} label="المتبقي"          value={fmt(totalOutstanding)}   color="bg-amber-500" />
@@ -336,7 +336,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       {/* حالة التحميل / الخطأ */}
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <RefreshCw size={28} className="text-[#1a365d] animate-spin" />
+          <RefreshCw size={28} className="text-brand-800 dark:text-brand-300 animate-spin" />
         </div>
       )}
       {error && !loading && (
@@ -348,14 +348,14 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
 
       {/* جدول المشتريات */}
       {!loading && !error && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
           {displayed.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-300">
               <ShoppingCart size={48} className="mb-4" />
-              <p className="text-sm font-bold text-slate-400">لا توجد فواتير شراء في هذه الفترة</p>
+              <p className="text-sm font-bold text-slate-400 dark:text-brand-400">لا توجد فواتير شراء في هذه الفترة</p>
               <button
                 onClick={openCreate}
-                className="mt-4 flex items-center gap-2 bg-[#c5a059] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-amber-600 transition-colors"
+                className="mt-4 flex items-center gap-2 bg-gold-500 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-amber-600 transition-colors"
               >
                 <Plus size={14} />
                 أنشئ أول أمر شراء
@@ -365,14 +365,14 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
+                  <tr className="bg-slate-50 dark:bg-brand-800/60 border-b border-slate-100 dark:border-brand-700">
                     <SortHeader label="رقم"      sortKey="no"       activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="التاريخ"  sortKey="date"     activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="المورد"   sortKey="supplier" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="الإجمالي" sortKey="total"    activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">المتبقي</th>
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">المشروع</th>
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">إجراءات</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المتبقي</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المشروع</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -382,27 +382,27 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                     return (
                       <tr
                         key={p.id}
-                        className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}
+                        className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/50 dark:hover:bg-brand-800 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}
                       >
                         <td className="px-4 py-3">
-                          <span className="bg-[#c5a059]/15 text-[#7a5c1e] px-2 py-0.5 rounded-lg text-xs font-black">
+                          <span className="bg-gold-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-lg text-xs font-black">
                             #{p.no || p.id}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500 font-medium whitespace-nowrap">{p.date || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{p.date || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <Truck size={13} className="text-slate-300 shrink-0" />
-                            <span className="text-xs text-slate-700 font-bold">{p.supplier || '—'}</span>
+                            <span className="text-xs text-slate-700 dark:text-brand-300 font-bold">{p.supplier || '—'}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs font-black text-slate-700 whitespace-nowrap">{fmt(p.total)}</td>
+                        <td className="px-4 py-3 text-xs font-black text-slate-700 dark:text-brand-300 whitespace-nowrap">{fmt(p.total)}</td>
                         <td className="px-4 py-3 text-xs font-bold whitespace-nowrap">
                           <span className={remaining > 0 ? 'text-amber-600' : 'text-green-600'}>
                             {fmt(remaining)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500 font-medium">
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium">
                           {project
                             ? <span className="flex items-center gap-1"><Building size={12} className="text-slate-300" />{project.title || `#${project.number || project.id}`}</span>
                             : <span className="text-slate-300">—</span>
@@ -412,7 +412,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                           <button
                             onClick={() => openEdit(p)}
                             title="تعديل"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#c5a059] hover:bg-amber-50 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-gold-500 hover:bg-amber-50 transition-colors"
                           >
                             <Edit3 size={14} />
                           </button>
@@ -441,31 +441,31 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       {/* رجوع */}
       <button
         onClick={() => setView('list')}
-        className="flex items-center gap-2 text-slate-500 hover:text-[#1a365d] font-bold text-sm mb-5 transition-colors"
+        className="flex items-center gap-2 text-slate-500 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 font-bold text-sm mb-5 transition-colors"
       >
         <ChevronLeft size={16} />
         رجوع إلى القائمة
       </button>
 
-      <h2 className="text-lg font-black text-[#1a365d] mb-6 flex items-center gap-2">
-        <ShoppingCart size={18} className="text-[#c5a059]" />
+      <h2 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-6 flex items-center gap-2">
+        <ShoppingCart size={18} className="text-gold-500" />
         {view === 'edit' ? 'تعديل فاتورة الشراء' : 'أمر شراء جديد'}
       </h2>
 
       {/* قسم: معلومات أمر الشراء */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
-        <h3 className="text-sm font-black text-[#1a365d] mb-4 flex items-center gap-2">
-          <Truck size={15} className="text-[#c5a059]" />
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-5">
+        <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2">
+          <Truck size={15} className="text-gold-500" />
           معلومات أمر الشراء
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* المورد */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-500 mb-1">المورد <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">المورد <span className="text-red-500">*</span></label>
             <select
               value={form.supplier_id}
               onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="">— اختر المورد —</option>
               {suppliers.map(s => (
@@ -476,22 +476,22 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
 
           {/* التاريخ */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">التاريخ <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">التاريخ <span className="text-red-500">*</span></label>
             <input
               type="date"
               value={form.date}
               onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             />
           </div>
 
           {/* المشروع */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">المشروع (اختياري)</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">المشروع (اختياري)</label>
             <select
               value={form.work_order_id}
               onChange={e => setForm(f => ({ ...f, work_order_id: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="">— بدون مشروع —</option>
               {workCycles.map(w => (
@@ -502,28 +502,28 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
 
           {/* ملاحظات */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">ملاحظات</label>
             <textarea
               rows={2}
               placeholder="ملاحظات إضافية..."
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] resize-none"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] resize-none"
             />
           </div>
         </div>
       </div>
 
       {/* قسم: بنود الشراء */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-black text-[#1a365d] flex items-center gap-2">
-            <Package size={15} className="text-[#c5a059]" />
+          <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
+            <Package size={15} className="text-gold-500" />
             بنود الشراء
           </h3>
           <button
             onClick={addItem}
-            className="flex items-center gap-1.5 text-xs bg-[#c5a059]/15 hover:bg-[#c5a059]/25 text-[#7a5c1e] px-3 py-1.5 rounded-xl font-bold transition-colors"
+            className="flex items-center gap-1.5 text-xs bg-gold-500/15 hover:bg-gold-500/25 text-amber-800 dark:text-amber-300 px-3 py-1.5 rounded-xl font-bold transition-colors"
           >
             <Plus size={13} />
             أضف بند
@@ -532,49 +532,49 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
 
         <div className="space-y-3">
           {form.items.map((item, idx) => (
-            <div key={idx} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+            <div key={idx} className="bg-slate-50 dark:bg-brand-800/40 rounded-xl p-4 border border-slate-100 dark:border-brand-700">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-2">
                 {/* اسم البند */}
                 <div className="col-span-2 md:col-span-3 lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-400 mb-1">اسم البند <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">اسم البند <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     placeholder="وصف المادة أو الخدمة"
                     value={item.name}
                     onChange={e => updateItem(idx, 'name', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* الكمية */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">الكمية</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">الكمية</label>
                   <input
                     type="number"
                     min="0.01"
                     step="0.01"
                     value={item.quantity}
                     onChange={e => updateItem(idx, 'quantity', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* سعر الوحدة */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">سعر الوحدة</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">سعر الوحدة</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={item.unit_price}
                     onChange={e => updateItem(idx, 'unit_price', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* الخصم */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">خصم %</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">خصم %</label>
                   <input
                     type="number"
                     min="0"
@@ -582,13 +582,13 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                     step="0.1"
                     value={item.discount}
                     onChange={e => updateItem(idx, 'discount', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* الضريبة */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">ضريبة %</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">ضريبة %</label>
                   <input
                     type="number"
                     min="0"
@@ -596,7 +596,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                     step="0.1"
                     value={item.tax}
                     onChange={e => updateItem(idx, 'tax', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
               </div>
@@ -604,8 +604,8 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
               {/* إجمالي السطر + زر الحذف */}
               <div className="flex items-center justify-between mt-1">
                 <div>
-                  <span className="text-xs text-slate-400 font-medium">إجمالي البند: </span>
-                  <span className="text-sm font-black text-[#1a365d]">{fmt(lineTotal(item))}</span>
+                  <span className="text-xs text-slate-400 dark:text-brand-400 font-medium">إجمالي البند: </span>
+                  <span className="text-sm font-black text-brand-800 dark:text-brand-100">{fmt(lineTotal(item))}</span>
                 </div>
                 {form.items.length > 1 && (
                   <button
@@ -622,29 +622,29 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       </div>
 
       {/* قسم: الإجمالي */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6">
-        <h3 className="text-sm font-black text-[#1a365d] mb-4 flex items-center gap-2">
-          <DollarSign size={15} className="text-[#c5a059]" />
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-6">
+        <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2">
+          <DollarSign size={15} className="text-gold-500" />
           الإجمالي
         </h3>
         <div className="space-y-2.5 max-w-xs mr-auto">
           <div className="flex justify-between text-sm">
-            <span className="text-slate-400 font-medium">الإجمالي قبل الخصم</span>
-            <span className="font-bold text-slate-700">{fmt(subtotal)}</span>
+            <span className="text-slate-400 dark:text-brand-400 font-medium">الإجمالي قبل الخصم</span>
+            <span className="font-bold text-slate-700 dark:text-brand-300">{fmt(subtotal)}</span>
           </div>
           {totalDisc > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400 font-medium">إجمالي الخصم</span>
+              <span className="text-slate-400 dark:text-brand-400 font-medium">إجمالي الخصم</span>
               <span className="font-bold text-red-500">- {fmt(totalDisc)}</span>
             </div>
           )}
           <div className="flex justify-between text-sm">
-            <span className="text-slate-400 font-medium">إجمالي الضريبة (15%)</span>
-            <span className="font-bold text-slate-600">{fmt(totalTax)}</span>
+            <span className="text-slate-400 dark:text-brand-400 font-medium">إجمالي الضريبة (15%)</span>
+            <span className="font-bold text-slate-600 dark:text-brand-300">{fmt(totalTax)}</span>
           </div>
-          <div className="border-t border-slate-200 pt-2.5 flex justify-between">
-            <span className="text-sm font-black text-[#1a365d]">الإجمالي الكلي</span>
-            <span className="text-lg font-black text-[#1a365d]">{fmt(grandTotal)}</span>
+          <div className="border-t border-slate-200 dark:border-brand-700 pt-2.5 flex justify-between">
+            <span className="text-sm font-black text-brand-800 dark:text-brand-100">الإجمالي الكلي</span>
+            <span className="text-lg font-black text-brand-800 dark:text-brand-100">{fmt(grandTotal)}</span>
           </div>
         </div>
       </div>
@@ -653,7 +653,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       <button
         onClick={handleSave}
         disabled={saving}
-        className="flex items-center gap-2 bg-[#c5a059] hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-black text-sm shadow-lg transition-colors"
+        className="flex items-center gap-2 bg-gold-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-black text-sm shadow-lg transition-colors"
       >
         {saving ? (
           <>
@@ -674,7 +674,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   // التصيير الرئيسي
   // ════════════════════════════════════════════════════════════
   return (
-    <div dir="rtl" className="font-cairo min-h-screen bg-slate-50 p-4 md:p-6">
+    <div dir="rtl" className="font-cairo min-h-screen bg-transparent p-4 md:p-6">
       {/* Toast */}
       {toast && (
         <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />

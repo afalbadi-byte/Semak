@@ -72,7 +72,7 @@ export default function Autocomplete({
     return (
         <div ref={boxRef} className={`relative ${className}`}>
             <div className="relative">
-                <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-400 pointer-events-none" />
                 <input
                     value={query}
                     disabled={disabled}
@@ -81,19 +81,19 @@ export default function Autocomplete({
                     onKeyDown={onKey}
                     placeholder={placeholder}
                     autoComplete="off"
-                    className={`w-full pr-9 pl-9 py-2.5 rounded-xl border border-slate-200 focus:border-[#c5a059] focus:ring-2 focus:ring-[#c5a059]/20 outline-none text-sm font-bold text-[#1a365d] bg-white transition disabled:bg-slate-50 disabled:text-slate-400 ${inputClassName}`}
+                    className={`w-full pr-9 pl-9 py-2.5 rounded-xl border border-slate-200 dark:border-brand-700 focus:border-gold-400 focus:ring-2 focus:ring-gold-400/20 outline-none text-sm font-bold text-brand-800 dark:text-brand-50 bg-white dark:bg-brand-900 transition disabled:bg-slate-50 dark:disabled:bg-brand-800 disabled:text-slate-400 dark:disabled:text-brand-500 ${inputClassName}`}
                 />
-                {loading && <Loader2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#c5a059] animate-spin" />}
+                {loading && <Loader2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gold-500 animate-spin" />}
             </div>
 
             {open && items.length > 0 && (
-                <ul className="absolute z-40 mt-1 w-full max-h-64 overflow-auto bg-white border border-slate-200 rounded-xl shadow-xl py-1 custom-scrollbar">
+                <ul className="absolute z-40 mt-1 w-full max-h-64 overflow-auto bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl shadow-xl py-1 custom-scrollbar">
                     {items.map((it, i) => (
                         <li
                             key={it.id ?? i}
                             onMouseDown={(e) => { e.preventDefault(); pick(it); }}
                             onMouseEnter={() => setActive(i)}
-                            className={`px-3 py-2 cursor-pointer text-sm font-bold text-[#1a365d] transition ${i === active ? 'bg-[#c5a059]/10' : 'hover:bg-slate-50'}`}
+                            className={`px-3 py-2 cursor-pointer text-sm font-bold text-brand-800 dark:text-brand-100 transition ${i === active ? 'bg-gold-500/10 dark:bg-gold-500/15' : 'hover:bg-slate-50 dark:hover:bg-brand-800'}`}
                         >
                             {renderItem ? renderItem(it) : getLabel(it)}
                         </li>
@@ -102,7 +102,7 @@ export default function Autocomplete({
             )}
 
             {open && !loading && items.length === 0 && query.trim().length >= minChars && (
-                <div className="absolute z-40 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl px-3 py-3 text-sm text-slate-400 font-bold text-center">
+                <div className="absolute z-40 mt-1 w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl shadow-xl px-3 py-3 text-sm text-slate-400 dark:text-brand-400 font-bold text-center">
                     لا توجد نتائج
                 </div>
             )}

@@ -79,7 +79,7 @@ export default function UnitsOverview({ showToast }) {
             {/* ─── إحصائيات ─────────────────────────────── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 {[
-                    { label: 'إجمالي الوحدات', value: stats.total,    color: 'text-[#1a365d]', bg: 'bg-[#1a365d]/5',  icon: Building2 },
+                    { label: 'إجمالي الوحدات', value: stats.total,    color: 'text-brand-800 dark:text-brand-100', bg: 'bg-[#1a365d]/5',  icon: Building2 },
                     { label: 'مباعة',           value: stats.sold,     color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2 },
                     { label: 'متاحة',           value: stats.avail,    color: 'text-blue-600',    bg: 'bg-blue-50',    icon: Circle },
                     { label: 'محجوزة',          value: stats.reserved, color: 'text-amber-600',   bg: 'bg-amber-50',   icon: Wrench },
@@ -89,7 +89,7 @@ export default function UnitsOverview({ showToast }) {
                         <div key={s.label} className={`${s.bg} rounded-2xl p-5 flex items-center gap-4`}>
                             <Icon className={s.color} size={28} />
                             <div>
-                                <p className="text-xs text-slate-500 font-bold">{s.label}</p>
+                                <p className="text-xs text-slate-500 dark:text-brand-300 font-bold">{s.label}</p>
                                 <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                             </div>
                         </div>
@@ -106,7 +106,7 @@ export default function UnitsOverview({ showToast }) {
                         placeholder="بحث برقم الوحدة أو اسم المالك أو الجوال..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-2xl py-3 pr-10 pl-4 text-sm font-bold outline-none focus:border-[#1a365d] transition"
+                        className="w-full bg-white border border-slate-200 rounded-2xl py-3 pr-10 pl-4 text-sm font-bold outline-none focus:border-brand-800 transition dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500"
                     />
                 </div>
                 <div className="flex gap-2">
@@ -114,12 +114,12 @@ export default function UnitsOverview({ showToast }) {
                         <button
                             key={f}
                             onClick={() => setFilter(f)}
-                            className={`px-4 py-2 rounded-xl text-xs font-black transition ${filterStatus === f ? 'bg-[#1a365d] text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-[#1a365d]'}`}
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition ${filterStatus === f ? 'bg-brand-800 text-white' : 'bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-brand-800'}`}
                         >
                             {f}
                         </button>
                     ))}
-                    <button onClick={load} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-[#1a365d] transition">
+                    <button onClick={load} className="p-2 bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl text-slate-500 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 transition">
                         <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                     </button>
                 </div>
@@ -127,12 +127,12 @@ export default function UnitsOverview({ showToast }) {
 
             {/* ─── قائمة المشاريع ──────────────────────────── */}
             {loading ? (
-                <div className="text-center py-24 text-slate-400">
-                    <RefreshCw className="animate-spin mx-auto mb-3 text-[#1a365d]" size={36} />
+                <div className="text-center py-24 text-slate-400 dark:text-brand-400">
+                    <RefreshCw className="animate-spin mx-auto mb-3 text-brand-800 dark:text-brand-300" size={36} />
                     <p className="font-bold">جاري تحميل بيانات الوحدات...</p>
                 </div>
             ) : filteredProjects.length === 0 ? (
-                <div className="text-center py-24 text-slate-400 font-bold">لا توجد نتائج</div>
+                <div className="text-center py-24 text-slate-400 dark:text-brand-400 font-bold">لا توجد نتائج</div>
             ) : (
                 <div className="space-y-4">
                     {filteredProjects.map(project => {
@@ -142,20 +142,20 @@ export default function UnitsOverview({ showToast }) {
                         const pct       = total > 0 ? Math.round((soldCount / total) * 100) : 0;
 
                         return (
-                            <div key={project.id} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div key={project.id} className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
 
                                 {/* رأس المشروع */}
                                 <button
                                     onClick={() => toggleProject(project.id)}
-                                    className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition text-right"
+                                    className="w-full flex items-center justify-between p-5 hover:bg-slate-50 dark:hover:bg-brand-800 transition text-right"
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-[#1a365d]/10 text-[#1a365d] rounded-2xl flex items-center justify-center">
+                                        <div className="w-12 h-12 bg-[#1a365d]/10 text-brand-800 dark:text-brand-300 rounded-2xl flex items-center justify-center">
                                             <Building2 size={22} />
                                         </div>
                                         <div>
-                                            <p className="font-black text-[#1a365d] text-lg">{project.name}</p>
-                                            <p className="text-xs text-slate-400 font-bold mt-0.5">
+                                            <p className="font-black text-brand-800 dark:text-brand-100 text-lg">{project.name}</p>
+                                            <p className="text-xs text-slate-400 dark:text-brand-400 font-bold mt-0.5">
                                                 {total} وحدة — {soldCount} مباعة — {total - soldCount} متاحة
                                             </p>
                                         </div>
@@ -163,27 +163,27 @@ export default function UnitsOverview({ showToast }) {
                                     <div className="flex items-center gap-4">
                                         {/* شريط التقدم */}
                                         <div className="hidden sm:block w-32">
-                                            <div className="flex justify-between text-[10px] font-black text-slate-400 mb-1">
+                                            <div className="flex justify-between text-[10px] font-black text-slate-400 dark:text-brand-400 mb-1">
                                                 <span>المبيعات</span>
                                                 <span>{pct}%</span>
                                             </div>
-                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="h-2 bg-slate-100 dark:bg-brand-800 rounded-full overflow-hidden">
                                                 <div
                                                     className="h-full bg-gradient-to-l from-emerald-500 to-emerald-400 rounded-full transition-all"
                                                     style={{ width: `${pct}%` }}
                                                 />
                                             </div>
                                         </div>
-                                        {isOpen ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+                                        {isOpen ? <ChevronUp size={18} className="text-slate-400 dark:text-brand-400" /> : <ChevronDown size={18} className="text-slate-400 dark:text-brand-400" />}
                                     </div>
                                 </button>
 
                                 {/* جدول الوحدات */}
                                 {isOpen && (
-                                    <div className="border-t border-slate-100 overflow-x-auto">
+                                    <div className="border-t border-slate-100 dark:border-brand-700 overflow-x-auto">
                                         <table className="w-full text-sm">
                                             <thead>
-                                                <tr className="bg-slate-50 text-xs text-slate-500 font-black">
+                                                <tr className="bg-slate-50 dark:bg-brand-800/60 text-xs text-slate-500 dark:text-brand-400 font-black">
                                                     <th className="text-right px-5 py-3">رقم الوحدة</th>
                                                     <th className="text-right px-5 py-3">الحالة</th>
                                                     <th className="text-right px-5 py-3">المالك</th>
@@ -191,11 +191,11 @@ export default function UnitsOverview({ showToast }) {
                                                     <th className="text-right px-5 py-3">المساحات</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-50">
+                                            <tbody className="divide-y divide-slate-50 dark:divide-brand-700">
                                                 {project.units_details.map(unit => (
-                                                    <tr key={unit.id} className="hover:bg-slate-50/50 transition">
+                                                    <tr key={unit.id} className="hover:bg-slate-50/50 dark:hover:bg-brand-800 transition">
                                                         <td className="px-5 py-3.5">
-                                                            <span className="font-black text-[#1a365d] bg-[#1a365d]/5 px-3 py-1 rounded-lg text-xs">
+                                                            <span className="font-black text-brand-800 dark:text-brand-100 bg-[#1a365d]/5 px-3 py-1 rounded-lg text-xs">
                                                                 {unit.unit_code}
                                                             </span>
                                                         </td>
@@ -205,13 +205,13 @@ export default function UnitsOverview({ showToast }) {
                                                         <td className="px-5 py-3.5">
                                                             {unit.owner_name ? (
                                                                 <div className="flex items-center gap-2">
-                                                                    <div className="w-7 h-7 rounded-full bg-[#c5a059]/10 text-[#c5a059] flex items-center justify-center text-xs font-black shrink-0">
+                                                                    <div className="w-7 h-7 rounded-full bg-gold-500/10 text-gold-500 flex items-center justify-center text-xs font-black shrink-0">
                                                                         {unit.owner_name.charAt(0)}
                                                                     </div>
-                                                                    <span className="font-bold text-slate-700">{unit.owner_name}</span>
+                                                                    <span className="font-bold text-slate-700 dark:text-brand-300">{unit.owner_name}</span>
                                                                 </div>
                                                             ) : (
-                                                                <span className="text-slate-400 text-xs font-bold">— غير مسجل</span>
+                                                                <span className="text-slate-400 dark:text-brand-400 text-xs font-bold">— غير مسجل</span>
                                                             )}
                                                         </td>
                                                         <td className="px-5 py-3.5">
@@ -220,23 +220,23 @@ export default function UnitsOverview({ showToast }) {
                                                                     <Phone size={12} /> {unit.owner_phone}
                                                                 </a>
                                                             ) : (
-                                                                <span className="text-slate-400 text-xs font-bold">—</span>
+                                                                <span className="text-slate-400 dark:text-brand-400 text-xs font-bold">—</span>
                                                             )}
                                                         </td>
                                                         <td className="px-5 py-3.5">
                                                             {Array.isArray(unit.spaces) && unit.spaces.length > 0 ? (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {unit.spaces.slice(0, 3).map((sp, i) => (
-                                                                        <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                                                        <span key={i} className="bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 px-2 py-0.5 rounded-full text-[10px] font-bold">
                                                                             {sp.label}: {sp.value}م²
                                                                         </span>
                                                                     ))}
                                                                     {unit.spaces.length > 3 && (
-                                                                        <span className="text-slate-400 text-[10px] font-bold">+{unit.spaces.length - 3}</span>
+                                                                        <span className="text-slate-400 dark:text-brand-400 text-[10px] font-bold">+{unit.spaces.length - 3}</span>
                                                                     )}
                                                                 </div>
                                                             ) : (
-                                                                <span className="text-slate-400 text-xs font-bold">—</span>
+                                                                <span className="text-slate-400 dark:text-brand-400 text-xs font-bold">—</span>
                                                             )}
                                                         </td>
                                                     </tr>

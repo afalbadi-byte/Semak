@@ -10,3 +10,4 @@ export { default as Breadcrumbs } from './Breadcrumbs';
 export { default as Autocomplete } from './Autocomplete';
 export { default as TagPicker, TagChip, TAG_COLORS, tagClass } from './TagPicker';
 export { ToastProvider, useToast } from './Toast';
+export { default as ThemeToggle } from './ThemeToggle';

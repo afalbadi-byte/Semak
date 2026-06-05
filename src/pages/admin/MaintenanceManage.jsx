@@ -37,7 +37,7 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView, waStatus }) {
     const sm = STATUS_META[ticket.status] || STATUS_META['قيد الانتظار'];
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow overflow-hidden">
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 hover:shadow-md transition-shadow overflow-hidden">
 
             {/* شريط الحالة العلوي */}
             <div className={`h-1.5 w-full ${sm.dot}`} />
@@ -47,7 +47,7 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView, waStatus }) {
                 <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
                         <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded-lg text-[10px] font-black">#{ticket.id}</span>
-                        <span className="bg-[#c5a059]/10 text-[#c5a059] px-2 py-0.5 rounded-lg text-[10px] font-bold">{ticket.unit}</span>
+                        <span className="bg-gold-500/10 text-gold-500 px-2 py-0.5 rounded-lg text-[10px] font-bold">{ticket.unit}</span>
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${sm.bg} ${sm.text}`}>
                         {ticket.status}
@@ -56,22 +56,22 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView, waStatus }) {
 
                 {/* معلومات العميل */}
                 <div className="flex items-center gap-2 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-black shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-brand-800 flex items-center justify-center text-slate-600 dark:text-brand-300 text-xs font-black shrink-0">
                         {ticket.name?.charAt(0) || '؟'}
                     </div>
                     <div>
-                        <p className="text-xs font-black text-slate-700">{ticket.name || 'غير مسجل'}</p>
+                        <p className="text-xs font-black text-slate-700 dark:text-brand-300">{ticket.name || 'غير مسجل'}</p>
                         {ticket.phone && (
                             <a href={`tel:${ticket.phone}`} className="text-[10px] text-blue-500 font-bold" dir="ltr">{ticket.phone}</a>
                         )}
                     </div>
                     <div className="mr-auto">
-                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] font-bold">{ticket.type}</span>
+                        <span className="bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400 px-2 py-0.5 rounded-full text-[10px] font-bold">{ticket.type}</span>
                     </div>
                 </div>
 
                 {/* الوصف */}
-                <p className="text-xs text-slate-500 bg-slate-50 rounded-xl p-2.5 leading-relaxed line-clamp-2 border border-slate-100 font-medium mb-3">
+                <p className="text-xs text-slate-500 dark:text-brand-300 bg-slate-50 dark:bg-brand-800/40 rounded-xl p-2.5 leading-relaxed line-clamp-2 border border-slate-100 dark:border-brand-700 font-medium mb-3">
                     {ticket.desc}
                 </p>
 
@@ -93,30 +93,30 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView, waStatus }) {
                 {/* زر تفاصيل الإدارة */}
                 <button
                     onClick={() => setExpanded(!expanded)}
-                    className="w-full flex items-center justify-center gap-1.5 text-[10px] text-slate-400 hover:text-[#1a365d] font-bold transition py-1">
+                    className="w-full flex items-center justify-center gap-1.5 text-[10px] text-slate-400 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 font-bold transition py-1">
                     <ChevronDown size={13} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
                     {expanded ? 'إخفاء التحكم' : 'إظهار التحكم'}
                 </button>
 
                 {/* قسم التحكم */}
                 {expanded && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-brand-700 space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="text-[10px] text-slate-400 font-bold block mb-1">التاريخ</label>
+                                <label className="text-[10px] text-slate-400 dark:text-brand-400 font-bold block mb-1">التاريخ</label>
                                 <input
                                     type="date"
                                     value={ticket.scheduleDate || ''}
                                     onChange={e => onUpdate(ticket.id, 'scheduleDate', e.target.value)}
-                                    className="w-full text-[11px] font-bold p-2 rounded-xl border border-slate-200 outline-none focus:border-[#1a365d] transition"
+                                    className="w-full text-[11px] font-bold p-2 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-brand-800 transition"
                                 />
                             </div>
                             <div>
-                                <label className="text-[10px] text-slate-400 font-bold block mb-1">الوقت</label>
+                                <label className="text-[10px] text-slate-400 dark:text-brand-400 font-bold block mb-1">الوقت</label>
                                 <select
                                     value={ticket.scheduleTime || 'غير محدد'}
                                     onChange={e => onUpdate(ticket.id, 'scheduleTime', e.target.value)}
-                                    className="w-full text-[11px] font-bold p-2 rounded-xl border border-slate-200 outline-none focus:border-[#1a365d] transition">
+                                    className="w-full text-[11px] font-bold p-2 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-brand-800 transition">
                                     <option value="غير محدد" disabled>اختر</option>
                                     {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
@@ -126,7 +126,7 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView, waStatus }) {
                         <select
                             value={ticket.technician || 'لم يتم التعيين'}
                             onChange={e => onUpdate(ticket.id, 'technician', e.target.value)}
-                            className="w-full text-[11px] font-bold p-2 rounded-xl border border-slate-200 outline-none focus:border-[#1a365d] transition">
+                            className="w-full text-[11px] font-bold p-2 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-brand-800 transition">
                             <option value="لم يتم التعيين" disabled>— إسناد لفني —</option>
                             {techList.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
@@ -135,7 +135,7 @@ function TicketCard({ ticket, techList, onUpdate, onWa, adminView, waStatus }) {
                             <select
                                 value={ticket.status}
                                 onChange={e => onUpdate(ticket.id, 'status', e.target.value)}
-                                className="flex-1 text-[11px] font-bold p-2 rounded-xl border border-slate-200 outline-none focus:border-[#1a365d] transition">
+                                className="flex-1 text-[11px] font-bold p-2 rounded-xl border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 outline-none focus:border-brand-800 transition">
                                 {Object.keys(STATUS_META).map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
 
@@ -295,13 +295,13 @@ export default function MaintenanceManage({ showToast, activeUser }) {
             {/* ── إحصائيات ──────────────────────────────────── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {[
-                    { label: 'إجمالي الطلبات', value: stats.total,     color: 'text-[#1a365d]',   bg: 'bg-white',         border: 'border-slate-200' },
-                    { label: 'جديدة / انتظار',  value: stats.pending,   color: 'text-slate-600',   bg: 'bg-slate-50',      border: 'border-slate-200' },
+                    { label: 'إجمالي الطلبات', value: stats.total,     color: 'text-brand-800 dark:text-brand-100', bg: 'bg-white dark:bg-brand-900',    border: 'border-slate-200 dark:border-brand-700' },
+                    { label: 'جديدة / انتظار',  value: stats.pending,   color: 'text-slate-600 dark:text-brand-300',   bg: 'bg-slate-50 dark:bg-brand-800/40',     border: 'border-slate-200 dark:border-brand-700' },
                     { label: 'جاري التنفيذ',    value: stats.active,    color: 'text-blue-600',    bg: 'bg-blue-50',       border: 'border-blue-200'  },
                     { label: 'مكتملة',          value: stats.completed, color: 'text-emerald-600', bg: 'bg-emerald-50',    border: 'border-emerald-200'},
                 ].map(s => (
                     <div key={s.label} className={`${s.bg} border ${s.border} rounded-2xl p-4`}>
-                        <p className="text-xs text-slate-400 font-bold">{s.label}</p>
+                        <p className="text-xs text-slate-400 dark:text-brand-400 font-bold">{s.label}</p>
                         <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                     </div>
                 ))}
@@ -316,20 +316,20 @@ export default function MaintenanceManage({ showToast, activeUser }) {
                         placeholder="بحث بالاسم أو الوحدة أو الجوال..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-2xl py-2.5 pr-9 pl-4 text-sm font-bold outline-none focus:border-[#1a365d] transition"
+                        className="w-full bg-white border border-slate-200 rounded-2xl py-2.5 pr-9 pl-4 text-sm font-bold outline-none focus:border-brand-800 transition dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500"
                     />
                 </div>
                 <button
                     onClick={loadMaintenance}
-                    className="bg-white border border-slate-200 text-slate-500 px-4 py-2.5 rounded-2xl font-bold hover:bg-slate-50 hover:text-[#1a365d] transition flex items-center gap-2 text-sm">
+                    className="bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 text-slate-500 dark:text-brand-400 px-4 py-2.5 rounded-2xl font-bold hover:bg-slate-50 dark:hover:bg-brand-800 hover:text-brand-800 dark:hover:text-brand-100 transition flex items-center gap-2 text-sm">
                     <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> تحديث
                 </button>
             </div>
 
             {/* ── الكانبان ──────────────────────────────────── */}
             {loading ? (
-                <div className="text-center py-24 text-slate-400">
-                    <RefreshCw className="animate-spin mx-auto mb-3 text-[#1a365d]" size={36} />
+                <div className="text-center py-24 text-slate-400 dark:text-brand-400">
+                    <RefreshCw className="animate-spin mx-auto mb-3 text-brand-800 dark:text-brand-300" size={36} />
                     <p className="font-bold">جاري تحميل الطلبات...</p>
                 </div>
             ) : (
@@ -342,14 +342,14 @@ export default function MaintenanceManage({ showToast, activeUser }) {
                                 <div className={`flex items-center gap-2 mb-4 ${col.text}`}>
                                     <Icon size={18} />
                                     <h4 className="font-black text-sm">{col.title}</h4>
-                                    <span className="mr-auto bg-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-black text-slate-600 shadow-sm">
+                                    <span className="mr-auto bg-white dark:bg-brand-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-black text-slate-600 dark:text-brand-300 shadow-sm">
                                         {colTickets.length}
                                     </span>
                                 </div>
 
                                 <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar">
                                     {colTickets.length === 0 ? (
-                                        <div className="text-center py-16 text-slate-300 font-bold text-xs border-2 border-dashed border-slate-200 rounded-2xl bg-white/50">
+                                        <div className="text-center py-16 text-slate-300 dark:text-brand-600 font-bold text-xs border-2 border-dashed border-slate-200 dark:border-brand-700 rounded-2xl bg-white/50 dark:bg-brand-900/50">
                                             لا توجد طلبات
                                         </div>
                                     ) : (

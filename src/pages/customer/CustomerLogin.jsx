@@ -143,7 +143,7 @@ export default function CustomerLogin() {
     >
       <div className="absolute inset-0 bg-[#1a365d]/92 backdrop-blur-sm" />
 
-      <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full relative z-10 border border-white/10 mx-4 overflow-hidden">
+      <div className="bg-white dark:bg-brand-900 rounded-[2.5rem] shadow-2xl max-w-md w-full relative z-10 border border-white/10 dark:border-brand-700 mx-4 overflow-hidden">
 
         {/* ─── شريط علوي ذهبي ─── */}
         <div className="h-1.5 bg-gradient-to-r from-[#c5a059] via-[#e8c97a] to-[#c5a059]" />
@@ -153,13 +153,13 @@ export default function CustomerLogin() {
           {/* ─── مؤشر الخطوات ─── */}
           <div className="flex items-center justify-center gap-2 mb-8">
             <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-black transition-all duration-300 ${
-              step === 'otp' ? 'bg-green-100 text-green-600' : 'bg-[#c5a059] text-white scale-110 shadow-lg shadow-[#c5a059]/30'
+              step === 'otp' ? 'bg-green-100 text-green-600' : 'bg-gold-500 text-white scale-110 shadow-lg shadow-gold-500/30'
             }`}>
               {step === 'otp' ? <CheckCircle2 size={18} /> : '١'}
             </div>
-            <div className={`h-[2px] w-14 rounded-full transition-all duration-500 ${step === 'otp' ? 'bg-[#c5a059]' : 'bg-slate-200'}`} />
+            <div className={`h-[2px] w-14 rounded-full transition-all duration-500 ${step === 'otp' ? 'bg-gold-500' : 'bg-slate-200 dark:bg-brand-700'}`} />
             <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-black transition-all duration-300 ${
-              step === 'otp' ? 'bg-[#c5a059] text-white scale-110 shadow-lg shadow-[#c5a059]/30' : 'bg-slate-100 text-slate-400'
+              step === 'otp' ? 'bg-gold-500 text-white scale-110 shadow-lg shadow-gold-500/30' : 'bg-slate-100 dark:bg-brand-800 text-slate-400 dark:text-brand-400'
             }`}>
               {step === 'otp' ? <KeyRound size={16} /> : '٢'}
             </div>
@@ -168,17 +168,17 @@ export default function CustomerLogin() {
           {/* ─── الأيقونة والعنوان ─── */}
           <div className="text-center mb-8">
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-all duration-300 ${
-              step === 'otp' ? 'bg-green-50 text-green-600' : 'bg-[#c5a059]/10 text-[#c5a059]'
+              step === 'otp' ? 'bg-green-50 text-green-600' : 'bg-gold-500/10 text-gold-500'
             }`}>
               {step === 'input' ? <ShieldCheck size={32} /> : <MessageCircle size={32} />}
             </div>
-            <h2 className="text-2xl font-black text-[#1a365d]">
+            <h2 className="text-2xl font-black text-brand-800 dark:text-brand-100">
               {step === 'input' ? 'بوابة الملاك' : 'رمز التحقق'}
             </h2>
-            <p className="text-slate-400 text-sm mt-2">
+            <p className="text-slate-400 dark:text-brand-400 text-sm mt-2">
               {step === 'input'
                 ? 'أدخل رقم وحدتك وسيصلك رمز المتابعة على واتساب'
-                : <>تم الإرسال إلى <span className="font-black text-[#1a365d]" dir="ltr">{maskedPhone}</span></>
+                : <>تم الإرسال إلى <span className="font-black text-brand-800 dark:text-brand-100" dir="ltr">{maskedPhone}</span></>
               }
             </p>
           </div>
@@ -187,16 +187,16 @@ export default function CustomerLogin() {
           {step === 'input' && (
             <form onSubmit={handleSendOtp} className="space-y-5 text-right">
               <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-500 uppercase tracking-wider">رقم الوحدة</label>
+                <label className="block text-xs font-bold mb-1.5 text-slate-500 dark:text-brand-400 uppercase tracking-wider">رقم الوحدة</label>
                 <div className="relative">
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Home size={16} /></span>
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-500"><Home size={16} /></span>
                   <input
                     type="text"
                     value={unitCode}
                     onChange={e => setUnitCode(e.target.value)}
                     required
                     autoFocus
-                    className="w-full bg-slate-50 border-2 border-slate-200 px-5 py-3.5 pr-12 rounded-xl outline-none focus:border-[#c5a059] focus:bg-white text-[#1a365d] transition font-black tracking-widest placeholder:font-normal placeholder:text-slate-300"
+                    className="w-full bg-slate-50 dark:bg-brand-900 border-2 border-slate-200 dark:border-brand-700 px-5 py-3.5 pr-12 rounded-xl outline-none focus:border-gold-500 focus:bg-white dark:focus:bg-brand-800 text-brand-800 dark:text-brand-50 transition font-black tracking-widest placeholder:font-normal placeholder:text-slate-300 dark:placeholder-brand-500"
                     placeholder="SM-A01"
                   />
                 </div>
@@ -236,10 +236,10 @@ export default function CustomerLogin() {
                     onKeyDown={e => handleOtpKeyDown(i, e)}
                     className={`w-12 h-14 text-center text-2xl font-black rounded-xl border-2 outline-none transition-all duration-200 caret-transparent
                       ${digit
-                        ? 'border-[#c5a059] bg-[#c5a059]/8 text-[#1a365d] scale-105'
-                        : 'border-slate-200 bg-slate-50 text-slate-300'
+                        ? 'border-gold-500 bg-gold-500/[0.08] text-brand-800 dark:text-brand-100 scale-105'
+                        : 'border-slate-200 dark:border-brand-700 bg-slate-50 dark:bg-brand-900 text-slate-300 dark:text-brand-500'
                       }
-                      focus:border-[#c5a059] focus:bg-[#c5a059]/5 focus:scale-105`}
+                      focus:border-gold-500 focus:bg-gold-500/5 focus:scale-105`}
                   />
                 ))}
               </div>
@@ -248,7 +248,7 @@ export default function CustomerLogin() {
               <button
                 onClick={() => verifyOtp(otp.join(''))}
                 disabled={loading || otp.some(d => !d)}
-                className="w-full bg-[#1a365d] hover:bg-[#c5a059] text-white py-4 rounded-xl font-bold text-base transition-all shadow-lg hover:-translate-y-0.5 flex justify-center items-center gap-2 mb-6 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
+                className="w-full bg-brand-800 hover:bg-gold-500 text-white py-4 rounded-xl font-bold text-base transition-all shadow-lg hover:-translate-y-0.5 flex justify-center items-center gap-2 mb-6 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
               >
                 {loading
                   ? <RefreshCw className="animate-spin" size={20} />
@@ -262,14 +262,14 @@ export default function CustomerLogin() {
                   <button
                     onClick={async () => { await sendOtp(); }}
                     disabled={loading}
-                    className="flex items-center gap-2 mx-auto text-[#c5a059] font-bold text-sm hover:text-[#1a365d] transition"
+                    className="flex items-center gap-2 mx-auto text-gold-500 font-bold text-sm hover:text-brand-800 transition"
                   >
                     <RefreshCw size={14} /> إعادة إرسال الرمز
                   </button>
                 ) : (
                   <p className="text-slate-400 text-sm">
                     إعادة الإرسال بعد{' '}
-                    <span className="font-black text-[#1a365d] tabular-nums" dir="ltr">{formatTime(countdown)}</span>
+                    <span className="font-black text-brand-800 dark:text-brand-100 tabular-nums" dir="ltr">{formatTime(countdown)}</span>
                   </p>
                 )}
               </div>
@@ -277,7 +277,7 @@ export default function CustomerLogin() {
               {/* رجوع لتغيير البيانات */}
               <button
                 onClick={() => { setStep('input'); setOtp(['', '', '', '', '', '']); clearInterval(timerRef.current); }}
-                className="mt-6 flex items-center gap-1.5 mx-auto text-slate-400 hover:text-[#1a365d] text-xs transition"
+                className="mt-6 flex items-center gap-1.5 mx-auto text-slate-400 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 text-xs transition"
               >
                 <ArrowRight size={13} /> تغيير رقم الوحدة أو الجوال
               </button>
@@ -286,10 +286,10 @@ export default function CustomerLogin() {
 
           {/* ─── رابط الرجوع للموقع (الخطوة ١ فقط) ─── */}
           {step === 'input' && (
-            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-brand-700 text-center">
               <button
                 onClick={() => navigate("/")}
-                className="text-slate-400 hover:text-[#1a365d] text-sm flex items-center justify-center gap-2 mx-auto transition"
+                className="text-slate-400 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 text-sm flex items-center justify-center gap-2 mx-auto transition"
               >
                 <ArrowRight size={14} /> العودة للموقع الرئيسي
               </button>

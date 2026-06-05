@@ -13,7 +13,7 @@ const ToastCtx = createContext(null);
 const KIND = {
     success: { cls: 'bg-emerald-600', Icon: CheckCircle2 },
     error:   { cls: 'bg-red-600',     Icon: AlertTriangle },
-    info:    { cls: 'bg-[#1a365d]',   Icon: Info },
+    info:    { cls: 'bg-brand-800 dark:bg-brand-700',   Icon: Info },
 };
 
 function ToastItem({ msg, kind, onClose }) {

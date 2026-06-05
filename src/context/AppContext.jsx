@@ -1,7 +1,23 @@
-import React, { createContext, useState } from 'react';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 
 // إنشاء الخزنة (السياق)
 export const AppContext = createContext();
+
+// ── إدارة الثيم (فاتح/داكن/تلقائي) ─────────────────────────────────────────
+const THEME_KEY = 'semak_theme';
+const getStoredTheme = () => {
+  try { return localStorage.getItem(THEME_KEY) || 'system'; } catch { return 'system'; }
+};
+const systemPrefersDark = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia &&
+  window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+const applyTheme = (theme) => {
+  if (typeof document === 'undefined') return;
+  const isDark = theme === 'dark' || (theme === 'system' && systemPrefersDark());
+  document.documentElement.classList.toggle('dark', isDark);
+};
 
 export const AppProvider = ({ children }) => {
   const [adminUser, setAdminUser] = useState(null);
@@ -16,6 +32,35 @@ export const AppProvider = ({ children }) => {
     if (data) localStorage.setItem('semak_customer', JSON.stringify(data));
     else localStorage.removeItem('semak_customer');
   };
+
+  // ── الثيم ────────────────────────────────────────────────────────────────
+  const [theme, setThemeState] = useState(getStoredTheme);
+
+  const setTheme = useCallback((next) => {
+    setThemeState(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
+    applyTheme(next);
+  }, []);
+
+  const cycleTheme = useCallback(() => {
+    const order = ['light', 'dark', 'system'];
+    setThemeState((prev) => {
+      const next = order[(order.indexOf(prev) + 1) % order.length];
+      try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
+      applyTheme(next);
+      return next;
+    });
+  }, []);
+
+  // تطبيق الثيم عند الإقلاع + الاستماع لتغيّر تفضيل النظام عند الوضع التلقائي
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== 'system' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => applyTheme('system');
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, [theme]);
 
   // حفظ حالة الإشعارات (الرسائل المنبثقة)
   const [toast, setToast] = useState({ show: false, title: "", desc: "", type: "success" });
@@ -34,10 +79,11 @@ export const AppProvider = ({ children }) => {
   };
 
   return (
-    <AppContext.Provider value={{ 
-      adminUser, setAdminUser, 
-      customer, setCustomer, 
+    <AppContext.Provider value={{
+      adminUser, setAdminUser,
+      customer, setCustomer,
       toast, showToast,
+      theme, setTheme, cycleTheme,
       logout
     }}>
       {children}

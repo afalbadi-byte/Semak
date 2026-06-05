@@ -17,9 +17,9 @@ import { API_URL } from '../../lib/api/client';
 function invoiceStatus(total, paid) {
   const t = parseFloat(total) || 0;
   const p = parseFloat(paid) || 0;
-  if (p >= t && t > 0) return { label: 'مدفوعة',     cls: 'bg-green-100 text-green-700 border-green-200' };
-  if (p > 0)           return { label: 'جزئي',        cls: 'bg-amber-100 text-amber-700 border-amber-200' };
-  return                      { label: 'غير مدفوعة', cls: 'bg-red-100 text-red-700 border-red-200' };
+  if (p >= t && t > 0) return { label: 'مدفوعة',     cls: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-300 dark:border-green-500/30' };
+  if (p > 0)           return { label: 'جزئي',        cls: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30' };
+  return                      { label: 'غير مدفوعة', cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30' };
 }
 
 // ─── تنسيق الأرقام ───────────────────────────────────────────────
@@ -62,13 +62,13 @@ function StatusBadge({ total, paid }) {
 // ─── شريحة ملخص ──────────────────────────────────────────────────
 function SummaryChip({ icon: Icon, label, value, color }) {
   return (
-    <div className={`flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 px-4 py-3 flex-1 min-w-[160px]`}>
+    <div className={`flex items-center gap-3 bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 px-4 py-3 flex-1 min-w-[160px]`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
         <Icon size={20} className="text-white" />
       </div>
       <div>
-        <p className="text-xs text-slate-400 font-medium">{label}</p>
-        <p className="text-sm font-black text-slate-700">{value}</p>
+        <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">{label}</p>
+        <p className="text-sm font-black text-slate-700 dark:text-brand-100">{value}</p>
       </div>
     </div>
   );
@@ -78,15 +78,15 @@ function SummaryChip({ icon: Icon, label, value, color }) {
 function ConfirmDialog({ msg, onConfirm, onCancel }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-2xl p-6 max-w-sm w-full">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
-            <AlertTriangle size={20} className="text-red-600" />
+          <div className="w-10 h-10 bg-red-100 dark:bg-red-500/15 rounded-xl flex items-center justify-center">
+            <AlertTriangle size={20} className="text-red-600 dark:text-red-300" />
           </div>
-          <p className="text-sm font-bold text-slate-700">{msg}</p>
+          <p className="text-sm font-bold text-slate-700 dark:text-brand-100">{msg}</p>
         </div>
         <div className="flex gap-3 justify-end">
-          <button onClick={onCancel} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-bold hover:bg-slate-200 transition-colors">
+          <button onClick={onCancel} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 text-sm font-bold hover:bg-slate-200 dark:hover:bg-brand-800 transition-colors">
             إلغاء
           </button>
           <button onClick={onConfirm} className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-colors">
@@ -443,8 +443,8 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
             <Receipt size={20} className="text-[#c5a059]" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-[#1a365d]">الفواتير</h1>
-            <p className="text-xs text-slate-400 font-medium">إدارة الفواتير والمدفوعات</p>
+            <h1 className="text-xl font-black text-brand-800 dark:text-brand-100">الفواتير</h1>
+            <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">إدارة الفواتير والمدفوعات</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -471,34 +471,34 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       </div>
 
       {/* شريط الفلاتر */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-4 mb-4">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400 font-bold">من</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">من</label>
             <div className="relative">
               <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
                 type="date"
                 value={filters.from}
                 onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
-                className="pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400 font-bold">إلى</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">إلى</label>
             <div className="relative">
               <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
                 type="date"
                 value={filters.to}
                 onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
-                className="pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
-            <label className="text-xs text-slate-400 font-bold">بحث</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">بحث</label>
             <div className="relative">
               <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
@@ -506,13 +506,13 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                 placeholder="رقم فاتورة أو اسم عميل..."
                 value={filters.search}
                 onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                className="w-full pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="w-full pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <button
             onClick={() => setAppliedFilters({ ...filters })}
-            className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#2d5299] text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+            className="flex items-center gap-2 bg-brand-800 hover:bg-[#2d5299] text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
           >
             <RefreshCw size={14} />
             تطبيق
@@ -526,7 +526,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
           icon={FileText}
           label="إجمالي الفواتير"
           value={displayed.length}
-          color="bg-[#1a365d]"
+          color="bg-brand-800"
         />
         <SummaryChip
           icon={DollarSign}
@@ -551,7 +551,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       {/* حالة التحميل / الخطأ */}
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <RefreshCw size={28} className="text-[#1a365d] animate-spin" />
+          <RefreshCw size={28} className="text-brand-800 dark:text-brand-300 animate-spin" />
         </div>
       )}
       {error && !loading && (
@@ -563,14 +563,14 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
 
       {/* جدول الفواتير */}
       {!loading && !error && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
           {displayed.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-300">
               <Receipt size={48} className="mb-4" />
-              <p className="text-sm font-bold text-slate-400">لا توجد فواتير في هذه الفترة</p>
+              <p className="text-sm font-bold text-slate-400 dark:text-brand-400">لا توجد فواتير في هذه الفترة</p>
               <button
                 onClick={openCreate}
-                className="mt-4 flex items-center gap-2 bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-[#2d5299] transition-colors"
+                className="mt-4 flex items-center gap-2 bg-brand-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-[#2d5299] transition-colors"
               >
                 <Plus size={14} />
                 أنشئ أول فاتورة
@@ -580,15 +580,15 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100 text-right">
+                  <tr className="bg-slate-50 dark:bg-brand-800/60 border-b border-slate-100 dark:border-brand-700 text-right">
                     <SortHeader label="رقم الفاتورة" sortKey="no"     activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="التاريخ"      sortKey="date"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="العميل"       sortKey="client" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="الإجمالي"     sortKey="total"  activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="المدفوع"      sortKey="paid"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-500 whitespace-nowrap">المتبقي</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-500 dark:text-brand-400 whitespace-nowrap">المتبقي</th>
                     <SortHeader label="الحالة"       sortKey="status" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-500 whitespace-nowrap">إجراءات</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-500 dark:text-brand-400 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -597,16 +597,16 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                     return (
                       <tr
                         key={inv.id}
-                        className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}
+                        className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/50 dark:hover:bg-brand-800 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30 dark:bg-brand-800/20'}`}
                       >
                         <td className="px-4 py-3">
-                          <span className="bg-[#1a365d]/10 text-[#1a365d] px-2 py-0.5 rounded-lg text-xs font-black">
+                          <span className="bg-brand-800/10 text-brand-800 dark:text-brand-300 px-2 py-0.5 rounded-lg text-xs font-black">
                             #{inv.no || inv.id}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500 font-medium whitespace-nowrap">{inv.date || '—'}</td>
-                        <td className="px-4 py-3 text-xs text-slate-700 font-bold">{inv.client || '—'}</td>
-                        <td className="px-4 py-3 text-xs font-black text-slate-700 whitespace-nowrap">{fmt(inv.total, inv.currency)}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{inv.date || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-700 dark:text-brand-300 font-bold">{inv.client || '—'}</td>
+                        <td className="px-4 py-3 text-xs font-black text-slate-700 dark:text-brand-100 whitespace-nowrap">{fmt(inv.total, inv.currency)}</td>
                         <td className="px-4 py-3 text-xs font-bold text-green-600 whitespace-nowrap">{fmt(inv.paid, inv.currency)}</td>
                         <td className="px-4 py-3 text-xs font-bold text-amber-600 whitespace-nowrap">{fmt(remaining, inv.currency)}</td>
                         <td className="px-4 py-3">
@@ -668,7 +668,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
         {/* رجوع */}
         <button
           onClick={() => setView('list')}
-          className="flex items-center gap-2 text-slate-500 hover:text-[#1a365d] font-bold text-sm mb-5 transition-colors"
+          className="flex items-center gap-2 text-slate-500 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 font-bold text-sm mb-5 transition-colors"
         >
           <ChevronLeft size={16} />
           رجوع إلى القائمة
@@ -712,28 +712,28 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
 
         {/* بنود الفاتورة */}
         {Array.isArray(inv.items) && inv.items.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-5 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
-              <h3 className="text-sm font-black text-[#1a365d]">بنود الفاتورة</h3>
+          <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 mb-5 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 dark:border-brand-700 bg-slate-50 dark:bg-brand-800/60">
+              <h3 className="text-sm font-black text-brand-800 dark:text-brand-100">بنود الفاتورة</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-100">
+                  <tr className="border-b border-slate-100 dark:border-brand-700">
                     {['البند', 'الكمية', 'السعر', 'الخصم', 'الضريبة', 'الإجمالي'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-right text-xs font-black text-slate-400">{h}</th>
+                      <th key={h} className="px-4 py-2.5 text-right text-xs font-black text-slate-400 dark:text-brand-400">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {inv.items.map((it, idx) => (
-                    <tr key={idx} className="border-b border-slate-50">
-                      <td className="px-4 py-3 text-xs font-bold text-slate-700">{it.name}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{it.quantity}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{fmt(it.unit_price, currency)}</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{it.discount || 0}%</td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{it.tax ?? 15}%</td>
-                      <td className="px-4 py-3 text-xs font-black text-slate-700">{fmt(lineTotal(it), currency)}</td>
+                    <tr key={idx} className="border-b border-slate-50 dark:border-brand-700">
+                      <td className="px-4 py-3 text-xs font-bold text-slate-700 dark:text-brand-100">{it.name}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400">{it.quantity}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400">{fmt(it.unit_price, currency)}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400">{it.discount || 0}%</td>
+                      <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400">{it.tax ?? 15}%</td>
+                      <td className="px-4 py-3 text-xs font-black text-slate-700 dark:text-brand-100">{fmt(lineTotal(it), currency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -743,19 +743,19 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
         )}
 
         {/* الملخص المالي */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
-          <h3 className="text-sm font-black text-[#1a365d] mb-4">الملخص المالي</h3>
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-5">
+          <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4">الملخص المالي</h3>
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400 font-medium">المجموع قبل الضريبة</span>
-              <span className="font-bold text-slate-700">{fmt(inv.total, currency)}</span>
+              <span className="text-slate-400 dark:text-brand-400 font-medium">المجموع قبل الضريبة</span>
+              <span className="font-bold text-slate-700 dark:text-brand-100">{fmt(inv.total, currency)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400 font-medium">المدفوع</span>
+              <span className="text-slate-400 dark:text-brand-400 font-medium">المدفوع</span>
               <span className="font-bold text-green-600">{fmt(inv.paid, currency)}</span>
             </div>
-            <div className="border-t border-slate-100 pt-3 flex justify-between">
-              <span className="text-sm font-black text-slate-700">المتبقي</span>
+            <div className="border-t border-slate-100 dark:border-brand-700 pt-3 flex justify-between">
+              <span className="text-sm font-black text-slate-700 dark:text-brand-100">المتبقي</span>
               <span className={`text-base font-black ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 {fmt(remaining, currency)}
               </span>
@@ -776,14 +776,14 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
           )}
           <button
             onClick={() => openEdit(inv)}
-            className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#2d5299] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
+            className="flex items-center gap-2 bg-brand-800 hover:bg-[#2d5299] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
           >
             <Edit3 size={15} />
             تعديل الفاتورة
           </button>
           <button
             onClick={() => window.open(`${API_URL}?action=daftra_doc_pdf&type=invoice&id=${inv.id}`, '_blank')}
-            className="flex items-center gap-2 bg-[#c5a059] hover:bg-[#b08f47] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
+            className="flex items-center gap-2 bg-gold-500 hover:bg-[#b08f47] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
           >
             <Printer size={15} />
             PDF رسمي (دفترة)
@@ -797,7 +797,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
+            className="flex items-center gap-2 bg-slate-100 dark:bg-brand-800 hover:bg-slate-200 dark:hover:bg-brand-800 text-slate-700 dark:text-brand-100 px-5 py-2.5 rounded-xl font-bold text-sm transition-colors"
           >
             <Printer size={15} />
             طباعة
@@ -815,30 +815,30 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       {/* رجوع */}
       <button
         onClick={() => setView('list')}
-        className="flex items-center gap-2 text-slate-500 hover:text-[#1a365d] font-bold text-sm mb-5 transition-colors"
+        className="flex items-center gap-2 text-slate-500 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 font-bold text-sm mb-5 transition-colors"
       >
         <ChevronLeft size={16} />
         رجوع
       </button>
 
-      <h2 className="text-lg font-black text-[#1a365d] mb-6">
+      <h2 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-6">
         {view === 'edit' ? 'تعديل الفاتورة' : 'فاتورة جديدة'}
       </h2>
 
       {/* قسم: معلومات الفاتورة */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
-        <h3 className="text-sm font-black text-[#1a365d] mb-4 flex items-center gap-2">
-          <User size={15} className="text-[#c5a059]" />
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-5">
+        <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2">
+          <User size={15} className="text-gold-500" />
           معلومات الفاتورة
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* العميل */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-500 mb-1">العميل <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">العميل <span className="text-red-500">*</span></label>
             <select
               value={form.client_id}
               onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="">— اختر العميل —</option>
               {clients.map(c => (
@@ -849,22 +849,22 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
 
           {/* التاريخ */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">التاريخ <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">التاريخ <span className="text-red-500">*</span></label>
             <input
               type="date"
               value={form.date}
               onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             />
           </div>
 
           {/* العملة */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">العملة</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">العملة</label>
             <select
               value={form.currency}
               onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="SAR">ريال سعودي (SAR)</option>
               <option value="USD">دولار أمريكي (USD)</option>
@@ -874,11 +874,11 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
 
           {/* المشروع */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">المشروع (اختياري)</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">المشروع (اختياري)</label>
             <select
               value={form.work_order_id}
               onChange={e => setForm(f => ({ ...f, work_order_id: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="">— بدون مشروع —</option>
               {workCycles.map(w => (
@@ -889,28 +889,28 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
 
           {/* ملاحظات */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">ملاحظات</label>
             <textarea
               rows={2}
               placeholder="ملاحظات إضافية..."
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] resize-none"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] resize-none"
             />
           </div>
         </div>
       </div>
 
       {/* قسم: بنود الفاتورة */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-5">
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-black text-[#1a365d] flex items-center gap-2">
-            <FileText size={15} className="text-[#c5a059]" />
+          <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
+            <FileText size={15} className="text-gold-500" />
             بنود الفاتورة
           </h3>
           <button
             onClick={addItem}
-            className="flex items-center gap-1.5 text-xs bg-[#1a365d]/10 hover:bg-[#1a365d]/20 text-[#1a365d] px-3 py-1.5 rounded-xl font-bold transition-colors"
+            className="flex items-center gap-1.5 text-xs bg-brand-800/10 hover:bg-brand-800/20 text-brand-800 dark:text-brand-300 px-3 py-1.5 rounded-xl font-bold transition-colors"
           >
             <Plus size={13} />
             أضف بند
@@ -919,14 +919,14 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
 
         <div className="space-y-3">
           {form.items.map((item, idx) => (
-            <div key={idx} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+            <div key={idx} className="bg-slate-50 dark:bg-brand-800/40 rounded-xl p-4 border border-slate-100 dark:border-brand-700">
               <div className="flex items-start gap-3 mb-3">
                 <div className="flex-1">
-                  <label className="block text-xs font-bold text-slate-400 mb-1">اختر منتجاً (اختياري)</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">اختر منتجاً (اختياري)</label>
                   <select
                     value=""
                     onChange={e => { if (e.target.value) applyProduct(idx, e.target.value); }}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20"
                   >
                     <option value="">— تعبئة من قائمة المنتجات —</option>
                     {products.map(p => (
@@ -947,45 +947,45 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 {/* اسم البند */}
                 <div className="col-span-2 md:col-span-3 lg:col-span-2">
-                  <label className="block text-xs font-bold text-slate-400 mb-1">اسم البند <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">اسم البند <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     placeholder="وصف الخدمة أو المنتج"
                     value={item.name}
                     onChange={e => updateItem(idx, 'name', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* الكمية */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">الكمية</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">الكمية</label>
                   <input
                     type="number"
                     min="0.01"
                     step="0.01"
                     value={item.quantity}
                     onChange={e => updateItem(idx, 'quantity', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* سعر الوحدة */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">سعر الوحدة</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">سعر الوحدة</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={item.unit_price}
                     onChange={e => updateItem(idx, 'unit_price', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* الخصم */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">خصم %</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">خصم %</label>
                   <input
                     type="number"
                     min="0"
@@ -993,13 +993,13 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                     step="0.1"
                     value={item.discount}
                     onChange={e => updateItem(idx, 'discount', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
 
                 {/* الضريبة */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">ضريبة %</label>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-brand-400 mb-1">ضريبة %</label>
                   <input
                     type="number"
                     min="0"
@@ -1007,15 +1007,15 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                     step="0.1"
                     value={item.tax}
                     onChange={e => updateItem(idx, 'tax', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
                   />
                 </div>
               </div>
 
               {/* إجمالي السطر */}
               <div className="mt-2 text-left">
-                <span className="text-xs text-slate-400 font-medium">إجمالي البند: </span>
-                <span className="text-sm font-black text-[#1a365d]">{fmt(lineTotal(item), form.currency)}</span>
+                <span className="text-xs text-slate-400 dark:text-brand-400 font-medium">إجمالي البند: </span>
+                <span className="text-sm font-black text-brand-800 dark:text-brand-100">{fmt(lineTotal(item), form.currency)}</span>
               </div>
             </div>
           ))}
@@ -1023,29 +1023,29 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       </div>
 
       {/* قسم: الإجمالي */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6">
-        <h3 className="text-sm font-black text-[#1a365d] mb-4 flex items-center gap-2">
-          <DollarSign size={15} className="text-[#c5a059]" />
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-6">
+        <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2">
+          <DollarSign size={15} className="text-gold-500" />
           الإجمالي
         </h3>
         <div className="space-y-2.5 max-w-xs mr-auto">
           <div className="flex justify-between text-sm">
-            <span className="text-slate-400 font-medium">الإجمالي قبل الخصم</span>
-            <span className="font-bold text-slate-700">{fmt(subtotal, form.currency)}</span>
+            <span className="text-slate-400 dark:text-brand-400 font-medium">الإجمالي قبل الخصم</span>
+            <span className="font-bold text-slate-700 dark:text-brand-100">{fmt(subtotal, form.currency)}</span>
           </div>
           {totalDisc > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400 font-medium">إجمالي الخصم</span>
+              <span className="text-slate-400 dark:text-brand-400 font-medium">إجمالي الخصم</span>
               <span className="font-bold text-red-500">- {fmt(totalDisc, form.currency)}</span>
             </div>
           )}
           <div className="flex justify-between text-sm">
-            <span className="text-slate-400 font-medium">إجمالي الضريبة</span>
-            <span className="font-bold text-slate-600">{fmt(totalTax, form.currency)}</span>
+            <span className="text-slate-400 dark:text-brand-400 font-medium">إجمالي الضريبة</span>
+            <span className="font-bold text-slate-600 dark:text-brand-300">{fmt(totalTax, form.currency)}</span>
           </div>
-          <div className="border-t border-slate-200 pt-2.5 flex justify-between">
-            <span className="text-sm font-black text-[#1a365d]">الإجمالي الكلي</span>
-            <span className="text-lg font-black text-[#1a365d]">{fmt(grandTotal, form.currency)}</span>
+          <div className="border-t border-slate-200 dark:border-brand-700 pt-2.5 flex justify-between">
+            <span className="text-sm font-black text-brand-800 dark:text-brand-100">الإجمالي الكلي</span>
+            <span className="text-lg font-black text-brand-800 dark:text-brand-100">{fmt(grandTotal, form.currency)}</span>
           </div>
         </div>
       </div>
@@ -1054,7 +1054,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       <button
         onClick={handleSave}
         disabled={saving}
-        className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#2d5299] disabled:opacity-60 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-black text-sm shadow-lg transition-colors"
+        className="flex items-center gap-2 bg-brand-800 hover:bg-[#2d5299] disabled:opacity-60 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-black text-sm shadow-lg transition-colors"
       >
         {saving ? (
           <>
@@ -1075,7 +1075,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   // التصيير الرئيسي
   // ════════════════════════════════════════════════════════════
   return (
-    <div dir="rtl" className="font-cairo min-h-screen bg-slate-50 p-4 md:p-6">
+    <div dir="rtl" className="font-cairo min-h-screen bg-transparent p-4 md:p-6">
       {/* Toast */}
       {toast && (
         <Toast
@@ -1097,31 +1097,31 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       {/* مودال تسجيل دفعة */}
       {payInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !paySaving && setPayInvoice(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
+          <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
             <div className="bg-emerald-600 text-white px-6 py-4 flex items-center justify-between">
               <h3 className="font-black text-base flex items-center gap-2"><DollarSign size={18}/> تسجيل دفعة — فاتورة #{payInvoice.no || payInvoice.id}</h3>
               <button onClick={() => !paySaving && setPayInvoice(null)} className="opacity-80 hover:opacity-100"><X size={18}/></button>
             </div>
             <div className="p-6 space-y-4">
-              <div className="bg-slate-50 rounded-xl p-3 flex justify-between text-sm">
-                <span className="text-slate-500 font-bold">المتبقي على الفاتورة</span>
+              <div className="bg-slate-50 dark:bg-brand-800/40 rounded-xl p-3 flex justify-between text-sm">
+                <span className="text-slate-500 dark:text-brand-400 font-bold">المتبقي على الفاتورة</span>
                 <span className="font-black text-amber-600">{fmt((parseFloat(payInvoice.total)||0) - (parseFloat(payInvoice.paid)||0), payInvoice.currency)}</span>
               </div>
               <div>
-                <label className="text-xs font-black text-slate-500 mb-1 block">المبلغ المُحصّل *</label>
+                <label className="text-xs font-black text-slate-500 dark:text-brand-400 mb-1 block">المبلغ المُحصّل *</label>
                 <input type="number" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none" placeholder="0.00"/>
+                  className="w-full border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none" placeholder="0.00"/>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-black text-slate-500 mb-1 block">التاريخ</label>
+                  <label className="text-xs font-black text-slate-500 dark:text-brand-400 mb-1 block">التاريخ</label>
                   <input type="date" value={payForm.date} onChange={e => setPayForm(f => ({ ...f, date: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none"/>
+                    className="w-full border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none"/>
                 </div>
                 <div>
-                  <label className="text-xs font-black text-slate-500 mb-1 block">طريقة الدفع</label>
+                  <label className="text-xs font-black text-slate-500 dark:text-brand-400 mb-1 block">طريقة الدفع</label>
                   <select value={payForm.method} onChange={e => setPayForm(f => ({ ...f, method: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none bg-white">
+                    className="w-full border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none">
                     <option value="cash">نقدي</option>
                     <option value="bank">تحويل بنكي</option>
                     <option value="cheque">شيك</option>
@@ -1130,17 +1130,17 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                 </div>
               </div>
               <div>
-                <label className="text-xs font-black text-slate-500 mb-1 block">الخزينة</label>
+                <label className="text-xs font-black text-slate-500 dark:text-brand-400 mb-1 block">الخزينة</label>
                 <select value={payForm.treasury_id} onChange={e => setPayForm(f => ({ ...f, treasury_id: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none bg-white">
+                  className="w-full border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-emerald-500 outline-none">
                   <option value="">— اختر الخزينة —</option>
                   {treasuries.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-black text-slate-500 mb-1 block">ملاحظات</label>
+                <label className="text-xs font-black text-slate-500 dark:text-brand-400 mb-1 block">ملاحظات</label>
                 <input type="text" value={payForm.notes} onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-emerald-500 outline-none" placeholder="اختياري"/>
+                  className="w-full border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 rounded-xl px-3 py-2.5 text-sm focus:border-emerald-500 outline-none" placeholder="اختياري"/>
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-3">
@@ -1150,7 +1150,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                 تأكيد الدفعة
               </button>
               <button onClick={() => setPayInvoice(null)} disabled={paySaving}
-                className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors">إلغاء</button>
+                className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-brand-800 hover:bg-slate-200 dark:hover:bg-brand-800 text-slate-600 dark:text-brand-300 font-bold text-sm transition-colors">إلغاء</button>
             </div>
           </div>
         </div>
@@ -1159,23 +1159,23 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
       {/* مودال إرسال واتساب */}
       {waInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !waSending && setWaInvoice(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
+          <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
             <div className="bg-green-600 text-white px-6 py-4 flex items-center justify-between">
               <h3 className="font-black text-base flex items-center gap-2"><MessageCircle size={18}/> إرسال الفاتورة عبر واتساب</h3>
               <button onClick={() => !waSending && setWaInvoice(null)} className="opacity-80 hover:opacity-100"><X size={18}/></button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="text-xs font-black text-slate-500 mb-1 block">رقم جوال العميل *</label>
+                <label className="text-xs font-black text-slate-500 dark:text-brand-400 mb-1 block">رقم جوال العميل *</label>
                 <input type="tel" dir="ltr" value={waForm.phone} onChange={e => setWaForm(f => ({ ...f, phone: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-green-500 outline-none text-right" placeholder="05XXXXXXXX"/>
+                  className="w-full border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 rounded-xl px-3 py-2.5 text-sm font-bold focus:border-green-500 outline-none text-right" placeholder="05XXXXXXXX"/>
               </div>
               <div>
-                <label className="text-xs font-black text-slate-500 mb-1 block">نص الرسالة</label>
+                <label className="text-xs font-black text-slate-500 dark:text-brand-400 mb-1 block">نص الرسالة</label>
                 <textarea rows={8} value={waForm.message} onChange={e => setWaForm(f => ({ ...f, message: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-xs leading-relaxed focus:border-green-500 outline-none resize-none"/>
+                  className="w-full border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 rounded-xl px-3 py-2.5 text-xs leading-relaxed focus:border-green-500 outline-none resize-none"/>
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
+              <p className="text-[11px] text-slate-400 dark:text-brand-400 leading-relaxed">
                 💡 يتضمّن رابط PDF الرسمي للفاتورة. ملاحظة: قد لا يصل النص خارج نافذة 24 ساعة ما لم يكن العميل قد راسلكم مؤخراً.
               </p>
             </div>
@@ -1186,7 +1186,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                 إرسال
               </button>
               <button onClick={() => setWaInvoice(null)} disabled={waSending}
-                className="px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors">إلغاء</button>
+                className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-brand-800 hover:bg-slate-200 dark:hover:bg-brand-800 text-slate-600 dark:text-brand-300 font-bold text-sm transition-colors">إلغاء</button>
             </div>
           </div>
         </div>

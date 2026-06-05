@@ -247,7 +247,7 @@ ${content.innerHTML}
   };
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#0d1f38] p-4 sm:p-6 font-[Cairo,sans-serif]">
+    <div dir="rtl" className="min-h-screen bg-transparent p-4 sm:p-6 font-[Cairo,sans-serif]">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap');`}</style>
 
       {/* Hidden print target */}

@@ -52,12 +52,12 @@ function StatusModal({ unit, onClose, onSaved, showToast }) {
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xs p-6" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-xs p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-5">
-                    <h3 className="font-black text-[#1a365d] text-lg">
+                    <h3 className="font-black text-brand-800 dark:text-brand-100 text-lg">
                         حالة الوحدة — {unit.unit_code}
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={20} /></button>
+                    <button onClick={onClose} className="text-slate-400 dark:text-brand-400 hover:text-slate-600 p-1"><X size={20} /></button>
                 </div>
 
                 <div className="space-y-2 mb-5">
@@ -71,7 +71,7 @@ function StatusModal({ unit, onClose, onSaved, showToast }) {
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition border-2 ${
                                     isSelected
                                         ? `${s.bg} ${s.text} border-current`
-                                        : 'bg-slate-50 text-slate-500 border-transparent hover:bg-slate-100'
+                                        : 'bg-slate-50 dark:bg-brand-800/40 text-slate-500 dark:text-brand-400 border-transparent hover:bg-slate-100 dark:hover:bg-brand-800'
                                 }`}>
                                 <span className={`w-3 h-3 rounded-full ${isSelected ? s.dot : 'bg-slate-300'}`} />
                                 {st}
@@ -82,7 +82,7 @@ function StatusModal({ unit, onClose, onSaved, showToast }) {
                 </div>
 
                 <button onClick={save} disabled={saving}
-                    className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-[#1a365d]/90 disabled:opacity-50">
+                    className="w-full bg-brand-800 text-white py-3 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-brand-800/90 disabled:opacity-50">
                     {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                     حفظ الحالة
                 </button>
@@ -145,36 +145,36 @@ function OwnerModal({ unit, projects, onClose, onSaved, showToast }) {
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-5">
-                    <h3 className="font-black text-[#1a365d] text-lg flex items-center gap-2">
+                    <h3 className="font-black text-brand-800 dark:text-brand-100 text-lg flex items-center gap-2">
                         <User size={20} className="text-emerald-500" />
                         {hasOwner ? 'تعديل المالك' : 'إضافة مالك'} — {unit.unit_code}
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1">
+                    <button onClick={onClose} className="text-slate-400 dark:text-brand-400 hover:text-slate-600 p-1">
                         <X size={20} />
                     </button>
                 </div>
 
                 <form onSubmit={save} className="space-y-4">
                     <div>
-                        <label className="text-xs font-bold text-slate-500 block mb-1.5">اسم المالك</label>
+                        <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1.5">اسم المالك</label>
                         <div className="relative">
-                            <User className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                            <User className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-500" size={15} />
                             <input
                                 required
                                 type="text"
                                 value={form.name}
                                 onChange={e => setForm({ ...form, name: e.target.value })}
                                 placeholder="الاسم الرباعي"
-                                className="w-full pr-9 pl-4 py-3 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#1a365d]"
+                                className="w-full pr-9 pl-4 py-3 border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl text-sm font-bold outline-none focus:border-brand-800"
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-slate-500 block mb-1.5">رقم الجوال</label>
+                        <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1.5">رقم الجوال</label>
                         <div className="relative">
-                            <Phone className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                            <Phone className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-500" size={15} />
                             <input
                                 required
                                 type="tel"
@@ -182,28 +182,28 @@ function OwnerModal({ unit, projects, onClose, onSaved, showToast }) {
                                 onChange={e => setForm({ ...form, phone: e.target.value })}
                                 placeholder="05XXXXXXXX"
                                 dir="ltr"
-                                className="w-full pr-9 pl-4 py-3 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#1a365d] text-left"
+                                className="w-full pr-9 pl-4 py-3 border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl text-sm font-bold outline-none focus:border-brand-800 text-left"
                             />
                         </div>
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-slate-500 block mb-1.5">البريد الإلكتروني (اختياري)</label>
+                        <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1.5">البريد الإلكتروني (اختياري)</label>
                         <div className="relative">
-                            <Mail className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                            <Mail className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-500" size={15} />
                             <input
                                 type="email"
                                 value={form.email}
                                 onChange={e => setForm({ ...form, email: e.target.value })}
                                 placeholder="email@example.com"
                                 dir="ltr"
-                                className="w-full pr-9 pl-4 py-3 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#1a365d] text-left"
+                                className="w-full pr-9 pl-4 py-3 border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl text-sm font-bold outline-none focus:border-brand-800 text-left"
                             />
                         </div>
                     </div>
 
                     <div className="flex gap-3 pt-2">
                         <button type="submit" disabled={saving}
-                            className="flex-1 bg-[#1a365d] text-white py-3 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-[#1a365d]/90 disabled:opacity-50">
+                            className="flex-1 bg-brand-800 text-white py-3 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-brand-800/90 disabled:opacity-50">
                             {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                             {hasOwner ? 'حفظ التعديلات' : 'إضافة المالك'}
                         </button>
@@ -258,13 +258,13 @@ function SpacesModal({ unit, onClose, onSaved, showToast }) {
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-5">
-                    <h3 className="font-black text-[#1a365d] text-lg flex items-center gap-2">
+                    <h3 className="font-black text-brand-800 dark:text-brand-100 text-lg flex items-center gap-2">
                         <Ruler size={20} className="text-blue-500" />
                         تعديل مساحات — {unit.unit_code}
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1"><X size={20} /></button>
+                    <button onClick={onClose} className="text-slate-400 dark:text-brand-400 hover:text-slate-600 p-1"><X size={20} /></button>
                 </div>
 
                 <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
@@ -275,14 +275,14 @@ function SpacesModal({ unit, onClose, onSaved, showToast }) {
                                 value={s.label}
                                 onChange={e => update(i, 'label', e.target.value)}
                                 placeholder="اسم المساحة (مثال: صالة)"
-                                className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#1a365d]"
+                                className="flex-1 px-3 py-2.5 border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl text-sm font-bold outline-none focus:border-brand-800"
                             />
                             <input
                                 type="number"
                                 value={s.value}
                                 onChange={e => update(i, 'value', e.target.value)}
                                 placeholder="م²"
-                                className="w-20 px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#1a365d] text-center"
+                                className="w-20 px-3 py-2.5 border border-slate-200 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl text-sm font-bold outline-none focus:border-brand-800 text-center"
                             />
                             <button onClick={() => removeRow(i)}
                                 className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition">
@@ -293,12 +293,12 @@ function SpacesModal({ unit, onClose, onSaved, showToast }) {
                 </div>
 
                 <button onClick={addRow}
-                    className="w-full border-2 border-dashed border-slate-200 text-slate-400 py-2.5 rounded-xl text-sm font-bold hover:border-[#1a365d] hover:text-[#1a365d] transition flex items-center justify-center gap-2 mb-5">
+                    className="w-full border-2 border-dashed border-slate-200 dark:border-brand-700 text-slate-400 dark:text-brand-400 py-2.5 rounded-xl text-sm font-bold hover:border-brand-800 hover:text-brand-800 transition flex items-center justify-center gap-2 mb-5">
                     <Plus size={16} /> إضافة مساحة
                 </button>
 
                 <button onClick={save} disabled={saving}
-                    className="w-full bg-[#1a365d] text-white py-3 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-[#1a365d]/90 disabled:opacity-50">
+                    className="w-full bg-brand-800 text-white py-3 rounded-xl font-black flex items-center justify-center gap-2 hover:bg-brand-800/90 disabled:opacity-50">
                     {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                     حفظ المساحات
                 </button>
@@ -376,13 +376,13 @@ export default function UnitsEdit({ showToast }) {
             {/* ── إحصائيات ──────────────────────────────────────── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 {[
-                    { label: 'إجمالي الوحدات', value: stats.total,    color: 'text-[#1a365d]',   bg: 'bg-[#1a365d]/5'  },
+                    { label: 'إجمالي الوحدات', value: stats.total,    color: 'text-brand-800 dark:text-brand-100', bg: 'bg-[#1a365d]/5'  },
                     { label: 'مباعة',           value: stats.sold,     color: 'text-emerald-600', bg: 'bg-emerald-50'   },
                     { label: 'متاحة',           value: stats.avail,    color: 'text-blue-600',    bg: 'bg-blue-50'      },
                     { label: 'محجوزة',          value: stats.reserved, color: 'text-amber-600',   bg: 'bg-amber-50'     },
                 ].map(s => (
                     <div key={s.label} className={`${s.bg} rounded-2xl p-5`}>
-                        <p className="text-xs text-slate-500 font-bold">{s.label}</p>
+                        <p className="text-xs text-slate-500 dark:text-brand-300 font-bold">{s.label}</p>
                         <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                     </div>
                 ))}
@@ -397,17 +397,17 @@ export default function UnitsEdit({ showToast }) {
                         placeholder="بحث برقم الوحدة أو اسم المالك أو الجوال..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-2xl py-3 pr-10 pl-4 text-sm font-bold outline-none focus:border-[#1a365d]"
+                        className="w-full bg-white border border-slate-200 rounded-2xl py-3 pr-10 pl-4 text-sm font-bold outline-none focus:border-brand-800 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 dark:placeholder-brand-500"
                     />
                 </div>
                 <div className="flex gap-2">
                     {['الكل', 'متاح', 'مباعة', 'محجوز'].map(f => (
                         <button key={f} onClick={() => setFilter(f)}
-                            className={`px-4 py-2 rounded-xl text-xs font-black transition ${filterStatus === f ? 'bg-[#1a365d] text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-[#1a365d]'}`}>
+                            className={`px-4 py-2 rounded-xl text-xs font-black transition ${filterStatus === f ? 'bg-brand-800 text-white' : 'bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-brand-800'}`}>
                             {f}
                         </button>
                     ))}
-                    <button onClick={load} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-[#1a365d]">
+                    <button onClick={load} className="p-2 bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl text-slate-500 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100">
                         <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                     </button>
                 </div>
@@ -415,12 +415,12 @@ export default function UnitsEdit({ showToast }) {
 
             {/* ── قائمة المشاريع ───────────────────────────────── */}
             {loading ? (
-                <div className="text-center py-24 text-slate-400">
-                    <RefreshCw className="animate-spin mx-auto mb-3 text-[#1a365d]" size={36} />
+                <div className="text-center py-24 text-slate-400 dark:text-brand-400">
+                    <RefreshCw className="animate-spin mx-auto mb-3 text-brand-800 dark:text-brand-300" size={36} />
                     <p className="font-bold">جاري التحميل...</p>
                 </div>
             ) : filteredProjects.length === 0 ? (
-                <div className="text-center py-24 text-slate-400 font-bold">لا توجد نتائج</div>
+                <div className="text-center py-24 text-slate-400 dark:text-brand-400 font-bold">لا توجد نتائج</div>
             ) : (
                 <div className="space-y-4">
                     {filteredProjects.map(project => {
@@ -430,42 +430,42 @@ export default function UnitsEdit({ showToast }) {
                         const pct = total > 0 ? Math.round((soldCount / total) * 100) : 0;
 
                         return (
-                            <div key={project.id} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div key={project.id} className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
 
                                 {/* رأس المشروع */}
                                 <button
                                     onClick={() => setExpanded(prev => ({ ...prev, [project.id]: !prev[project.id] }))}
-                                    className="w-full flex items-center justify-between p-5 hover:bg-slate-50 transition text-right">
+                                    className="w-full flex items-center justify-between p-5 hover:bg-slate-50 dark:hover:bg-brand-800 transition text-right">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-[#1a365d]/10 text-[#1a365d] rounded-2xl flex items-center justify-center">
+                                        <div className="w-12 h-12 bg-[#1a365d]/10 text-brand-800 dark:text-brand-300 rounded-2xl flex items-center justify-center">
                                             <Building2 size={22} />
                                         </div>
                                         <div>
-                                            <p className="font-black text-[#1a365d] text-lg">{project.name}</p>
-                                            <p className="text-xs text-slate-400 font-bold mt-0.5">
+                                            <p className="font-black text-brand-800 dark:text-brand-100 text-lg">{project.name}</p>
+                                            <p className="text-xs text-slate-400 dark:text-brand-400 font-bold mt-0.5">
                                                 {total} وحدة — {soldCount} مباعة — {total - soldCount} متاحة
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <div className="hidden sm:block w-32">
-                                            <div className="flex justify-between text-[10px] font-black text-slate-400 mb-1">
+                                            <div className="flex justify-between text-[10px] font-black text-slate-400 dark:text-brand-400 mb-1">
                                                 <span>المبيعات</span><span>{pct}%</span>
                                             </div>
-                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="h-2 bg-slate-100 dark:bg-brand-800 rounded-full overflow-hidden">
                                                 <div className="h-full bg-gradient-to-l from-emerald-500 to-emerald-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
                                             </div>
                                         </div>
-                                        {isOpen ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
+                                        {isOpen ? <ChevronUp size={18} className="text-slate-400 dark:text-brand-400" /> : <ChevronDown size={18} className="text-slate-400 dark:text-brand-400" />}
                                     </div>
                                 </button>
 
                                 {/* جدول الوحدات */}
                                 {isOpen && (
-                                    <div className="border-t border-slate-100 overflow-x-auto">
+                                    <div className="border-t border-slate-100 dark:border-brand-700 overflow-x-auto">
                                         <table className="w-full text-sm">
                                             <thead>
-                                                <tr className="bg-slate-50 text-xs text-slate-500 font-black">
+                                                <tr className="bg-slate-50 dark:bg-brand-800/60 text-xs text-slate-500 dark:text-brand-400 font-black">
                                                     <th className="text-right px-5 py-3">رقم الوحدة</th>
                                                     <th className="text-right px-5 py-3">الحالة</th>
                                                     <th className="text-right px-5 py-3">المالك</th>
@@ -473,11 +473,11 @@ export default function UnitsEdit({ showToast }) {
                                                     <th className="text-center px-5 py-3">تعديل</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-50">
+                                            <tbody className="divide-y divide-slate-50 dark:divide-brand-700">
                                                 {project.units_details.map(unit => (
-                                                    <tr key={unit.id} className="hover:bg-slate-50/50 transition">
+                                                    <tr key={unit.id} className="hover:bg-slate-50/50 dark:hover:bg-brand-800 transition">
                                                         <td className="px-5 py-3.5">
-                                                            <span className="font-black text-[#1a365d] bg-[#1a365d]/5 px-3 py-1 rounded-lg text-xs">
+                                                            <span className="font-black text-brand-800 dark:text-brand-100 bg-[#1a365d]/5 px-3 py-1 rounded-lg text-xs">
                                                                 {unit.unit_code}
                                                             </span>
                                                         </td>
@@ -497,12 +497,12 @@ export default function UnitsEdit({ showToast }) {
                                                                         {unit.owner_name.charAt(0)}
                                                                     </div>
                                                                     <div>
-                                                                        <p className="font-bold text-slate-700 text-xs">{unit.owner_name}</p>
+                                                                        <p className="font-bold text-slate-700 dark:text-brand-300 text-xs">{unit.owner_name}</p>
                                                                         <p className="text-[10px] text-blue-500" dir="ltr">{unit.owner_phone}</p>
                                                                     </div>
                                                                 </div>
                                                             ) : (
-                                                                <span className="text-slate-400 text-xs font-bold">— بدون مالك</span>
+                                                                <span className="text-slate-400 dark:text-brand-400 text-xs font-bold">— بدون مالك</span>
                                                             )}
                                                         </td>
                                                         <td className="px-5 py-3.5">
@@ -512,17 +512,17 @@ export default function UnitsEdit({ showToast }) {
                                                                         const label = typeof sp === 'string' ? sp : sp.label;
                                                                         const val   = typeof sp === 'string' ? null : sp.value;
                                                                         return (
-                                                                            <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap">
+                                                                            <span key={i} className="bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap">
                                                                                 {label}{val ? `: ${val}م²` : ''}
                                                                             </span>
                                                                         );
                                                                     })}
                                                                     {unit.spaces.length > 3 && (
-                                                                        <span className="text-slate-400 text-[10px] font-bold">+{unit.spaces.length - 3}</span>
+                                                                        <span className="text-slate-400 dark:text-brand-400 text-[10px] font-bold">+{unit.spaces.length - 3}</span>
                                                                     )}
                                                                 </div>
                                                             ) : (
-                                                                <span className="text-slate-400 text-xs">—</span>
+                                                                <span className="text-slate-400 dark:text-brand-400 text-xs">—</span>
                                                             )}
                                                         </td>
                                                         <td className="px-5 py-3.5">
@@ -543,7 +543,7 @@ export default function UnitsEdit({ showToast }) {
                                                                 <button
                                                                     onClick={() => setSpacesModal({ ...unit, project_id: project.id })}
                                                                     title="تعديل المساحات"
-                                                                    className="bg-slate-50 text-slate-600 hover:bg-[#1a365d] hover:text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5">
+                                                                    className="bg-slate-50 dark:bg-brand-800/40 text-slate-600 dark:text-brand-300 hover:bg-brand-800 hover:text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5">
                                                                     <Ruler size={13} /> مساحات
                                                                 </button>
                                                             </div>

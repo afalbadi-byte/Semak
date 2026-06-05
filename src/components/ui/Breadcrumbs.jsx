@@ -14,7 +14,7 @@ export default function Breadcrumbs({ items = [], className = '' }) {
         <nav className={`flex items-center gap-1.5 text-[13px] font-bold flex-wrap ${className}`} dir="rtl">
             <button
                 onClick={() => navigate('/admin/dashboard')}
-                className="inline-flex items-center gap-1 text-slate-500 hover:text-[#c5a059] transition"
+                className="inline-flex items-center gap-1 text-slate-500 dark:text-brand-300 hover:text-gold-600 dark:hover:text-gold-400 transition"
             >
                 <Home size={14} /> الرئيسية
             </button>
@@ -22,16 +22,16 @@ export default function Breadcrumbs({ items = [], className = '' }) {
                 const isLast = i === items.length - 1;
                 return (
                     <React.Fragment key={i}>
-                        <ChevronLeft size={14} className="text-slate-300 shrink-0" />
+                        <ChevronLeft size={14} className="text-slate-300 dark:text-brand-600 shrink-0" />
                         {it.to && !isLast ? (
                             <button
                                 onClick={() => navigate(`/admin/dashboard/${it.to}`)}
-                                className="text-slate-500 hover:text-[#c5a059] transition"
+                                className="text-slate-500 dark:text-brand-300 hover:text-gold-600 dark:hover:text-gold-400 transition"
                             >
                                 {it.label}
                             </button>
                         ) : (
-                            <span className="text-[#1a365d]">{it.label}</span>
+                            <span className="text-brand-800 dark:text-brand-100">{it.label}</span>
                         )}
                     </React.Fragment>
                 );

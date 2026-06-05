@@ -30,7 +30,7 @@ export default function Money({
 
     const formatted = n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
     const sign = signed && n > 0 ? '+' : '';
-    const tone = colored ? (n > 0 ? 'text-emerald-600' : n < 0 ? 'text-rose-600' : 'text-slate-500') : '';
+    const tone = colored ? (n > 0 ? 'text-emerald-600 dark:text-emerald-400' : n < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-brand-400') : '';
 
     return (
         <span className={`tabular-nums ${tone} ${className}`} dir="ltr">

@@ -25,14 +25,14 @@ const monthStart = () => new Date(new Date().getFullYear(), new Date().getMonth(
 
 // ─── ألوان الفئات ────────────────────────────────────────────────
 const CATEGORY_COLORS = [
-  'bg-blue-100 text-blue-700 border-blue-200',
-  'bg-purple-100 text-purple-700 border-purple-200',
-  'bg-green-100 text-green-700 border-green-200',
-  'bg-orange-100 text-orange-700 border-orange-200',
-  'bg-pink-100 text-pink-700 border-pink-200',
-  'bg-teal-100 text-teal-700 border-teal-200',
-  'bg-amber-100 text-amber-700 border-amber-200',
-  'bg-indigo-100 text-indigo-700 border-indigo-200',
+  'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30',
+  'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30',
+  'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/15 dark:text-green-300 dark:border-green-500/30',
+  'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30',
+  'bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-500/15 dark:text-pink-300 dark:border-pink-500/30',
+  'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-500/15 dark:text-teal-300 dark:border-teal-500/30',
+  'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30',
+  'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-500/30',
 ];
 
 function categoryColor(id) {
@@ -59,13 +59,13 @@ function Toast({ msg, type, onClose }) {
 // ─── شريحة ملخص ──────────────────────────────────────────────────
 function SummaryChip({ icon: Icon, label, value, color }) {
   return (
-    <div className="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-slate-100 px-4 py-3 flex-1 min-w-[160px]">
+    <div className="flex items-center gap-3 bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 px-4 py-3 flex-1 min-w-[160px]">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
         <Icon size={20} className="text-white" />
       </div>
       <div>
-        <p className="text-xs text-slate-400 font-medium">{label}</p>
-        <p className="text-sm font-black text-slate-700">{value}</p>
+        <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">{label}</p>
+        <p className="text-sm font-black text-slate-700 dark:text-brand-300">{value}</p>
       </div>
     </div>
   );
@@ -315,11 +315,11 @@ export default function ExpensesManage({ user, navigateTo }) {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-[#1a365d] to-[#2d5299] rounded-2xl flex items-center justify-center shadow-lg">
-            <Receipt size={20} className="text-[#c5a059]" />
+            <Receipt size={20} className="text-gold-500" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-[#1a365d]">المصروفات</h1>
-            <p className="text-xs text-slate-400 font-medium">تتبع وإدارة مصروفات الشركة</p>
+            <h1 className="text-xl font-black text-brand-800 dark:text-brand-100">المصروفات</h1>
+            <p className="text-xs text-slate-400 dark:text-brand-400 font-medium">تتبع وإدارة مصروفات الشركة</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -345,34 +345,34 @@ export default function ExpensesManage({ user, navigateTo }) {
       </div>
 
       {/* شريط الفلاتر */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-4 mb-4">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400 font-bold">من</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">من</label>
             <div className="relative">
               <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
                 type="date"
                 value={filters.from}
                 onChange={e => setFilters(f => ({ ...f, from: e.target.value }))}
-                className="pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400 font-bold">إلى</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">إلى</label>
             <div className="relative">
               <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
                 type="date"
                 value={filters.to}
                 onChange={e => setFilters(f => ({ ...f, to: e.target.value }))}
-                className="pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
-            <label className="text-xs text-slate-400 font-bold">بحث</label>
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">بحث</label>
             <div className="relative">
               <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
@@ -380,13 +380,13 @@ export default function ExpensesManage({ user, navigateTo }) {
                 placeholder="ملاحظات أو فئة..."
                 value={filters.search}
                 onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                className="w-full pr-8 pl-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="w-full pr-8 pl-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
           <button
             onClick={() => setAppliedFilters({ ...filters })}
-            className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#2d5299] text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+            className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
           >
             <RefreshCw size={14} />
             تطبيق
@@ -400,7 +400,7 @@ export default function ExpensesManage({ user, navigateTo }) {
           icon={Receipt}
           label="إجمالي السجلات"
           value={displayed.length}
-          color="bg-[#1a365d]"
+          color="bg-brand-800"
         />
         <SummaryChip
           icon={DollarSign}
@@ -419,7 +419,7 @@ export default function ExpensesManage({ user, navigateTo }) {
       {/* حالة التحميل / الخطأ */}
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <RefreshCw size={28} className="text-[#1a365d] animate-spin" />
+          <RefreshCw size={28} className="text-brand-800 dark:text-brand-300 animate-spin" />
         </div>
       )}
       {error && !loading && (
@@ -431,14 +431,14 @@ export default function ExpensesManage({ user, navigateTo }) {
 
       {/* جدول المصروفات */}
       {!loading && !error && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
           {displayed.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-300">
               <Receipt size={48} className="mb-4" />
-              <p className="text-sm font-bold text-slate-400">لا توجد مصروفات في هذه الفترة</p>
+              <p className="text-sm font-bold text-slate-400 dark:text-brand-400">لا توجد مصروفات في هذه الفترة</p>
               <button
                 onClick={openCreate}
-                className="mt-4 flex items-center gap-2 bg-[#1a365d] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-[#2d5299] transition-colors"
+                className="mt-4 flex items-center gap-2 bg-brand-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-brand-900 transition-colors"
               >
                 <Plus size={14} />
                 أضف أول مصروف
@@ -448,14 +448,14 @@ export default function ExpensesManage({ user, navigateTo }) {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
+                  <tr className="bg-slate-50 dark:bg-brand-800/60 border-b border-slate-100 dark:border-brand-700">
                     <SortHeader label="التاريخ" sortKey="date"     activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="الفئة"   sortKey="category" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="المورد"  sortKey="supplier" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="المبلغ"  sortKey="amount"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">المشروع</th>
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">ملاحظات</th>
-                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 whitespace-nowrap">إجراءات</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المشروع</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">ملاحظات</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -467,9 +467,9 @@ export default function ExpensesManage({ user, navigateTo }) {
                     return (
                       <tr
                         key={exp.id}
-                        className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}
+                        className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/50 dark:hover:bg-brand-800 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}
                       >
-                        <td className="px-4 py-3 text-xs text-slate-500 font-medium whitespace-nowrap">{exp.date || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{exp.date || '—'}</td>
                         <td className="px-4 py-3">
                           {catName ? (
                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${categoryColor(catId)}`}>
@@ -479,24 +479,24 @@ export default function ExpensesManage({ user, navigateTo }) {
                             <span className="text-xs text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-600 font-medium">{supName || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600 dark:text-brand-300 font-medium">{supName || '—'}</td>
                         <td className="px-4 py-3 text-xs font-black text-red-600 whitespace-nowrap">{fmt(exp.amount, exp.currency)}</td>
-                        <td className="px-4 py-3 text-xs text-slate-500 font-medium">
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium">
                           {wcName && wcName !== '—' ? (
-                            <span className="bg-[#1a365d]/10 text-[#1a365d] px-2 py-0.5 rounded-lg text-xs font-bold">
+                            <span className="bg-brand-800/10 dark:bg-brand-800/40 text-brand-800 dark:text-brand-300 px-2 py-0.5 rounded-lg text-xs font-bold">
                               {wcName}
                             </span>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate">{exp.notes || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 max-w-[180px] truncate">{exp.notes || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => openEdit(exp)}
                               title="تعديل"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#c5a059] hover:bg-amber-50 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-gold-500 hover:bg-amber-50 transition-colors"
                             >
                               <Edit3 size={14} />
                             </button>
@@ -532,40 +532,40 @@ export default function ExpensesManage({ user, navigateTo }) {
     <div>
       <button
         onClick={() => setView('list')}
-        className="flex items-center gap-2 text-slate-500 hover:text-[#1a365d] font-bold text-sm mb-5 transition-colors"
+        className="flex items-center gap-2 text-slate-500 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 font-bold text-sm mb-5 transition-colors"
       >
         <ChevronLeft size={16} />
         رجوع
       </button>
 
-      <h2 className="text-lg font-black text-[#1a365d] mb-6">
+      <h2 className="text-lg font-black text-brand-800 dark:text-brand-100 mb-6">
         {view === 'edit' ? 'تعديل المصروف' : 'إضافة مصروف جديد'}
       </h2>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6">
-        <h3 className="text-sm font-black text-[#1a365d] mb-4 flex items-center gap-2">
-          <Receipt size={15} className="text-[#c5a059]" />
+      <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-5 mb-6">
+        <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2">
+          <Receipt size={15} className="text-gold-500" />
           تفاصيل المصروف
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* التاريخ */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">التاريخ <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">التاريخ <span className="text-red-500">*</span></label>
             <div className="relative">
               <Calendar size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
                 type="date"
                 value={form.date}
                 onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full pr-8 pl-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="w-full pr-8 pl-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
 
           {/* المبلغ */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">المبلغ <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">المبلغ <span className="text-red-500">*</span></label>
             <div className="relative">
               <DollarSign size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <input
@@ -575,18 +575,18 @@ export default function ExpensesManage({ user, navigateTo }) {
                 placeholder="0.00"
                 value={form.amount}
                 onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                className="w-full pr-8 pl-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+                className="w-full pr-8 pl-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               />
             </div>
           </div>
 
           {/* العملة */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">العملة</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">العملة</label>
             <select
               value={form.currency}
               onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="SAR">ريال سعودي (SAR)</option>
               <option value="USD">دولار أمريكي (USD)</option>
@@ -596,13 +596,13 @@ export default function ExpensesManage({ user, navigateTo }) {
 
           {/* الفئة */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">الفئة <span className="text-red-500">*</span></label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">الفئة <span className="text-red-500">*</span></label>
             <div className="relative">
               <Tag size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
               <select
                 value={form.category_id}
                 onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
-                className="w-full pr-8 pl-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+                className="w-full pr-8 pl-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
               >
                 <option value="">— اختر الفئة —</option>
                 {categories.map(c => (
@@ -614,11 +614,11 @@ export default function ExpensesManage({ user, navigateTo }) {
 
           {/* المورد */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">المورد (اختياري)</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">المورد (اختياري)</label>
             <select
               value={form.supplier_id}
               onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="">— بدون مورد —</option>
               {suppliers.map(s => (
@@ -629,11 +629,11 @@ export default function ExpensesManage({ user, navigateTo }) {
 
           {/* المشروع */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">المشروع / أمر العمل (اختياري)</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">المشروع / أمر العمل (اختياري)</label>
             <select
               value={form.work_order_id}
               onChange={e => setForm(f => ({ ...f, work_order_id: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] bg-white"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
             >
               <option value="">— بدون مشروع —</option>
               {workCycles.map(w => (
@@ -644,21 +644,21 @@ export default function ExpensesManage({ user, navigateTo }) {
 
           {/* ملاحظات */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-500 mb-1">ملاحظات</label>
+            <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">ملاحظات</label>
             <textarea
               rows={3}
               placeholder="وصف المصروف أو ملاحظات إضافية..."
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] resize-none"
+              className="w-full px-3 py-2.5 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-700 dark:text-brand-50 dark:bg-brand-900 dark:placeholder-brand-500 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d] resize-none"
             />
           </div>
         </div>
 
         {/* معاينة المبلغ */}
         {parseFloat(form.amount) > 0 && (
-          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
-            <span className="text-sm text-slate-400 font-medium">المبلغ المُدخَل</span>
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-brand-700 flex justify-between items-center">
+            <span className="text-sm text-slate-400 dark:text-brand-400 font-medium">المبلغ المُدخَل</span>
             <span className="text-lg font-black text-red-600">{fmt(form.amount, form.currency)}</span>
           </div>
         )}
@@ -668,7 +668,7 @@ export default function ExpensesManage({ user, navigateTo }) {
       <button
         onClick={handleSave}
         disabled={saving}
-        className="flex items-center gap-2 bg-[#1a365d] hover:bg-[#2d5299] disabled:opacity-60 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-black text-sm shadow-lg transition-colors"
+        className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 disabled:opacity-60 disabled:cursor-not-allowed text-white px-8 py-3 rounded-xl font-black text-sm shadow-lg transition-colors"
       >
         {saving ? (
           <>
@@ -689,7 +689,7 @@ export default function ExpensesManage({ user, navigateTo }) {
   // التصيير الرئيسي
   // ══════════════════════════════════════════════════════════════
   return (
-    <div dir="rtl" className="font-cairo min-h-screen bg-slate-50 p-4 md:p-6">
+    <div dir="rtl" className="font-cairo min-h-screen bg-transparent p-4 md:p-6">
       {/* Toast */}
       {toast && (
         <Toast

@@ -190,14 +190,14 @@ export default function Maintenance() {
     if (ticket.status === "مكتمل") currentStep = 3;
 
     return (
-      <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
-        <div className="absolute top-0 right-0 w-full h-2 bg-[#1a365d]" />
-        <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-6">
+      <div className="bg-white dark:bg-brand-900 p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-brand-700 relative overflow-hidden animate-fade-in-up">
+        <div className="absolute top-0 right-0 w-full h-2 bg-brand-800" />
+        <div className="flex justify-between items-start mb-6 border-b border-slate-100 dark:border-brand-700 pb-6">
           <div>
-            <h4 className="text-2xl font-black text-[#1a365d] mb-2">طلب رقم {ticket.id}</h4>
-            <p className="text-slate-500 flex items-center gap-2 font-bold text-sm"><Clock size={16} /> الموعد المفضل: {ticket.scheduleDate}</p>
+            <h4 className="text-2xl font-black text-brand-800 dark:text-brand-100 mb-2">طلب رقم {ticket.id}</h4>
+            <p className="text-slate-500 dark:text-brand-300 flex items-center gap-2 font-bold text-sm"><Clock size={16} /> الموعد المفضل: {ticket.scheduleDate}</p>
           </div>
-          <span className="bg-[#c5a059]/10 text-[#c5a059] px-4 py-2 rounded-xl font-bold text-sm border border-[#c5a059]/20">{ticket.type}</span>
+          <span className="bg-gold-500/10 text-gold-500 px-4 py-2 rounded-xl font-bold text-sm border border-gold-500/20">{ticket.type}</span>
         </div>
         {/* زر واتساب لفتح نافذة المحادثة — يضمن وصول الإشعارات التلقائية */}
         <a
@@ -216,12 +216,12 @@ export default function Maintenance() {
             const isCurrent = i === currentStep;
             return (
               <div key={step.id} className="timeline-item">
-                <div className={`timeline-icon ${isPast ? "bg-[#c5a059] text-white shadow-lg shadow-orange-200" : "bg-slate-200 text-slate-400"}`}>
+                <div className={`timeline-icon ${isPast ? "bg-gold-500 text-white shadow-lg shadow-orange-200" : "bg-slate-200 text-slate-400"}`}>
                   <Icon size={16} />
                 </div>
-                <div className={`bg-slate-50 rounded-2xl p-5 border ${isCurrent ? "border-[#c5a059] shadow-md" : "border-slate-100"} transition-all`}>
-                  <h5 className={`font-bold text-lg mb-1 ${isCurrent ? "text-[#c5a059]" : "text-[#1a365d]"}`}>{step.label}</h5>
-                  <p className="text-slate-500 text-sm font-bold">{step.desc}</p>
+                <div className={`bg-slate-50 dark:bg-brand-800/40 rounded-2xl p-5 border ${isCurrent ? "border-gold-500 shadow-md" : "border-slate-100 dark:border-brand-700"} transition-all`}>
+                  <h5 className={`font-bold text-lg mb-1 ${isCurrent ? "text-gold-500" : "text-brand-800 dark:text-brand-100"}`}>{step.label}</h5>
+                  <p className="text-slate-500 dark:text-brand-300 text-sm font-bold">{step.desc}</p>
                 </div>
               </div>
             );
@@ -235,7 +235,7 @@ export default function Maintenance() {
       return (
           <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-cairo">
               <div className="text-center">
-                  <Loader2 className="animate-spin text-[#c5a059] mx-auto mb-4" size={48} />
+                  <Loader2 className="animate-spin text-gold-500 mx-auto mb-4" size={48} />
                   <p className="font-bold text-lg">جاري مسح الوحدة وتهيئة النظام...</p>
               </div>
           </div>
@@ -248,45 +248,45 @@ export default function Maintenance() {
     <>
     <PageMeta title="طلب صيانة" description="ارفع طلب صيانة لوحدتك في سماك العقارية — خدمة سريعة وفنيون متخصصون." />
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen relative flex items-center justify-center bg-cover bg-center font-cairo" style={{ backgroundImage: "url('/images/maintenance-bg.jpg')" }}>
-      <div className="absolute inset-0 bg-[#1a365d]/90 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-brand-800/90 backdrop-blur-sm" />
       <div className="w-full max-w-3xl px-6 relative z-10">
         <div className="text-center mb-10 text-white relative">
           <button onClick={handleLogout} className="absolute left-0 top-0 bg-red-500/20 text-red-100 hover:bg-red-500 hover:text-white px-4 py-2 rounded-xl transition text-sm font-bold flex items-center gap-2 backdrop-blur-md border border-red-500/30">
             <LogOut size={16} /> خروج
           </button>
-          <h2 className="text-[#c5a059] font-black tracking-[0.1em] uppercase text-sm mb-2">بوابة الملاك</h2>
+          <h2 className="text-gold-500 font-black tracking-[0.1em] uppercase text-sm mb-2">بوابة الملاك</h2>
           <h3 className="text-3xl md:text-4xl font-black mb-6">طلب صيانة سريع</h3>
           <div className="flex justify-center gap-2 bg-white/10 p-2 rounded-full backdrop-blur-md w-fit mx-auto border border-white/10">
-            <button onClick={() => setTab("new")} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "new" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>رفع طلب</button>
-            <button onClick={() => setTab("track")} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "track" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>آخر طلب</button>
-            <button onClick={() => { setTab("history"); loadHistory(customer.unit); }} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "history" ? "bg-[#c5a059] text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>سجل طلباتي</button>
+            <button onClick={() => setTab("new")} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "new" ? "bg-gold-500 text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>رفع طلب</button>
+            <button onClick={() => setTab("track")} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "track" ? "bg-gold-500 text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>آخر طلب</button>
+            <button onClick={() => { setTab("history"); loadHistory(customer.unit); }} className={`px-5 py-2 rounded-full font-bold text-sm transition ${tab === "history" ? "bg-gold-500 text-white shadow-lg" : "text-slate-300 hover:text-white"}`}>سجل طلباتي</button>
           </div>
         </div>
         {tab === "history" ? (
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 animate-fade-in-up">
-            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-[#1a365d] to-[#c5a059]" />
-            <h4 className="text-xl font-black text-[#1a365d] mb-6 flex items-center gap-2">
-              <ListChecks size={22} className="text-[#c5a059]" /> سجل جميع طلبات الصيانة
+          <div className="bg-white dark:bg-brand-900 p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-brand-700 animate-fade-in-up">
+            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-brand-800 to-gold-500" />
+            <h4 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-6 flex items-center gap-2">
+              <ListChecks size={22} className="text-gold-500" /> سجل جميع طلبات الصيانة
             </h4>
             {historyLoading ? (
-              <div className="text-center py-10"><Loader2 className="animate-spin text-[#c5a059] mx-auto" size={36} /></div>
+              <div className="text-center py-10"><Loader2 className="animate-spin text-gold-500 mx-auto" size={36} /></div>
             ) : history.length === 0 ? (
               <p className="text-center text-slate-400 font-bold py-10">لا توجد طلبات سابقة لهذه الوحدة.</p>
             ) : (
               <div className="space-y-4">
                 {history.map(t => {
                   const statusColors = {
-                    "مكتمل": "bg-green-100 text-green-700",
-                    "جاري العمل": "bg-blue-100 text-blue-700",
-                    "قيد الانتظار": "bg-orange-100 text-orange-700",
+                    "مكتمل": "bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-300",
+                    "جاري العمل": "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300",
+                    "قيد الانتظار": "bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300",
                   };
-                  const color = statusColors[t.status] || "bg-slate-100 text-slate-600";
+                  const color = statusColors[t.status] || "bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300";
                   return (
-                    <div key={t.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div key={t.id} className="flex items-center justify-between bg-slate-50 dark:bg-brand-800/40 p-4 rounded-2xl border border-slate-100 dark:border-brand-700">
                       <div>
-                        <span className="text-xs text-slate-400 font-bold">#{t.id}</span>
-                        <p className="font-black text-[#1a365d] mt-0.5">{t.type}</p>
-                        <p className="text-xs text-slate-500 mt-1">{t.date ? t.date.split(" ")[0] : ""}</p>
+                        <span className="text-xs text-slate-400 dark:text-brand-400 font-bold">#{t.id}</span>
+                        <p className="font-black text-brand-800 dark:text-brand-100 mt-0.5">{t.type}</p>
+                        <p className="text-xs text-slate-500 dark:text-brand-400 mt-1">{t.date ? t.date.split(" ")[0] : ""}</p>
                       </div>
                       <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${color}`}>{t.status || "قيد الانتظار"}</span>
                     </div>
@@ -296,23 +296,23 @@ export default function Maintenance() {
             )}
           </div>
         ) : tab === "new" ? (
-          <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative overflow-hidden animate-fade-in-up">
-            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-[#c5a059] to-yellow-600" />
+          <div className="bg-white dark:bg-brand-900 p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-brand-700 relative overflow-hidden animate-fade-in-up">
+            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-gold-500 to-yellow-600" />
             
             {/* معلومات الوحدة */}
-            <div className={`p-4 rounded-2xl mb-6 border flex flex-col md:flex-row gap-4 items-center justify-between ${customer.phone ? 'bg-slate-50 border-slate-200' : 'bg-amber-50 border-amber-200'}`}>
+            <div className={`p-4 rounded-2xl mb-6 border flex flex-col md:flex-row gap-4 items-center justify-between ${customer.phone ? 'bg-slate-50 dark:bg-brand-800/40 border-slate-200 dark:border-brand-700' : 'bg-amber-50 dark:bg-amber-500/15 border-amber-200 dark:border-amber-500/30'}`}>
                 <div>
-                    <p className="text-xs text-slate-500 font-bold">{customer.phone ? 'المالك المسجل:' : 'الوحدة:'}</p>
-                    <p className="text-[#1a365d] font-black text-lg">
+                    <p className="text-xs text-slate-500 dark:text-brand-400 font-bold">{customer.phone ? 'المالك المسجل:' : 'الوحدة:'}</p>
+                    <p className="text-brand-800 dark:text-brand-100 font-black text-lg">
                         {customer.phone ? customer.name : `وحدة ${customer.unit}`}
                     </p>
                     {customer.phone && (
-                        <p className="text-xs text-slate-400 font-bold" dir="ltr">{customer.phone}</p>
+                        <p className="text-xs text-slate-400 dark:text-brand-400 font-bold" dir="ltr">{customer.phone}</p>
                     )}
                 </div>
-                <div className="bg-[#1a365d] text-white px-4 py-2 rounded-xl text-center">
+                <div className="bg-brand-800 text-white px-4 py-2 rounded-xl text-center">
                     <p className="text-[10px] text-slate-300 font-bold">رقم الوحدة</p>
-                    <p className="font-black tracking-widest text-[#c5a059]">{customer.unit}</p>
+                    <p className="font-black tracking-widest text-gold-500">{customer.unit}</p>
                 </div>
             </div>
 
@@ -356,8 +356,8 @@ export default function Maintenance() {
               )}
 
               <div>
-                <label className="block text-sm font-bold mb-2 text-[#1a365d]">نوع العطل</label>
-                <select name="type" required value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 px-5 py-4 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm font-bold text-slate-700">
+                <label className="block text-sm font-bold mb-2 text-brand-800 dark:text-brand-100">نوع العطل</label>
+                <select name="type" required value={type} onChange={e => setType(e.target.value)} className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-5 py-4 rounded-2xl outline-none focus:border-gold-500 transition shadow-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500">
                   <option value="" disabled>-- اختر نوع العطل --</option>
                   <optgroup label="⚡ كهرباء وإنارة (ضمان 3 سنوات)">
                     <option value="إنارة">مشكلة في الإنارة 💡</option>
@@ -386,18 +386,18 @@ export default function Maintenance() {
               </div>
               
               {type && (
-                <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 animate-fadeIn">
-                  <h4 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2"><CalendarDays size={16} /> متى يناسبك زيارة الفني؟</h4>
+                <div className="bg-blue-50/50 dark:bg-blue-500/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-500/30 animate-fadeIn">
+                  <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2"><CalendarDays size={16} /> متى يناسبك زيارة الفني؟</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-bold mb-2 text-slate-500">التاريخ</label>
-                      <input type="date" min={new Date().toISOString().split("T")[0]} required value={date} onChange={e => setDate(e.target.value)} className="w-full bg-white border border-blue-200 px-4 py-3 rounded-xl outline-none focus:border-blue-500 transition shadow-sm text-sm font-bold text-slate-700" />
+                      <label className="block text-xs font-bold mb-2 text-slate-500 dark:text-brand-400">التاريخ</label>
+                      <input type="date" min={new Date().toISOString().split("T")[0]} required value={date} onChange={e => setDate(e.target.value)} className="w-full bg-white dark:bg-brand-900 border border-blue-200 dark:border-brand-700 px-4 py-3 rounded-xl outline-none focus:border-blue-500 transition shadow-sm text-sm font-bold text-slate-700 dark:text-brand-50" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold mb-2 text-slate-500">الوقت المتاح</label>
+                      <label className="block text-xs font-bold mb-2 text-slate-500 dark:text-brand-400">الوقت المتاح</label>
                       <div className="grid grid-cols-2 gap-2">
                         {TIME_SLOTS.map(t => (
-                          <div key={t} onClick={() => setTime(t)} className={`text-[10px] md:text-xs font-bold text-center py-3 px-1 rounded-xl cursor-pointer transition-all border ${time === t ? "bg-blue-600 text-white border-blue-600 shadow-md transform scale-105" : "bg-white text-slate-600 border-blue-100 hover:border-blue-300"}`}>
+                          <div key={t} onClick={() => setTime(t)} className={`text-[10px] md:text-xs font-bold text-center py-3 px-1 rounded-xl cursor-pointer transition-all border ${time === t ? "bg-blue-600 text-white border-blue-600 shadow-md transform scale-105" : "bg-white dark:bg-brand-900 text-slate-600 dark:text-brand-300 border-blue-100 dark:border-brand-700 hover:border-blue-300 dark:hover:border-brand-500"}`}>
                             {t}
                           </div>
                         ))}
@@ -408,8 +408,8 @@ export default function Maintenance() {
               )}
               
               <div>
-                <label className="block text-sm font-bold mb-2 text-[#1a365d]">وصف المشكلة (اختياري)</label>
-                <textarea name="desc" rows="3" className="w-full bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl outline-none focus:border-[#c5a059] transition shadow-sm font-bold text-slate-700" placeholder="أخبرنا بالمزيد من التفاصيل لمساعدة الفني..." />
+                <label className="block text-sm font-bold mb-2 text-brand-800 dark:text-brand-100">وصف المشكلة (اختياري)</label>
+                <textarea name="desc" rows="3" className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-5 py-3 rounded-2xl outline-none focus:border-gold-500 transition shadow-sm font-bold text-slate-700 dark:text-brand-50 dark:placeholder-brand-500" placeholder="أخبرنا بالمزيد من التفاصيل لمساعدة الفني..." />
               </div>
               
               {/* شارة الضمان — تظهر فقط إذا اختار نوعاً يقع ضمن الضمان */}
@@ -424,7 +424,7 @@ export default function Maintenance() {
               )}
 
               <button type="submit" disabled={loading} className={`w-full text-white px-8 py-4 rounded-full font-black transition shadow-lg transform hover:-translate-y-1 text-lg flex justify-center items-center gap-2
-                ${warrantyYears ? 'bg-green-600 hover:bg-green-700 shadow-green-600/20' : 'bg-[#1a365d] hover:bg-[#112240] shadow-[#1a365d]/20'}`}>
+                ${warrantyYears ? 'bg-green-600 hover:bg-green-700 shadow-green-600/20' : 'bg-brand-800 hover:bg-[#112240] shadow-[#1a365d]/20'}`}>
                 {loading ? <RefreshCw className="animate-spin" /> : warrantyYears ? <ShieldCheck /> : <Send />}
                 {warrantyYears ? `إرسال طلب ضمان (${warrantyYears} سنوات)` : 'إرسال الطلب للفني'}
               </button>
