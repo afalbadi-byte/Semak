@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v406
+// deploy: 2026-06-05-v407
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -4008,43 +4008,53 @@ switch ($action) {
         $errs=[]; $done=[];
         $conn->begin_transaction();
         try {
-            $applySide = function($state,$plan) use ($conn,$tid,$eid,&$errs,&$done){
+            // الثابت الحاكم: صافي كل حساب (مدين−دائن) لا يتغيّر إطلاقًا ⇒ ميزان المراجعة يبقى كما هو.
+            // أرصدة الأطراف قد تكون عكسية (مورّد مدين/عميل دائن) ⇒ تُكتب كبند أحادي الجانب حسب الإشارة،
+            // فيكبر إجمالي القيد القائم (gross) بمقدار البنود العكسية مع بقاء التوازن وصافي كل حساب ثابتًا.
+            $applySide = function($state,$plan) use ($conn,$tid,$eid,&$done){
                 $code=$plan['account_code'];
                 if($state['already_split']){ $done[]="تخطّي $code: سبق تفصيله"; return; }
                 if(round($plan['residual'],2) < -0.01){ throw new Exception("الحساب $code: الأطراف المطابقة (".$plan['mapped_sum'].") تتجاوز الرصيد المُرحَّل (".$plan['control'].") — راجِع قبل الكتابة"); }
-                $accId=(int)$plan['account_id']; $isDebit=$plan['side']==='debit';
-                // بنود جديدة
-                $newLines=[];
-                foreach($plan['mapped'] as $m){ $newLines[]=['amount'=>$m['amount'],'pid'=>(int)$m['party_id'],'desc'=>$m['name']]; }
+                $accId=(int)$plan['account_id']; $isCredit=$plan['side']==='credit'; // الموردون=دائن، العملاء=مدين
+                // المبلغ موجب = على الجانب الطبيعي للحساب (دائن للموردين/مدين للعملاء)، سالب = الجانب المعاكس
+                $items=[];
+                foreach($plan['mapped'] as $m){ $items[]=['amt'=>round((float)$m['amount'],2),'pid'=>(int)$m['party_id'],'desc'=>$m['name']]; }
                 $res=round($plan['residual'],2);
-                if($res>0.001) $newLines[]=['amount'=>$res,'pid'=>0,'desc'=>$isDebit?'عملاء متفرقون (غير مطابقين)':'موردون متفرقون (غير مطابقين)'];
-                if(!$newLines){ $done[]="تخطّي $code: لا بنود"; return; }
-                // احذف السطور القديمة لهذا الحساب ثم أدرج الجديدة
+                if(abs($res)>0.001) $items[]=['amt'=>$res,'pid'=>0,'desc'=>$isCredit?'موردون متفرقون (غير مطابقين)':'عملاء متفرقون (غير مطابقين)'];
+                if(!$items){ $done[]="تخطّي $code: لا بنود"; return; }
+                // تحقّق: صافي البنود على الجانب الطبيعي = الرصيد المُرحَّل تمامًا
+                $net=0; foreach($items as $it) $net=round($net+$it['amt'],2);
+                if(round($net-$plan['control'],2)!=0) throw new Exception("الحساب $code: صافي الأطراف ($net) ≠ الرصيد المُرحَّل (".$plan['control'].")");
+                // احذف السطور القديمة لهذا الحساب ثم أدرج البنود لكل طرف
                 if(!$conn->query("DELETE FROM acc_lines WHERE tenant_id=$tid AND entry_id=$eid AND account_id=$accId")) throw new Exception($conn->error);
-                $pt = "'".$plan['party_type']."'";
-                foreach($newLines as $nl){
-                    $amt=round((float)$nl['amount'],2); if($amt==0) continue;
-                    $deb=$isDebit?$amt:0; $cre=$isDebit?0:$amt;
-                    $pid=$nl['pid']>0?(int)$nl['pid']:'NULL';
-                    $ptx=$nl['pid']>0?$pt:'NULL';
-                    $desc=$conn->real_escape_string($nl['desc']);
+                $pt="'".$plan['party_type']."'"; $contra=0;
+                foreach($items as $it){
+                    $a=round((float)$it['amt'],2); if($a==0) continue;
+                    if($isCredit){ $deb=$a<0?round(-$a,2):0; $cre=$a>0?$a:0; } // الموردون: موجب→دائن، سالب→مدين
+                    else         { $deb=$a>0?$a:0; $cre=$a<0?round(-$a,2):0; } // العملاء: موجب→مدين، سالب→دائن
+                    if($a<0) $contra=round($contra+(-$a),2);
+                    $pid=$it['pid']>0?(int)$it['pid']:'NULL';
+                    $ptx=$it['pid']>0?$pt:'NULL';
+                    $desc=$conn->real_escape_string($it['desc']);
                     if(!$conn->query("INSERT INTO acc_lines (tenant_id,entry_id,account_id,debit,credit,cost_center_id,party_type,party_id,due_date,description) VALUES ($tid,$eid,$accId,$deb,$cre,NULL,$ptx,$pid,NULL,'$desc')")) throw new Exception($conn->error);
                 }
-                $done[]="فُصّل $code إلى ".count($newLines)." بند".($res>0.001?' (منها سطر متفرقون '.$res.')':'');
+                $done[]="فُصّل $code إلى ".count($items)." بند".($res>0.001?' (منها متفرقون '.$res.')':'').($contra>0?' [بنود عكسية '.$contra.']':'');
             };
             $applySide($arState,$arPlan);
             $applySide($apState,$apPlan);
-            // أعد احتساب إجمالي القيد من البنود (يجب أن يبقى كما هو) وحدّثه ضمانًا
+            // أعد احتساب إجمالي القيد من البنود (gross قد يكبر بسبب البنود العكسية) وتحقّق التوازن وثبات صافي الحسابين
             $tr=$conn->query("SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c FROM acc_lines WHERE tenant_id=$tid AND entry_id=$eid");
             $tx=$tr?$tr->fetch_assoc():['d'=>0,'c'=>0]; $ntd=round((float)$tx['d'],2); $ntc=round((float)$tx['c'],2);
             if(round($ntd-$ntc,2)!=0) throw new Exception("اختلّ توازن القيد بعد التفصيل: مدين $ntd ≠ دائن $ntc");
-            if(round($ntd,2)!=round((float)$oerow['total_debit'],2)) throw new Exception("تغيّر إجمالي القيد ($ntd ≠ {$oerow['total_debit']}) — تراجُع");
+            $chkNet=function($accId) use($conn,$tid,$eid){ $r=$conn->query("SELECT COALESCE(SUM(debit-credit),0) n FROM acc_lines WHERE tenant_id=$tid AND entry_id=$eid AND account_id=".(int)$accId); $x=$r?$r->fetch_assoc():['n'=>0]; return round((float)$x['n'],2); };
+            if($chkNet($arAcc)!=round($arState['net'],2)) throw new Exception("تغيّر صافي حساب العملاء بعد التفصيل — تراجُع");
+            if($chkNet($apAcc)!=round($apState['net'],2)) throw new Exception("تغيّر صافي حساب الموردين بعد التفصيل — تراجُع");
             $conn->query("UPDATE acc_entries SET total_debit=$ntd, total_credit=$ntc WHERE id=$eid AND tenant_id=$tid");
             acc_audit($conn,$tid,'migration',$eid,'party_subledger','ar='.$arControl.' ap='.$apControl.' | '.implode(' | ',$done),$input_data['actor']??null);
             $conn->commit();
             echo json_encode(['success'=>true,'mode'=>'committed','entry_no'=>$oerow['entry_no'],'entry_id'=>$eid,
                 'total_debit'=>$ntd,'total_credit'=>$ntc,'actions'=>$done,'diagnostics'=>$diag,
-                'note'=>'تم تفصيل أرصدة الأطراف. إجمالي القيد لم يتغيّر. افتح كشوف حسابات الأطراف لرؤية الأرصدة الافتتاحية.'], JSON_UNESCAPED_UNICODE);
+                'note'=>'تم تفصيل أرصدة الأطراف. صافي كل حساب (ميزان المراجعة) لم يتغيّر؛ قد يكبر إجمالي القيد الإجمالي بسبب البنود العكسية. افتح كشوف حسابات الأطراف لرؤية الأرصدة الافتتاحية.'], JSON_UNESCAPED_UNICODE);
         } catch(Exception $e){ $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل التفصيل: '.$e->getMessage(),'diagnostics'=>$diag], JSON_UNESCAPED_UNICODE); }
         break;
 
