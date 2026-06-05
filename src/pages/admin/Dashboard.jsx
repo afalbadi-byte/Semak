@@ -7,7 +7,8 @@ import {
     AlertTriangle, DollarSign, ArrowLeft, CheckCircle2, Coins, ShieldCheck,
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
-    Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2
+    Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2,
+    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText
 } from 'lucide-react';
 
 import UnitInspection   from './UnitInspection';
@@ -43,8 +44,9 @@ import DaftraLink       from './DaftraLink';
 import PartyDetail      from './PartyDetail';
 import EntryDetail      from './EntryDetail';
 import InvoiceDetail    from './InvoiceDetail';
+import ActivityLog      from './ActivityLog';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, apiPost, TENANT } from '../../lib/api/client';
 import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
@@ -344,6 +346,227 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
     );
 }
 
+// ─── القائمة الجانبية الثابتة (تنقّل موحّد بنفس هوية سماك) ────────────────────
+function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLeads, dbUser, onLogout, isOpen, onClose }) {
+    const [openGroups, setOpenGroups] = useState({});
+    const go = (tool) => {
+        if (tool.isExternal)  window.open(tool.path, '_blank');
+        else if (tool.isLink) window.location.href = tool.path;
+        else { setActiveTab(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
+        onClose && onClose();
+    };
+    return (
+        <>
+            {isOpen && (
+                <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} aria-hidden="true" />
+            )}
+            <aside className={`fixed lg:static inset-y-0 right-0 z-50 w-72 shrink-0 bg-brand-800 dark:bg-brand-950 text-brand-50 flex flex-col shadow-2xl border-l border-white/5 dark:border-brand-800 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
+                {/* الشعار */}
+                <div className="h-20 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
+                    <img src="/images/logo-light.png" alt="سماك العقارية" className="h-11 w-auto object-contain" />
+                    <button onClick={onClose} className="lg:hidden text-brand-200 hover:text-white p-1" aria-label="إغلاق"><X size={22} /></button>
+                </div>
+                {/* التنقّل */}
+                <nav className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-1">
+                    <button
+                        onClick={() => { setActiveTab('overview'); onClose && onClose(); }}
+                        className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-gold-500 text-white shadow-lg shadow-gold-500/20' : 'text-brand-100 hover:bg-white/5 hover:text-white'}`}
+                    >
+                        <LayoutDashboard size={18} /> الرئيسية
+                    </button>
+                    {departments.map(dept => {
+                        const tools = dept.tools.filter(t => hasPermission(t.permKey));
+                        if (tools.length === 0) return null;
+                        const groupActive = tools.some(t => t.tabId === activeTab);
+                        const open = dept.id in openGroups ? openGroups[dept.id] : groupActive;
+                        const DeptIcon = dept.icon;
+                        return (
+                            <div key={dept.id} className="pt-1.5">
+                                <button
+                                    onClick={() => setOpenGroups(g => ({ ...g, [dept.id]: !open }))}
+                                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-black tracking-wide transition-colors ${groupActive ? 'text-gold-300' : 'text-brand-300 hover:text-brand-100'}`}
+                                >
+                                    <DeptIcon size={15} className="shrink-0" />
+                                    <span className="flex-1 text-right truncate">{dept.label}</span>
+                                    <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                                </button>
+                                {open && (
+                                    <div className="mt-0.5 space-y-0.5 pr-2.5">
+                                        {tools.map(tool => {
+                                            const ToolIcon = tool.icon;
+                                            const isActive = tool.tabId === activeTab;
+                                            return (
+                                                <button
+                                                    key={tool.id}
+                                                    onClick={() => go(tool)}
+                                                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-bold transition-all ${isActive ? 'bg-gold-500 text-white shadow-md shadow-gold-500/20' : 'text-brand-200 hover:bg-white/5 hover:text-white'}`}
+                                                >
+                                                    <ToolIcon size={16} className="shrink-0 opacity-90" />
+                                                    <span className="flex-1 text-right truncate">{tool.label}</span>
+                                                    {(tool.isExternal || tool.isLink) && <ExternalLink size={12} className="opacity-50 shrink-0" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </nav>
+                {/* المستخدم + خروج */}
+                <div className="p-3 border-t border-white/10 shrink-0 space-y-2">
+                    <div className="flex items-center gap-2.5 px-2 py-1.5">
+                        <div className="w-9 h-9 bg-gold-500/15 text-gold-300 rounded-full flex items-center justify-center shrink-0">
+                            <UserCircle size={20} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-black text-white leading-tight truncate">{dbUser?.name}</p>
+                            <p className="text-[10px] font-bold text-brand-300">{dbUser?.role === 'admin' ? 'مدير النظام' : (dbUser?.job || 'موظف')}</p>
+                        </div>
+                    </div>
+                    <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white rounded-xl font-bold transition-all text-sm">
+                        <LogOut size={16} /> تسجيل الخروج
+                    </button>
+                </div>
+            </aside>
+        </>
+    );
+}
+
+// ─── جرس التنبيهات ───────────────────────────────────────────────────────────
+function NotificationBell({ userId, onNavigate }) {
+    const [open, setOpen]       = useState(false);
+    const [items, setItems]     = useState([]);
+    const [unread, setUnread]   = useState(0);
+    const [loading, setLoading] = useState(false);
+
+    const NOTI_ICON = {
+        maintenance: { ic: Wrench,        cls: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
+        lead:        { ic: TrendingUp,    cls: 'bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300' },
+        info:        { ic: Bell,          cls: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
+    };
+    const metaOf = (t) => NOTI_ICON[t] || NOTI_ICON.info;
+
+    const relTime = (s) => {
+        if (!s) return '';
+        try {
+            const d = new Date(s.replace(' ', 'T'));
+            const diff = (Date.now() - d.getTime()) / 1000;
+            if (diff < 60)    return 'الآن';
+            if (diff < 3600)  return `قبل ${Math.floor(diff / 60)} د`;
+            if (diff < 86400) return `قبل ${Math.floor(diff / 3600)} س`;
+            return d.toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' });
+        } catch { return ''; }
+    };
+
+    const pollUnread = async () => {
+        try {
+            const res = await apiPost('notifications_unread', { user_id: userId || '' }, {}, { tenant: TENANT });
+            if (res.success) setUnread(res.unread || 0);
+        } catch { /* صامت */ }
+    };
+
+    const loadList = async () => {
+        setLoading(true);
+        try {
+            const res = await apiPost('notifications_list', { user_id: userId || '', limit: 30 }, {}, { tenant: TENANT });
+            if (res.success) { setItems(res.data || []); setUnread(res.unread || 0); }
+        } catch { /* صامت */ }
+        finally { setLoading(false); }
+    };
+
+    useEffect(() => {
+        pollUnread();
+        const t = setInterval(pollUnread, 45000);
+        return () => clearInterval(t);
+    }, [userId]);
+
+    const toggle = () => {
+        const next = !open;
+        setOpen(next);
+        if (next) loadList();
+    };
+
+    const markAll = async () => {
+        try { await apiPost('notifications_mark_read', { user_id: userId || '', all: 1 }, {}, { tenant: TENANT }); } catch {}
+        setItems(items.map(n => ({ ...n, is_read: 1 })));
+        setUnread(0);
+    };
+
+    const clickItem = async (n) => {
+        if (!n.is_read) {
+            try { await apiPost('notifications_mark_read', { id: n.id, user_id: userId || '' }, {}, { tenant: TENANT }); } catch {}
+            setItems(items.map(x => x.id === n.id ? { ...x, is_read: 1 } : x));
+            setUnread(u => Math.max(0, u - 1));
+        }
+        setOpen(false);
+        if (n.link && onNavigate) onNavigate(n.link);
+    };
+
+    return (
+        <div className="relative">
+            <button
+                onClick={toggle}
+                className="relative w-10 h-10 flex items-center justify-center rounded-xl text-brand-700 dark:text-brand-200 hover:bg-brand-50 dark:hover:bg-brand-800 transition"
+                aria-label="التنبيهات"
+            >
+                <Bell size={20} />
+                {unread > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center ring-2 ring-white dark:ring-brand-900">
+                        {unread > 99 ? '99+' : unread}
+                    </span>
+                )}
+            </button>
+
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
+                    <div className="absolute left-0 mt-2 w-80 max-w-[90vw] bg-white dark:bg-brand-900 rounded-2xl shadow-2xl border border-brand-100/70 dark:border-brand-700 z-50 overflow-hidden animate-fadeIn">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-brand-100/70 dark:border-brand-700 bg-brand-50/50 dark:bg-brand-800/40">
+                            <h4 className="text-sm font-black text-brand-800 dark:text-brand-50 flex items-center gap-2"><Bell size={15} className="text-gold-500" /> التنبيهات</h4>
+                            {unread > 0 && (
+                                <button onClick={markAll} className="text-[11px] font-bold text-gold-600 dark:text-gold-400 hover:underline flex items-center gap-1">
+                                    <CheckCircle2 size={13} /> تعليم الكل كمقروء
+                                </button>
+                            )}
+                        </div>
+                        <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                            {loading ? (
+                                <div className="text-center py-10 text-slate-400 dark:text-brand-400"><RefreshCw className="animate-spin mx-auto" size={22} /></div>
+                            ) : items.length === 0 ? (
+                                <div className="text-center py-10 text-slate-400 dark:text-brand-400">
+                                    <Bell size={28} className="mx-auto mb-2 opacity-30" />
+                                    <p className="text-xs font-bold">لا توجد تنبيهات</p>
+                                </div>
+                            ) : items.map(n => {
+                                const m = metaOf(n.type);
+                                const Icon = m.ic;
+                                return (
+                                    <button
+                                        key={n.id}
+                                        onClick={() => clickItem(n)}
+                                        className={`w-full text-right flex items-start gap-3 px-4 py-3 border-b border-brand-100/50 dark:border-brand-800 hover:bg-brand-50/60 dark:hover:bg-brand-800/40 transition ${n.is_read ? '' : 'bg-gold-50/40 dark:bg-gold-500/5'}`}
+                                    >
+                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${m.cls}`}><Icon size={16} /></div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-[13px] font-black text-brand-800 dark:text-brand-50 leading-tight flex items-center gap-1.5">
+                                                {!n.is_read && <span className="w-2 h-2 rounded-full bg-gold-500 shrink-0" />}
+                                                {n.title}
+                                            </p>
+                                            {n.body && <p className="text-[11px] text-slate-500 dark:text-brand-300 mt-0.5 leading-snug line-clamp-2">{n.body}</p>}
+                                            <p className="text-[10px] font-bold text-slate-400 dark:text-brand-400 mt-1">{relTime(n.created_at)}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
 // ─── الداشبورد الرئيسي ───────────────────────────────────────────────────────
 function DashboardInner({ onLogout }) {
     // ─── التنقّل عبر الـ URL (كل قسم له رابط مستقل قابل للمشاركة، وزر الرجوع يتنقّل داخل اللوحة) ───
@@ -364,6 +587,7 @@ function DashboardInner({ onLogout }) {
         toast[isErr ? 'error' : 'success'](msg ?? titleOrType);
     };
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [dbUser, setDbUser]       = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [leads, setLeads]         = useState([]);
@@ -546,9 +770,10 @@ function DashboardInner({ onLogout }) {
         {
             id:'it', color:'indigo', icon:Cpu,
             label:'تقنية المعلومات',
-            desc:'الأنظمة الرقمية · الذكاء الاصطناعي · البنية التقنية',
+            desc:'الأنظمة الرقمية · الذكاء الاصطناعي · البنية التقنية · سجل النشاط',
             tools:[
-                { id:'daftra_link', tabId:'daftra_link', label:'ربط دفترة', icon:Link2, permKey:'finance', color:'indigo' },
+                { id:'daftra_link',  tabId:'daftra_link',  label:'ربط دفترة',   icon:Link2,      permKey:'finance',       color:'indigo' },
+                { id:'activity_log', tabId:'activity_log', label:'سجل النشاط', icon:ScrollText, permKey:'activity_log',  color:'slate'  },
             ],
         },
         {
@@ -574,7 +799,7 @@ function DashboardInner({ onLogout }) {
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
         rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
         ledger:'الدفترة المستقلة', accounting:'دفتر المحاسبة (دفترة)', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
-        parties:'كشوف حسابات الأطراف',
+        parties:'كشوف حسابات الأطراف', activity_log:'سجل النشاط',
     };
 
     if (authLoading) return (
@@ -586,10 +811,28 @@ function DashboardInner({ onLogout }) {
     if (!dbUser) return null;
 
     return (
-        <div className="flex flex-col h-screen bg-brand-50/40 dark:bg-brand-950 font-cairo overflow-hidden" dir="rtl">
+        <div className="flex h-screen bg-brand-50/40 dark:bg-brand-950 font-cairo overflow-hidden" dir="rtl">
+
+            <Sidebar
+                departments={DEPARTMENTS}
+                hasPermission={hasPermission}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                loadLeads={loadLeads}
+                dbUser={dbUser}
+                onLogout={handleForceLogout}
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+            />
+
+            <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
             {/* ─── الهيدر ─────────────────────────────────────────────────── */}
             <header className="h-20 bg-white/90 dark:bg-brand-900/90 backdrop-blur border-b border-brand-100/70 dark:border-brand-700 flex items-center justify-between px-4 md:px-8 z-30 shrink-0 shadow-sm">
+                <div className="flex items-center gap-2 md:gap-3">
+                <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-brand-700 dark:text-brand-200 hover:text-gold-600 dark:hover:text-gold-400 p-2 -mr-2 transition" aria-label="القائمة">
+                    <Menu size={24} />
+                </button>
                 <button onClick={() => setActiveTab('overview')} className="flex items-center gap-3 hover:opacity-80 transition">
                     <img src="/images/logo-main.png" alt="سماك" className="h-12 md:h-14 w-auto object-contain"/>
                     <div className="hidden sm:block border-r border-brand-100 dark:border-brand-700 pr-3 text-right">
@@ -597,7 +840,9 @@ function DashboardInner({ onLogout }) {
                         <div className="text-sm font-black text-brand-800 dark:text-brand-50">{TAB_LABELS[activeTab] || 'لوحة التحكم'}</div>
                     </div>
                 </button>
+                </div>
                 <div className="flex items-center gap-3">
+                    <NotificationBell userId={dbUser?.id} onNavigate={(link) => navigate(link)} />
                     <ThemeToggle />
                     <div className="flex items-center gap-2 border-l border-brand-100 dark:border-brand-700 pl-3 md:pl-4">
                         <div className="w-10 h-10 bg-gold-50 text-gold-600 dark:bg-gold-500/15 dark:text-gold-300 rounded-full flex items-center justify-center">
@@ -759,8 +1004,10 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'rentals'     && hasPermission('finance')     && <div className="animate-fadeIn"><RentalsManage /></div>}
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
+                {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
 
             </main>
+            </div>
         </div>
     );
 }

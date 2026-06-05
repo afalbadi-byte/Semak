@@ -12,6 +12,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # api.php is the SOLE backend API. A parse error would take down the
+      # entire live site, so we hard-gate the deploy on a PHP syntax check
+      # BEFORE building or uploading anything. ubuntu-latest ships with PHP.
+      - name: Lint api.php (syntax gate)
+        run: php -l api.php
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

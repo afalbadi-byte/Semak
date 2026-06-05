@@ -213,6 +213,21 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_audit_log (
     INDEX idx_entity (tenant_id, entity, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ─── التنبيهات (إشعارات داخل اللوحة) ──────────────────────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS notifications (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    user_id     INT DEFAULT NULL,
+    type        VARCHAR(40)  DEFAULT 'info',
+    title       VARCHAR(255) NOT NULL,
+    body        VARCHAR(1024) DEFAULT NULL,
+    link        VARCHAR(255) DEFAULT NULL,
+    is_read     TINYINT(1) DEFAULT 0,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user (tenant_id, user_id, is_read),
+    INDEX idx_created (tenant_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // كتالوج المنتجات/الخدمات (بيانات مرجعية مرحَّلة من دفترة)
 $conn->query("CREATE TABLE IF NOT EXISTS acc_products (
     id           INT AUTO_INCREMENT PRIMARY KEY,
@@ -376,6 +391,17 @@ function acc_audit($conn, $tid, $entity, $eid, $action, $detail, $actor) {
     $eidSql = ($eid === null) ? 'NULL' : (int)$eid;
     $conn->query("INSERT INTO acc_audit_log (tenant_id,entity,entity_id,action,detail,actor)
                   VALUES ($tid,'$entity',$eidSql,'$action','$detail'," . ($actor !== '' ? "'$actor'" : 'NULL') . ")");
+}
+// إنشاء تنبيه داخل اللوحة (user_id = null يعني تنبيه عام لكل المستخدمين)
+function notify($conn, $tid, $user_id, $type, $title, $body = null, $link = null) {
+    $tid   = (int)$tid;
+    $uid   = ($user_id === null || $user_id === '') ? 'NULL' : (int)$user_id;
+    $type  = $conn->real_escape_string((string)$type);
+    $title = $conn->real_escape_string((string)$title);
+    $bodyS = ($body === null) ? 'NULL' : "'" . $conn->real_escape_string((string)$body) . "'";
+    $linkS = ($link === null) ? 'NULL' : "'" . $conn->real_escape_string((string)$link) . "'";
+    $conn->query("INSERT INTO notifications (tenant_id,user_id,type,title,body,link)
+                  VALUES ($tid,$uid,'$type','$title',$bodyS,$linkS)");
 }
 // قراءة إعداد منشأة واحد (مع قيمة افتراضية)
 function acc_setting($conn, $tid, $key, $default = '') {
@@ -675,11 +701,15 @@ switch ($action) {
     case 'login':
         $email    = $conn->real_escape_string($input_data['email']);
         $password = $conn->real_escape_string($input_data['password']);
+        $ip       = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
         $res = $conn->query("SELECT * FROM users WHERE email='$email' AND password='$password' LIMIT 1");
         if ($res && $row = $res->fetch_assoc()) {
             unset($row['password']);
+            $uid = (int)$row['id'];
+            acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح · IP ' . $ip, $row['email'] ?? $email);
             echo json_encode(["success" => true, "data" => $row]);
         } else {
+            acc_audit($conn, 1, 'auth', null, 'login_fail', 'محاولة دخول فاشلة · IP ' . $ip, $input_data['email'] ?? '');
             echo json_encode(["success" => false, "message" => "البريد الإلكتروني أو كلمة المرور غير صحيحة"]);
         }
         break;
@@ -820,6 +850,102 @@ switch ($action) {
         if (!$owner_data) { echo json_encode(['success' => false, 'message' => 'خطأ في استرجاع بيانات الملك']); break; }
         echo json_encode(['success' => true, 'data' => $owner_data]);
         break;
+
+    // ─── سجل النشاط (اللوق) + التنبيهات ───────────────────────────────────────
+    case 'log_event': {
+        $entity = $input_data['entity'] ?? 'app';
+        $eid    = isset($input_data['entity_id']) && $input_data['entity_id'] !== '' ? (int)$input_data['entity_id'] : null;
+        $act    = $input_data['action'] ?? 'view';
+        $detail = $input_data['detail'] ?? '';
+        $actor  = $input_data['actor'] ?? '';
+        acc_audit($conn, 1, $entity, $eid, $act, $detail, $actor);
+        echo json_encode(['success' => true]);
+        break;
+    }
+
+    case 'activity_log': {
+        $gv = function ($k) use ($input_data) { return isset($input_data[$k]) ? trim((string)$input_data[$k]) : ''; };
+        $tid  = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $page = max(1, (int)($gv('page') ?: 1));
+        $per  = min(200, max(1, (int)($gv('per') ?: 50)));
+        $off  = ($page - 1) * $per;
+
+        $w = ["tenant_id = $tid"];
+        if ($gv('entity') !== '') $w[] = "entity = '" . $conn->real_escape_string($gv('entity')) . "'";
+        if ($gv('action') !== '') $w[] = "action = '" . $conn->real_escape_string($gv('action')) . "'";
+        if ($gv('actor')  !== '') $w[] = "actor LIKE '%" . $conn->real_escape_string($gv('actor')) . "%'";
+        if ($gv('q')      !== '') {
+            $q = $conn->real_escape_string($gv('q'));
+            $w[] = "(detail LIKE '%$q%' OR actor LIKE '%$q%' OR entity LIKE '%$q%')";
+        }
+        if ($gv('from') !== '') $w[] = "created_at >= '" . $conn->real_escape_string($gv('from')) . " 00:00:00'";
+        if ($gv('to')   !== '') $w[] = "created_at <= '" . $conn->real_escape_string($gv('to'))   . " 23:59:59'";
+        $where = implode(' AND ', $w);
+
+        $cnt = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE $where");
+        $total = $cnt ? (int)$cnt->fetch_assoc()['c'] : 0;
+
+        $rows = [];
+        $r = $conn->query("SELECT id, entity, entity_id, action, detail, actor, created_at FROM acc_audit_log WHERE $where ORDER BY id DESC LIMIT $per OFFSET $off");
+        if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+
+        echo json_encode(['success' => true, 'data' => $rows, 'total' => $total, 'page' => $page, 'per' => $per], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'notifications_list': {
+        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $uid = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : 0;
+        $lim = min(100, max(1, (int)($input_data['limit'] ?? 30)));
+        $cond = "tenant_id = $tid AND (user_id IS NULL" . ($uid ? " OR user_id = $uid" : "") . ")";
+
+        $rows = [];
+        $r = $conn->query("SELECT id, type, title, body, link, is_read, created_at FROM notifications WHERE $cond ORDER BY id DESC LIMIT $lim");
+        if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+
+        $uc = $conn->query("SELECT COUNT(*) AS c FROM notifications WHERE $cond AND is_read = 0");
+        $unread = $uc ? (int)$uc->fetch_assoc()['c'] : 0;
+
+        echo json_encode(['success' => true, 'data' => $rows, 'unread' => $unread], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'notifications_unread': {
+        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $uid = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : 0;
+        $cond = "tenant_id = $tid AND (user_id IS NULL" . ($uid ? " OR user_id = $uid" : "") . ") AND is_read = 0";
+        $uc = $conn->query("SELECT COUNT(*) AS c FROM notifications WHERE $cond");
+        $unread = $uc ? (int)$uc->fetch_assoc()['c'] : 0;
+        echo json_encode(['success' => true, 'unread' => $unread]);
+        break;
+    }
+
+    case 'notifications_mark_read': {
+        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $uid = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : 0;
+        $cond = "tenant_id = $tid AND (user_id IS NULL" . ($uid ? " OR user_id = $uid" : "") . ")";
+        if (!empty($input_data['all'])) {
+            $conn->query("UPDATE notifications SET is_read = 1 WHERE $cond");
+        } elseif (isset($input_data['id'])) {
+            $id = (int)$input_data['id'];
+            $conn->query("UPDATE notifications SET is_read = 1 WHERE id = $id AND $cond");
+        }
+        echo json_encode(['success' => true]);
+        break;
+    }
+
+    case 'notify_create': {
+        $tid   = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $uid   = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : null;
+        $type  = $input_data['type']  ?? 'info';
+        $title = $input_data['title'] ?? '';
+        $body  = $input_data['body']  ?? null;
+        $link  = $input_data['link']  ?? null;
+        if ($title === '') { echo json_encode(['success' => false, 'message' => 'العنوان مطلوب']); break; }
+        notify($conn, $tid, $uid, $type, $title, $body, $link);
+        echo json_encode(['success' => true]);
+        break;
+    }
 
     // ─── المشاريع والوحدات ──────────────────────────────────────────────────
 
@@ -1166,6 +1292,8 @@ switch ($action) {
         $sql     = "INSERT INTO maintenance (name, phone, unit, type, descrip, status, date) VALUES ('$name', '$phone', '$unit', '$type', '$descrip', '$status', '$date')";
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
+            notify($conn, 1, null, 'maintenance', 'طلب صيانة جديد', 'العميل ' . $name . ' · وحدة ' . $unit . ' · ' . $type, '/admin/dashboard/maintenance');
+            acc_audit($conn, 1, 'maintenance', $new_id, 'create', 'طلب صيانة · ' . $name . ' · ' . $unit, $name);
             $wa_token    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
             $wa_headers  = ["Content-Type: application/json", "Authorization: Bearer $wa_token"];
             $admin_phone = "966550163121";
@@ -1294,6 +1422,8 @@ switch ($action) {
         $sql = "INSERT INTO leads (name, phone, interest, source, unit, status) VALUES ('$name', '$phone', '$interest', '$source', '$interest', '$status')";
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
+            notify($conn, 1, null, 'lead', 'عميل محتمل جديد', 'الاسم: ' . $name . ' · ' . $interest, '/admin/dashboard/leads');
+            acc_audit($conn, 1, 'lead', $new_id, 'create', 'عميل محتمل · ' . $name . ' · ' . $interest, $name);
             // إرسال إشعار واتساب للإدارة تلقائياً
             $wa_token  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo";
             $admin_phone = "966550163121";

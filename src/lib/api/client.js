@@ -53,3 +53,26 @@ export const apiGet  = (action, params = {}, opts = {}) =>
 
 export const apiPost = (action, body = {}, params = {}, opts = {}) =>
     api(action, { ...opts, method: 'POST', params, body });
+
+// ─── المستخدم الحالي (من جلسة لوحة الموظفين) ────────────────────────────────
+// يقرأ بيانات الموظف المسجَّل من localStorage (يحفظها AdminLogin بعد الدخول).
+export function currentUser() {
+    try {
+        const raw = localStorage.getItem('semak_current_user');
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+}
+
+// ─── تسجيل حدث في سجل النشاط (اللوق) ────────────────────────────────────────
+// استدعاء صامت (لا يُعطّل الواجهة عند الفشل). actor يُملأ تلقائيًا من المستخدم الحالي.
+export function logEvent(entity, action, detail = '', entityId = null) {
+    const u = currentUser();
+    const actor = u ? (u.name || u.email || '') : '';
+    try {
+        apiPost('log_event', {
+            entity, action, detail,
+            entity_id: entityId,
+            actor,
+        }, {}, { tenant: TENANT }).catch(() => {});
+    } catch { /* تجاهل أي خطأ — التسجيل ثانوي */ }
+}
