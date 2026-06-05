@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Building,
     UserCircle, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
@@ -341,7 +342,17 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
 
 // ─── الداشبورد الرئيسي ───────────────────────────────────────────────────────
 export default function Dashboard({ onLogout }) {
-    const [activeTab, setActiveTab] = useState('overview');
+    // ─── التنقّل عبر الـ URL (كل قسم له رابط مستقل قابل للمشاركة، وزر الرجوع يتنقّل داخل اللوحة) ───
+    const navigate = useNavigate();
+    const params   = useParams();
+    const splat    = params['*'] || '';            // مثال: "invoices" أو "suppliers/123"
+    const [seg0, seg1] = splat.split('/');
+    const activeTab = seg0 || 'overview';
+    const detailId  = seg1 || null;
+    const setActiveTab = (tab) => {
+        navigate(!tab || tab === 'overview' ? '/admin/dashboard' : `/admin/dashboard/${tab}`);
+    };
+
     const [dbUser, setDbUser]       = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [leads, setLeads]         = useState([]);

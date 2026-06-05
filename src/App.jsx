@@ -132,7 +132,7 @@ const MainApp = () => {
 
               {/* لوحات التحكم */}
               <Route path="/login"                    element={<AdminLogin />} />
-              <Route path="/admin/dashboard"          element={<Dashboard />} />
+              <Route path="/admin/dashboard/*"        element={<Dashboard />} />
               <Route path="/admin/tech-dashboard"     element={<TechDashboard />} />
               <Route path="/admin/letter-generator"   element={<LetterGenerator />} />
 
