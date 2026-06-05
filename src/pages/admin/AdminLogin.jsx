@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Lock, RefreshCw, ArrowRight, ShieldCheck, Mail, MessageCircle, KeyRound } from 'lucide-react';
+import { User, Lock, RefreshCw, ArrowRight, ShieldCheck, Mail, MessageCircle, KeyRound, Smartphone } from 'lucide-react';
 
 import { API_URL } from '../../lib/api/client';
 
@@ -11,9 +11,15 @@ export default function AdminLogin({ setUser, showToast }) {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // ── الدخول الموحّد بدون كلمة مرور (بريد/جوال) ──
+  const [identifier, setIdentifier] = useState("");
+  const [idLoading, setIdLoading] = useState(false);
+  // مصدر جلسة الرمز الحالية: 'password' (login/verify_login_otp) | 'identifier' (auth_otp_*)
+  const [flow, setFlow] = useState('password');
+
   // ── حالة التحقق بخطوتين ──
-  const [step, setStep] = useState('login'); // 'login' | 'otp'
-  const [otp, setOtp] = useState(null);       // { ticket, channel, masked_email, masked_phone, has_email, has_phone }
+  const [step, setStep] = useState('login'); // 'login' | 'identifier' | 'choose' | 'otp'
+  const [otp, setOtp] = useState(null);       // { ticket, channel, masked_email, masked_phone, has_email, has_phone, name }
   const [code, setCode] = useState("");
   const [rememberDevice, setRememberDevice] = useState(true);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -34,8 +40,8 @@ export default function AdminLogin({ setUser, showToast }) {
 
   // ── إنهاء الدخول وتخزين الجلسة والتحويل ──
   const finalizeLogin = (userData) => {
-    if (rememberMe) localStorage.setItem("semak_admin_email", email);
-    else localStorage.removeItem("semak_admin_email");
+    if (rememberMe && email) localStorage.setItem("semak_admin_email", email);
+    else if (!rememberMe) localStorage.removeItem("semak_admin_email");
 
     localStorage.setItem("semak_current_user", JSON.stringify(userData));
     if (setUser) setUser(userData);
@@ -45,6 +51,23 @@ export default function AdminLogin({ setUser, showToast }) {
     else window.location.href = "/admin/dashboard";
   };
 
+  // الانتقال لشاشة الرمز بعد تجهيز كائن otp
+  const enterOtpStep = (data, usedFlow) => {
+    setFlow(usedFlow);
+    setOtp({
+      ticket: data.ticket,
+      channel: data.channel,
+      masked_email: data.masked_email,
+      masked_phone: data.masked_phone,
+      has_email: data.has_email,
+      has_phone: data.has_phone,
+      name: data.name,
+    });
+    setCode("");
+    setStep(data.choose ? 'choose' : 'otp');
+  };
+
+  // ── المسار 1: بريد + كلمة مرور ──
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -58,16 +81,7 @@ export default function AdminLogin({ setUser, showToast }) {
       const data = await res.json();
 
       if (data.otp_required) {
-        setOtp({
-          ticket: data.ticket,
-          channel: data.channel,
-          masked_email: data.masked_email,
-          masked_phone: data.masked_phone,
-          has_email: data.has_email,
-          has_phone: data.has_phone,
-        });
-        setCode("");
-        setStep('otp');
+        enterOtpStep(data, 'password');
         toast("رمز التحقق", data.sent ? "أرسلنا لك رمز الدخول" : "تعذّر إرسال الرمز، جرّب قناة أخرى", data.sent ? undefined : "error");
       } else if (data.success) {
         finalizeLogin(data.data);
@@ -81,12 +95,47 @@ export default function AdminLogin({ setUser, showToast }) {
     }
   };
 
+  // ── المسار 2: دخول موحّد برمز (بريد أو جوال) بدون كلمة مرور ──
+  const handleIdentifier = async (e) => {
+    e.preventDefault();
+    if (!identifier.trim()) return;
+    setIdLoading(true);
+    try {
+      const device_token = localStorage.getItem(DEVICE_KEY) || undefined;
+      const res = await fetch(`${API_URL}?action=auth_otp_start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: identifier.trim(), scope: 'staff', device_token })
+      });
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        // جهاز موثوق — دخول مباشر بدون رمز
+        finalizeLogin(data.data);
+      } else if (data.otp_required) {
+        enterOtpStep(data, 'identifier');
+        if (!data.choose) {
+          toast("رمز التحقق", data.sent
+            ? (data.channel === 'whatsapp' ? "أرسلنا الرمز عبر واتساب" : "أرسلنا الرمز لبريدك")
+            : "تعذّر إرسال الرمز، جرّب قناة أخرى", data.sent ? undefined : "error");
+        }
+      } else {
+        toast("خطأ", data.message || "تعذّر بدء الدخول", "error");
+      }
+    } catch (error) {
+      toast("خطأ", "فشل الاتصال بالسيرفر", "error");
+    } finally {
+      setIdLoading(false);
+    }
+  };
+
   const handleVerify = async (e) => {
     e.preventDefault();
     if (!otp) return;
     setOtpLoading(true);
     try {
-      const res = await fetch(`${API_URL}?action=verify_login_otp`, {
+      const action = flow === 'identifier' ? 'auth_otp_verify' : 'verify_login_otp';
+      const res = await fetch(`${API_URL}?action=${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticket: otp.ticket, code: code.trim(), remember_device: rememberDevice })
@@ -112,7 +161,8 @@ export default function AdminLogin({ setUser, showToast }) {
     if (!otp) return;
     setResending(true);
     try {
-      const res = await fetch(`${API_URL}?action=login_send_otp`, {
+      const action = flow === 'identifier' ? 'auth_otp_send' : 'login_send_otp';
+      const res = await fetch(`${API_URL}?action=${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticket: otp.ticket, channel })
@@ -123,17 +173,26 @@ export default function AdminLogin({ setUser, showToast }) {
         toast("تم الإرسال", data.sent
           ? (channel === 'whatsapp' ? `أرسلنا الرمز للواتساب ${data.masked_phone || ''}` : `أرسلنا الرمز للبريد ${data.masked_email || ''}`)
           : "تعذّر الإرسال عبر هذه القناة", data.sent ? undefined : "error");
+        return true;
       } else {
         toast("خطأ", data.message || "تعذّر إعادة الإرسال", "error");
+        return false;
       }
     } catch (error) {
       toast("خطأ", "فشل الاتصال بالسيرفر", "error");
+      return false;
     } finally {
       setResending(false);
     }
   };
 
-  const backToLogin = () => { setStep('login'); setOtp(null); setCode(""); };
+  // اختيار القناة من شاشة الاختيار ثم الانتقال لإدخال الرمز
+  const chooseChannel = async (channel) => {
+    await sendOtp(channel);
+    setStep('otp');
+  };
+
+  const backToLogin = () => { setStep('login'); setOtp(null); setCode(""); setFlow('password'); };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative" style={{ backgroundImage: "url('/images/admin-login-bg.jpg')" }}>
@@ -182,6 +241,65 @@ export default function AdminLogin({ setUser, showToast }) {
                 {loading ? <RefreshCw className="animate-spin" size={20} /> : "دخول"}
               </button>
             </form>
+
+            {/* دخول موحّد برمز بدون كلمة مرور */}
+            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-brand-700">
+              <button type="button" onClick={() => { setIdentifier(email); setStep('identifier'); }}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border border-slate-200 dark:border-brand-700 text-brand-800 dark:text-brand-100 hover:border-gold-500 hover:text-gold-600 transition">
+                <Smartphone size={16} /> الدخول برمز عبر الجوال أو البريد
+              </button>
+            </div>
+          </>
+        ) : step === 'identifier' ? (
+          <>
+            <div className="w-14 h-14 rounded-2xl bg-gold-500/15 text-gold-500 flex items-center justify-center mx-auto mb-3">
+              <Smartphone size={28} />
+            </div>
+            <h2 className="text-2xl font-black text-brand-800 dark:text-brand-100">الدخول برمز</h2>
+            <p className="text-slate-500 dark:text-brand-400 text-sm mt-2 mb-8">أدخل بريدك أو رقم جوالك وسنرسل لك رمز دخول لمرة واحدة</p>
+            <form onSubmit={handleIdentifier} className="space-y-6 text-right">
+              <div>
+                <label className="block text-sm font-bold mb-2 text-brand-800 dark:text-brand-100">البريد الإلكتروني أو رقم الجوال</label>
+                <div className="relative">
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-400"><User size={16} /></span>
+                  <input type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required autoFocus className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-6 py-4 pr-12 rounded-xl outline-none focus:border-gold-500 focus:bg-white dark:focus:bg-brand-800 text-slate-800 dark:text-brand-50 dark:placeholder-brand-500 transition" placeholder="name@semak.sa أو 05xxxxxxxx" />
+                </div>
+              </div>
+              <button type="submit" disabled={idLoading} className="w-full bg-brand-800 text-white py-4 rounded-xl font-bold text-lg hover:bg-gold-500 transition shadow-lg shadow-brand-800/30 flex justify-center items-center gap-2 disabled:opacity-50">
+                {idLoading ? <RefreshCw className="animate-spin" size={20} /> : "إرسال الرمز"}
+              </button>
+            </form>
+
+            <button onClick={backToLogin} className="mt-6 text-slate-400 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 text-sm flex items-center justify-center gap-2 mx-auto transition">
+              <ArrowRight size={14} /> الدخول بكلمة المرور بدلاً من ذلك
+            </button>
+          </>
+        ) : step === 'choose' ? (
+          <>
+            <div className="w-14 h-14 rounded-2xl bg-gold-500/15 text-gold-500 flex items-center justify-center mx-auto mb-3">
+              <ShieldCheck size={28} />
+            </div>
+            <h2 className="text-2xl font-black text-brand-800 dark:text-brand-100">اختر قناة الإرسال</h2>
+            <p className="text-slate-500 dark:text-brand-400 text-sm mt-2 mb-8">أين تريد استلام رمز الدخول؟</p>
+            <div className="space-y-3">
+              {otp?.has_phone && (
+                <button type="button" disabled={resending} onClick={() => chooseChannel('whatsapp')}
+                  className="w-full py-4 rounded-xl text-base font-bold flex items-center justify-center gap-2 border bg-white dark:bg-brand-800 text-emerald-700 dark:text-emerald-300 border-slate-200 dark:border-brand-700 hover:border-emerald-500 transition disabled:opacity-50">
+                  <MessageCircle size={18} /> واتساب {otp?.masked_phone && <span dir="ltr" className="text-xs opacity-70">{otp.masked_phone}</span>}
+                </button>
+              )}
+              {otp?.has_email && (
+                <button type="button" disabled={resending} onClick={() => chooseChannel('email')}
+                  className="w-full py-4 rounded-xl text-base font-bold flex items-center justify-center gap-2 border bg-white dark:bg-brand-800 text-brand-800 dark:text-brand-100 border-slate-200 dark:border-brand-700 hover:border-gold-500 transition disabled:opacity-50">
+                  <Mail size={18} /> البريد الإلكتروني {otp?.masked_email && <span dir="ltr" className="text-xs opacity-70">{otp.masked_email}</span>}
+                </button>
+              )}
+            </div>
+            {resending && <p className="text-xs text-slate-400 mt-4 flex items-center justify-center gap-1"><RefreshCw size={12} className="animate-spin" /> جارٍ الإرسال…</p>}
+
+            <button onClick={backToLogin} className="mt-6 text-slate-400 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 text-sm flex items-center justify-center gap-2 mx-auto transition">
+              <ArrowRight size={14} /> رجوع
+            </button>
           </>
         ) : (
           <>

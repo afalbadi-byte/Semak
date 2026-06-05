@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v413
+// deploy: 2026-06-05-v414
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -253,6 +253,25 @@ $conn->query("CREATE TABLE IF NOT EXISTS trusted_devices (
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_dev_user (user_id),
     INDEX idx_dev_hash (token_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// ─── دخول موحّد بالـ OTP لكل البوابات ─────────────────────────────────────────
+// القناة تتبع نوع المُعرّف: جوال⇒واتساب، إيميل⇒إيميل، هوية/وحدة⇒يختار المستخدم.
+// scope يفصل بين الموظفين (users) والعملاء (owners) أمنيًا — لا تداخل صلاحيات.
+$conn->query("CREATE TABLE IF NOT EXISTS auth_otp (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    ticket      CHAR(32) NOT NULL,
+    scope       VARCHAR(12) NOT NULL,
+    ref_id      INT DEFAULT NULL,
+    ref_key     VARCHAR(60) DEFAULT NULL,
+    code        VARCHAR(10) DEFAULT NULL,
+    channel     VARCHAR(10) DEFAULT NULL,
+    dest_email  VARCHAR(190) DEFAULT NULL,
+    dest_phone  VARCHAR(30) DEFAULT NULL,
+    attempts    INT DEFAULT 0,
+    expires_at  DATETIME NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_auth_ticket (ticket)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 // كتالوج المنتجات/الخدمات (بيانات مرجعية مرحَّلة من دفترة)
@@ -594,6 +613,88 @@ function send_login_otp($user, $channel, $code) {
     return false;
 }
 
+// ─── دخول موحّد بالـ OTP: أدوات مساعدة ────────────────────────────────────────
+// تطبيع رقم جوال سعودي إلى الصيغة الدولية 9665XXXXXXXX (يُرجع '' إذا غير صالح).
+function auth_norm_phone($p) {
+    $d = preg_replace('/\D/', '', (string)$p);
+    if ($d === '') return '';
+    $d = ltrim($d, '0');
+    if (substr($d, 0, 3) === '966') $d = substr($d, 3);
+    $d = ltrim($d, '0');
+    // جوال سعودي: 9 أرقام تبدأ بـ 5
+    if (strlen($d) === 9 && $d[0] === '5') return '966' . $d;
+    if (strlen($d) >= 9) return '966' . substr($d, -9); // تساهل
+    return '';
+}
+// تحديد نوع المُعرّف المُدخل: email | phone | national_id | unit
+function auth_detect_identifier($raw) {
+    $t = trim((string)$raw);
+    if ($t === '') return ['type' => 'unknown', 'value' => ''];
+    if (strpos($t, '@') !== false && filter_var($t, FILTER_VALIDATE_EMAIL)) {
+        return ['type' => 'email', 'value' => strtolower($t)];
+    }
+    $d = preg_replace('/\D/', '', $t);
+    // إذا كان المُدخل أرقامًا (مع رموز هاتف +/مسافات فقط)
+    if ($d !== '' && preg_match('/^[\d\s\-\+\(\)]+$/', $t)) {
+        // هوية وطنية سعودية: 10 أرقام تبدأ بـ 1 أو 2
+        if (strlen($d) === 10 && ($d[0] === '1' || $d[0] === '2')) {
+            return ['type' => 'national_id', 'value' => $d];
+        }
+        // جوال: 9665XXXXXXXX أو 05XXXXXXXX أو 5XXXXXXXX
+        $norm = auth_norm_phone($d);
+        if ($norm !== '') return ['type' => 'phone', 'value' => $norm];
+        // أرقام أخرى ⇒ تُعامل كرقم وحدة رقمي
+        return ['type' => 'unit', 'value' => strtoupper($t)];
+    }
+    // غير ذلك ⇒ رقم وحدة (أبجدي رقمي)
+    return ['type' => 'unit', 'value' => strtoupper($t)];
+}
+// إرسال رمز عبر واتساب بقالب معتمَد (يعمل خارج نافذة 24 ساعة) مع احتياطي نصّي.
+function wa_send_otp($to966, $name, $ref, $code) {
+    $key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo';
+    $payload = json_encode([
+        'to' => $to966, 'type' => 'template',
+        'template' => [
+            'name' => 'semak_request_ref', 'language' => ['code' => 'ar'],
+            'components' => [[
+                'type' => 'body',
+                'parameters' => [
+                    ['type' => 'text', 'text' => $name ?: 'عميلنا'],
+                    ['type' => 'text', 'text' => $ref ?: 'سماك'],
+                    ['type' => 'text', 'text' => $code],
+                ],
+            ]],
+        ],
+    ]);
+    $ch = curl_init('https://api.mottasl.ai/v1/message/send?create=true');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', "Authorization: Bearer $key"],
+        CURLOPT_TIMEOUT => 10, CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($status === 200 || $status === 201) return true;
+    // احتياطي: رسالة نصّية مباشرة
+    return wa_send_text($to966, "🔐 سماك العقارية\nأهلاً " . ($name ?: '') . "، رمز الدخول: $code\nصالح 10 دقائق.");
+}
+// إرسال الرمز عبر القناة المطلوبة باستخدام بريد/جوال السجل المُحدَّد.
+function auth_dispatch_code($channel, $name, $ref, $email, $phone, $code) {
+    if ($channel === 'whatsapp') {
+        $to = auth_norm_phone($phone);
+        if ($to === '') return false;
+        return wa_send_otp($to, $name, $ref, $code);
+    }
+    if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
+    $html = email_template('رمز تسجيل الدخول',
+        'رمز الدخول لمرّة واحدة الخاص بك:'
+        . '<div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#1a365d;text-align:center;margin:22px 0;direction:ltr">' . $code . '</div>'
+        . 'الرمز صالح لمدة 10 دقائق. إذا لم تطلب هذا الرمز فتجاهل هذه الرسالة.');
+    $r = send_email($email, 'رمز الدخول · سماك العقارية', $html);
+    return !empty($r['ok']);
+}
+
 // قراءة إعداد منشأة واحد (مع قيمة افتراضية)
 function acc_setting($conn, $tid, $key, $default = '') {
     $tid = (int)$tid; $key = $conn->real_escape_string($key);
@@ -884,7 +985,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v413','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v414','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -1167,6 +1268,189 @@ switch ($action) {
         if (!$owner_data) { echo json_encode(['success' => false, 'message' => 'خطأ في استرجاع بيانات الملك']); break; }
         echo json_encode(['success' => true, 'data' => $owner_data]);
         break;
+
+    // ─── دخول موحّد بالـ OTP لكل البوابات ────────────────────────────────────
+    // المرحلة 1: استقبال المُعرّف، تحديد القناة، إرسال الرمز (أو طلب الاختيار).
+    case 'auth_otp_start': {
+        $scope = (($input_data['scope'] ?? 'customer') === 'staff') ? 'staff' : 'customer';
+        $det   = auth_detect_identifier($input_data['identifier'] ?? '');
+        $type  = $det['type']; $val = $det['value'];
+        if ($type === 'unknown' || $val === '') { echo json_encode(['success' => false, 'message' => 'أدخل بريدًا أو رقم جوال أو رقم وحدة']); break; }
+
+        $ip = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
+        $rec = null; // ['id','name','email','phone','ref']
+
+        if ($scope === 'staff') {
+            // الموظفون: بريد أو جوال فقط (لا وحدة/هوية)
+            if ($type === 'email') {
+                $e = $conn->real_escape_string($val);
+                $q = $conn->query("SELECT id,name,email,phone FROM users WHERE email='$e' LIMIT 1");
+                if ($q && $r = $q->fetch_assoc()) $rec = ['id'=>(int)$r['id'],'name'=>$r['name'],'email'=>$r['email'],'phone'=>$r['phone'],'ref'=>'بوابة الموظفين'];
+            } elseif ($type === 'phone') {
+                $last9 = substr(preg_replace('/\D/', '', $val), -9);
+                $le = $conn->real_escape_string($last9);
+                $q = $conn->query("SELECT id,name,email,phone FROM users WHERE REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE '%$le%' LIMIT 1");
+                if ($q && $r = $q->fetch_assoc()) $rec = ['id'=>(int)$r['id'],'name'=>$r['name'],'email'=>$r['email'],'phone'=>$r['phone'],'ref'=>'بوابة الموظفين'];
+            } else {
+                echo json_encode(['success' => false, 'message' => 'لدخول الموظفين استخدم البريد أو رقم الجوال']); break;
+            }
+        } else {
+            // العملاء: بريد/جوال/رقم وحدة (الهوية غير مُخزّنة بعد)
+            if ($type === 'email') {
+                $e = $conn->real_escape_string($val);
+                $q = $conn->query("SELECT id,owner_name,owner_email,owner_phone,unit_code FROM owners WHERE owner_email='$e' LIMIT 1");
+                if ($q && $r = $q->fetch_assoc()) $rec = ['id'=>(int)$r['id'],'name'=>$r['owner_name'],'email'=>$r['owner_email'],'phone'=>$r['owner_phone'],'ref'=>$r['unit_code']];
+            } elseif ($type === 'phone') {
+                $last9 = substr(preg_replace('/\D/', '', $val), -9);
+                $le = $conn->real_escape_string($last9);
+                $q = $conn->query("SELECT id,owner_name,owner_email,owner_phone,unit_code FROM owners WHERE REPLACE(REPLACE(REPLACE(owner_phone,' ',''),'-',''),'+','') LIKE '%$le%' LIMIT 1");
+                if ($q && $r = $q->fetch_assoc()) $rec = ['id'=>(int)$r['id'],'name'=>$r['owner_name'],'email'=>$r['owner_email'],'phone'=>$r['owner_phone'],'ref'=>$r['unit_code']];
+            } elseif ($type === 'unit') {
+                $u = $conn->real_escape_string($val);
+                $q = $conn->query("SELECT id,owner_name,owner_email,owner_phone,unit_code FROM owners WHERE UPPER(unit_code)='$u' LIMIT 1");
+                if ($q && $r = $q->fetch_assoc()) $rec = ['id'=>(int)$r['id'],'name'=>$r['owner_name'],'email'=>$r['owner_email'],'phone'=>$r['owner_phone'],'ref'=>$r['unit_code']];
+            } elseif ($type === 'national_id') {
+                echo json_encode(['success' => false, 'message' => 'الدخول برقم الهوية غير متاح حاليًا — استخدم رقم الوحدة أو الجوال أو البريد']); break;
+            }
+        }
+
+        if (!$rec) { echo json_encode(['success' => false, 'message' => 'لم نجد حسابًا مطابقًا لهذا المُعرّف']); break; }
+
+        // جهاز موثوق (للموظفين فقط) — تخطَّ الرمز
+        if ($scope === 'staff') {
+            $dev = trim((string)($input_data['device_token'] ?? ''));
+            if ($dev !== '') {
+                $dh = hash('sha256', $dev); $now = date('Y-m-d H:i:s'); $uid = $rec['id'];
+                $tr = $conn->query("SELECT id FROM trusted_devices WHERE user_id=$uid AND token_hash='$dh' AND expires_at > '$now' LIMIT 1");
+                if ($tr && $tr->num_rows > 0) {
+                    $ur = $conn->query("SELECT * FROM users WHERE id=$uid LIMIT 1");
+                    $user = $ur ? $ur->fetch_assoc() : null;
+                    if ($user) {
+                        unset($user['password']);
+                        acc_audit($conn, 1, 'auth', $uid, 'login', 'دخول موحّد عبر جهاز موثوق · IP ' . $ip, $user['email'] ?? '');
+                        echo json_encode(['success' => true, 'scope' => 'staff', 'data' => $user]);
+                        break;
+                    }
+                }
+            }
+        }
+
+        $hasEmail = !empty($rec['email']) && filter_var($rec['email'], FILTER_VALIDATE_EMAIL);
+        $hasPhone = auth_norm_phone($rec['phone']) !== '';
+        if (!$hasEmail && !$hasPhone) { echo json_encode(['success' => false, 'message' => 'لا توجد وسيلة تواصل مسجّلة لهذا الحساب']); break; }
+
+        // تحديد القناة حسب نوع المُعرّف
+        $choose = false; $channel = null;
+        if ($type === 'email')      { $channel = 'email'; }
+        elseif ($type === 'phone')  { $channel = 'whatsapp'; }
+        else { // unit / national_id ⇒ يختار المستخدم إن توفّرت قناتان
+            if ($hasEmail && $hasPhone) $choose = true;
+            elseif ($hasPhone)          $channel = 'whatsapp';
+            else                        $channel = 'email';
+        }
+
+        $ticket = bin2hex(random_bytes(16));
+        $tk = $conn->real_escape_string($ticket);
+        $sc = $conn->real_escape_string($scope);
+        $de = $conn->real_escape_string($rec['email'] ?? '');
+        $dp = $conn->real_escape_string($rec['phone'] ?? '');
+        $rk = $conn->real_escape_string($rec['ref'] ?? '');
+        $rid = (int)$rec['id'];
+        $expires = date('Y-m-d H:i:s', time() + 600);
+        // نظّف تذاكر سابقة لنفس السجل
+        $conn->query("DELETE FROM auth_otp WHERE scope='$sc' AND ref_id=$rid");
+
+        $sent = false; $code = null; $cl = null;
+        if (!$choose) {
+            $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $cl   = ($channel === 'whatsapp') ? 'whatsapp' : 'email';
+            $sent = auth_dispatch_code($cl, $rec['name'] ?? '', $rec['ref'] ?? '', $rec['email'] ?? '', $rec['phone'] ?? '', $code);
+            acc_audit($conn, 1, 'auth', $scope === 'staff' ? $rid : null, 'otp_sent', 'رمز دخول موحّد (' . $scope . ') عبر ' . $cl . ' · IP ' . $ip, $rec['email'] ?? $rec['ref'] ?? '');
+        }
+        $cd  = $code !== null ? "'" . $conn->real_escape_string($code) . "'" : 'NULL';
+        $clq = $cl   !== null ? "'" . $conn->real_escape_string($cl)   . "'" : 'NULL';
+        $conn->query("INSERT INTO auth_otp (ticket,scope,ref_id,ref_key,code,channel,dest_email,dest_phone,expires_at) VALUES ('$tk','$sc',$rid,'$rk',$cd,$clq,'$de','$dp','$expires')");
+
+        echo json_encode([
+            'success' => true, 'otp_required' => true, 'ticket' => $ticket,
+            'choose' => $choose, 'channel' => $channel, 'sent' => $sent,
+            'has_email' => $hasEmail, 'has_phone' => $hasPhone,
+            'masked_email' => mask_email($rec['email'] ?? ''),
+            'masked_phone' => mask_phone($rec['phone'] ?? ''),
+            'name' => $rec['name'] ?? '',
+        ]);
+        break;
+    }
+
+    // المرحلة 2 (اختيارية): إرسال/إعادة إرسال عبر القناة المختارة.
+    case 'auth_otp_send': {
+        $ticket  = $conn->real_escape_string(trim($input_data['ticket'] ?? ''));
+        $want    = (($input_data['channel'] ?? '') === 'whatsapp') ? 'whatsapp' : 'email';
+        if ($ticket === '') { echo json_encode(['success' => false, 'message' => 'جلسة غير صالحة']); break; }
+        $now = date('Y-m-d H:i:s');
+        $q = $conn->query("SELECT * FROM auth_otp WHERE ticket='$ticket' AND expires_at > '$now' LIMIT 1");
+        if (!$q || $q->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'انتهت صلاحية الجلسة، أعد المحاولة']); break; }
+        $row = $q->fetch_assoc();
+        if ($want === 'whatsapp' && auth_norm_phone($row['dest_phone']) === '') { echo json_encode(['success' => false, 'message' => 'لا يوجد رقم جوال مسجّل']); break; }
+        if ($want === 'email' && (empty($row['dest_email']) || !filter_var($row['dest_email'], FILTER_VALIDATE_EMAIL))) { echo json_encode(['success' => false, 'message' => 'لا يوجد بريد مسجّل']); break; }
+        $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $cd = $conn->real_escape_string($code); $cl = $conn->real_escape_string($want);
+        $conn->query("UPDATE auth_otp SET code='$cd', channel='$cl', attempts=0, expires_at='" . date('Y-m-d H:i:s', time() + 600) . "' WHERE ticket='$ticket'");
+        $sent = auth_dispatch_code($want, '', $row['ref_key'] ?? '', $row['dest_email'] ?? '', $row['dest_phone'] ?? '', $code);
+        echo json_encode([
+            'success' => true, 'channel' => $want, 'sent' => $sent,
+            'masked_email' => mask_email($row['dest_email'] ?? ''),
+            'masked_phone' => mask_phone($row['dest_phone'] ?? ''),
+        ]);
+        break;
+    }
+
+    // المرحلة 3: التحقق من الرمز وإصدار الجلسة (مع وثوق الجهاز للموظفين).
+    case 'auth_otp_verify': {
+        $ticket   = $conn->real_escape_string(trim($input_data['ticket'] ?? ''));
+        $code     = trim((string)($input_data['code'] ?? ''));
+        $remember = !empty($input_data['remember_device']);
+        $ip       = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
+        if ($ticket === '' || $code === '') { echo json_encode(['success' => false, 'message' => 'بيانات ناقصة']); break; }
+        $now = date('Y-m-d H:i:s');
+        $q = $conn->query("SELECT * FROM auth_otp WHERE ticket='$ticket' AND expires_at > '$now' LIMIT 1");
+        if (!$q || $q->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'انتهت صلاحية الرمز، أعد المحاولة']); break; }
+        $row = $q->fetch_assoc();
+        $aid = (int)$row['id'];
+        if ($row['code'] === null || $row['code'] === '') { echo json_encode(['success' => false, 'message' => 'لم يُرسَل رمز بعد، اختر قناة الإرسال']); break; }
+        if ((int)$row['attempts'] >= 5) { $conn->query("DELETE FROM auth_otp WHERE id=$aid"); echo json_encode(['success' => false, 'message' => 'محاولات كثيرة، أعد المحاولة']); break; }
+        if (!hash_equals((string)$row['code'], $code)) {
+            $conn->query("UPDATE auth_otp SET attempts=attempts+1 WHERE id=$aid");
+            acc_audit($conn, 1, 'auth', $row['scope'] === 'staff' ? (int)$row['ref_id'] : null, 'otp_fail', 'رمز دخول موحّد خاطئ (' . $row['scope'] . ') · IP ' . $ip, $row['dest_email'] ?? '');
+            echo json_encode(['success' => false, 'message' => 'الرمز غير صحيح']); break;
+        }
+        $scope = $row['scope']; $rid = (int)$row['ref_id'];
+        $conn->query("DELETE FROM auth_otp WHERE id=$aid");
+
+        if ($scope === 'staff') {
+            $ur = $conn->query("SELECT * FROM users WHERE id=$rid LIMIT 1");
+            $user = $ur ? $ur->fetch_assoc() : null;
+            if (!$user) { echo json_encode(['success' => false, 'message' => 'المستخدم غير موجود']); break; }
+            unset($user['password']);
+            $device_token = null;
+            if ($remember) {
+                $device_token = bin2hex(random_bytes(32));
+                $dh = hash('sha256', $device_token);
+                $exp = date('Y-m-d H:i:s', time() + 30 * 86400);
+                $label = $conn->real_escape_string(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 150));
+                $conn->query("INSERT INTO trusted_devices (user_id,token_hash,label,expires_at) VALUES ($rid,'$dh','$label','$exp')");
+            }
+            acc_audit($conn, 1, 'auth', $rid, 'login', 'دخول موحّد ناجح · IP ' . $ip, $user['email'] ?? '');
+            echo json_encode(['success' => true, 'scope' => 'staff', 'data' => $user, 'device_token' => $device_token]);
+        } else {
+            $or = $conn->query("SELECT owner_name as name, owner_phone as phone, owner_email as email, unit_code as unit FROM owners WHERE id=$rid LIMIT 1");
+            $owner = $or ? $or->fetch_assoc() : null;
+            if (!$owner) { echo json_encode(['success' => false, 'message' => 'العميل غير موجود']); break; }
+            acc_audit($conn, 1, 'auth', null, 'login', 'دخول عميل موحّد ناجح · وحدة ' . ($owner['unit'] ?? '') . ' · IP ' . $ip, $owner['name'] ?? '');
+            echo json_encode(['success' => true, 'scope' => 'customer', 'data' => $owner]);
+        }
+        break;
+    }
 
     // ─── سجل النشاط (اللوق) + التنبيهات ───────────────────────────────────────
     case 'log_event': {
