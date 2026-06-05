@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v404
+// deploy: 2026-06-05-v405
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -232,6 +232,29 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_products (
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_prod_tenant (tenant_id),
     INDEX idx_prod_daftra (tenant_id, daftra_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// ─── نظام الوسوم (Tags) — قابلة للإنشاء والتلوين والفلترة على أي كيان ─────────
+$conn->query("CREATE TABLE IF NOT EXISTS acc_tags (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    name        VARCHAR(80)  NOT NULL,
+    color       VARCHAR(20)  DEFAULT 'slate',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_tag (tenant_id, name),
+    INDEX idx_tag_tenant (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// ربط الوسوم بالكيانات (فاتورة/طرف/منتج/مصروف...) — علاقة كثير-لكثير
+$conn->query("CREATE TABLE IF NOT EXISTS acc_tag_links (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    tag_id      INT NOT NULL,
+    entity      VARCHAR(40) NOT NULL,
+    entity_id   INT NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_link (tenant_id, tag_id, entity, entity_id),
+    INDEX idx_link_entity (tenant_id, entity, entity_id),
+    INDEX idx_link_tag (tenant_id, tag_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 // ─── المستندات المستقلة: الفواتير وبنودها والسندات (Phase 3) ────────────────
@@ -3397,6 +3420,95 @@ switch ($action) {
         }
         acc_audit($conn, $tid, 'settings', null, 'save', "saved $n keys", $by);
         echo json_encode(['success'=>true,'saved'=>$n,'message'=>'تم حفظ إعدادات المنشأة'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ─── نظام الوسوم (Tags) — قابلة للإنشاء/التلوين/الربط/الفلترة (نمط دفترة) ───────────
+    case 'acc_tags_list':
+        // كل الوسوم مع عدد مرّات الاستخدام (اختياري: فلترة بنوع كيان معيّن usage_entity)
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $ue  = isset($_GET['usage_entity']) ? $conn->real_escape_string(trim($_GET['usage_entity'])) : '';
+        $cntJoin = "LEFT JOIN acc_tag_links l ON l.tag_id=t.id AND l.tenant_id=t.tenant_id";
+        if ($ue !== '') $cntJoin .= " AND l.entity='$ue'";
+        $res = $conn->query("SELECT t.id, t.name, t.color, COUNT(l.id) AS usage_count
+                             FROM acc_tags t $cntJoin
+                             WHERE t.tenant_id=$tid
+                             GROUP BY t.id, t.name, t.color
+                             ORDER BY t.name");
+        $rows = []; while ($res && ($x = $res->fetch_assoc())) { $x['id']=(int)$x['id']; $x['usage_count']=(int)$x['usage_count']; $rows[]=$x; }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'acc_tag_save':
+        // إنشاء/تعديل وسم (upsert على الاسم) — يعيد المعرّف
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $color= $conn->real_escape_string(trim($input_data['color'] ?? 'slate'));
+        $id   = (int)($input_data['id'] ?? 0);
+        if ($name === '') { echo json_encode(['success'=>false,'message'=>'اسم الوسم مطلوب']); break; }
+        if ($color === '') $color = 'slate';
+        if ($id) {
+            $ok = $conn->query("UPDATE acc_tags SET name='$name', color='$color' WHERE id=$id AND tenant_id=$tid");
+            echo json_encode(['success'=>(bool)$ok,'id'=>$id,'message'=>$ok?'تم':$conn->error], JSON_UNESCAPED_UNICODE);
+        } else {
+            $ok = $conn->query("INSERT INTO acc_tags (tenant_id,name,color) VALUES ($tid,'$name','$color')
+                                ON DUPLICATE KEY UPDATE color=VALUES(color), id=LAST_INSERT_ID(id)");
+            echo json_encode(['success'=>(bool)$ok,'id'=>$conn->insert_id,'message'=>$ok?'تم':$conn->error], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
+    case 'acc_tag_delete':
+        // حذف وسم وكل روابطه
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $id  = (int)($input_data['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف غير صالح']); break; }
+        $conn->query("DELETE FROM acc_tag_links WHERE tag_id=$id AND tenant_id=$tid");
+        $ok = $conn->query("DELETE FROM acc_tags WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>(bool)$ok,'message'=>$ok?'تم الحذف':$conn->error], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'acc_tag_set':
+        // استبدال مجموعة الوسوم كاملةً لكيان واحد {entity, entity_id, tag_ids[]}
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $ent = $conn->real_escape_string(trim($input_data['entity'] ?? ''));
+        $eid = (int)($input_data['entity_id'] ?? 0);
+        $ids = is_array($input_data['tag_ids'] ?? null) ? $input_data['tag_ids'] : [];
+        if ($ent === '' || !$eid) { echo json_encode(['success'=>false,'message'=>'الكيان ومعرّفه مطلوبان']); break; }
+        $conn->query("DELETE FROM acc_tag_links WHERE tenant_id=$tid AND entity='$ent' AND entity_id=$eid");
+        $n = 0;
+        foreach ($ids as $tagId) {
+            $tagId = (int)$tagId; if (!$tagId) continue;
+            if ($conn->query("INSERT IGNORE INTO acc_tag_links (tenant_id,tag_id,entity,entity_id)
+                              VALUES ($tid,$tagId,'$ent',$eid)")) $n++;
+        }
+        echo json_encode(['success'=>true,'count'=>$n,'message'=>'تم تحديث الوسوم'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'acc_tags_for':
+        // وسوم كيان واحد (entity+entity_id) أو خريطة جماعية لنوع كيان (entity فقط → {entity_id:[tags]})
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $ent = isset($_GET['entity']) ? $conn->real_escape_string(trim($_GET['entity'])) : '';
+        $eid = (int)($_GET['entity_id'] ?? 0);
+        if ($ent === '') { echo json_encode(['success'=>false,'message'=>'الكيان مطلوب']); break; }
+        if ($eid) {
+            $res = $conn->query("SELECT t.id, t.name, t.color
+                                 FROM acc_tag_links l JOIN acc_tags t ON t.id=l.tag_id AND t.tenant_id=l.tenant_id
+                                 WHERE l.tenant_id=$tid AND l.entity='$ent' AND l.entity_id=$eid
+                                 ORDER BY t.name");
+            $rows = []; while ($res && ($x = $res->fetch_assoc())) { $x['id']=(int)$x['id']; $rows[]=$x; }
+            echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        } else {
+            $res = $conn->query("SELECT l.entity_id, t.id, t.name, t.color
+                                 FROM acc_tag_links l JOIN acc_tags t ON t.id=l.tag_id AND t.tenant_id=l.tenant_id
+                                 WHERE l.tenant_id=$tid AND l.entity='$ent'
+                                 ORDER BY l.entity_id, t.name");
+            $map = [];
+            while ($res && ($x = $res->fetch_assoc())) {
+                $k = (int)$x['entity_id'];
+                if (!isset($map[$k])) $map[$k] = [];
+                $map[$k][] = ['id'=>(int)$x['id'],'name'=>$x['name'],'color'=>$x['color']];
+            }
+            echo json_encode(['success'=>true,'map'=>(object)$map], JSON_UNESCAPED_UNICODE);
+        }
         break;
 
     case 'zatca_selftest':
