@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v402
+// deploy: 2026-06-05-v403
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -3725,6 +3725,89 @@ switch ($action) {
             'raw'=>$rawMode?['accounts'=>$rawAll,'count'=>count($rawAll),'first_row_keys'=>$firstKeys,'total_debit'=>round(array_sum(array_column($rawAll,'debit')),2),'total_credit'=>round(array_sum(array_column($rawAll,'credit')),2)]:null,
             'treasuries'=>['items'=>$treas,'total'=>round($treasTotal,2)],
             'note'=>'قراءة فقط للمراجعة — لم يُكتب أي قيد. عند الجاهزية نبني القيد الافتتاحي عبر mig_opening_entry بعد ربط أكواد دفترة بشجرة حساباتنا'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'mig_opening_entry':
+        // القيد الافتتاحي عند التحويل من دفترة (2026-06-05). preview افتراضيًا — لا يكتب شيئًا إلا confirm=1
+        // الربط مبني على بادئة كود دفترة (data-driven) ليسهل التعديل لاحقًا. الشركاء → حقوق ملكية مساهمة (3103)
+        set_time_limit(120);
+        $tid = (int)($_GET['tenant_id'] ?? $_GET['tenant'] ?? 1);
+        $confirm = !empty($_GET['confirm']);
+        $odate = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['date'] ?? '')) ? $_GET['date'] : '2026-06-05';
+        $suspenseCode = preg_match('/^\d{2,6}$/', (string)($_GET['suspense'] ?? '')) ? $_GET['suspense'] : '1190';
+        // عائلة المموّلين (شركاء) — مطابقة بالاسم تمامًا كما في acc_parties
+        $family = ['أمي وأبي','منيرة فهد البادي','إبراهيم فهد البادي','أسامة فهد البادي','طلال مفرج الحربي','ورود عبدالعزيز الحسون'];
+        // منع التكرار: لو فيه قيد افتتاحي مُرحّل سابقًا
+        $ex = $conn->query("SELECT id,entry_no FROM acc_entries WHERE tenant_id=$tid AND ref_type='opening' LIMIT 1");
+        $exRow = $ex ? $ex->fetch_assoc() : null;
+        if ($exRow && $confirm) { echo json_encode(['success'=>false,'message'=>'يوجد قيد افتتاحي مُرحّل مسبقًا: '.$exRow['entry_no'].' — احذفه أولًا قبل إعادة الترحيل','existing'=>$exRow], JSON_UNESCAPED_UNICODE); break; }
+        // 1) اسحب ميزان دفترة (الأوراق فقط — صافي ≠ 0)
+        $dk="__DAFTRA_KEY__"; $obase="https://semak.daftra.com/api2"; $ohh=["APIKEY: $dk","Accept: application/json"];
+        $ofetch=function($ep)use($obase,$ohh){ $ch=curl_init("$obase/$ep"); curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$ohh,CURLOPT_TIMEOUT=>25]); $r=curl_exec($ch); curl_close($ch); return json_decode($r,true); };
+        $leaves=[]; for($pg=1;$pg<=40;$pg++){ $j=$ofetch("journal_accounts.json?limit=200&page=$pg"); $d=$j['data']??null; if(!is_array($d)||!$d)break; foreach($d as $row){ $a=$row['JournalAccount']??$row; if(!empty($a['disabled'])||!empty($a['is_hidden']))continue; $net=round((float)($a['total_debit']??0)-(float)($a['total_credit']??0),2); if($net==0)continue; $leaves[]=['code'=>(string)($a['code']??''),'name'=>trim((string)($a['name']??'')),'net'=>$net]; } if(count($d)<200)break; }
+        // 2) صنّف كل حساب ورقي إلى صندوق (bucket) عبر بادئة الكود + اسم العائلة
+        $B=['cash'=>0.0,'bank'=>0.0,'ar'=>0.0,'ap'=>0.0,'partner'=>0.0,'pnl'=>0.0];
+        $details=['cash'=>[],'bank'=>[],'ar'=>[],'ap'=>[],'partner'=>[],'pnl'=>[],'unmapped'=>[]];
+        $partnerByName=[]; // اسم → صافي (لترحيل بند لكل شريك)
+        foreach($leaves as $L){ $c=$L['code']; $nm=$L['name']; $net=$L['net']; $b=null;
+            if($c==='120101') $b='bank';
+            elseif(strpos($c,'120102')===0 || strpos($c,'1202')===0) $b='cash';
+            elseif(strpos($c,'1204')===0 && in_array($nm,$family,true)) { $b='partner'; $partnerByName[$nm]=round(($partnerByName[$nm]??0)+$net,2); }
+            elseif(strpos($c,'1203')===0 || strpos($c,'1204')===0) $b='ar';
+            elseif(strpos($c,'1210')===0 || strpos($c,'411')===0 || strpos($c,'541')===0) $b='pnl';
+            elseif(strpos($c,'221')===0) $b='ap';
+            else { $details['unmapped'][]=['code'=>$c,'name'=>$nm,'net'=>$net]; continue; }
+            $B[$b]=round($B[$b]+$net,2); $details[$b][]=['code'=>$c,'name'=>$nm,'net'=>$net];
+        }
+        // 3) ابنِ بنود القيد على شجرة حساباتنا. (موجب=مدين، سالب=دائن)
+        $coa=['cash'=>'1101','bank'=>'1102','ar'=>'1103','ap'=>'2101','partner'=>'3103','pnl'=>'3102'];
+        $plan=[]; // [code,name,debit,credit,note,party_type,party_name]
+        $addLine=function($code,$name,$net,$pt=null,$pn=null) use(&$plan){ if(round($net,2)==0) return; $plan[]=['code'=>$code,'name'=>$name,'debit'=>$net>0?round($net,2):0.0,'credit'=>$net<0?round(-$net,2):0.0,'party_type'=>$pt,'party_name'=>$pn]; };
+        $addLine('1101','الصندوق',$B['cash']);
+        $addLine('1102','البنك',$B['bank']);
+        $addLine('1103','العملاء (المدينون)',$B['ar']);
+        $addLine('2101','الموردون (الدائنون)',$B['ap']);
+        // الشركاء: بند منفصل لكل شريك مع ربط الطرف (party subledger)
+        ksort($partnerByName);
+        foreach($partnerByName as $pn=>$pnet){ $addLine('3103','مساهمات الشركاء',$pnet,'partner',$pn); }
+        $addLine('3102','الأرباح المُحتجزة (صافي تشغيل سابق)',$B['pnl']);
+        // 4) فرق التوازن (أصول غير موثّقة: مشاريع تحت التنفيذ/مخزون/معدات) → حساب تسوية مدين
+        $sumNet=0.0; foreach($B as $v)$sumNet=round($sumNet+$v,2);
+        $plug=round(-$sumNet,2); // لو صافي الأصول ناقص نضيف مدين بحساب التسوية
+        if($plug!=0) $addLine($suspenseCode,'أصول تحت التسوية — رصيد افتتاحي',$plug);
+        // إجماليات
+        $td=0.0;$tc=0.0; foreach($plan as $p){ $td+=$p['debit']; $tc+=$p['credit']; }
+        $td=round($td,2);$tc=round($tc,2); $balanced=round($td-$tc,2)==0;
+        // 5) PREVIEW (افتراضي) — لا كتابة
+        if(!$confirm){
+            echo json_encode(['success'=>true,'mode'=>'preview','date'=>$odate,'balanced'=>$balanced,
+                'total_debit'=>$td,'total_credit'=>$tc,
+                'lines'=>$plan,
+                'buckets'=>$B,'plug'=>['account'=>$suspenseCode,'amount'=>$plug,'meaning'=>'صافي أصول غير موثّقة في دفترة (غالبًا مشاريع تحت التنفيذ/مخزون/معدات) — راجعها وأعد توزيعها لاحقًا'],
+                'partners'=>$partnerByName,
+                'unmapped'=>$details['unmapped'],
+                'note'=>'معاينة فقط — لم يُكتب قيد. للترحيل: نفس الرابط + confirm=1. الشركاء → 3103 مساهمات الشركاء (حقوق ملكية). الفرق '.number_format($plug,2).' في حساب '.$suspenseCode.' بانتظار توزيعه على الأصول الفعلية',
+                'existing_opening'=>$exRow], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        // 6) COMMIT — تأكد من وجود الحسابات الجديدة ثم رحّل القيد داخل معاملة
+        if(!$balanced){ echo json_encode(['success'=>false,'message'=>'القيد غير متوازن: مدين '.$td.' ≠ دائن '.$tc.' — لم يُرحّل']); break; }
+        $conn->begin_transaction();
+        try {
+            // ensure 3103 + suspense exist
+            $ensure=function($code,$name,$type) use($conn,$tid){ $id=acc_id_by_code($conn,$tid,$code); if($id) return $id; $ce=$conn->real_escape_string($code); $ne=$conn->real_escape_string($name); $te=$conn->real_escape_string($type); if(!$conn->query("INSERT INTO acc_accounts (tenant_id,code,name,type,is_group) VALUES ($tid,'$ce','$ne','$te',0)")) throw new Exception($conn->error); return $conn->insert_id; };
+            $ensure('3103','مساهمات الشركاء','equity');
+            $ensure($suspenseCode,'أصول تحت التسوية — رصيد افتتاحي','asset');
+            acc_fix_hierarchy($conn,$tid); // اربط الحسابات الجديدة بآبائها
+            // خريطة الشركاء: اسم → party_id من acc_parties
+            $pmap=[]; $pr=$conn->query("SELECT id,name FROM acc_parties WHERE tenant_id=$tid AND type='partner'"); while($pr&&($x=$pr->fetch_assoc())) $pmap[trim($x['name'])]=(int)$x['id'];
+            // ابنِ بنود acc_post_entry
+            $lines=[];
+            foreach($plan as $p){ $aid=acc_id_by_code($conn,$tid,$p['code']); if(!$aid) throw new Exception('حساب غير موجود: '.$p['code']); $ln=['account_id'=>$aid,'debit'=>$p['debit'],'credit'=>$p['credit'],'description'=>$p['name']]; if($p['party_type']==='partner'){ $ln['party_type']='partner'; if(isset($pmap[$p['party_name']])) $ln['party_id']=$pmap[$p['party_name']]; } $lines[]=$ln; }
+            $res=acc_post_entry($conn,$tid,$odate,'القيد الافتتاحي — تحويل من دفترة بتاريخ '.$odate,'opening',null,'migration',$lines,1);
+            $conn->commit();
+            echo json_encode(['success'=>true,'mode'=>'committed','entry_no'=>$res['eno'],'entry_id'=>$res['eid'],'total'=>$res['total'],'balanced'=>true,'lines'=>count($plan),'plug'=>['account'=>$suspenseCode,'amount'=>$plug],'note'=>'تم ترحيل القيد الافتتاحي. الفرق '.number_format($plug,2).' في '.$suspenseCode.' بانتظار توزيعه على الأصول الفعلية'], JSON_UNESCAPED_UNICODE);
+        } catch(Exception $e){ $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل الترحيل: '.$e->getMessage()], JSON_UNESCAPED_UNICODE); }
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
