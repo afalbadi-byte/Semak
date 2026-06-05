@@ -50,10 +50,12 @@ jobs:
       - name: Inject Daftra session cookie
         run: sed -i "s|__DAFTRA_SESSION__|${{ secrets.DAFTRA_SESSION_COOKIE }}|g" dist/api.php
 
-      # Hostinger FTP suffers multi-minute outage windows. Back-to-back retries
-      # all fall inside the same window, so we space attempts out with a backoff
-      # sleep between each one — 4 attempts spanning ~15 min to ride out an outage.
-      # Attempts 1-3 use continue-on-error; the final attempt gates job success.
+      # Hostinger FTP suffers outage windows that can exceed 30 min. We space
+      # attempts out with escalating backoff sleeps to ride out a long outage —
+      # 8 attempts spanning ~35 min. Each gate checks only the IMMEDIATELY
+      # preceding attempt: if a prior attempt succeeded, its successor's step is
+      # skipped (outcome 'skipped' != 'failure'), so the chain stops cleanly.
+      # Attempts 1-7 use continue-on-error; the final attempt gates job success.
       - name: Deploy to server via FTP (attempt 1)
         id: ftp1
         continue-on-error: true
@@ -74,7 +76,7 @@ jobs:
 
       - name: Backoff before attempt 2
         if: steps.ftp1.outcome == 'failure'
-        run: sleep 90
+        run: sleep 180
 
       - name: Deploy to server via FTP (attempt 2)
         id: ftp2
@@ -96,12 +98,12 @@ jobs:
             **/node_modules/**
 
       - name: Backoff before attempt 3
-        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
-        run: sleep 120
+        if: steps.ftp2.outcome == 'failure'
+        run: sleep 300
 
       - name: Deploy to server via FTP (attempt 3)
         id: ftp3
-        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure'
+        if: steps.ftp2.outcome == 'failure'
         continue-on-error: true
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
@@ -119,11 +121,103 @@ jobs:
             **/node_modules/**
 
       - name: Backoff before attempt 4
-        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure'
-        run: sleep 180
+        if: steps.ftp3.outcome == 'failure'
+        run: sleep 300
 
-      - name: Deploy to server via FTP (attempt 4, final)
-        if: steps.ftp1.outcome == 'failure' && steps.ftp2.outcome == 'failure' && steps.ftp3.outcome == 'failure'
+      - name: Deploy to server via FTP (attempt 4)
+        id: ftp4
+        if: steps.ftp3.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 600000
+          log-level: minimal
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Backoff before attempt 5
+        if: steps.ftp4.outcome == 'failure'
+        run: sleep 300
+
+      - name: Deploy to server via FTP (attempt 5)
+        id: ftp5
+        if: steps.ftp4.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 600000
+          log-level: minimal
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Backoff before attempt 6
+        if: steps.ftp5.outcome == 'failure'
+        run: sleep 300
+
+      - name: Deploy to server via FTP (attempt 6)
+        id: ftp6
+        if: steps.ftp5.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 600000
+          log-level: minimal
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Backoff before attempt 7
+        if: steps.ftp6.outcome == 'failure'
+        run: sleep 300
+
+      - name: Deploy to server via FTP (attempt 7)
+        id: ftp7
+        if: steps.ftp6.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 600000
+          log-level: minimal
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Backoff before attempt 8
+        if: steps.ftp7.outcome == 'failure'
+        run: sleep 300
+
+      - name: Deploy to server via FTP (attempt 8, final)
+        if: steps.ftp7.outcome == 'failure'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ${{ secrets.FTP_HOST }}
