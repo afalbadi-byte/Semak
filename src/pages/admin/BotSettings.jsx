@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, MessageSquare, Users, TrendingUp, Zap, DollarSign, Clock, RefreshCw, Activity, CheckCircle2, AlertCircle } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function BotSettings() {
     const [stats, setStats] = useState(null);

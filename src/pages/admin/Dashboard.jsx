@@ -41,7 +41,7 @@ import LedgerHub        from './LedgerHub';
 import NotesReturns     from './NotesReturns';
 import DaftraLink       from './DaftraLink';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
 const DEPT_PALETTE = {

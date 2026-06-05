@@ -7,7 +7,7 @@ import {
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 // ─── تنسيق الأرقام ───────────────────────────────────────────────
 const fmt = (n) =>

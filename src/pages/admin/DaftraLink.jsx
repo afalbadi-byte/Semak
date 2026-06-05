@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link2, CheckCircle2, AlertTriangle, RefreshCw, Save, ExternalLink, ShieldCheck, Clock } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function DaftraLink() {
   const [status, setStatus]   = useState(null);

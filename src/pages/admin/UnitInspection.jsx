@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronRight, ClipboardCheck, CheckCircle2, Save, RefreshCw, FileWarning, Settings2, ShieldCheck, Trash2, X, AlertTriangle, Hammer, Plus, HardHat, Copy, Link as LinkIcon, Eye } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function UnitInspection({ user, navigateTo, showToast }) {
   const [viewMode, setViewMode] = useState('list'); // list, setup, inspect, client_setup

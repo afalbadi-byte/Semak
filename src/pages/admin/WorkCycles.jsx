@@ -7,7 +7,7 @@ import {
     Phone, Mail, CreditCard, Activity, X, Edit3
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 const DAFTRA  = "https://semak.daftra.com";
 
 const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Printer, Building, RefreshCw, FileWarning, Search, ChevronDown, Wrench, X, CheckCircle } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function SnagList() {
     const [loading, setLoading] = useState(true);

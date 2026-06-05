@@ -5,7 +5,7 @@ import {
   CreditCard, User, FileText
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 // ─── تنسيق الأرقام ───────────────────────────────────────────────
 const fmt = (n) =>

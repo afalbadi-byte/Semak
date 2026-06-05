@@ -12,7 +12,7 @@ import {
 //  كل البيانات من قاعدتنا عبر إجراءات gl_* في api.php
 // ════════════════════════════════════════════════════════════════════════════
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 const TENANT = 1;
 
 const TYPE_LABELS = {

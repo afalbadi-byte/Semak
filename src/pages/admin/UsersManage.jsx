@@ -5,7 +5,7 @@ import {
     Building, Building2, Edit2, TrendingUp, Bot, MessageCircle, FileWarning
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 // قائمة كل أدوات النظام للصلاحيات
 const APP_MODULES = [

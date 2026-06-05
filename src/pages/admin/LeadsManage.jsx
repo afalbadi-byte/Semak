@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Search, RefreshCw, MessageCircle, UserCheck, X, Building, CheckCircle2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { sendWhatsAppMessage, normalizePhone } from '../../services/whatsappService';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function LeadsManage({ showToast }) {
     const [leads, setLeads] = useState([]);

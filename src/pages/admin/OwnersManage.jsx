@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, RefreshCw, Plus, Edit, Trash2, Save } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function OwnersManage({ showToast }) {
     const [ownersList, setOwnersList] = useState([]);

@@ -5,7 +5,7 @@ import {
   FileBarChart2, Users, Receipt, BarChart3
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 const fmt = (n) =>
   Number(n || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ر.س';

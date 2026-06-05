@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building, Plus, Trash2, LayoutGrid, ChevronRight, RefreshCw, Edit, User, Phone, Copy, Check, QrCode as QrIcon, X, Printer } from 'lucide-react';
 import QRCode from 'react-qr-code'; 
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function ProjectsManage({ showToast }) {
     const [projectsList, setProjectsList] = useState([]);

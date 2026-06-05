@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { notifyClientStatusUpdate } from '../../services/whatsappService';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 const TIME_SLOTS = [
     "08:00 ص - 10:00 ص",
     "10:00 ص - 12:00 م",

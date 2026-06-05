@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, RefreshCw, Search, User, Phone, CheckCircle2, Circle, Wrench, ChevronDown, ChevronUp } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 const STATUS_STYLES = {
     'مباعة':   { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },

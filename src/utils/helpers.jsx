@@ -12,7 +12,8 @@ export const getImg = (pathOrId, sz = "w1500") => {
 };
 
 // الثوابت الأخرى تبقى كما هي
-export const API_URL = import.meta.env.VITE_API_URL || "https://semak.sa/api.php";
+// API_URL يُعاد تصديره من العميل الموحّد ليكون هناك مصدر واحد فقط للرابط.
+export { API_URL } from '../lib/api/client';
 export const TIME_SLOTS = [
   "08:00 ص - 10:00 ص",
   "10:00 ص - 12:00 م",

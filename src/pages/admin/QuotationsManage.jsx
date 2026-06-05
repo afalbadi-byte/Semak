@@ -10,7 +10,7 @@ import useTableControls from '../../utils/useTableControls';
 import SortHeader from '../../components/SortHeader';
 import TablePager from '../../components/TablePager';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 // ─── حالة عرض السعر ──────────────────────────────────────────────
 function estimateStatusInfo(status) {

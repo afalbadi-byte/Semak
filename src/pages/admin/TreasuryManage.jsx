@@ -4,7 +4,7 @@ import {
   Plus, X, CheckCircle, AlertCircle, Loader2, Calendar, FileText
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 const fmt = (n, currency = 'SAR') =>
   Number(n || 0).toLocaleString('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +

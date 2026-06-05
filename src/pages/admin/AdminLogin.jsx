@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Lock, RefreshCw, ArrowRight } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function AdminLogin({ setUser, showToast }) {
   const [email, setEmail] = useState("");

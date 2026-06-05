@@ -5,7 +5,7 @@ import {
     Search, Calendar, DollarSign, Hash,
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 // ─── ترجمة أسماء الحقول الشائعة ─────────────────────────────────────────────
 const FIELD_LABELS = {

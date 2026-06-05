@@ -4,7 +4,7 @@ import {
     ExternalLink, Wallet, Receipt, ShoppingCart, Truck, Building, Coins
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 export default function Finance() {
     const [data, setData] = useState(null);

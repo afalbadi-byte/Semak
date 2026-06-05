@@ -4,7 +4,7 @@ import {
     Save, X, User, Phone, Mail, ChevronDown, ChevronUp, Ruler
 } from 'lucide-react';
 
-const API_URL = "https://semak.sa/api.php";
+import { API_URL } from '../../lib/api/client';
 
 const STATUS_STYLES = {
     'مباعة':  { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', hover: 'hover:bg-emerald-200' },
