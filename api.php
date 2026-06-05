@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v407
+// deploy: 2026-06-05-v408
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -664,6 +664,11 @@ if (isset($input_data['email']) && isset($input_data['password'])) {
 ob_end_clean();
 
 switch ($action) {
+
+    case 'ver':
+        // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
+        echo json_encode(['success'=>true,'version'=>'v408','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
+        break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
 
