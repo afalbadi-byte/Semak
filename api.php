@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v403
+// deploy: 2026-06-05-v404
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -3727,8 +3727,8 @@ switch ($action) {
             'note'=>'قراءة فقط للمراجعة — لم يُكتب أي قيد. عند الجاهزية نبني القيد الافتتاحي عبر mig_opening_entry بعد ربط أكواد دفترة بشجرة حساباتنا'], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'mig_opening_entry':
-        // القيد الافتتاحي عند التحويل من دفترة (2026-06-05). preview افتراضيًا — لا يكتب شيئًا إلا confirm=1
+    case 'mig_opening_auto':
+        // القيد الافتتاحي الآلي: يسحب ميزان دفترة ويبني القيد تلقائيًا. preview افتراضيًا — لا يكتب شيئًا إلا confirm=1
         // الربط مبني على بادئة كود دفترة (data-driven) ليسهل التعديل لاحقًا. الشركاء → حقوق ملكية مساهمة (3103)
         set_time_limit(120);
         $tid = (int)($_GET['tenant_id'] ?? $_GET['tenant'] ?? 1);
