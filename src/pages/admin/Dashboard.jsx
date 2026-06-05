@@ -42,6 +42,7 @@ import NotesReturns     from './NotesReturns';
 import DaftraLink       from './DaftraLink';
 
 import { API_URL } from '../../lib/api/client';
+import { ToastProvider, useToast } from '../../components/ui';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
 const DEPT_PALETTE = {
@@ -341,7 +342,7 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
 }
 
 // ─── الداشبورد الرئيسي ───────────────────────────────────────────────────────
-export default function Dashboard({ onLogout }) {
+function DashboardInner({ onLogout }) {
     // ─── التنقّل عبر الـ URL (كل قسم له رابط مستقل قابل للمشاركة، وزر الرجوع يتنقّل داخل اللوحة) ───
     const navigate = useNavigate();
     const params   = useParams();
@@ -351,6 +352,13 @@ export default function Dashboard({ onLogout }) {
     const detailId  = seg1 || null;
     const setActiveTab = (tab) => {
         navigate(!tab || tab === 'overview' ? '/admin/dashboard' : `/admin/dashboard/${tab}`);
+    };
+
+    // ─── إشعارات احترافية موحّدة (بدل alert) ───
+    const toast = useToast();
+    const showToast = (titleOrType, msg) => {
+        const isErr = /خطأ|فشل|تنبيه|error|fail/i.test(String(titleOrType || ''));
+        toast[isErr ? 'error' : 'success'](msg ?? titleOrType);
     };
 
     const [dbUser, setDbUser]       = useState(null);
@@ -712,13 +720,13 @@ export default function Dashboard({ onLogout }) {
 
                 {/* ════ محتوى التبويبات ════ */}
                 {activeTab === 'projects'    && hasPermission('projects')    && <ProjectsManage />}
-                {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={(t,m)=>alert(`${t}: ${m}`)} />}
-                {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={(t,m)=>alert(`${t}: ${m}`)} /></div>}
-                {activeTab === 'feasibility' && hasPermission('feasibility') && <div className="animate-fadeIn"><FeasibilityCalc showToast={(t,m)=>alert(`${t}: ${m}`)} /></div>}
-                {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={(t,m)=>alert(`${t}: ${m}`)} /></div>}
+                {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={showToast} />}
+                {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={showToast} /></div>}
+                {activeTab === 'feasibility' && hasPermission('feasibility') && <div className="animate-fadeIn"><FeasibilityCalc showToast={showToast} /></div>}
+                {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={showToast} /></div>}
                 {activeTab === 'snaglist'    && hasPermission('snaglist')    && <div className="animate-fadeIn p-6 md:p-8"><SnagList /></div>}
-                {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={(t,m)=>alert(`${t}: ${m}`)} activeUser={dbUser} /></div>}
-                {activeTab === 'users'       && hasPermission('users_manage')&& <div className="animate-fadeIn p-6 md:p-8"><UsersManage showToast={(t,m)=>alert(`${t}: ${m}`)} /></div>}
+                {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}
+                {activeTab === 'users'       && hasPermission('users_manage')&& <div className="animate-fadeIn p-6 md:p-8"><UsersManage showToast={showToast} /></div>}
                 {activeTab === 'qr'          && hasPermission('qr')          && <QrSection />}
                 {activeTab === 'bot'         && hasPermission('bot')         && <div className="animate-fadeIn"><BotSettings /></div>}
                 {activeTab === 'finance'     && hasPermission('finance')     && <div className="animate-fadeIn"><Finance /></div>}
@@ -740,10 +748,19 @@ export default function Dashboard({ onLogout }) {
                 {activeTab === 'suppliers'   && hasPermission('finance')     && <div className="animate-fadeIn"><SuppliersManage /></div>}
                 {activeTab === 'products'    && hasPermission('finance')     && <div className="animate-fadeIn"><ProductsManage /></div>}
                 {activeTab === 'rentals'     && hasPermission('finance')     && <div className="animate-fadeIn"><RentalsManage /></div>}
-                {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={(t,m)=>alert(`${t}: ${m}`)} /></div>}
+                {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
 
             </main>
         </div>
+    );
+}
+
+// مغلّف يوفّر نظام الإشعارات الموحّد لكامل اللوحة
+export default function Dashboard(props) {
+    return (
+        <ToastProvider>
+            <DashboardInner {...props} />
+        </ToastProvider>
     );
 }
