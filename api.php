@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v405
+// deploy: 2026-06-05-v406
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -3920,6 +3920,132 @@ switch ($action) {
             $conn->commit();
             echo json_encode(['success'=>true,'mode'=>'committed','entry_no'=>$res['eno'],'entry_id'=>$res['eid'],'total'=>$res['total'],'balanced'=>true,'lines'=>count($plan),'plug'=>['account'=>$suspenseCode,'amount'=>$plug],'note'=>'تم ترحيل القيد الافتتاحي. الفرق '.number_format($plug,2).' في '.$suspenseCode.' بانتظار توزيعه على الأصول الفعلية'], JSON_UNESCAPED_UNICODE);
         } catch(Exception $e){ $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل الترحيل: '.$e->getMessage()], JSON_UNESCAPED_UNICODE); }
+        break;
+
+    case 'mig_party_subledger':
+        // تفصيل القيد الافتتاحي: استبدال سطرَي العملاء (1103) والموردين (2101) المجمَّعَين ببنود لكل طرف.
+        //   - المصدر: حسابات دفترة الورقية (journal_accounts) — نفس تصنيف mig_opening_auto (1203/1204→عملاء، 221→موردون).
+        //   - الربط بالأطراف: entity_id↔daftra_id أولًا ثم بالاسم. غير المطابق → سطر «متفرقون» (party NULL) ليبقى إجمالي الحساب مطابقًا تمامًا للرصيد المُرحَّل.
+        //   - معاينة افتراضيًا (قراءة فقط). الكتابة تتطلب confirm=1، وتتم داخل معاملة، ولا تغيّر إجمالي القيد إطلاقًا.
+        set_time_limit(120);
+        $tid     = (int)($_GET['tenant_id'] ?? $_GET['tenant'] ?? $input_data['tenant_id'] ?? 1);
+        $confirm = !empty($_GET['confirm']) || !empty($input_data['confirm']);
+        // 1) القيد الافتتاحي + حسابات العملاء/الموردين
+        $oe = $conn->query("SELECT id,entry_no,date,total_debit,total_credit FROM acc_entries WHERE tenant_id=$tid AND ref_type='opening' ORDER BY id LIMIT 1");
+        $oerow = $oe ? $oe->fetch_assoc() : null;
+        if (!$oerow) { echo json_encode(['success'=>false,'message'=>'لا يوجد قيد افتتاحي — رحّله أولًا عبر mig_opening_auto'], JSON_UNESCAPED_UNICODE); break; }
+        $eid   = (int)$oerow['id'];
+        $arAcc = acc_id_by_code($conn,$tid,'1103');
+        $apAcc = acc_id_by_code($conn,$tid,'2101');
+        if (!$arAcc || !$apAcc) { echo json_encode(['success'=>false,'message'=>'حسابات 1103/2101 غير موجودة في الشجرة'], JSON_UNESCAPED_UNICODE); break; }
+        // الحالة الراهنة لسطور هذين الحسابين داخل القيد (لكشف ما إذا سبق التفصيل)
+        $accState = function($accId) use ($conn,$tid,$eid){
+            $r=$conn->query("SELECT id,debit,credit,party_id FROM acc_lines WHERE tenant_id=$tid AND entry_id=$eid AND account_id=".(int)$accId);
+            $lines=[]; $d=0;$c=0; $split=false;
+            while($r&&($x=$r->fetch_assoc())){ $lines[]=$x; $d+=(float)$x['debit']; $c+=(float)$x['credit']; if($x['party_id']!==null) $split=true; }
+            return ['lines'=>$lines,'debit'=>round($d,2),'credit'=>round($c,2),'net'=>round($d-$c,2),'already_split'=>$split,'count'=>count($lines)];
+        };
+        $arState = $accState($arAcc);   // net موجب (مدين)
+        $apState = $accState($apAcc);   // net سالب (دائن)
+        $arControl = $arState['net'];           // مثال: 4231.64
+        $apControl = round(-$apState['net'],2); // مثال: 81463.99 (دائن موجب)
+        // 2) اسحب حسابات دفترة الورقية وصنّفها (نفس منطق mig_opening_auto)
+        $dk="__DAFTRA_KEY__"; $sbase="https://semak.daftra.com/api2"; $shh=["APIKEY: $dk","Accept: application/json"];
+        $sfetch=function($ep)use($sbase,$shh){ $ch=curl_init("$sbase/$ep"); curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$shh,CURLOPT_TIMEOUT=>25]); $r=curl_exec($ch); curl_close($ch); return json_decode($r,true); };
+        $family = ['أمي وأبي','منيرة فهد البادي','إبراهيم فهد البادي','أسامة فهد البادي','طلال مفرج الحربي','ورود عبدالعزيز الحسون'];
+        $arLeaves=[]; $apLeaves=[]; $entityKeys=null;
+        for($pg=1;$pg<=40;$pg++){
+            $j=$sfetch("journal_accounts.json?limit=200&page=$pg"); $d=$j['data']??null; if(!is_array($d)||!$d)break;
+            foreach($d as $row){ $a=$row['JournalAccount']??$row;
+                if($entityKeys===null && (isset($a['entity_id'])||isset($a['entity_type']))) $entityKeys=['entity_type'=>$a['entity_type']??null,'entity_id'=>$a['entity_id']??null];
+                if(!empty($a['disabled'])||!empty($a['is_hidden']))continue;
+                $net=round((float)($a['total_debit']??0)-(float)($a['total_credit']??0),2); if($net==0)continue;
+                $c=(string)($a['code']??''); $nm=trim((string)($a['name']??''));
+                $entId=trim((string)($a['entity_id']??'')); $entTy=(string)($a['entity_type']??'');
+                if(strpos($c,'1204')===0 && in_array($nm,$family,true)) continue; // شريك — مفصَّل أصلًا
+                if(strpos($c,'1203')===0 || strpos($c,'1204')===0) $arLeaves[]=['code'=>$c,'name'=>$nm,'net'=>$net,'entity_id'=>$entId,'entity_type'=>$entTy];
+                elseif(strpos($c,'221')===0)                       $apLeaves[]=['code'=>$c,'name'=>$nm,'net'=>$net,'entity_id'=>$entId,'entity_type'=>$entTy];
+            }
+            if(count($d)<200)break;
+        }
+        // 3) خرائط الأطراف
+        $mapBy = function($type) use ($conn,$tid){
+            $byD=[]; $byN=[]; $r=$conn->query("SELECT id,name,daftra_id FROM acc_parties WHERE tenant_id=$tid AND type='$type'");
+            while($r&&($x=$r->fetch_assoc())){ if($x['daftra_id']!==null&&$x['daftra_id']!=='') $byD[(string)$x['daftra_id']]=(int)$x['id']; $byN[mb_strtolower(trim($x['name']))]=(int)$x['id']; }
+            return ['d'=>$byD,'n'=>$byN];
+        };
+        $cust = $mapBy('customer'); $supp = $mapBy('supplier');
+        // 4) ابنِ بنود التفصيل لكل جانب
+        $buildSide = function($leaves,$accId,$control,$side,$maps,$pType,$accCode,$accName) {
+            // side: 'debit' للعملاء أو 'credit' للموردين. control = صافي الحساب الموجب.
+            $mapped=[]; $unmappedAmt=0; $unmappedList=[]; $sumMapped=0;
+            foreach($leaves as $L){
+                $amt = $side==='debit' ? $L['net'] : round(-$L['net'],2); // العملاء net موجب، الموردون net سالب
+                if(round($amt,2)==0) continue;
+                $pid = ($L['entity_id']!=='' && isset($maps['d'][$L['entity_id']])) ? $maps['d'][$L['entity_id']]
+                     : ($maps['n'][mb_strtolower($L['name'])] ?? 0);
+                if($pid){ $mapped[]=['party_id'=>$pid,'name'=>$L['name'],'amount'=>round($amt,2),'entity_id'=>$L['entity_id']]; $sumMapped=round($sumMapped+$amt,2); }
+                else { $unmappedAmt=round($unmappedAmt+$amt,2); $unmappedList[]=['name'=>$L['name'],'amount'=>round($amt,2),'entity_id'=>$L['entity_id'],'code'=>$L['code']]; }
+            }
+            $residual = round($control - $sumMapped,2); // ما تبقّى ليطابق رصيد الحساب المُرحَّل (يشمل غير المطابق + أي انحراف)
+            return ['account_id'=>$accId,'account_code'=>$accCode,'account_name'=>$accName,'party_type'=>$pType,'side'=>$side,
+                    'control'=>$control,'mapped'=>$mapped,'mapped_sum'=>$sumMapped,'mapped_count'=>count($mapped),
+                    'unmapped'=>$unmappedList,'unmapped_sum'=>$unmappedAmt,'residual'=>$residual];
+        };
+        $arPlan = $buildSide($arLeaves,$arAcc,$arControl,'debit', $cust,'customer','1103','العملاء (المدينون)');
+        $apPlan = $buildSide($apLeaves,$apAcc,$apControl,'credit',$supp,'supplier','2101','الموردون (الدائنون)');
+        // 5) معاينة (افتراضي)
+        $diag = ['entry_no'=>$oerow['entry_no'],'entry_id'=>$eid,'date'=>$oerow['date'],
+                 'ar'=>['control'=>$arControl,'already_split'=>$arState['already_split'],'leaves'=>count($arLeaves),'mapped'=>$arPlan['mapped_count'],'mapped_sum'=>$arPlan['mapped_sum'],'residual'=>$arPlan['residual'],'parties'=>$arPlan['mapped'],'unmapped'=>$arPlan['unmapped']],
+                 'ap'=>['control'=>$apControl,'already_split'=>$apState['already_split'],'leaves'=>count($apLeaves),'mapped'=>$apPlan['mapped_count'],'mapped_sum'=>$apPlan['mapped_sum'],'residual'=>$apPlan['residual'],'parties'=>$apPlan['mapped'],'unmapped'=>$apPlan['unmapped']],
+                 'entity_keys_sample'=>$entityKeys];
+        if(!$confirm){
+            echo json_encode(['success'=>true,'mode'=>'preview','tenant'=>$tid,'diagnostics'=>$diag,
+                'note'=>'معاينة فقط — لم تُكتب أي بنود. أضف confirm=1 لاستبدال السطرين المجمَّعَين ببنود لكل طرف (دون تغيير إجمالي القيد). إجمالي كل حساب يبقى مطابقًا للرصيد المُرحَّل عبر سطر «متفرقون» إن وُجد فرق.'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        // 6) كتابة — استبدل سطور الحساب داخل القيد ببنود الأطراف (داخل معاملة)
+        $errs=[]; $done=[];
+        $conn->begin_transaction();
+        try {
+            $applySide = function($state,$plan) use ($conn,$tid,$eid,&$errs,&$done){
+                $code=$plan['account_code'];
+                if($state['already_split']){ $done[]="تخطّي $code: سبق تفصيله"; return; }
+                if(round($plan['residual'],2) < -0.01){ throw new Exception("الحساب $code: الأطراف المطابقة (".$plan['mapped_sum'].") تتجاوز الرصيد المُرحَّل (".$plan['control'].") — راجِع قبل الكتابة"); }
+                $accId=(int)$plan['account_id']; $isDebit=$plan['side']==='debit';
+                // بنود جديدة
+                $newLines=[];
+                foreach($plan['mapped'] as $m){ $newLines[]=['amount'=>$m['amount'],'pid'=>(int)$m['party_id'],'desc'=>$m['name']]; }
+                $res=round($plan['residual'],2);
+                if($res>0.001) $newLines[]=['amount'=>$res,'pid'=>0,'desc'=>$isDebit?'عملاء متفرقون (غير مطابقين)':'موردون متفرقون (غير مطابقين)'];
+                if(!$newLines){ $done[]="تخطّي $code: لا بنود"; return; }
+                // احذف السطور القديمة لهذا الحساب ثم أدرج الجديدة
+                if(!$conn->query("DELETE FROM acc_lines WHERE tenant_id=$tid AND entry_id=$eid AND account_id=$accId")) throw new Exception($conn->error);
+                $pt = "'".$plan['party_type']."'";
+                foreach($newLines as $nl){
+                    $amt=round((float)$nl['amount'],2); if($amt==0) continue;
+                    $deb=$isDebit?$amt:0; $cre=$isDebit?0:$amt;
+                    $pid=$nl['pid']>0?(int)$nl['pid']:'NULL';
+                    $ptx=$nl['pid']>0?$pt:'NULL';
+                    $desc=$conn->real_escape_string($nl['desc']);
+                    if(!$conn->query("INSERT INTO acc_lines (tenant_id,entry_id,account_id,debit,credit,cost_center_id,party_type,party_id,due_date,description) VALUES ($tid,$eid,$accId,$deb,$cre,NULL,$ptx,$pid,NULL,'$desc')")) throw new Exception($conn->error);
+                }
+                $done[]="فُصّل $code إلى ".count($newLines)." بند".($res>0.001?' (منها سطر متفرقون '.$res.')':'');
+            };
+            $applySide($arState,$arPlan);
+            $applySide($apState,$apPlan);
+            // أعد احتساب إجمالي القيد من البنود (يجب أن يبقى كما هو) وحدّثه ضمانًا
+            $tr=$conn->query("SELECT COALESCE(SUM(debit),0) d, COALESCE(SUM(credit),0) c FROM acc_lines WHERE tenant_id=$tid AND entry_id=$eid");
+            $tx=$tr?$tr->fetch_assoc():['d'=>0,'c'=>0]; $ntd=round((float)$tx['d'],2); $ntc=round((float)$tx['c'],2);
+            if(round($ntd-$ntc,2)!=0) throw new Exception("اختلّ توازن القيد بعد التفصيل: مدين $ntd ≠ دائن $ntc");
+            if(round($ntd,2)!=round((float)$oerow['total_debit'],2)) throw new Exception("تغيّر إجمالي القيد ($ntd ≠ {$oerow['total_debit']}) — تراجُع");
+            $conn->query("UPDATE acc_entries SET total_debit=$ntd, total_credit=$ntc WHERE id=$eid AND tenant_id=$tid");
+            acc_audit($conn,$tid,'migration',$eid,'party_subledger','ar='.$arControl.' ap='.$apControl.' | '.implode(' | ',$done),$input_data['actor']??null);
+            $conn->commit();
+            echo json_encode(['success'=>true,'mode'=>'committed','entry_no'=>$oerow['entry_no'],'entry_id'=>$eid,
+                'total_debit'=>$ntd,'total_credit'=>$ntc,'actions'=>$done,'diagnostics'=>$diag,
+                'note'=>'تم تفصيل أرصدة الأطراف. إجمالي القيد لم يتغيّر. افتح كشوف حسابات الأطراف لرؤية الأرصدة الافتتاحية.'], JSON_UNESCAPED_UNICODE);
+        } catch(Exception $e){ $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل التفصيل: '.$e->getMessage(),'diagnostics'=>$diag], JSON_UNESCAPED_UNICODE); }
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
