@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v399
+// deploy: 2026-06-05-v400
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -159,6 +159,11 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_parties (
     INDEX idx_tenant_type (tenant_id, type),
     INDEX idx_daftra (tenant_id, daftra_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// توسيع نوع الطرف ليشمل "شريك" (جاري شركاء) — يُنفَّذ مرة واحدة فقط عند غيابه
+$__pt = $conn->query("SELECT COLUMN_TYPE ct FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='acc_parties' AND COLUMN_NAME='type'");
+if ($__pt && ($__ptr = $__pt->fetch_assoc()) && strpos($__ptr['ct'], "'partner'") === false) {
+    $conn->query("ALTER TABLE acc_parties MODIFY COLUMN type ENUM('customer','supplier','partner') NOT NULL");
+}
 
 // مراكز التكلفة
 $conn->query("CREATE TABLE IF NOT EXISTS acc_cost_centers (
@@ -557,7 +562,7 @@ function acc_post_entry($conn, $tid, $date, $desc, $reft, $refid, $by, $lines, $
         if (!$acc || ($dv == 0 && $cv == 0)) continue;
         if ($dv > 0 && $cv > 0) throw new Exception('البند لا يكون مدين ودائن معًا');
         $td += $dv; $tc += $cv;
-        $pt  = isset($ln['party_type']) && in_array($ln['party_type'], ['customer','supplier']) ? "'".$conn->real_escape_string($ln['party_type'])."'" : 'NULL';
+        $pt  = isset($ln['party_type']) && in_array($ln['party_type'], ['customer','supplier','partner']) ? "'".$conn->real_escape_string($ln['party_type'])."'" : 'NULL';
         $plid= isset($ln['party_id']) && $ln['party_id'] !== '' && $ln['party_id'] !== null ? (int)$ln['party_id'] : 'NULL';
         $dd  = isset($ln['due_date']) && $ln['due_date'] !== '' && $ln['due_date'] !== null ? "'".$conn->real_escape_string($ln['due_date'])."'" : 'NULL';
         $cc  = isset($ln['cost_center_id']) && $ln['cost_center_id'] !== '' && $ln['cost_center_id'] !== null ? (int)$ln['cost_center_id'] : 'NULL';
@@ -2954,7 +2959,7 @@ switch ($action) {
             if (!$acc || ($dv == 0 && $cv == 0)) continue;
             if ($dv > 0 && $cv > 0) { echo json_encode(['success'=>false,'message'=>'البند لا يكون مدين ودائن معًا']); break 2; }
             $td += $dv; $tc += $cv;
-            $pt  = isset($ln['party_type']) && in_array($ln['party_type'], ['customer','supplier']) ? "'".$conn->real_escape_string($ln['party_type'])."'" : 'NULL';
+            $pt  = isset($ln['party_type']) && in_array($ln['party_type'], ['customer','supplier','partner']) ? "'".$conn->real_escape_string($ln['party_type'])."'" : 'NULL';
             $plid= isset($ln['party_id']) && $ln['party_id'] !== '' ? (int)$ln['party_id'] : 'NULL';
             $dd  = isset($ln['due_date']) && $ln['due_date'] !== '' ? "'".$conn->real_escape_string($ln['due_date'])."'" : 'NULL';
             $cc  = isset($ln['cost_center_id']) && $ln['cost_center_id'] !== '' ? (int)$ln['cost_center_id'] : 'NULL';
@@ -3208,7 +3213,7 @@ switch ($action) {
         $tid  = (int)($_GET['tenant'] ?? 1);
         $type = $conn->real_escape_string($_GET['type'] ?? '');
         $w = "tenant_id=$tid";
-        if (in_array($type, ['customer','supplier'])) $w .= " AND type='$type'";
+        if (in_array($type, ['customer','supplier','partner'])) $w .= " AND type='$type'";
         $res = $conn->query("SELECT * FROM acc_parties WHERE $w ORDER BY name");
         $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -3218,7 +3223,7 @@ switch ($action) {
         $tid  = (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $type = $conn->real_escape_string($input_data['type'] ?? 'customer');
-        if (!in_array($type, ['customer','supplier'])) $type = 'customer';
+        if (!in_array($type, ['customer','supplier','partner'])) $type = 'customer';
         $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
         $vat  = $conn->real_escape_string(trim($input_data['vat_number'] ?? ''));
         $cr   = $conn->real_escape_string(trim($input_data['cr_number'] ?? ''));
@@ -3234,6 +3239,25 @@ switch ($action) {
             $ok = $conn->query("INSERT INTO acc_parties (tenant_id,type,name,vat_number,cr_number,phone,email,address,daftra_id) VALUES ($tid,'$type','$name','$vat','$cr','$phone','$email','$addr','$daftra')");
             echo json_encode(['success'=>(bool)$ok,'id'=>$conn->insert_id,'message'=>$ok?'تم':$conn->error], JSON_UNESCAPED_UNICODE);
         }
+        break;
+
+    case 'gl_party_reclass':
+        // إعادة تصنيف أطراف بالجملة عبر daftra_id (مثلاً تحويل "عملاء" وهميين إلى شركاء) — تغيير النوع فقط، بلا حذف
+        $tid  = (int)($input_data['tenant_id'] ?? $_GET['tenant_id'] ?? $_GET['tenant'] ?? 1);
+        $type = $conn->real_escape_string($input_data['type'] ?? $_GET['type'] ?? '');
+        if (!in_array($type, ['customer','supplier','partner'])) { echo json_encode(['success'=>false,'message'=>'type يجب أن يكون customer أو supplier أو partner']); break; }
+        $ids = $input_data['daftra_ids'] ?? $_GET['daftra_ids'] ?? null;
+        if (is_string($ids)) $ids = array_filter(array_map('trim', explode(',', $ids)), 'strlen');
+        if (!is_array($ids) || !$ids) { echo json_encode(['success'=>false,'message'=>'مرّر daftra_ids (مصفوفة أو قائمة مفصولة بفواصل)']); break; }
+        $esc = array_map(function($v) use ($conn){ return "'".$conn->real_escape_string((string)$v)."'"; }, $ids);
+        $inList = implode(',', $esc);
+        $before = []; $rb = $conn->query("SELECT daftra_id,name,type FROM acc_parties WHERE tenant_id=$tid AND daftra_id IN ($inList)");
+        while ($rb && ($x=$rb->fetch_assoc())) $before[] = $x;
+        $conn->query("UPDATE acc_parties SET type='$type' WHERE tenant_id=$tid AND daftra_id IN ($inList)");
+        $affected = $conn->affected_rows;
+        $changed = []; foreach ($before as $b) $changed[] = $b['name'].' ('.$b['type'].'→'.$type.')';
+        acc_audit($conn,$tid,'reclass',null,'parties','type='.$type.' ids='.implode(',',$ids).' affected='.$affected,$input_data['actor']??null);
+        echo json_encode(['success'=>true,'reclassified'=>$affected,'to_type'=>$type,'details'=>$changed], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_party_delete':
@@ -3552,7 +3576,7 @@ switch ($action) {
         foreach ($parties as $p){
             $name=$conn->real_escape_string(trim((string)($p['name']??''))); if($name==='')continue;
             $did=$conn->real_escape_string((string)($p['daftra_id']??''));
-            $type=in_array($p['type']??'customer',['customer','supplier'])?$p['type']:'customer';
+            $type=in_array($p['type']??'customer',['customer','supplier','partner'])?$p['type']:'customer';
             $vat=$conn->real_escape_string((string)($p['vat_number']??''));
             $cr =$conn->real_escape_string((string)($p['cr_number']??''));
             $ph =$conn->real_escape_string((string)($p['phone']??''));
