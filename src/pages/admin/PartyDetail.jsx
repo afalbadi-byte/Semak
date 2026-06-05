@@ -264,7 +264,11 @@ function Statement({ partyId, setActiveTab, tenant }) {
                                     ) : rows.map((r, i) => (
                                         <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/60 transition">
                                             <td className="py-2.5 px-3 text-slate-500 font-bold whitespace-nowrap" dir="ltr">{r.date}</td>
-                                            <td className="py-2.5 px-3 text-slate-400 font-bold text-[12px]" dir="ltr">{r.entry_no}</td>
+                                            <td className="py-2.5 px-3 text-[12px]" dir="ltr">
+                                                {r.entry_id
+                                                    ? <EntityLink to={`entry/${r.entry_id}`} muted>{r.entry_no}</EntityLink>
+                                                    : <span className="text-slate-400 font-bold">{r.entry_no}</span>}
+                                            </td>
                                             <td className="py-2.5 px-3 text-slate-600 font-bold">{r.line_desc || r.ent_desc || '—'}</td>
                                             <td className="py-2.5 px-3 text-left"><Money value={r.debit} zeroDash /></td>
                                             <td className="py-2.5 px-3 text-left"><Money value={r.credit} zeroDash /></td>

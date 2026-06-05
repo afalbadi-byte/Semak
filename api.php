@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v408
+// deploy: 2026-06-05-v409
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -667,7 +667,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v408','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v409','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -3329,7 +3329,7 @@ switch ($action) {
         $w = "l.party_id=$pid AND l.tenant_id=$tid";
         if ($from) $w .= " AND e.date>='$from'";
         if ($to)   $w .= " AND e.date<='$to'";
-        $res = $conn->query("SELECT e.entry_no,e.date,e.description ent_desc,l.debit,l.credit,l.due_date,l.description line_desc FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE $w ORDER BY e.date,e.id,l.id");
+        $res = $conn->query("SELECT e.id entry_id,e.entry_no,e.date,e.description ent_desc,l.debit,l.credit,l.due_date,l.description line_desc FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE $w ORDER BY e.date,e.id,l.id");
         $rows = []; $run = $opening; $sd = 0; $sc = 0;
         while ($res && ($x = $res->fetch_assoc())) {
             $d = (float)$x['debit']; $c = (float)$x['credit'];

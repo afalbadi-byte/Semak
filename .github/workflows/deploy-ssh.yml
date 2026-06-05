@@ -1,0 +1,87 @@
+name: Build & Deploy via SSH/SFTP (reliable alternative to FTP)
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  لماذا هذا الملف؟                                                          ║
+# ║  Hostinger FTP يتعرّض لانقطاعات تتجاوز 30 دقيقة وتعطّل النشر. SSH/SFTP      ║
+# ║  أوثق بكثير. هذا الـ workflow يبني نفس بناء deploy.yml ويحقن نفس الأسرار،  ║
+# ║  لكنه يرفع dist عبر SCP/SSH بدل FTP.                                        ║
+# ║                                                                            ║
+# ║  لتفعيله (مرّة واحدة):                                                      ║
+# ║   1) فعّل SSH من Hostinger hPanel ▸ Advanced ▸ SSH Access (خطط Premium/    ║
+# ║      Business). دوّن: الـ IP/host، المنفذ (غالبًا 65002)، اسم المستخدم.    ║
+# ║   2) أنشئ زوج مفاتيح:  ssh-keygen -t ed25519 -f deploy_key -N ""           ║
+# ║      وألصق المفتاح العام (deploy_key.pub) في hPanel ▸ SSH ▸ Manage Keys.   ║
+# ║   3) أضِف في GitHub ▸ Settings ▸ Secrets and variables ▸ Actions:          ║
+# ║        SSH_HOST    = عنوان الخادم (مثال: 145.14.xx.xx أو الـ hostname)     ║
+# ║        SSH_PORT    = المنفذ (مثال: 65002)                                  ║
+# ║        SSH_USER    = اسم مستخدم SSH (مثال: u123456789)                     ║
+# ║        SSH_KEY     = محتوى المفتاح الخاص deploy_key كاملًا                 ║
+# ║        SSH_TARGET  = مسار مجلد الويب (مثال: domains/semak.sa/public_html   ║
+# ║                       أو public_html — حسب بنية حسابك)                     ║
+# ║   4) بعد التأكد من نجاحه يدويًا، نحوّل التشغيل إلى on: push ونتقاعد عن FTP. ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+on:
+  workflow_dispatch:        # تشغيل يدوي فقط الآن (لن يعمل تلقائيًا حتى نجهّز الأسرار)
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_MOTTASL_API_KEY: ${{ secrets.VITE_MOTTASL_API_KEY }}
+          VITE_WA_ADMIN_PHONE: ${{ secrets.VITE_WA_ADMIN_PHONE }}
+          VITE_WA_CLIENT_TEMPLATE_ID: ${{ secrets.VITE_WA_CLIENT_TEMPLATE_ID }}
+          VITE_WA_CLIENT_TEMPLATE_LANG: ${{ secrets.VITE_WA_CLIENT_TEMPLATE_LANG }}
+          VITE_WA_MAINT_TEMPLATE_ID: ${{ secrets.VITE_WA_MAINT_TEMPLATE_ID }}
+
+      - name: Copy api.php to dist
+        run: cp api.php dist/api.php
+
+      - name: Inject Anthropic API key
+        run: sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g" dist/api.php
+
+      - name: Inject Daftra API key
+        run: sed -i "s|__DAFTRA_KEY__|${{ secrets.DAFTRA_API_KEY }}|g" dist/api.php
+
+      - name: Inject Daftra credentials
+        run: |
+          sed -i "s|__DAFTRA_EMAIL__|${{ secrets.DAFTRA_EMAIL }}|g" dist/api.php
+          sed -i "s|__DAFTRA_PASSWORD__|${{ secrets.DAFTRA_PASSWORD }}|g" dist/api.php
+          sed -i "s|__DAFTRA_CLIENT_ID__|${{ secrets.DAFTRA_CLIENT_ID }}|g" dist/api.php
+          sed -i "s|__DAFTRA_CLIENT_SECRET__|${{ secrets.DAFTRA_CLIENT_SECRET }}|g" dist/api.php
+
+      - name: Inject Daftra session cookie
+        run: sed -i "s|__DAFTRA_SESSION__|${{ secrets.DAFTRA_SESSION_COOKIE }}|g" dist/api.php
+
+      # رفع محتوى dist إلى مجلد الويب عبر SCP/SSH — أوثق من FTP.
+      # rm:false  → لا نحذف الملفات الأخرى على الخادم (الوسائط المرفوعة تبقى).
+      - name: Deploy to server via SCP/SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "dist/*"
+          target: ${{ secrets.SSH_TARGET }}
+          strip_components: 1
+          rm: false
+          timeout: 120s
+          command_timeout: 10m

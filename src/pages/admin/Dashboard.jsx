@@ -41,6 +41,8 @@ import LedgerHub        from './LedgerHub';
 import NotesReturns     from './NotesReturns';
 import DaftraLink       from './DaftraLink';
 import PartyDetail      from './PartyDetail';
+import EntryDetail      from './EntryDetail';
+import InvoiceDetail    from './InvoiceDetail';
 
 import { API_URL } from '../../lib/api/client';
 import { ToastProvider, useToast } from '../../components/ui';
@@ -741,6 +743,8 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}
                 {activeTab === 'parties'     && hasPermission('finance')     && <PartyDetail partyId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'entry'       && hasPermission('finance')     && <EntryDetail entryId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'inv'         && hasPermission('finance')     && <InvoiceDetail invoiceId={detailId} setActiveTab={setActiveTab} />}
                 {activeTab === 'ledger'      && hasPermission('finance')     && <div className="animate-fadeIn"><LedgerHub /></div>}
                 {activeTab === 'accounting'  && hasPermission('finance')     && <div className="animate-fadeIn"><AccountingHub /></div>}
                 {activeTab === 'notes'       && hasPermission('finance')     && <div className="animate-fadeIn"><NotesReturns /></div>}
