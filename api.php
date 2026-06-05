@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v409
+// deploy: 2026-06-05-v412
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -228,6 +228,33 @@ $conn->query("CREATE TABLE IF NOT EXISTS notifications (
     INDEX idx_created (tenant_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ─── التحقق بخطوتين عند دخول الموظفين (OTP) — اختياري لكل مستخدم ──────────────
+// twofa = 0 افتراضيًا ⇒ لا يتغيّر سلوك الدخول لأحد حتى يُفعّله المستخدم بنفسه.
+$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa TINYINT(1) DEFAULT 0");
+$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa_channel VARCHAR(10) DEFAULT 'email'");
+$conn->query("CREATE TABLE IF NOT EXISTS login_otp (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT NOT NULL,
+    ticket      CHAR(32) NOT NULL,
+    code        VARCHAR(10) NOT NULL,
+    channel     VARCHAR(10) DEFAULT 'email',
+    attempts    INT DEFAULT 0,
+    expires_at  DATETIME NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_ticket (ticket),
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS trusted_devices (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT NOT NULL,
+    token_hash  CHAR(64) NOT NULL,
+    label       VARCHAR(160) DEFAULT NULL,
+    expires_at  DATETIME NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_dev_user (user_id),
+    INDEX idx_dev_hash (token_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // كتالوج المنتجات/الخدمات (بيانات مرجعية مرحَّلة من دفترة)
 $conn->query("CREATE TABLE IF NOT EXISTS acc_products (
     id           INT AUTO_INCREMENT PRIMARY KEY,
@@ -403,6 +430,170 @@ function notify($conn, $tid, $user_id, $type, $title, $body = null, $link = null
     $conn->query("INSERT INTO notifications (tenant_id,user_id,type,title,body,link)
                   VALUES ($tid,$uid,'$type','$title',$bodyS,$linkS)");
 }
+
+// ─── البريد الإلكتروني (SMTP عبر بريد semak.sa) ──────────────────────────────
+// القيم تُحقن وقت النشر من GitHub Secrets (sed). تبقى كـ placeholders محليًا.
+function smtp_config() {
+    return [
+        'host'      => '__SMTP_HOST__',
+        'port'      => '__SMTP_PORT__',
+        'user'      => '__SMTP_USER__',
+        'pass'      => '__SMTP_PASS__',
+        'from'      => '__SMTP_FROM__',
+        'from_name' => '__SMTP_FROM_NAME__',
+        'secure'    => '__SMTP_SECURE__', // ssl (465) أو tls (587)
+    ];
+}
+function smtp_ready($c) {
+    foreach (['host', 'user', 'pass'] as $k) {
+        if (empty($c[$k]) || strpos($c[$k], '__SMTP') !== false) return false;
+    }
+    return true;
+}
+// قالب بريد مُنسَّق بهوية سماك (أزرق/ذهبي، RTL)
+function email_template($title, $bodyHtml, $cta = null) {
+    $year = date('Y');
+    $btn  = '';
+    if ($cta && !empty($cta['url'])) {
+        $btn = '<div style="text-align:center;margin-top:24px"><a href="' . htmlspecialchars($cta['url']) . '" style="display:inline-block;background:#c5a059;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 30px;border-radius:10px">' . htmlspecialchars($cta['label'] ?? 'فتح') . '</a></div>';
+    }
+    return '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+        . '<body style="margin:0;background:#f1f5f9;font-family:Tahoma,Arial,sans-serif">'
+        . '<div style="max-width:560px;margin:0 auto;padding:24px">'
+        . '<div style="background:#1a365d;border-radius:20px 20px 0 0;padding:26px;text-align:center">'
+        . '<div style="color:#c5a059;font-size:24px;font-weight:bold;letter-spacing:1px">سماك العقارية</div></div>'
+        . '<div style="background:#ffffff;padding:32px;border-radius:0 0 20px 20px;box-shadow:0 10px 30px rgba(0,0,0,.06)">'
+        . '<h1 style="color:#1a365d;font-size:20px;margin:0 0 16px">' . htmlspecialchars($title) . '</h1>'
+        . '<div style="color:#475569;font-size:15px;line-height:1.9">' . $bodyHtml . '</div>' . $btn . '</div>'
+        . '<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:16px">© ' . $year . ' سماك العقارية · رسالة آلية، يُرجى عدم الرد</p>'
+        . '</div></body></html>';
+}
+// إرسال بريد عبر SMTP (fsockopen) — يدعم SSL/465 و STARTTLS/587 و AUTH LOGIN
+function send_email($to, $subject, $html, $alt = '') {
+    $c = smtp_config();
+    if (!smtp_ready($c)) return ['ok' => false, 'error' => 'SMTP not configured'];
+
+    $port = (int)$c['port'];
+    $secure = ($c['secure'] === 'tls') ? 'tls' : 'ssl';
+    if ($port <= 0) $port = ($secure === 'tls') ? 587 : 465;
+    $host = $c['host'];
+
+    $transport = ($secure === 'ssl') ? "ssl://$host" : "tcp://$host";
+    $ctx = stream_context_create(['ssl' => ['verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true]]);
+    $fp = @stream_socket_client("$transport:$port", $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $ctx);
+    if (!$fp) return ['ok' => false, 'error' => "connect failed: $errstr ($errno)"];
+    stream_set_timeout($fp, 15);
+
+    $read = function () use ($fp) {
+        $data = '';
+        while (($line = fgets($fp, 515)) !== false) {
+            $data .= $line;
+            if (isset($line[3]) && $line[3] === ' ') break;
+        }
+        return $data;
+    };
+    $cmd = function ($s) use ($fp, $read) { fwrite($fp, $s . "\r\n"); return $read(); };
+
+    $read(); // تحية الخادم (220)
+    $domain  = $c['from'] ? substr(strrchr($c['from'], '@'), 1) : 'localhost';
+    $ehloHost = $domain ?: 'localhost';
+    $cmd("EHLO $ehloHost");
+
+    if ($secure === 'tls') {
+        $cmd("STARTTLS");
+        $ok = @stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_1_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT);
+        if (!$ok) { fclose($fp); return ['ok' => false, 'error' => 'STARTTLS failed']; }
+        $cmd("EHLO $ehloHost");
+    }
+
+    $cmd("AUTH LOGIN");
+    $cmd(base64_encode($c['user']));
+    $authResp = $cmd(base64_encode($c['pass']));
+    if (strpos($authResp, '235') === false) { fclose($fp); return ['ok' => false, 'error' => 'auth failed']; }
+
+    $from = $c['from'] ?: $c['user'];
+    $cmd("MAIL FROM:<$from>");
+    $rcpt = $cmd("RCPT TO:<$to>");
+    if (strpos($rcpt, '250') === false && strpos($rcpt, '251') === false) { fclose($fp); return ['ok' => false, 'error' => 'recipient rejected']; }
+    $cmd("DATA");
+
+    $fromName = $c['from_name'] ?: 'Semak';
+    $encName  = '=?UTF-8?B?' . base64_encode($fromName) . '?=';
+    $encSubj  = '=?UTF-8?B?' . base64_encode($subject) . '?=';
+    $boundary = 'b_' . bin2hex(random_bytes(8));
+    if ($alt === '') $alt = trim(preg_replace('/\s+/', ' ', strip_tags($html)));
+
+    $headers = [
+        "From: $encName <$from>",
+        "To: <$to>",
+        "Subject: $encSubj",
+        "MIME-Version: 1.0",
+        "Date: " . date('r'),
+        "Message-ID: <" . bin2hex(random_bytes(8)) . "@$ehloHost>",
+        "Content-Type: multipart/alternative; boundary=\"$boundary\"",
+    ];
+    $body  = "--$boundary\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($alt)) . "\r\n";
+    $body .= "--$boundary\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($html)) . "\r\n";
+    $body .= "--$boundary--\r\n";
+
+    $message = implode("\r\n", $headers) . "\r\n\r\n" . $body;
+    $message = preg_replace('/^\./m', '..', $message); // dot-stuffing
+
+    fwrite($fp, $message . "\r\n.\r\n");
+    $dataResp = $read();
+    $cmd("QUIT");
+    fclose($fp);
+
+    if (strpos($dataResp, '250') === false) return ['ok' => false, 'error' => 'message rejected'];
+    return ['ok' => true];
+}
+
+// ─── أدوات التحقق بخطوتين عند الدخول ──────────────────────────────────────────
+function mask_email($e) {
+    if (!$e || strpos($e, '@') === false) return $e;
+    list($u, $d) = explode('@', $e, 2);
+    $um = (strlen($u) <= 2) ? substr($u, 0, 1) . '*' : substr($u, 0, 2) . str_repeat('*', max(1, strlen($u) - 2));
+    return $um . '@' . $d;
+}
+function mask_phone($p) {
+    $p = preg_replace('/\D/', '', (string)$p);
+    if (strlen($p) < 4) return $p;
+    return substr($p, 0, 3) . ' **** ' . substr($p, -3);
+}
+function wa_send_text($to, $body) {
+    $key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo';
+    $ch = curl_init('https://api.mottasl.ai/v1/message/send');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode(['to' => $to, 'type' => 'text', 'text' => ['body' => $body]]),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', "Authorization: Bearer $key"],
+        CURLOPT_TIMEOUT => 10, CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return $status === 200 || $status === 201;
+}
+// إرسال رمز الدخول عبر القناة المختارة (email | whatsapp)
+function send_login_otp($user, $channel, $code) {
+    $channel = ($channel === 'whatsapp') ? 'whatsapp' : 'email';
+    if ($channel === 'email' && !empty($user['email'])) {
+        $html = email_template('رمز تسجيل الدخول',
+            'رمز الدخول لمرّة واحدة الخاص بك في لوحة سماك:'
+            . '<div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#1a365d;text-align:center;margin:22px 0;direction:ltr">' . $code . '</div>'
+            . 'الرمز صالح لمدة 10 دقائق. إذا لم تطلب هذا الرمز فتجاهل هذه الرسالة.');
+        $r = send_email($user['email'], 'رمز الدخول · سماك العقارية', $html);
+        return !empty($r['ok']);
+    }
+    if ($channel === 'whatsapp' && !empty($user['phone'])) {
+        $phone = preg_replace('/\D/', '', $user['phone']);
+        $phone = ltrim($phone, '0');
+        if (substr($phone, 0, 3) !== '966') $phone = '966' . $phone;
+        return wa_send_text($phone, "🔐 سماك العقارية\nرمز تسجيل الدخول: $code\nصالح 10 دقائق.");
+    }
+    return false;
+}
+
 // قراءة إعداد منشأة واحد (مع قيمة افتراضية)
 function acc_setting($conn, $tid, $key, $default = '') {
     $tid = (int)$tid; $key = $conn->real_escape_string($key);
@@ -693,7 +884,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v409','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v412','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -704,8 +895,53 @@ switch ($action) {
         $ip       = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
         $res = $conn->query("SELECT * FROM users WHERE email='$email' AND password='$password' LIMIT 1");
         if ($res && $row = $res->fetch_assoc()) {
+            $uid   = (int)$row['id'];
+            $twofa = (int)($row['twofa'] ?? 0);
+
+            // ── التحقق بخطوتين مُفعّل لهذا المستخدم؟ ──
+            if ($twofa === 1) {
+                // جهاز موثوق سابقًا؟ تخطَّ الرمز
+                $dev = isset($input_data['device_token']) ? trim((string)$input_data['device_token']) : '';
+                if ($dev !== '') {
+                    $dh  = hash('sha256', $dev);
+                    $now = date('Y-m-d H:i:s');
+                    $tr  = $conn->query("SELECT id FROM trusted_devices WHERE user_id=$uid AND token_hash='$dh' AND expires_at > '$now' LIMIT 1");
+                    if ($tr && $tr->num_rows > 0) {
+                        unset($row['password']);
+                        acc_audit($conn, 1, 'auth', $uid, 'login', 'دخول عبر جهاز موثوق · IP ' . $ip, $row['email'] ?? $email);
+                        echo json_encode(["success" => true, "data" => $row]);
+                        break;
+                    }
+                }
+                // أنشئ رمزًا وأرسله عبر القناة المختارة أو الافتراضية
+                $channel = $input_data['channel'] ?? ($row['twofa_channel'] ?? 'email');
+                $channel = ($channel === 'whatsapp') ? 'whatsapp' : 'email';
+                $ticket  = bin2hex(random_bytes(16));
+                $code    = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                $expires = date('Y-m-d H:i:s', time() + 600);
+                $conn->query("DELETE FROM login_otp WHERE user_id=$uid");
+                $tk = $conn->real_escape_string($ticket);
+                $cd = $conn->real_escape_string($code);
+                $cl = $conn->real_escape_string($channel);
+                $conn->query("INSERT INTO login_otp (user_id,ticket,code,channel,expires_at) VALUES ($uid,'$tk','$cd','$cl','$expires')");
+                $sent = send_login_otp($row, $channel, $code);
+                acc_audit($conn, 1, 'auth', $uid, 'otp_sent', 'إرسال رمز دخول عبر ' . $channel . ' · IP ' . $ip, $row['email'] ?? $email);
+                echo json_encode([
+                    "success"      => true,
+                    "otp_required" => true,
+                    "ticket"       => $ticket,
+                    "channel"      => $channel,
+                    "sent"         => $sent,
+                    "masked_email" => mask_email($row['email'] ?? ''),
+                    "masked_phone" => mask_phone($row['phone'] ?? ''),
+                    "has_email"    => !empty($row['email']),
+                    "has_phone"    => !empty($row['phone']),
+                ]);
+                break;
+            }
+
+            // ── الوضع الاعتيادي (بدون تحقق بخطوتين) ──
             unset($row['password']);
-            $uid = (int)$row['id'];
             acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح · IP ' . $ip, $row['email'] ?? $email);
             echo json_encode(["success" => true, "data" => $row]);
         } else {
@@ -713,6 +949,87 @@ switch ($action) {
             echo json_encode(["success" => false, "message" => "البريد الإلكتروني أو كلمة المرور غير صحيحة"]);
         }
         break;
+
+    // ─── إعادة إرسال رمز الدخول / تبديل القناة (واتساب ⇄ إيميل) ───────────────
+    case 'login_send_otp': {
+        $ticket  = $conn->real_escape_string(trim($input_data['ticket'] ?? ''));
+        $channel = (($input_data['channel'] ?? '') === 'whatsapp') ? 'whatsapp' : 'email';
+        if ($ticket === '') { echo json_encode(['success' => false, 'message' => 'جلسة غير صالحة']); break; }
+        $now = date('Y-m-d H:i:s');
+        $r = $conn->query("SELECT * FROM login_otp WHERE ticket='$ticket' AND expires_at > '$now' LIMIT 1");
+        if (!$r || $r->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'انتهت صلاحية الجلسة، أعد تسجيل الدخول']); break; }
+        $otp  = $r->fetch_assoc();
+        $uid  = (int)$otp['user_id'];
+        $ur   = $conn->query("SELECT * FROM users WHERE id=$uid LIMIT 1");
+        $user = $ur ? $ur->fetch_assoc() : null;
+        if (!$user) { echo json_encode(['success' => false, 'message' => 'المستخدم غير موجود']); break; }
+        $code    = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $expires = date('Y-m-d H:i:s', time() + 600);
+        $cd = $conn->real_escape_string($code);
+        $cl = $conn->real_escape_string($channel);
+        $conn->query("UPDATE login_otp SET code='$cd', channel='$cl', expires_at='$expires', attempts=0 WHERE ticket='$ticket'");
+        $sent = send_login_otp($user, $channel, $code);
+        echo json_encode([
+            'success' => true, 'channel' => $channel, 'sent' => $sent,
+            'masked_email' => mask_email($user['email'] ?? ''),
+            'masked_phone' => mask_phone($user['phone'] ?? ''),
+        ]);
+        break;
+    }
+
+    // ─── التحقق من رمز الدخول وإصدار الجلسة ──────────────────────────────────
+    case 'verify_login_otp': {
+        $ticket   = $conn->real_escape_string(trim($input_data['ticket'] ?? ''));
+        $code     = $conn->real_escape_string(trim($input_data['code'] ?? ''));
+        $remember = !empty($input_data['remember_device']);
+        $ip       = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
+        if ($ticket === '' || $code === '') { echo json_encode(['success' => false, 'message' => 'بيانات ناقصة']); break; }
+        $now = date('Y-m-d H:i:s');
+        $r = $conn->query("SELECT * FROM login_otp WHERE ticket='$ticket' AND expires_at > '$now' LIMIT 1");
+        if (!$r || $r->num_rows === 0) { echo json_encode(['success' => false, 'message' => 'انتهت صلاحية الرمز، أعد تسجيل الدخول']); break; }
+        $otp = $r->fetch_assoc();
+        $oid = (int)$otp['id'];
+        if ((int)$otp['attempts'] >= 5) {
+            $conn->query("DELETE FROM login_otp WHERE id=$oid");
+            echo json_encode(['success' => false, 'message' => 'محاولات كثيرة، أعد تسجيل الدخول']); break;
+        }
+        if (!hash_equals((string)$otp['code'], (string)$code)) {
+            $conn->query("UPDATE login_otp SET attempts=attempts+1 WHERE id=$oid");
+            acc_audit($conn, 1, 'auth', (int)$otp['user_id'], 'otp_fail', 'رمز دخول خاطئ · IP ' . $ip, '');
+            echo json_encode(['success' => false, 'message' => 'الرمز غير صحيح']); break;
+        }
+        $uid = (int)$otp['user_id'];
+        $conn->query("DELETE FROM login_otp WHERE user_id=$uid");
+        $ur   = $conn->query("SELECT * FROM users WHERE id=$uid LIMIT 1");
+        $user = $ur ? $ur->fetch_assoc() : null;
+        if (!$user) { echo json_encode(['success' => false, 'message' => 'المستخدم غير موجود']); break; }
+        unset($user['password']);
+        $device_token = null;
+        if ($remember) {
+            $device_token = bin2hex(random_bytes(32));
+            $dh    = hash('sha256', $device_token);
+            $exp   = date('Y-m-d H:i:s', time() + 30 * 86400);
+            $label = $conn->real_escape_string(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 150));
+            $conn->query("INSERT INTO trusted_devices (user_id,token_hash,label,expires_at) VALUES ($uid,'$dh','$label','$exp')");
+        }
+        acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح (تحقق بخطوتين) · IP ' . $ip, $user['email'] ?? '');
+        echo json_encode(['success' => true, 'data' => $user, 'device_token' => $device_token]);
+        break;
+    }
+
+    // ─── تفعيل/تعطيل التحقق بخطوتين لمستخدم ──────────────────────────────────
+    case 'set_twofa': {
+        $uid     = (int)($input_data['user_id'] ?? 0);
+        $enabled = !empty($input_data['enabled']) ? 1 : 0;
+        $channel = (($input_data['channel'] ?? 'email') === 'whatsapp') ? 'whatsapp' : 'email';
+        if ($uid <= 0) { echo json_encode(['success' => false, 'message' => 'مستخدم غير صالح']); break; }
+        $cl = $conn->real_escape_string($channel);
+        $conn->query("UPDATE users SET twofa=$enabled, twofa_channel='$cl' WHERE id=$uid");
+        if (!$enabled) $conn->query("DELETE FROM trusted_devices WHERE user_id=$uid");
+        acc_audit($conn, 1, 'auth', $uid, 'update', 'التحقق بخطوتين: ' . ($enabled ? 'تفعيل' : 'تعطيل') . ' · ' . $channel, '');
+        echo json_encode(['success' => true, 'twofa' => $enabled, 'channel' => $channel]);
+        break;
+    }
 
     // ─── تسجيل دخول العملاء (رقم الوحدة + الجوال) — احتياطي ──────────────────
     case 'customer_login':
@@ -944,6 +1261,69 @@ switch ($action) {
         if ($title === '') { echo json_encode(['success' => false, 'message' => 'العنوان مطلوب']); break; }
         notify($conn, $tid, $uid, $type, $title, $body, $link);
         echo json_encode(['success' => true]);
+        break;
+    }
+
+    // ─── إرسال البريد (SMTP عبر بريد سماك) ───────────────────────────────────
+    // اختبار الإعداد: يرسل رسالة تجريبية ويُرجع جاهزية SMTP + نتيجة الإرسال.
+    case 'send_test_email': {
+        $cfg = smtp_config();
+        if (!smtp_ready($cfg)) {
+            echo json_encode(['success' => false, 'configured' => false, 'message' => 'لم يتم إعداد بيانات SMTP بعد']);
+            break;
+        }
+        $to = trim($input_data['to'] ?? $cfg['from'] ?? '');
+        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['success' => false, 'configured' => true, 'message' => 'البريد المستلِم غير صالح']);
+            break;
+        }
+        $html = email_template('رسالة اختبار', '<p>هذه رسالة تجريبية للتأكد من عمل خادم البريد (SMTP) الخاص بسماك العقارية.</p><p>إن وصلتك هذه الرسالة فالإعداد سليم ✅</p>');
+        $r = send_email($to, 'اختبار بريد سماك', $html);
+        if (!empty($r['ok'])) {
+            acc_audit($conn, 1, 'app', null, 'view', 'إرسال بريد اختبار إلى ' . $to, $input_data['actor'] ?? '');
+        }
+        echo json_encode(['success' => !empty($r['ok']), 'configured' => true, 'message' => !empty($r['ok']) ? 'تم إرسال رسالة الاختبار' : ('فشل الإرسال: ' . ($r['error'] ?? 'خطأ غير معروف'))]);
+        break;
+    }
+    // إرسال بريد تحديث/إشعار إلى مستلِم واحد أو عدة مستلِمين بقالب سماك.
+    case 'send_update_email': {
+        $cfg = smtp_config();
+        if (!smtp_ready($cfg)) {
+            echo json_encode(['success' => false, 'configured' => false, 'message' => 'لم يتم إعداد بيانات SMTP بعد']);
+            break;
+        }
+        $subject = trim($input_data['subject'] ?? '');
+        $title   = trim($input_data['title'] ?? $subject);
+        $bodyTxt = $input_data['body'] ?? '';
+        $bodyHtml = $input_data['body_html'] ?? null;
+        $ctaUrl   = trim($input_data['cta_url'] ?? '');
+        $ctaLabel = trim($input_data['cta_label'] ?? 'فتح');
+        if ($subject === '' || ($bodyTxt === '' && !$bodyHtml)) {
+            echo json_encode(['success' => false, 'configured' => true, 'message' => 'العنوان والمحتوى مطلوبان']);
+            break;
+        }
+        // قبول to كنص مفصول بفواصل أو مصفوفة
+        $rawTo = $input_data['to'] ?? '';
+        $list  = is_array($rawTo) ? $rawTo : preg_split('/[,;\s]+/', (string)$rawTo, -1, PREG_SPLIT_NO_EMPTY);
+        $valid = [];
+        foreach ($list as $addr) {
+            $addr = trim($addr);
+            if (filter_var($addr, FILTER_VALIDATE_EMAIL)) $valid[] = $addr;
+        }
+        if (!$valid) {
+            echo json_encode(['success' => false, 'configured' => true, 'message' => 'لا يوجد بريد مستلِم صالح']);
+            break;
+        }
+        if (!$bodyHtml) $bodyHtml = '<p>' . nl2br(htmlspecialchars($bodyTxt)) . '</p>';
+        $cta  = $ctaUrl ? ['url' => $ctaUrl, 'label' => $ctaLabel] : null;
+        $html = email_template($title ?: $subject, $bodyHtml, $cta);
+        $sent = 0; $failed = [];
+        foreach ($valid as $addr) {
+            $r = send_email($addr, $subject, $html, $bodyTxt);
+            if (!empty($r['ok'])) $sent++; else $failed[] = $addr;
+        }
+        acc_audit($conn, 1, 'app', null, 'create', 'إرسال بريد تحديث «' . $subject . '» إلى ' . $sent . ' مستلِم', $input_data['actor'] ?? '');
+        echo json_encode(['success' => $sent > 0, 'configured' => true, 'sent' => $sent, 'failed' => $failed, 'message' => 'تم الإرسال إلى ' . $sent . ' من ' . count($valid)]);
         break;
     }
 

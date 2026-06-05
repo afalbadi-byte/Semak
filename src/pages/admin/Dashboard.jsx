@@ -45,6 +45,7 @@ import PartyDetail      from './PartyDetail';
 import EntryDetail      from './EntryDetail';
 import InvoiceDetail    from './InvoiceDetail';
 import ActivityLog      from './ActivityLog';
+import SecuritySettings  from './SecuritySettings';
 
 import { API_URL, apiPost, TENANT } from '../../lib/api/client';
 import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
@@ -774,6 +775,7 @@ function DashboardInner({ onLogout }) {
             tools:[
                 { id:'daftra_link',  tabId:'daftra_link',  label:'ربط دفترة',   icon:Link2,      permKey:'finance',       color:'indigo' },
                 { id:'activity_log', tabId:'activity_log', label:'سجل النشاط', icon:ScrollText, permKey:'activity_log',  color:'slate'  },
+                { id:'security',     tabId:'security',     label:'الأمان والبريد', icon:ShieldCheck, permKey:'all',       color:'emerald'},
             ],
         },
         {
@@ -799,7 +801,7 @@ function DashboardInner({ onLogout }) {
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
         rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
         ledger:'الدفترة المستقلة', accounting:'دفتر المحاسبة (دفترة)', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
-        parties:'كشوف حسابات الأطراف', activity_log:'سجل النشاط',
+        parties:'كشوف حسابات الأطراف', activity_log:'سجل النشاط', security:'الأمان والبريد',
     };
 
     if (authLoading) return (
@@ -1005,6 +1007,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
+                {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
 
             </main>
             </div>
