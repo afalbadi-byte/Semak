@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v412
+// deploy: 2026-06-05-v413
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -884,7 +884,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v412','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v413','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────

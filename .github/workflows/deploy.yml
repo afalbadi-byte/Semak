@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
 
+# Only one deploy may run at a time. If a newer push arrives while an older
+# deploy is still grinding through the FTP backoff window, cancel the stale
+# run so it can't overwrite the newer build on the server (avoids version
+# regressions when two pushes land close together).
+concurrency:
+  group: deploy-semak
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
