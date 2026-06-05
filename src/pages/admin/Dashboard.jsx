@@ -40,6 +40,7 @@ import AccountingHub    from './AccountingHub';
 import LedgerHub        from './LedgerHub';
 import NotesReturns     from './NotesReturns';
 import DaftraLink       from './DaftraLink';
+import PartyDetail      from './PartyDetail';
 
 import { API_URL } from '../../lib/api/client';
 import { ToastProvider, useToast } from '../../components/ui';
@@ -535,6 +536,7 @@ function DashboardInner({ onLogout }) {
             desc:'الدفترة المستقلة · دليل الحسابات · القيود اليومية · التقارير المالية · مراكز التكلفة · الإشعارات والمرتجعات',
             tools:[
                 { id:'ledger',     tabId:'ledger',     label:'الدفترة المستقلة',     icon:BookOpen, permKey:'finance', color:'indigo' },
+                { id:'parties',    tabId:'parties',    label:'كشوف حسابات الأطراف',  icon:Users,    permKey:'finance', color:'purple' },
                 { id:'accounting', tabId:'accounting', label:'دفتر المحاسبة (دفترة)', icon:FileText, permKey:'finance', color:'slate'  },
                 { id:'notes',      tabId:'notes',      label:'الإشعارات والمرتجعات', icon:FileText, permKey:'finance', color:'rose'   },
             ],
@@ -570,6 +572,7 @@ function DashboardInner({ onLogout }) {
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
         rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
         ledger:'الدفترة المستقلة', accounting:'دفتر المحاسبة (دفترة)', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
+        parties:'كشوف حسابات الأطراف',
     };
 
     if (authLoading) return (
@@ -737,6 +740,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}
+                {activeTab === 'parties'     && hasPermission('finance')     && <PartyDetail partyId={detailId} setActiveTab={setActiveTab} />}
                 {activeTab === 'ledger'      && hasPermission('finance')     && <div className="animate-fadeIn"><LedgerHub /></div>}
                 {activeTab === 'accounting'  && hasPermission('finance')     && <div className="animate-fadeIn"><AccountingHub /></div>}
                 {activeTab === 'notes'       && hasPermission('finance')     && <div className="animate-fadeIn"><NotesReturns /></div>}
