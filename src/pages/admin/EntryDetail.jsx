@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Loader2, ArrowLeft, Search, Printer, RefreshCw, BookOpen, Hash,
     CheckCircle2, Clock, Link2, Building2, Calendar
@@ -35,15 +35,15 @@ function Browse({ tenant }) {
     const [loading, setLoad] = useState(true);
     const [q, setQ]          = useState('');
 
-    const load = useCallback(() => {
+    useEffect(() => {
+        const ctrl = new AbortController();
         setLoad(true);
-        apiGet('gl_entries', { tenant })
+        apiGet('gl_entries', { tenant }, { signal: ctrl.signal })
             .then(r => setRows(Array.isArray(r?.data) ? r.data : []))
-            .catch(() => setRows([]))
-            .finally(() => setLoad(false));
+            .catch(e => { if (e?.name !== 'AbortError') setRows([]); })
+            .finally(() => { if (!ctrl.signal.aborted) setLoad(false); });
+        return () => ctrl.abort();
     }, [tenant]);
-
-    useEffect(() => { load(); }, [load]);
 
     const filtered = useMemo(() => {
         const s = q.trim().toLowerCase();
@@ -139,19 +139,19 @@ function Detail({ entryId, setActiveTab, tenant }) {
     const [loading, setLoad]  = useState(true);
     const [err, setErr]       = useState('');
 
-    const load = useCallback(() => {
+    useEffect(() => {
+        const ctrl = new AbortController();
         setLoad(true); setErr('');
         // party_name يأتي الآن من JOIN في gl_entry_single — لا حاجة لجلب كل الأطراف
-        apiGet('gl_entry_single', { tenant, id: entryId })
+        apiGet('gl_entry_single', { tenant, id: entryId }, { signal: ctrl.signal })
             .then(r => {
                 if (r?.success) { setEntry(r.entry); setLines(Array.isArray(r.lines) ? r.lines : []); }
                 else { setErr(r?.message || 'تعذّر جلب القيد'); setEntry(null); }
             })
-            .catch(() => setErr('خطأ في الاتصال'))
-            .finally(() => setLoad(false));
+            .catch(e => { if (e?.name !== 'AbortError') setErr('خطأ في الاتصال'); })
+            .finally(() => { if (!ctrl.signal.aborted) setLoad(false); });
+        return () => ctrl.abort();
     }, [tenant, entryId]);
-
-    useEffect(() => { load(); }, [load]);
 
     const totals = useMemo(() => {
         let d = 0, c = 0;

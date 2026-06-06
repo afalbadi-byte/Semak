@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 
 import { API_URL } from '../../lib/api/client';
+import { useToast } from '../../components/ui';
 import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 
 // ─── تنسيق الأرقام ───────────────────────────────────────────────
@@ -26,21 +27,6 @@ const METHODS = [
 ];
 const methodLabel = (m) => (METHODS.find(x => x.value === m) || {}).label || m || '—';
 
-// ─── Toast ───────────────────────────────────────────────────────
-function Toast({ msg, type, onClose }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 3500);
-    return () => clearTimeout(t);
-  }, [onClose]);
-  const bg = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-  return (
-    <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl text-white text-sm font-bold ${bg} animate-fadeIn`}>
-      {type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
-      {msg}
-      <button onClick={onClose} className="mr-1 opacity-70 hover:opacity-100"><X size={14} /></button>
-    </div>
-  );
-}
 
 // ─── شريحة ملخص ──────────────────────────────────────────────────
 function SummaryChip({ icon: Icon, label, value, color }) {
@@ -68,8 +54,8 @@ export default function PaymentsManage() {
   const [tab, setTab] = useState('collection'); // collection | payments
 
   // ─── حالة عامة ───────────────────────────────────────────────
-  const [toast, setToast] = useState(null);
-  const notify = (msg, type = 'success') => setToast({ msg, type });
+  const toast  = useToast();
+  const notify = (msg, type = 'success') => type === 'error' ? toast.error(msg) : toast.success(msg);
 
   // ─── القوائم المنسدلة ────────────────────────────────────────
   const [treasuries, setTreasuries] = useState([]);
@@ -778,10 +764,6 @@ export default function PaymentsManage() {
   // ════════════════════════════════════════════════════════════
   return (
     <div dir="rtl" className="font-cairo bg-transparent p-4 md:p-6">
-      {/* Toast */}
-      {toast && (
-        <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />
-      )}
 
       {/* رأس الصفحة */}
       <div className="flex items-center gap-3 mb-6">

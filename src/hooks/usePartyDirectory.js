@@ -36,6 +36,12 @@ async function loadDirectory() {
   return _promise;
 }
 
+/** إلغاء التخزين المؤقت — استدعِها بعد إضافة/تعديل طرف لإجبار الجلب من جديد */
+export function invalidatePartyDirectory() {
+  _cache = null;
+  _promise = null;
+}
+
 export function usePartyDirectory() {
   const [dir, setDir] = useState(_cache || { byDaftraId: {}, byName: {} });
 

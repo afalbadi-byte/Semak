@@ -14,6 +14,7 @@ import {
 
 import { API_URL } from '../../lib/api/client';
 import EntityLink from '../../components/ui/EntityLink';
+import { useToast } from '../../components/ui';
 const TENANT = 1;
 
 const TYPE_LABELS = {
@@ -57,23 +58,6 @@ function downloadCSV(filename, headers, rows) {
     URL.revokeObjectURL(url);
 }
 
-// ─── إشعار (Toast) ───────────────────────────────────────────────────────────
-function useToast() {
-    const [toast, setToast] = useState(null);
-    const show = useCallback((msg, kind = 'success') => {
-        setToast({ msg, kind });
-        setTimeout(() => setToast(null), 3500);
-    }, []);
-    const node = toast ? (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 px-5 py-3 rounded-2xl shadow-xl font-bold text-sm animate-fadeIn ${
-            toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
-        }`}>
-            {toast.kind === 'error' ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
-            {toast.msg}
-        </div>
-    ) : null;
-    return { show, node };
-}
 
 // ─── عناصر واجهة عامة ────────────────────────────────────────────────────────
 function Spinner({ label = 'جاري التحميل…' }) {
@@ -1725,7 +1709,7 @@ const TABS = [
 ];
 
 export default function LedgerHub() {
-    const { show: toast, node: toastNode } = useToast();
+    const { show: toast } = useToast();
     const [activeTab, setActiveTab] = useState('chart');
 
     // بيانات مشتركة
@@ -1769,7 +1753,6 @@ export default function LedgerHub() {
 
     return (
         <div dir="rtl" className="space-y-6 p-4 md:p-6 font-cairo">
-            {toastNode}
 
             {/* رأس الصفحة */}
             <div className="bg-gradient-to-l from-[#1a365d] to-[#0f2543] rounded-[2rem] p-6 md:p-8 text-white shadow-xl">

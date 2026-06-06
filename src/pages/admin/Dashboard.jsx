@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Building,
@@ -49,8 +49,9 @@ import ProductMovement  from './ProductMovement';
 import ActivityLog      from './ActivityLog';
 import SecuritySettings  from './SecuritySettings';
 
-import { API_URL, apiPost, TENANT } from '../../lib/api/client';
+import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
+import ErrorBoundary from '../../components/ErrorBoundary';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
 const DEPT_PALETTE = {
@@ -643,23 +644,26 @@ function DashboardInner({ onLogout }) {
             const local = JSON.parse(localStorage.getItem('semak_current_user') || 'null');
             if (!local?.id) { handleForceLogout(); return; }
             try {
-                const res  = await fetch(`${API_URL}?action=get_users`);
-                const resp = await res.json();
-                const arr  = resp.success ? resp.data : resp;
-                const fresh = arr.find(u => String(u.id) === String(local.id));
-                if (fresh) { setDbUser(fresh); localStorage.setItem('semak_current_user', JSON.stringify(fresh)); }
-                else handleForceLogout();
+                const resp = await apiGet('get_current_user', { id: local.id });
+                if (resp?.success && resp.user) {
+                    setDbUser(resp.user);
+                    localStorage.setItem('semak_current_user', JSON.stringify(resp.user));
+                } else handleForceLogout();
             } catch { handleForceLogout(); }
             finally  { setAuthLoading(false); }
         };
         verify();
     }, []);
 
-    const hasPermission = (key) => {
+    const permsArr = useMemo(
+        () => { try { return JSON.parse(dbUser?.permissions || '[]'); } catch { return []; } },
+        [dbUser?.permissions]
+    );
+    const hasPermission = useCallback((key) => {
         if (!dbUser) return false;
         if (dbUser.role === 'admin' || key === 'all') return true;
-        try { return JSON.parse(dbUser.permissions || '[]').includes(key); } catch { return false; }
-    };
+        return permsArr.includes(key);
+    }, [dbUser, permsArr]);
 
     const loadLeads = async () => {
         setDataLoading(true);
@@ -974,6 +978,7 @@ function DashboardInner({ onLogout }) {
                 })()}
 
                 {/* ════ محتوى التبويبات ════ */}
+                <ErrorBoundary key={activeTab}>
                 {activeTab === 'projects'    && hasPermission('projects')    && <ProjectsManage />}
                 {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={showToast} />}
                 {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={showToast} /></div>}
@@ -1012,6 +1017,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
                 {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
+                </ErrorBoundary>
 
             </main>
             </div>

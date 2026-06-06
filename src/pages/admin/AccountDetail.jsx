@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Loader2, ArrowLeft, Printer, BookOpen,
 } from 'lucide-react';
@@ -23,16 +23,16 @@ export default function AccountDetail({ accountId, setActiveTab, tenant = 1 }) {
     const [from, setFrom]    = useState('');
     const [to, setTo]        = useState('');
 
-    const load = useCallback(() => {
+    useEffect(() => {
         if (!accountId) return;
+        const ctrl = new AbortController();
         setLoad(true); setErr('');
-        apiGet('gl_ledger', { tenant, account_id: accountId, from, to })
+        apiGet('gl_ledger', { tenant, account_id: accountId, from, to }, { signal: ctrl.signal })
             .then(r => { if (r?.success) setData(r); else { setErr(r?.message || 'تعذّر جلب الكشف'); setData(null); } })
-            .catch(() => setErr('خطأ في الاتصال'))
-            .finally(() => setLoad(false));
+            .catch(e => { if (e?.name !== 'AbortError') setErr('خطأ في الاتصال'); })
+            .finally(() => { if (!ctrl.signal.aborted) setLoad(false); });
+        return () => ctrl.abort();
     }, [tenant, accountId, from, to]);
-
-    useEffect(() => { load(); }, [load]);
 
     const account = data?.account;
     const rows    = data?.data || [];

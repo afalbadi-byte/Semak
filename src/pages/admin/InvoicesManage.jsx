@@ -13,6 +13,7 @@ import SortHeader from '../../components/SortHeader';
 import TablePager from '../../components/TablePager';
 
 import { API_URL } from '../../lib/api/client';
+import { useToast } from '../../components/ui';
 import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 
 // ─── حساب حالة الفاتورة ──────────────────────────────────────────
@@ -35,21 +36,6 @@ const today = () => new Date().toISOString().slice(0, 10);
 // ─── بند فاتورة فارغ ─────────────────────────────────────────────
 const emptyItem = () => ({ name: '', quantity: 1, unit_price: 0, discount: 0, tax: 15 });
 
-// ─── Toast ───────────────────────────────────────────────────────
-function Toast({ msg, type, onClose }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 3500);
-    return () => clearTimeout(t);
-  }, [onClose]);
-  const bg = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-  return (
-    <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl text-white text-sm font-bold ${bg} animate-fadeIn`}>
-      {type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
-      {msg}
-      <button onClick={onClose} className="mr-1 opacity-70 hover:opacity-100"><X size={14} /></button>
-    </div>
-  );
-}
 
 // ─── شارة الحالة ─────────────────────────────────────────────────
 function StatusBadge({ total, paid }) {
@@ -118,7 +104,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   const [error, setError]             = useState('');
   const [selected, setSelected]       = useState(null);
   const [confirmId, setConfirmId]     = useState(null);
-  const [toast, setToast]             = useState(null);
+  const toast                          = useToast();
 
   // ─── دفعة سريعة (تحصيل على الفاتورة) ─────────────────────────
   const [payInvoice, setPayInvoice]   = useState(null);   // الفاتورة الجاري تحصيلها
@@ -146,7 +132,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   const [form, setForm] = useState(defaultForm);
 
   // ─── Toast مساعد ─────────────────────────────────────────────
-  const notify = (msg, type = 'success') => setToast({ msg, type });
+  const notify = (msg, type = 'success') => type === 'error' ? toast.error(msg) : toast.success(msg);
 
   // ─── جلب البيانات الأساسية ────────────────────────────────────
   const loadDropdowns = useCallback(async () => {
@@ -1091,14 +1077,6 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   // ════════════════════════════════════════════════════════════
   return (
     <div dir="rtl" className="font-cairo min-h-screen bg-transparent p-4 md:p-6">
-      {/* Toast */}
-      {toast && (
-        <Toast
-          msg={toast.msg}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
 
       {/* مربع تأكيد الحذف */}
       {confirmId && (
