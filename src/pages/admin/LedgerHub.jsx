@@ -2527,6 +2527,7 @@ export default function LedgerHub() {
     const [products, setProducts] = useState([]);
     const [prodLoading, setProdLoading] = useState(false);
     const [company, setCompany] = useState({});
+    const [kpis, setKpis] = useState(null);
     const [seeded, setSeeded] = useState(false);
 
     const loadAccounts = useCallback(async () => {
@@ -2553,8 +2554,12 @@ export default function LedgerHub() {
         try { const r = await api('gl_settings_get'); if (r.success) setCompany(r.settings || {}); }
         catch (e) { /* صامت — لا يعطّل الواجهة */ }
     }, []);
+    const loadKpis = useCallback(async () => {
+        try { const r = await api('gl_dashboard_kpis'); if (r.success) setKpis(r); }
+        catch (e) { /* صامت */ }
+    }, []);
 
-    useEffect(() => { loadAccounts(); loadParties(); loadCostCenters(); loadProducts(); loadCompany(); }, [loadAccounts, loadParties, loadCostCenters, loadProducts, loadCompany]);
+    useEffect(() => { loadAccounts(); loadParties(); loadCostCenters(); loadProducts(); loadCompany(); loadKpis(); }, [loadAccounts, loadParties, loadCostCenters, loadProducts, loadCompany, loadKpis]);
 
     // زرع دليل الحسابات إن كان فارغاً
     const seed = async () => {
@@ -2581,6 +2586,25 @@ export default function LedgerHub() {
                     )}
                 </div>
             </div>
+
+            {/* شريط مؤشرات سريعة */}
+            {kpis && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                        { label: 'ذمم العملاء (AR)', val: kpis.ar,           color: 'text-blue-700 dark:text-blue-400',    bg: 'bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20' },
+                        { label: 'ذمم الموردين (AP)', val: kpis.ap,          color: 'text-amber-700 dark:text-amber-400',  bg: 'bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20' },
+                        { label: `صافي الدخل ${kpis.year}`,val:kpis.net_income_ytd, color: kpis.net_income_ytd>=0?'text-emerald-700 dark:text-emerald-400':'text-rose-700 dark:text-rose-400', bg: 'bg-white dark:bg-brand-900 border-slate-100 dark:border-brand-700' },
+                        { label: 'أطراف متأخرة +30 يوم', val: null, count: kpis.overdue_parties, color: kpis.overdue_parties>0?'text-rose-700 dark:text-rose-400':'text-emerald-700 dark:text-emerald-400', bg: 'bg-white dark:bg-brand-900 border-slate-100 dark:border-brand-700' },
+                    ].map(({ label, val, count, color, bg }) => (
+                        <div key={label} className={`rounded-2xl border px-4 py-3 shadow-sm ${bg}`}>
+                            <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{label}</div>
+                            {count !== undefined
+                                ? <div className={`text-2xl font-black tabular-nums ${color}`}>{count}</div>
+                                : <div className={`text-xl font-black tabular-nums ${color}`} dir="ltr">{money(val)} <span className="text-xs font-normal">﷼</span></div>}
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* شريط التبويبات */}
             <div className="bg-white dark:bg-brand-900 rounded-2xl shadow border border-slate-100 dark:border-brand-700 overflow-hidden">
