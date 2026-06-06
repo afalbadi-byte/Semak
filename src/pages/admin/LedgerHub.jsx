@@ -145,9 +145,43 @@ function Card({ children, className = '' }) {
 // ════════════════════════════════════════════════════════════════════════════
 //  تبويب 0: لوحة القيادة — مؤشرات مالية رئيسية
 // ════════════════════════════════════════════════════════════════════════════
+const AR_MONTHS_SHORT = ['ين','فب','مار','أبر','ماي','يون','يول','أغس','سبت','أكت','نوف','ديس'];
+
+function MonthlySparkChart({ months, onClick }) {
+    if (!months?.length) return null;
+    const maxVal = Math.max(...months.map(m => Math.max(Number(m.revenue||0), Number(m.expenses||0))), 1);
+    const curMo  = todayISO().slice(0, 7);
+    return (
+        <div className="flex items-end gap-0.5 h-20 cursor-pointer" onClick={onClick}>
+            {months.map((m, i) => {
+                const rev  = Number(m.revenue || 0);
+                const exp  = Number(m.expenses || 0);
+                const net  = Number(m.net || 0);
+                const revH = Math.max(2, Math.round((rev / maxVal) * 64));
+                const expH = Math.max(2, Math.round((exp / maxVal) * 64));
+                const isCur = m.month === curMo;
+                return (
+                    <div key={i} title={`${AR_MONTHS_SHORT[i]}: إيرادات ${money(rev)} | مصروفات ${money(exp)} | صافي ${net >= 0 ? '+' : ''}${money(net)}`}
+                        className={`flex-1 flex flex-col items-center gap-px transition-opacity ${isCur ? 'opacity-100' : 'opacity-60 hover:opacity-90'}`}>
+                        <div className="flex items-end gap-px w-full justify-center" style={{ height: '68px' }}>
+                            <div className={`flex-1 rounded-sm max-w-[5px] ${rev > 0 ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-transparent'}`}
+                                style={{ height: `${revH}px` }} />
+                            <div className={`flex-1 rounded-sm max-w-[5px] ${exp > 0 ? 'bg-rose-300 dark:bg-rose-500' : 'bg-transparent'}`}
+                                style={{ height: `${expH}px` }} />
+                        </div>
+                        <span className={`text-[8px] font-bold leading-none ${isCur ? 'text-[#c5a059]' : 'text-slate-300 dark:text-brand-600'}`}>{AR_MONTHS_SHORT[i]}</span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 function DashboardHomeTab({ setActiveTab, toast }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [monthly, setMonthly] = useState(null);
+    const curYear = new Date().getFullYear().toString();
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -157,6 +191,12 @@ function DashboardHomeTab({ setActiveTab, toast }) {
     }, [toast]);
 
     useEffect(() => { load(); }, []); // eslint-disable-line
+
+    useEffect(() => {
+        api('gl_income_monthly', { params: { year: curYear } })
+            .then(r => { if (r.success) setMonthly(r.months); })
+            .catch(() => {});
+    }, []); // eslint-disable-line
 
     const KPI = ({ label, value, sub, color, icon: Icon, onClick }) => (
         <button onClick={onClick}
@@ -236,6 +276,21 @@ function DashboardHomeTab({ setActiveTab, toast }) {
                     onClick={() => setActiveTab('parties')}
                 />
             </div>
+
+            {/* مخطط الأداء الشهري */}
+            {monthly && (
+                <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-black text-brand-800 dark:text-brand-100">الأداء الشهري {curYear}</h4>
+                        <button onClick={() => setActiveTab('income')} className="text-[12px] font-bold text-[#c5a059] hover:underline">تفاصيل</button>
+                    </div>
+                    <MonthlySparkChart months={monthly} onClick={() => setActiveTab('income')} />
+                    <div className="flex items-center gap-4 mt-2.5">
+                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /><span className="text-[10px] font-bold text-slate-400 dark:text-brand-500">إيرادات</span></div>
+                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-300 inline-block" /><span className="text-[10px] font-bold text-slate-400 dark:text-brand-500">مصروفات</span></div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* آخر القيود */}
