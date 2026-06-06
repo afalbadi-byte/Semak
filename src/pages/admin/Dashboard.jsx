@@ -45,6 +45,7 @@ import PartyDetail      from './PartyDetail';
 import EntryDetail      from './EntryDetail';
 import InvoiceDetail    from './InvoiceDetail';
 import AccountDetail    from './AccountDetail';
+import ProductMovement  from './ProductMovement';
 import ActivityLog      from './ActivityLog';
 import SecuritySettings  from './SecuritySettings';
 
@@ -995,6 +996,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'entry'       && hasPermission('finance')     && <EntryDetail entryId={detailId} setActiveTab={setActiveTab} />}
                 {activeTab === 'inv'         && hasPermission('finance')     && <InvoiceDetail invoiceId={detailId} setActiveTab={setActiveTab} />}
                 {activeTab === 'acct'        && hasPermission('finance')     && <AccountDetail accountId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'prod'        && hasPermission('finance')     && <ProductMovement productId={detailId} setActiveTab={setActiveTab} />}
                 {activeTab === 'ledger'      && hasPermission('finance')     && <div className="animate-fadeIn"><LedgerHub /></div>}
                 {activeTab === 'accounting'  && hasPermission('finance')     && <div className="animate-fadeIn"><AccountingHub /></div>}
                 {activeTab === 'notes'       && hasPermission('finance')     && <div className="animate-fadeIn"><NotesReturns /></div>}

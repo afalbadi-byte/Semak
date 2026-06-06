@@ -253,7 +253,11 @@ function Detail({ invoiceId, setActiveTab, tenant }) {
                                         <tr><td colSpan={7} className="py-12 text-center text-slate-300 font-bold">لا توجد بنود</td></tr>
                                     ) : items.map((it, i) => (
                                         <tr key={it.id || i} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
-                                            <td className="py-2.5 px-3 text-slate-700 dark:text-brand-100 font-bold">{it.description}</td>
+                                            <td className="py-2.5 px-3 font-bold">
+                                                {it.product_id
+                                                    ? <EntityLink to={`prod/${it.product_id}`} title="حركة الصنف">{it.description}</EntityLink>
+                                                    : <span className="text-slate-700 dark:text-brand-100">{it.description}</span>}
+                                            </td>
                                             <td className="py-2.5 px-3 text-left text-slate-600 dark:text-brand-300 font-bold" dir="ltr">{Number(it.qty)}</td>
                                             <td className="py-2.5 px-3 text-left"><Money value={it.unit_price} zeroDash /></td>
                                             <td className="py-2.5 px-3 text-left"><Money value={it.discount} zeroDash /></td>

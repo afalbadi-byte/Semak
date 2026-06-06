@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-06-v416
+// deploy: 2026-06-06-v417
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -985,7 +985,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v416','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v417','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -4891,6 +4891,44 @@ switch ($action) {
         $ir = $conn->query("SELECT * FROM acc_invoice_items WHERE invoice_id=$id AND tenant_id=$tid ORDER BY id");
         $items = []; while ($ir && ($x = $ir->fetch_assoc())) $items[] = $x;
         echo json_encode(['success'=>true,'invoice'=>$head,'items'=>$items], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_product_ledger':
+        // حركة صنف: مشتريات = وارد (+) ، مبيعات = منصرف (-) — من بنود الفواتير المُرحّلة.
+        // المسودات والفواتير الملغاة تُستثنى. يُرجع رصيدًا جاريًا للكمية + لقطة المخزون المسجّل.
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $pid  = (int)($_GET['product_id'] ?? 0);
+        $from = $conn->real_escape_string($_GET['from'] ?? '');
+        $to   = $conn->real_escape_string($_GET['to'] ?? '');
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'المنتج مطلوب']); break; }
+        $pr = $conn->query("SELECT * FROM acc_products WHERE id=$pid AND tenant_id=$tid LIMIT 1");
+        $prod = $pr ? $pr->fetch_assoc() : null;
+        if (!$prod) { echo json_encode(['success'=>false,'message'=>'المنتج غير موجود']); break; }
+        $statusFilter = "i.status IN ('posted','partial','paid')";
+        $opQ = 0;
+        if ($from) {
+            $o = $conn->query("SELECT COALESCE(SUM(CASE WHEN i.doc_type='purchase' THEN it.qty ELSE -it.qty END),0) q
+                               FROM acc_invoice_items it JOIN acc_invoices i ON i.id=it.invoice_id
+                               WHERE it.product_id=$pid AND it.tenant_id=$tid AND $statusFilter AND i.issue_date<'$from'");
+            if ($o && ($x = $o->fetch_assoc())) $opQ = (float)$x['q'];
+        }
+        $w = "it.product_id=$pid AND it.tenant_id=$tid AND $statusFilter";
+        if ($from) $w .= " AND i.issue_date>='$from'";
+        if ($to)   $w .= " AND i.issue_date<='$to'";
+        $res = $conn->query("SELECT i.id invoice_id,i.invoice_no,i.issue_date,i.doc_type,i.status,i.party_id,COALESCE(p.name,i.party_name) party_label,
+                                    it.qty,it.unit_price,it.line_total,it.description
+                             FROM acc_invoice_items it JOIN acc_invoices i ON i.id=it.invoice_id
+                             LEFT JOIN acc_parties p ON p.id=i.party_id
+                             WHERE $w ORDER BY i.issue_date, i.id, it.id");
+        $rows = []; $run = $opQ; $inQ = 0; $outQ = 0;
+        while ($res && ($x = $res->fetch_assoc())) {
+            $q = (float)$x['qty'];
+            if ($x['doc_type'] === 'purchase') { $x['qty_in'] = $q; $x['qty_out'] = 0; $run += $q; $inQ += $q; }
+            else { $x['qty_in'] = 0; $x['qty_out'] = $q; $run -= $q; $outQ += $q; }
+            $x['balance'] = round($run, 3); $rows[] = $x;
+        }
+        echo json_encode(['success'=>true,'product'=>$prod,'opening'=>round($opQ,3),'data'=>$rows,
+            'totals'=>['in'=>round($inQ,3),'out'=>round($outQ,3),'closing'=>round($run,3),'stock_balance'=>(float)$prod['stock_balance']]], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'inv_save':
