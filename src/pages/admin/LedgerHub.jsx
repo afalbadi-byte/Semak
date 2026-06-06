@@ -252,6 +252,95 @@ function ChartTab({ accounts, reload, loading, toast }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  AccountCombobox — حقل بحث قابل للكتابة عن الحسابات (كود أو اسم)
+// ════════════════════════════════════════════════════════════════════════════
+function AccountCombobox({ accounts, value, onChange, placeholder = 'ابحث بالكود أو الاسم…', className = '' }) {
+    const [q, setQ]         = useState('');
+    const [open, setOpen]   = useState(false);
+    const [cursor, setCursor] = useState(0);
+    const inputRef = React.useRef(null);
+    const listRef  = React.useRef(null);
+
+    // عند تغيير القيمة خارجيًا (مثلاً عند صفّ جديد) نُعيد النص المعروض
+    const selected = accounts.find(a => String(a.id) === String(value));
+    const displayText = selected ? `${selected.code} · ${selected.name}` : '';
+
+    // الأسلوب: إن كان الحقل يحتوي نفس نص الحساب المختار → لا نفلتر، لكن فتح القائمة
+    const filtered = React.useMemo(() => {
+        const s = q.trim().toLowerCase();
+        if (!s) return accounts.slice(0, 50); // أول 50 عند فارغ
+        return accounts.filter(a =>
+            a.code.toLowerCase().includes(s) || a.name.toLowerCase().includes(s)
+        ).slice(0, 30);
+    }, [q, accounts]);
+
+    const pick = (a) => {
+        onChange(String(a.id));
+        setQ('');
+        setOpen(false);
+    };
+
+    const handleKeyDown = (e) => {
+        if (!open) { if (e.key !== 'Escape') setOpen(true); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, filtered.length - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)); }
+        else if (e.key === 'Enter' && filtered[cursor]) { e.preventDefault(); pick(filtered[cursor]); }
+        else if (e.key === 'Escape') { setOpen(false); setQ(''); }
+    };
+
+    // مزامنة scroll الـ cursor
+    React.useEffect(() => {
+        if (!listRef.current) return;
+        const el = listRef.current.children[cursor];
+        if (el) el.scrollIntoView({ block: 'nearest' });
+    }, [cursor]);
+
+    return (
+        <div className={`relative ${className}`}>
+            {/* حقل الإدخال — يعرض اسم الحساب المختار أو نص البحث */}
+            <input
+                ref={inputRef}
+                type="text"
+                value={open ? q : displayText}
+                placeholder={placeholder}
+                onFocus={() => { setOpen(true); setQ(''); setCursor(0); }}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                onChange={e => { setQ(e.target.value); setCursor(0); if (!open) setOpen(true); }}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm outline-none focus:border-[#c5a059] placeholder-slate-300 dark:placeholder-brand-600"
+                dir="rtl"
+                autoComplete="off"
+            />
+            {/* القائمة المنسدلة */}
+            {open && filtered.length > 0 && (
+                <ul
+                    ref={listRef}
+                    className="absolute z-50 mt-0.5 w-full max-h-56 overflow-y-auto bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl shadow-lg text-sm"
+                >
+                    {filtered.map((a, idx) => (
+                        <li key={a.id}
+                            onMouseDown={() => pick(a)}
+                            className={`px-3 py-1.5 cursor-pointer flex items-baseline gap-2 ${idx === cursor ? 'bg-brand-50 dark:bg-brand-800' : 'hover:bg-slate-50 dark:hover:bg-brand-800/60'}`}
+                        >
+                            <span className="font-mono text-xs text-slate-400 dark:text-brand-500 shrink-0">{a.code}</span>
+                            <span className="font-bold text-slate-700 dark:text-brand-200 truncate">{a.name}</span>
+                            <span className={`text-[10px] mr-auto shrink-0 px-1.5 py-0.5 rounded font-bold
+                                ${a.type==='asset'?'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400':
+                                  a.type==='liability'?'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400':
+                                  a.type==='equity'?'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400':
+                                  a.type==='revenue'?'bg-green-50 text-green-600 dark:bg-green-500/10 dark:text-green-400':
+                                  'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'}`}>
+                                {a.type==='asset'?'أصول':a.type==='liability'?'خصوم':a.type==='equity'?'ملكية':a.type==='revenue'?'إيرادات':'مصروفات'}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  تبويب 2: القيود اليومية + نموذج قيد
 // ════════════════════════════════════════════════════════════════════════════
 const emptyLine = () => ({ account_id: '', debit: '', credit: '', party_type: '', party_id: '', due_date: '', cost_center_id: '', description: '' });
@@ -384,11 +473,11 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                                 {form.lines.map((l, i) => (
                                     <tr key={i} className="border-b border-slate-100 dark:border-brand-700">
                                         <td className="px-2 py-1.5">
-                                            <select value={l.account_id} onChange={e => setLine(i, { account_id: e.target.value })}
-                                                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm outline-none focus:border-[#c5a059]">
-                                                <option value="">— اختر حساب —</option>
-                                                {postable.map(a => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
-                                            </select>
+                                            <AccountCombobox
+                                                accounts={postable}
+                                                value={l.account_id}
+                                                onChange={v => setLine(i, { account_id: v })}
+                                            />
                                         </td>
                                         <td className="px-2 py-1.5">
                                             <input type="number" step="0.01" value={l.debit} onChange={e => setLine(i, { debit: e.target.value, credit: '' })}
@@ -750,11 +839,12 @@ function LedgerTab({ accounts, toast }) {
             <Card className="p-4 flex flex-wrap gap-3 items-end">
                 <div className="flex-1 min-w-[220px]">
                     <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">الحساب</label>
-                    <select value={acc} onChange={e => setAcc(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
-                        <option value="">— اختر حساب —</option>
-                        {postable.map(a => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
-                    </select>
+                    <AccountCombobox
+                        accounts={postable}
+                        value={acc}
+                        onChange={setAcc}
+                        className="[&_input]:py-2 [&_input]:rounded-xl [&_input]:bg-slate-50"
+                    />
                 </div>
                 <div>
                     <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">من</label>
