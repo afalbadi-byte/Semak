@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     BookOpen, FileText, Layers, Package, Wallet,
     RefreshCw, ChevronLeft, ChevronRight, AlertTriangle,
-    Search, Calendar, DollarSign,
+    Search, Calendar, DollarSign, Lock, Unlock, CheckCircle2,
+    TrendingUp, TrendingDown, Loader2,
 } from 'lucide-react';
 
 import { API_URL } from '../../lib/api/client';
@@ -653,6 +654,208 @@ function TabEmployeeCustody({ showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Tab 6: إقفال السنة المالية
+// ══════════════════════════════════════════════════════════════════════════════
+const SAR = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ﷼';
+const THIS_YEAR = new Date().getFullYear();
+const YEAR_OPTS = Array.from({ length: 5 }, (_, i) => THIS_YEAR - i);
+
+function TabFiscalClose() {
+    const [fy, setFy]           = useState(THIS_YEAR);
+    const [preview, setPreview] = useState(null);
+    const [period, setPeriod]   = useState(null);   // { is_closed, closed_at, closed_by }
+    const [loading, setLoading] = useState(false);
+    const [busy, setBusy]       = useState(false);
+    const [msg, setMsg]         = useState(null);   // { text, ok }
+    const [confirm, setConfirm] = useState(null);   // 'close' | 'reopen'
+
+    const fetchPreview = useCallback(async (year) => {
+        setLoading(true); setPreview(null); setPeriod(null); setMsg(null);
+        try {
+            const [isRes, perRes] = await Promise.all([
+                fetch(`${API_URL}?action=gl_income_statement&tenant=1&from=${year}-01-01&to=${year}-12-31`),
+                fetch(`${API_URL}?action=gl_entries&tenant=1&limit=1&from=${year}-01-01&to=${year}-01-01`)
+                    .then(() => fetch(`${API_URL}?action=gl_income_statement&tenant=1&from=${year}-01-01&to=${year}-01-01`)),
+            ]);
+            const isData = await isRes.json();
+            if (isData.success) setPreview(isData);
+
+            // استعلام مباشر عن حالة الفترة
+            const perData = await fetch(`${API_URL}?action=gl_periods_status&tenant=1&fy=${year}`).then(r => r.json()).catch(() => null);
+            if (perData?.success) setPeriod(perData.period);
+            else setPeriod(null);
+        } catch { /* تجاهل */ }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { fetchPreview(fy); }, [fy, fetchPreview]);
+
+    const doClose = async () => {
+        setBusy(true); setMsg(null); setConfirm(null);
+        try {
+            const res = await fetch(`${API_URL}?action=gl_close_year`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: 1, fy }),
+            });
+            const d = await res.json();
+            setMsg({ text: d.message, ok: d.success });
+            if (d.success) fetchPreview(fy);
+        } catch { setMsg({ text: 'خطأ في الاتصال', ok: false }); }
+        finally { setBusy(false); }
+    };
+
+    const doReopen = async () => {
+        setBusy(true); setMsg(null); setConfirm(null);
+        try {
+            const res = await fetch(`${API_URL}?action=gl_reopen_year`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: 1, fy }),
+            });
+            const d = await res.json();
+            setMsg({ text: d.message, ok: d.success });
+            if (d.success) fetchPreview(fy);
+        } catch { setMsg({ text: 'خطأ في الاتصال', ok: false }); }
+        finally { setBusy(false); }
+    };
+
+    const net = preview ? (preview.totals?.net ?? 0) : 0;
+    const isClosed = period?.is_closed == 1;
+
+    return (
+        <div className="space-y-5 max-w-2xl">
+            {/* اختيار السنة */}
+            <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 p-5 shadow-sm">
+                <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2">
+                    <Calendar size={16} className="text-brand-400" /> اختر السنة المالية
+                </h3>
+                <div className="flex gap-2 flex-wrap">
+                    {YEAR_OPTS.map(y => (
+                        <button key={y} onClick={() => setFy(y)}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold border transition ${fy === y ? 'bg-brand-800 text-white border-brand-800' : 'border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-brand-500'}`}>
+                            {y}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* معاينة قائمة الدخل */}
+            <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 p-5 shadow-sm">
+                <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-4 flex items-center gap-2">
+                    <FileText size={16} className="text-brand-400" /> معاينة قائمة الدخل — {fy}
+                </h3>
+                {loading ? (
+                    <div className="flex items-center gap-2 text-slate-400 dark:text-brand-500 text-sm py-4">
+                        <Loader2 size={16} className="animate-spin" /> جارٍ التحميل…
+                    </div>
+                ) : preview ? (
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 dark:bg-green-500/10 border border-green-100 dark:border-green-500/20">
+                            <span className="text-sm font-bold text-green-700 dark:text-green-400 flex items-center gap-2"><TrendingUp size={15} /> إجمالي الإيرادات</span>
+                            <span className="font-black text-green-800 dark:text-green-300">{SAR(preview.totals?.revenue)}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20">
+                            <span className="text-sm font-bold text-red-700 dark:text-red-400 flex items-center gap-2"><TrendingDown size={15} /> إجمالي المصروفات</span>
+                            <span className="font-black text-red-800 dark:text-red-300">{SAR(preview.totals?.expenses)}</span>
+                        </div>
+                        <div className={`flex items-center justify-between p-3 rounded-xl border ${net >= 0 ? 'bg-brand-50 dark:bg-brand-800/40 border-brand-200 dark:border-brand-700' : 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20'}`}>
+                            <span className={`text-sm font-bold flex items-center gap-2 ${net >= 0 ? 'text-brand-700 dark:text-brand-300' : 'text-amber-700 dark:text-amber-300'}`}>
+                                {net >= 0 ? '📈 صافي الربح' : '📉 صافي الخسارة'}
+                            </span>
+                            <span className={`font-black text-lg ${net >= 0 ? 'text-brand-800 dark:text-brand-100' : 'text-amber-800 dark:text-amber-200'}`}>{SAR(Math.abs(net))}</span>
+                        </div>
+                        {/* حسابات تفصيلية */}
+                        {(preview.revenue?.length > 0 || preview.expenses?.length > 0) && (
+                            <details className="text-xs text-slate-500 dark:text-brand-400 mt-1">
+                                <summary className="cursor-pointer font-bold hover:text-brand-600 dark:hover:text-brand-300">عرض التفاصيل ({(preview.revenue?.length || 0) + (preview.expenses?.length || 0)} حساب)</summary>
+                                <div className="mt-2 space-y-1 pr-2 border-r border-slate-200 dark:border-brand-700">
+                                    {preview.revenue?.map(r => <div key={r.id} className="flex justify-between"><span>{r.name}</span><span className="text-green-600">{SAR(r.amount)}</span></div>)}
+                                    {preview.expenses?.map(e => <div key={e.id} className="flex justify-between"><span>{e.name}</span><span className="text-red-500">({SAR(e.amount)})</span></div>)}
+                                </div>
+                            </details>
+                        )}
+                    </div>
+                ) : (
+                    <p className="text-sm text-slate-400 dark:text-brand-500">لا توجد حركات مُرحَّلة في {fy}</p>
+                )}
+            </div>
+
+            {/* حالة الفترة + أزرار الإجراء */}
+            <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
+                        {isClosed
+                            ? <><Lock size={16} className="text-red-500" /> السنة {fy} مقفلة</>
+                            : <><Unlock size={16} className="text-green-500" /> السنة {fy} مفتوحة</>}
+                    </h3>
+                    {isClosed && period?.closed_at && (
+                        <span className="text-xs text-slate-400 dark:text-brand-500">
+                            {period.closed_at?.slice(0, 10)} · {period.closed_by || '—'}
+                        </span>
+                    )}
+                </div>
+
+                {/* رسالة النتيجة */}
+                {msg && (
+                    <div className={`mb-4 flex items-start gap-2 p-3 rounded-xl text-sm font-bold ${msg.ok ? 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-500/20' : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-100 dark:border-red-500/20'}`}>
+                        {msg.ok ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 shrink-0" />}
+                        {msg.text}
+                    </div>
+                )}
+
+                {/* تأكيد */}
+                {confirm === 'close' && (
+                    <div className="mb-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
+                        <p className="text-sm font-bold text-amber-700 dark:text-amber-300 mb-3">
+                            <AlertTriangle size={14} className="inline ml-1" />
+                            سيتم إنشاء قيد إقفال بتاريخ {fy}-12-31 وقفل الفترة. هذا الإجراء يمكن عكسه.
+                        </p>
+                        <div className="flex gap-2">
+                            <button onClick={doClose} disabled={busy}
+                                className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-50 transition flex items-center gap-2">
+                                {busy && <Loader2 size={14} className="animate-spin" />} تأكيد الإقفال
+                            </button>
+                            <button onClick={() => setConfirm(null)} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-slate-600 dark:text-brand-300 hover:border-brand-500 transition">إلغاء</button>
+                        </div>
+                    </div>
+                )}
+                {confirm === 'reopen' && (
+                    <div className="mb-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
+                        <p className="text-sm font-bold text-amber-700 dark:text-amber-300 mb-3">
+                            <AlertTriangle size={14} className="inline ml-1" />
+                            سيتم حذف قيد الإقفال وإعادة فتح السنة {fy}. هذا الإجراء للتصحيح فقط.
+                        </p>
+                        <div className="flex gap-2">
+                            <button onClick={doReopen} disabled={busy}
+                                className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-bold hover:bg-amber-700 disabled:opacity-50 transition flex items-center gap-2">
+                                {busy && <Loader2 size={14} className="animate-spin" />} تأكيد إعادة الفتح
+                            </button>
+                            <button onClick={() => setConfirm(null)} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-slate-600 dark:text-brand-300 hover:border-brand-500 transition">إلغاء</button>
+                        </div>
+                    </div>
+                )}
+
+                {!confirm && (
+                    <div className="flex gap-3">
+                        {!isClosed && (
+                            <button onClick={() => setConfirm('close')} disabled={busy || loading || !preview}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-800 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-50 transition">
+                                <Lock size={15} /> إقفال السنة {fy}
+                            </button>
+                        )}
+                        {isClosed && (
+                            <button onClick={() => setConfirm('reopen')} disabled={busy}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-amber-400 text-amber-700 dark:text-amber-300 text-sm font-bold hover:bg-amber-50 dark:hover:bg-amber-500/10 disabled:opacity-50 transition">
+                                <Unlock size={15} /> إعادة فتح السنة {fy}
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // المكوّن الرئيسي
 // ══════════════════════════════════════════════════════════════════════════════
 const TABS = [
@@ -661,6 +864,7 @@ const TABS = [
     { id: 'cost_centers',     label: 'مراكز التكلفة',   icon: Layers,   component: TabCostCenters },
     { id: 'assets',           label: 'الأصول الثابتة',  icon: Package,  component: TabAssets },
     { id: 'employee_custody', label: 'عُهَد الموظفين',  icon: Wallet,   component: TabEmployeeCustody },
+    { id: 'fiscal_close',     label: 'إقفال السنة',     icon: Lock,     component: TabFiscalClose },
 ];
 
 export default function AccountingHub({ showToast }) {

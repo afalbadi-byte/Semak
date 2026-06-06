@@ -4054,6 +4054,141 @@ switch ($action) {
         echo json_encode(['success'=>true,'period'=>['from'=>$from,'to'=>$to],'revenue'=>$rev,'expenses'=>$exp,'totals'=>['revenue'=>round($totRev,2),'expenses'=>round($totExp,2),'net'=>round($totRev-$totExp,2)]], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'gl_periods_status': {
+        // حالة الفترة المالية لسنة معينة
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $fy  = (int)($_GET['fy'] ?? date('Y'));
+        $r   = $conn->query("SELECT fy,is_closed,closed_at,closed_by FROM acc_periods WHERE tenant_id=$tid AND fy=$fy LIMIT 1");
+        $row = $r ? $r->fetch_assoc() : null;
+        echo json_encode(['success'=>true,'period'=>$row ?: ['fy'=>$fy,'is_closed'=>0,'closed_at'=>null,'closed_by'=>null]], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_close_year': {
+        // ═══ إقفال السنة المالية ═══════════════════════════════════════════════
+        // 1) يُولّد قيد إقفال يُصفّر الإيرادات والمصروفات ويرحّل الصافي للأرباح المحتجزة
+        // 2) يُقفل سجل acc_periods للسنة (is_closed=1)
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $fy  = (int)($input_data['fy'] ?? date('Y'));
+        $by  = $input_data['actor'] ?? null;
+
+        if ($fy < 2000 || $fy > 2100) { echo json_encode(['success'=>false,'message'=>'سنة غير صالحة']); break; }
+
+        // منع الإقفال المزدوج
+        $pc = $conn->query("SELECT is_closed FROM acc_periods WHERE tenant_id=$tid AND fy=$fy LIMIT 1");
+        if ($pc && ($pr = $pc->fetch_assoc()) && (int)$pr['is_closed'] === 1) {
+            echo json_encode(['success'=>false,'message'=>"السنة المالية $fy مقفلة مسبقًا"], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $from = "$fy-01-01"; $to = "$fy-12-31";
+
+        // ─── أرصدة الإيرادات والمصروفات للسنة ───────────────────────────
+        $sql = "SELECT a.id,a.code,a.name,a.type,
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to'
+                                     AND (e.ref_type IS NULL OR e.ref_type NOT IN ('year_close'))
+                                     THEN l.debit  ELSE 0 END),0) d,
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to'
+                                     AND (e.ref_type IS NULL OR e.ref_type NOT IN ('year_close'))
+                                     THEN l.credit ELSE 0 END),0) c
+                FROM acc_accounts a
+                LEFT JOIN acc_lines l ON l.account_id=a.id AND l.tenant_id=a.tenant_id
+                LEFT JOIN acc_entries e ON e.id=l.entry_id
+                WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('revenue','expense')
+                GROUP BY a.id HAVING (d+c)>0 ORDER BY a.code";
+        $res = $conn->query($sql);
+        $lines = []; $netRev = 0.0; $netExp = 0.0;
+        while ($res && ($x = $res->fetch_assoc())) {
+            $d = round((float)$x['d'], 2); $c = round((float)$x['c'], 2);
+            if ($x['type'] === 'revenue') {
+                $net = round($c - $d, 2); if ($net == 0) continue; $netRev += $net;
+                $lines[] = ['account_id'=>(int)$x['id'],'debit'=>$net,'credit'=>0,
+                            'description'=>'إقفال إيرادات: '.$x['name']];
+            } else {
+                $net = round($d - $c, 2); if ($net == 0) continue; $netExp += $net;
+                $lines[] = ['account_id'=>(int)$x['id'],'debit'=>0,'credit'=>$net,
+                            'description'=>'إقفال مصروفات: '.$x['name']];
+            }
+        }
+        if (empty($lines)) { echo json_encode(['success'=>false,'message'=>'لا توجد أرصدة إيرادات/مصروفات لإقفالها'], JSON_UNESCAPED_UNICODE); break; }
+
+        $netIncome = round($netRev - $netExp, 2);
+
+        // ─── حساب الأرباح المحتجزة ──────────────────────────────────────
+        $retAccId = (int)acc_setting($conn, $tid, 'retained_earnings_account_id', '0');
+        if (!$retAccId) {
+            $ra = $conn->query("SELECT id FROM acc_accounts WHERE tenant_id=$tid AND type='equity' AND is_group=0 ORDER BY code ASC LIMIT 1");
+            $retAccId = ($ra && ($raRow = $ra->fetch_assoc())) ? (int)$raRow['id'] : 0;
+            if (!$retAccId) {
+                if (!$conn->query("INSERT INTO acc_accounts (tenant_id,code,name,type,is_group,status) VALUES ($tid,'3110','الأرباح المحتجزة','equity',0,1)
+                                   ON DUPLICATE KEY UPDATE name=name")) throw new \Exception($conn->error);
+                // قد تكون الكود موجودة بالفعل — نجلب المعرّف في الحالتين
+                $ra2 = $conn->query("SELECT id FROM acc_accounts WHERE tenant_id=$tid AND code='3110' LIMIT 1");
+                $retAccId = ($ra2 && ($r2 = $ra2->fetch_assoc())) ? (int)$r2['id'] : $conn->insert_id;
+            }
+            $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'retained_earnings_account_id','$retAccId') ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        }
+        if (!$retAccId) { echo json_encode(['success'=>false,'message'=>'تعذّر تحديد حساب الأرباح المحتجزة']); break; }
+
+        // بند الصافي → الأرباح المحتجزة
+        if ($netIncome >= 0) {
+            $lines[] = ['account_id'=>$retAccId,'debit'=>0,'credit'=>$netIncome,
+                        'description'=>"صافي ربح $fy"];
+        } else {
+            $lines[] = ['account_id'=>$retAccId,'debit'=>abs($netIncome),'credit'=>0,
+                        'description'=>"صافي خسارة $fy"];
+        }
+
+        $conn->begin_transaction();
+        try {
+            $r = acc_post_entry($conn, $tid, "$fy-12-31", "إقفال السنة المالية $fy", 'year_close', $fy, $by, $lines, 1);
+            // إنشاء/تحديث سجل الفترة وإقفالها
+            $byEsc = $by ? "'".$conn->real_escape_string($by)."'" : 'NULL';
+            $conn->query("INSERT INTO acc_periods (tenant_id,fy,start_date,end_date,is_closed,closed_at,closed_by)
+                          VALUES ($tid,$fy,'$from','$to',1,NOW(),$byEsc)
+                          ON DUPLICATE KEY UPDATE is_closed=1,closed_at=NOW(),closed_by=$byEsc");
+            $conn->commit();
+            acc_audit($conn, $tid, 'gl', null, 'close_year', "fy=$fy rev=$netRev exp=$netExp net=$netIncome entry=".$r['eno'], $by);
+            echo json_encode(['success'=>true,'entry_no'=>$r['eno'],'fy'=>$fy,
+                'net_revenue'=>$netRev,'net_expenses'=>$netExp,'net_income'=>$netIncome,
+                'message'=>"تم إقفال السنة المالية $fy — قيد الإقفال: ".$r['eno']], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>'فشل الإقفال: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
+    case 'gl_reopen_year': {
+        // إعادة فتح سنة مالية — لتصحيح الأخطاء (يحذف قيد الإقفال ويفتح الفترة)
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $fy  = (int)($input_data['fy'] ?? date('Y'));
+        $by  = $input_data['actor'] ?? null;
+
+        if ($fy < 2000 || $fy > 2100) { echo json_encode(['success'=>false,'message'=>'سنة غير صالحة']); break; }
+
+        $conn->begin_transaction();
+        try {
+            // حذف قيود الإقفال لهذه السنة
+            $eids = [];
+            $er = $conn->query("SELECT id FROM acc_entries WHERE tenant_id=$tid AND ref_type='year_close' AND ref_id=$fy");
+            while ($er && ($eRow = $er->fetch_assoc())) $eids[] = (int)$eRow['id'];
+            foreach ($eids as $eid) {
+                $conn->query("DELETE FROM acc_lines WHERE entry_id=$eid AND tenant_id=$tid");
+                $conn->query("DELETE FROM acc_entries WHERE id=$eid AND tenant_id=$tid");
+            }
+            // فتح الفترة
+            $conn->query("UPDATE acc_periods SET is_closed=0,closed_at=NULL,closed_by=NULL WHERE tenant_id=$tid AND fy=$fy");
+            $conn->commit();
+            acc_audit($conn, $tid, 'gl', null, 'reopen_year', "fy=$fy deleted=".count($eids)." entries", $by);
+            echo json_encode(['success'=>true,'fy'=>$fy,'deleted_entries'=>count($eids),
+                'message'=>"تم إعادة فتح السنة المالية $fy"], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>'فشل الفتح: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
     case 'gl_balance_sheet':
         // الميزانية العمومية حتى تاريخ — أصول/خصوم/حقوق ملكية + صافي الدخل (المُرحَّلة فقط)
         $tid = (int)($_GET['tenant'] ?? 1);
