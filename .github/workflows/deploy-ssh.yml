@@ -70,6 +70,19 @@ jobs:
       - name: Inject Daftra session cookie
         run: sed -i "s|__DAFTRA_SESSION__|${{ secrets.DAFTRA_SESSION_COOKIE }}|g" dist/api.php
 
+      # SMTP credentials (mirror of deploy.yml). All optional: if a secret is
+      # unset its placeholder stays, smtp_ready() returns false, and send_email()
+      # degrades gracefully (returns ok:false, never crashes).
+      - name: Inject SMTP credentials
+        run: |
+          sed -i "s|__SMTP_HOST__|${{ secrets.SMTP_HOST }}|g" dist/api.php
+          sed -i "s|__SMTP_PORT__|${{ secrets.SMTP_PORT }}|g" dist/api.php
+          sed -i "s|__SMTP_USER__|${{ secrets.SMTP_USER }}|g" dist/api.php
+          sed -i "s|__SMTP_PASS__|${{ secrets.SMTP_PASS }}|g" dist/api.php
+          sed -i "s|__SMTP_FROM__|${{ secrets.SMTP_FROM }}|g" dist/api.php
+          sed -i "s|__SMTP_FROM_NAME__|${{ secrets.SMTP_FROM_NAME }}|g" dist/api.php
+          sed -i "s|__SMTP_SECURE__|${{ secrets.SMTP_SECURE }}|g" dist/api.php
+
       # رفع محتوى dist إلى مجلد الويب عبر SCP/SSH — أوثق من FTP.
       # rm:false  → لا نحذف الملفات الأخرى على الخادم (الوسائط المرفوعة تبقى).
       - name: Deploy to server via SCP/SSH
