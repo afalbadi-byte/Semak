@@ -4058,6 +4058,182 @@ switch ($action) {
         break;
 
     // ════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
+    //  الأصول الثابتة
+    // ════════════════════════════════════════════════════════════════════
+    case 'gl_assets': {
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_fixed_assets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tenant_id INT NOT NULL DEFAULT 1,
+            code VARCHAR(50) DEFAULT '',
+            name VARCHAR(300) NOT NULL,
+            cost DECIMAL(15,2) NOT NULL DEFAULT 0,
+            residual_value DECIMAL(15,2) NOT NULL DEFAULT 0,
+            purchase_date DATE NOT NULL,
+            useful_life_months INT NOT NULL DEFAULT 60,
+            depreciation_method ENUM('straight_line','declining') NOT NULL DEFAULT 'straight_line',
+            gl_account_id INT DEFAULT NULL,
+            accum_depr_account_id INT DEFAULT NULL,
+            expense_account_id INT DEFAULT NULL,
+            disposed_at DATE DEFAULT NULL,
+            notes TEXT DEFAULT '',
+            KEY idx_fa_tenant (tenant_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_asset_depreciations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tenant_id INT NOT NULL DEFAULT 1,
+            asset_id INT NOT NULL,
+            period_date DATE NOT NULL,
+            amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+            book_value_after DECIMAL(15,2) NOT NULL DEFAULT 0,
+            entry_id INT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_ad_asset (asset_id),
+            KEY idx_ad_period (period_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $rows = [];
+        $res = $conn->query("SELECT a.*,
+                               ag.code AS gl_code, ag.name AS gl_name,
+                               COALESCE(SUM(d.amount),0) AS total_depr,
+                               COUNT(d.id) AS depr_count
+                             FROM acc_fixed_assets a
+                             LEFT JOIN acc_accounts ag ON ag.id=a.gl_account_id
+                             LEFT JOIN acc_asset_depreciations d ON d.asset_id=a.id AND d.tenant_id=a.tenant_id
+                             WHERE a.tenant_id=$tid
+                             GROUP BY a.id ORDER BY a.purchase_date DESC, a.code ASC");
+        while ($res && ($x = $res->fetch_assoc())) {
+            $x['book_value'] = round((float)$x['cost']-(float)$x['total_depr'],2);
+            $rows[] = $x;
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_asset_save': {
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $id   = (int)($input_data['id'] ?? 0);
+        $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $code = $conn->real_escape_string(trim($input_data['code'] ?? ''));
+        $cost = round((float)($input_data['cost'] ?? 0), 2);
+        $resv = round((float)($input_data['residual_value'] ?? 0), 2);
+        $pdate= $conn->real_escape_string($input_data['purchase_date'] ?? date('Y-m-d'));
+        $ulm  = max(1, (int)($input_data['useful_life_months'] ?? 60));
+        $dm   = in_array($input_data['depreciation_method']??'',['straight_line','declining']) ? $input_data['depreciation_method'] : 'straight_line';
+        $glid = (int)($input_data['gl_account_id'] ?? 0) ?: 'NULL';
+        $acid = (int)($input_data['accum_depr_account_id'] ?? 0) ?: 'NULL';
+        $exid = (int)($input_data['expense_account_id'] ?? 0) ?: 'NULL';
+        $disp = trim($input_data['disposed_at'] ?? '') ? "'".$conn->real_escape_string($input_data['disposed_at'])."'" : 'NULL';
+        $notes= $conn->real_escape_string($input_data['notes'] ?? '');
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+        if ($id) {
+            $conn->query("UPDATE acc_fixed_assets SET code='$code',name='$name',cost=$cost,residual_value=$resv,purchase_date='$pdate',useful_life_months=$ulm,depreciation_method='$dm',gl_account_id=$glid,accum_depr_account_id=$acid,expense_account_id=$exid,disposed_at=$disp,notes='$notes' WHERE id=$id AND tenant_id=$tid");
+        } else {
+            $conn->query("INSERT INTO acc_fixed_assets (tenant_id,code,name,cost,residual_value,purchase_date,useful_life_months,depreciation_method,gl_account_id,accum_depr_account_id,expense_account_id,disposed_at,notes) VALUES ($tid,'$code','$name',$cost,$resv,'$pdate',$ulm,'$dm',$glid,$acid,$exid,$disp,'$notes')");
+            $id = (int)$conn->insert_id;
+        }
+        echo json_encode(['success'=>true,'id'=>$id,'message'=>'تم الحفظ'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_asset_schedule': {
+        // جدول الإهلاك للأصل (straight-line افتراضياً)
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $id   = (int)($_GET['id'] ?? 0);
+        $r    = $conn->query("SELECT * FROM acc_fixed_assets WHERE id=$id AND tenant_id=$tid LIMIT 1");
+        $a    = $r ? $r->fetch_assoc() : null;
+        if (!$a) { echo json_encode(['success'=>false,'message'=>'أصل غير موجود']); break; }
+
+        $cost    = (float)$a['cost'];
+        $resv    = (float)$a['residual_value'];
+        $ulm     = (int)$a['useful_life_months'];
+        $dm      = $a['depreciation_method'];
+        $pdate   = new DateTime($a['purchase_date']);
+
+        // الإهلاك الفعلي المرحّل
+        $posted = [];
+        $pr = $conn->query("SELECT period_date,amount,book_value_after,entry_id FROM acc_asset_depreciations WHERE asset_id=$id AND tenant_id=$tid ORDER BY period_date ASC");
+        while ($pr && ($x = $pr->fetch_assoc())) $posted[substr($x['period_date'],0,7)] = $x;
+
+        $schedule = []; $bv = $cost;
+        $monthlyDepr = $dm === 'straight_line' ? round(($cost - $resv) / $ulm, 2) : null;
+        for ($m = 0; $m < $ulm; $m++) {
+            $pd = clone $pdate; $pd->modify("+$m months");
+            $per = $pd->format('Y-m');
+            $pFull = $pd->format('Y-m-01');
+            if ($dm === 'straight_line') {
+                $depr = ($m === $ulm-1) ? round($bv - $resv, 2) : $monthlyDepr;
+            } else { // declining
+                $rate = 2.0 / $ulm;
+                $depr = round($bv * $rate / 12, 2);
+                if ($depr + $resv > $bv) $depr = max(0, $bv - $resv);
+            }
+            $bv = round($bv - $depr, 2);
+            $isPosted = isset($posted[$per]);
+            $schedule[] = ['period'=>$pFull,'depr_amount'=>$depr,'book_value'=>$bv,'posted'=>$isPosted?1:0,'entry_id'=>$isPosted?$posted[$per]['entry_id']:null];
+        }
+        echo json_encode(['success'=>true,'asset'=>$a,'schedule'=>$schedule], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_asset_depreciate': {
+        // ترحيل إهلاك شهر محدد للأصل
+        $tid    = (int)($input_data['tenant_id'] ?? 1);
+        $aid    = (int)($input_data['asset_id'] ?? 0);
+        $period = $conn->real_escape_string($input_data['period'] ?? ''); // YYYY-MM-DD (first of month)
+        if (!$aid || !$period) { echo json_encode(['success'=>false,'message'=>'بيانات ناقصة']); break; }
+
+        $r = $conn->query("SELECT * FROM acc_fixed_assets WHERE id=$aid AND tenant_id=$tid LIMIT 1");
+        $a = $r ? $r->fetch_assoc() : null;
+        if (!$a) { echo json_encode(['success'=>false,'message'=>'أصل غير موجود']); break; }
+        if (!$a['expense_account_id'] || !$a['accum_depr_account_id']) {
+            echo json_encode(['success'=>false,'message'=>'حدّد حساب مصروف الإهلاك وحساب مجمّع الإهلاك في بيانات الأصل'], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        // تحقّق من عدم الترحيل المزدوج
+        $perKey = substr($period,0,7);
+        $ex = $conn->query("SELECT id FROM acc_asset_depreciations WHERE asset_id=$aid AND tenant_id=$tid AND LEFT(period_date,7)='$perKey' LIMIT 1");
+        if ($ex && $ex->num_rows > 0) { echo json_encode(['success'=>false,'message'=>'تم ترحيل إهلاك هذا الشهر مسبقاً'], JSON_UNESCAPED_UNICODE); break; }
+
+        // احسب القيمة الدفترية الحالية
+        $tdp = $conn->query("SELECT COALESCE(SUM(amount),0) td FROM acc_asset_depreciations WHERE asset_id=$aid AND tenant_id=$tid");
+        $totalDepr = $tdp ? (float)$tdp->fetch_assoc()['td'] : 0;
+        $bv = (float)$a['cost'] - $totalDepr;
+        $resv = (float)$a['residual_value'];
+
+        $dm = $a['depreciation_method']; $ulm = (int)$a['useful_life_months'];
+        $monthsLeft = max(0, $ulm - (int)$conn->query("SELECT COUNT(*) c FROM acc_asset_depreciations WHERE asset_id=$aid AND tenant_id=$tid")->fetch_assoc()['c']);
+        if ($monthsLeft <= 0 || $bv <= $resv) { echo json_encode(['success'=>false,'message'=>'الأصل مكتمل الإهلاك'], JSON_UNESCAPED_UNICODE); break; }
+
+        if ($dm === 'straight_line') {
+            $depr = $monthsLeft === 1 ? round($bv-$resv,2) : round(((float)$a['cost']-$resv)/$ulm, 2);
+        } else {
+            $rate = 2.0/$ulm;
+            $depr = round($bv*$rate/12, 2);
+            if ($depr+$resv > $bv) $depr = max(0, $bv-$resv);
+        }
+        if ($depr <= 0) { echo json_encode(['success'=>false,'message'=>'مبلغ الإهلاك صفر'], JSON_UNESCAPED_UNICODE); break; }
+
+        $bvAfter = round($bv - $depr, 2);
+        $assetName = $conn->real_escape_string($a['name']);
+        $lines = [
+            ['account_id'=>(int)$a['expense_account_id'],'debit'=>$depr,'credit'=>0,'description'=>"إهلاك $assetName — $perKey"],
+            ['account_id'=>(int)$a['accum_depr_account_id'],'debit'=>0,'credit'=>$depr,'description'=>"مجمع إهلاك $assetName — $perKey"],
+        ];
+        $conn->begin_transaction();
+        try {
+            $er = acc_post_entry($conn, $tid, $period, "إهلاك: $assetName ($perKey)", 'depreciation', $aid, null, $lines, 1);
+            $eid = (int)$conn->query("SELECT id FROM acc_entries WHERE entry_no='".$conn->real_escape_string($er['eno'])."' AND tenant_id=$tid LIMIT 1")->fetch_assoc()['id'];
+            $conn->query("INSERT INTO acc_asset_depreciations (tenant_id,asset_id,period_date,amount,book_value_after,entry_id) VALUES ($tid,$aid,'$period',$depr,$bvAfter,$eid)");
+            $conn->commit();
+            echo json_encode(['success'=>true,'entry_no'=>$er['eno'],'depr_amount'=>$depr,'book_value_after'=>$bvAfter,'message'=>"تم ترحيل إهلاك {$er['eno']}"], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
     //  المطابقة البنكية
     // ════════════════════════════════════════════════════════════════════
     case 'gl_bank_accounts': {

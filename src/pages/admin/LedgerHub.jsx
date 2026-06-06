@@ -4113,6 +4113,386 @@ function BudgetTab({ accounts, toast }) {
     );
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  الأصول الثابتة
+// ════════════════════════════════════════════════════════════════════
+function FixedAssetsTab({ accounts, toast }) {
+    const [sub, setSub]         = useState('list');
+    const [assets, setAssets]   = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [busy, setBusy]       = useState(false);
+
+    // ترحيل الإهلاك
+    const [deprAsset,  setDeprAsset]  = useState('');
+    const [deprPeriod, setDeprPeriod] = useState(() => todayISO().slice(0, 7));
+    const [deprResult, setDeprResult] = useState(null);
+    const [deprBusy,   setDeprBusy]   = useState(false);
+
+    // جدول الإهلاك
+    const [schedAsset, setSchedAsset] = useState('');
+    const [schedData,  setSchedData]  = useState(null);
+    const [schedBusy,  setSchedBusy]  = useState(false);
+
+    const DEPR_LABELS = { straight_line: 'القسط الثابت', declining: 'القسط المتناقص' };
+
+    const blankForm = () => ({
+        id: 0, code: '', name: '', cost: '', residual_value: 0,
+        purchase_date: todayISO(), useful_life_months: 60,
+        depreciation_method: 'straight_line',
+        gl_account_id: '', accum_depr_account_id: '', expense_account_id: '',
+        notes: '',
+    });
+
+    const loadAssets = useCallback(async () => {
+        setLoading(true);
+        try { const r = await api('gl_assets'); if (r.success) setAssets(r.data || []); }
+        catch { /* صامت */ }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { loadAssets(); }, [loadAssets]);
+
+    const saveAsset = async () => {
+        if (!editing.name.trim()) return toast('الاسم مطلوب', 'error');
+        if (!editing.cost || Number(editing.cost) <= 0) return toast('التكلفة مطلوبة', 'error');
+        setBusy(true);
+        try {
+            const r = await api('gl_asset_save', { method: 'POST', body: { ...editing, tenant_id: 1 } });
+            if (r.success) { toast('تم الحفظ بنجاح', 'success'); setEditing(null); loadAssets(); }
+            else toast(r.message || 'خطأ', 'error');
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setBusy(false); }
+    };
+
+    const runDepr = async () => {
+        if (!deprAsset) return toast('اختر الأصل', 'error');
+        if (!deprPeriod) return toast('اختر الشهر', 'error');
+        setDeprBusy(true); setDeprResult(null);
+        try {
+            const r = await api('gl_asset_depreciate', { method: 'POST', body: { tenant_id: 1, asset_id: Number(deprAsset), period: deprPeriod + '-01' } });
+            if (r.success) { toast(r.message, 'success'); setDeprResult(r); loadAssets(); }
+            else toast(r.message || 'خطأ', 'error');
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setDeprBusy(false); }
+    };
+
+    const loadSchedule = useCallback(async (aid) => {
+        if (!aid) return;
+        setSchedBusy(true); setSchedData(null);
+        try {
+            const r = await api('gl_asset_schedule', { params: { id: aid } });
+            if (r.success) setSchedData(r);
+            else toast(r.message || 'خطأ', 'error');
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setSchedBusy(false); }
+    }, [toast]);
+
+    // ── نموذج الأصل (عودة مبكرة) ──────────────────────────────────
+    if (editing) return (
+        <div className="space-y-5">
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">
+                    {editing.id ? 'تعديل أصل ثابت' : 'إضافة أصل ثابت جديد'}
+                </h3>
+                <Btn color="gray" size="sm" onClick={() => setEditing(null)}><X size={14} /> إلغاء</Btn>
+            </div>
+            <Card>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">الاسم *</label>
+                        <input value={editing.name} onChange={e => setEditing(p => ({...p, name: e.target.value}))}
+                            placeholder="مثال: سيارة توصيل، حاسوب، معدة..."
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">الكود</label>
+                        <input value={editing.code} onChange={e => setEditing(p => ({...p, code: e.target.value}))}
+                            placeholder="FA-001"
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">التكلفة (ريال) *</label>
+                        <input type="number" min="0" step="0.01" value={editing.cost} onChange={e => setEditing(p => ({...p, cost: e.target.value}))}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">القيمة التخريدية (ريال)</label>
+                        <input type="number" min="0" step="0.01" value={editing.residual_value} onChange={e => setEditing(p => ({...p, residual_value: e.target.value}))}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">تاريخ الشراء</label>
+                        <input type="date" value={editing.purchase_date} onChange={e => setEditing(p => ({...p, purchase_date: e.target.value}))}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">العمر الإنتاجي (أشهر)</label>
+                        <input type="number" min="1" value={editing.useful_life_months} onChange={e => setEditing(p => ({...p, useful_life_months: Number(e.target.value)}))}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">طريقة الإهلاك</label>
+                        <select value={editing.depreciation_method} onChange={e => setEditing(p => ({...p, depreciation_method: e.target.value}))}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]">
+                            <option value="straight_line">القسط الثابت (Straight-Line)</option>
+                            <option value="declining">القسط المتناقص (Declining Balance)</option>
+                        </select>
+                    </div>
+                    <div className="md:col-span-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">حساب الأصل في الميزانية</label>
+                                <AccountCombobox accounts={accounts} value={editing.gl_account_id} onChange={v => setEditing(p => ({...p, gl_account_id: v}))} />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">حساب مجمّع الإهلاك</label>
+                                <AccountCombobox accounts={accounts} value={editing.accum_depr_account_id} onChange={v => setEditing(p => ({...p, accum_depr_account_id: v}))} />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">حساب مصروف الإهلاك</label>
+                                <AccountCombobox accounts={accounts} value={editing.expense_account_id} onChange={v => setEditing(p => ({...p, expense_account_id: v}))} />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">ملاحظات</label>
+                        <textarea value={editing.notes} onChange={e => setEditing(p => ({...p, notes: e.target.value}))} rows={2}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059] resize-none" />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100 dark:border-brand-700">
+                    <Btn color="gray" onClick={() => setEditing(null)}>إلغاء</Btn>
+                    <Btn color="navy" onClick={saveAsset} disabled={busy}>
+                        {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} حفظ الأصل
+                    </Btn>
+                </div>
+            </Card>
+        </div>
+    );
+
+    return (
+        <div className="space-y-4">
+            {/* تبويبات فرعية */}
+            <div className="flex flex-wrap gap-2">
+                {[
+                    { id: 'list',     label: `سجل الأصول${assets.length ? ` (${assets.length})` : ''}` },
+                    { id: 'depr',     label: 'ترحيل الإهلاك' },
+                    { id: 'schedule', label: 'جدول الإهلاك' },
+                ].map(s => (
+                    <button key={s.id} onClick={() => setSub(s.id)}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold transition border ${
+                            sub === s.id
+                                ? 'bg-brand-800 text-white border-brand-800 dark:bg-brand-700 dark:border-brand-600'
+                                : 'border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059]'
+                        }`}>{s.label}</button>
+                ))}
+            </div>
+
+            {/* ── سجل الأصول ─────────────────────────────────── */}
+            {sub === 'list' && (
+                <>
+                    <div className="flex justify-end">
+                        <Btn color="navy" size="sm" onClick={() => setEditing(blankForm())}>
+                            <Plus size={14} /> أصل جديد
+                        </Btn>
+                    </div>
+                    <Card>
+                        {loading ? (
+                            <div className="text-center py-12"><Loader2 className="animate-spin mx-auto text-slate-400" size={28} /></div>
+                        ) : assets.length === 0 ? (
+                            <div className="text-center py-14 text-slate-400 dark:text-brand-500 font-bold">لا توجد أصول ثابتة مسجّلة — ابدأ بإضافة أصل جديد</div>
+                        ) : (
+                            <div className="overflow-x-auto custom-scrollbar">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-[12px] font-black text-slate-400 dark:text-brand-500 border-b border-slate-100 dark:border-brand-700">
+                                            <th className="text-right py-3 px-3">الكود</th>
+                                            <th className="text-right py-3 px-3">الاسم</th>
+                                            <th className="text-left py-3 px-3">التكلفة</th>
+                                            <th className="text-left py-3 px-3">القيمة الدفترية</th>
+                                            <th className="text-right py-3 px-3">تاريخ الشراء</th>
+                                            <th className="text-right py-3 px-3">طريقة الإهلاك</th>
+                                            <th className="text-center py-3 px-3">مرحّل/الكل</th>
+                                            <th className="py-3 px-3"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {assets.map(a => (
+                                            <tr key={a.id} className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition ${a.disposed_at ? 'opacity-50' : ''}`}>
+                                                <td className="py-2.5 px-3 font-mono text-xs text-slate-500 dark:text-brand-400">{a.code || '—'}</td>
+                                                <td className="py-2.5 px-3 font-bold text-brand-800 dark:text-brand-100">
+                                                    {a.name}
+                                                    {a.disposed_at && <span className="mr-2 text-[11px] text-rose-500 font-bold">(مستبعد)</span>}
+                                                </td>
+                                                <td className="py-2.5 px-3 text-left tabular-nums" dir="ltr">{money(a.cost)}</td>
+                                                <td className={`py-2.5 px-3 text-left tabular-nums font-black ${Number(a.book_value) <= Number(a.residual_value || 0) ? 'text-slate-400 dark:text-brand-600' : 'text-emerald-600 dark:text-emerald-400'}`} dir="ltr">{money(a.book_value)}</td>
+                                                <td className="py-2.5 px-3 text-slate-500 dark:text-brand-400 font-bold whitespace-nowrap" dir="ltr">{a.purchase_date}</td>
+                                                <td className="py-2.5 px-3 text-xs font-bold text-slate-600 dark:text-brand-300">{DEPR_LABELS[a.depreciation_method] || a.depreciation_method}</td>
+                                                <td className="py-2.5 px-3 text-center tabular-nums text-[12px] font-bold">
+                                                    <span className={Number(a.depr_count) >= Number(a.useful_life_months) ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-brand-400'}>
+                                                        {a.depr_count}/{a.useful_life_months}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2.5 px-3">
+                                                    <button onClick={() => setEditing({ id: Number(a.id), code: a.code||'', name: a.name, cost: a.cost, residual_value: a.residual_value, purchase_date: a.purchase_date, useful_life_months: Number(a.useful_life_months), depreciation_method: a.depreciation_method, gl_account_id: a.gl_account_id||'', accum_depr_account_id: a.accum_depr_account_id||'', expense_account_id: a.expense_account_id||'', notes: a.notes||'' })}
+                                                        className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059] transition"><Edit2 size={15} /></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </Card>
+                </>
+            )}
+
+            {/* ── ترحيل الإهلاك ───────────────────────────────── */}
+            {sub === 'depr' && (
+                <Card>
+                    <h4 className="font-black text-brand-800 dark:text-brand-100 mb-4">ترحيل قيد إهلاك شهري</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">الأصل الثابت</label>
+                            <select value={deprAsset} onChange={e => { setDeprAsset(e.target.value); setDeprResult(null); }}
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]">
+                                <option value="">— اختر الأصل —</option>
+                                {assets.filter(a => !a.disposed_at && Number(a.depr_count) < Number(a.useful_life_months)).map(a => (
+                                    <option key={a.id} value={a.id}>{a.name} — قيمة دفترية: {money(a.book_value)} ﷼</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">الشهر</label>
+                            <input type="month" value={deprPeriod} onChange={e => { setDeprPeriod(e.target.value); setDeprResult(null); }}
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                        </div>
+                    </div>
+                    <div className="mt-4">
+                        <Btn color="gold" onClick={runDepr} disabled={deprBusy || !deprAsset || !deprPeriod}>
+                            {deprBusy ? <Loader2 size={14} className="animate-spin" /> : <ChevronRight size={14} />}
+                            ترحيل إهلاك الشهر
+                        </Btn>
+                    </div>
+                    {deprResult && (
+                        <div className="mt-5 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
+                            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-black mb-3">
+                                <CheckCircle2 size={18} /> تم الترحيل بنجاح
+                            </div>
+                            <div className="grid grid-cols-3 gap-3 text-center">
+                                {[
+                                    { label: 'رقم القيد',            val: deprResult.entry_no,         mono: true },
+                                    { label: 'مبلغ الإهلاك',         val: money(deprResult.depr_amount) + ' ﷼' },
+                                    { label: 'القيمة الدفترية بعده', val: money(deprResult.book_value_after) + ' ﷼' },
+                                ].map(c => (
+                                    <div key={c.label} className="bg-white dark:bg-brand-900 rounded-xl p-3 border border-emerald-100 dark:border-emerald-500/20">
+                                        <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                        <div className={`font-black text-brand-800 dark:text-brand-100 ${c.mono ? 'font-mono text-sm' : 'text-base'}`}>{c.val}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </Card>
+            )}
+
+            {/* ── جدول الإهلاك ────────────────────────────────── */}
+            {sub === 'schedule' && (
+                <Card>
+                    <div className="flex flex-wrap items-end gap-3 mb-4">
+                        <div className="flex-1 min-w-48">
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">الأصل الثابت</label>
+                            <select value={schedAsset} onChange={e => { setSchedAsset(e.target.value); loadSchedule(e.target.value); }}
+                                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]">
+                                <option value="">— اختر الأصل —</option>
+                                {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                        </div>
+                        {schedData && (
+                            <>
+                                <Btn color="gray" size="sm" onClick={() => downloadCSV(
+                                    `schedule_${schedData.asset.name}.csv`,
+                                    ['#', 'الفترة', 'مبلغ الإهلاك', 'القيمة الدفترية', 'مرحّل'],
+                                    schedData.schedule.map((r, i) => [i + 1, r.period.slice(0, 7), r.depr_amount, r.book_value, r.posted ? 'نعم' : 'لا'])
+                                )}>
+                                    <Download size={14} /> CSV
+                                </Btn>
+                                <Btn color="gray" size="sm" onClick={() => {
+                                    const rows = schedData.schedule.map((r, i) =>
+                                        `<tr class="${r.posted ? 'posted' : ''}"><td>${i+1}</td><td dir="ltr">${r.period.slice(0,7)}</td><td style="text-align:left" dir="ltr">${money(r.depr_amount)}</td><td style="text-align:left" dir="ltr">${money(r.book_value)}</td><td style="text-align:center">${r.posted ? '✓' : '—'}</td></tr>`
+                                    ).join('');
+                                    printHtml(`جدول إهلاك: ${schedData.asset.name}`,
+                                        `<style>.posted td{background:#f0fdf4}</style>
+                                         <h1>جدول الإهلاك: ${schedData.asset.name}</h1>
+                                         <h2>التكلفة: ${money(schedData.asset.cost)} ﷼ — العمر الإنتاجي: ${schedData.asset.useful_life_months} شهر</h2>
+                                         <table><thead><tr><th>#</th><th>الفترة</th><th style="text-align:left">الإهلاك</th><th style="text-align:left">القيمة الدفترية</th><th style="text-align:center">مرحّل</th></tr></thead><tbody>${rows}</tbody></table>`
+                                    );
+                                }}>
+                                    <Printer size={14} /> طباعة
+                                </Btn>
+                            </>
+                        )}
+                    </div>
+                    {schedBusy ? (
+                        <div className="text-center py-12"><Loader2 className="animate-spin mx-auto text-slate-400" size={24} /></div>
+                    ) : !schedData ? (
+                        <div className="text-center py-14 text-slate-300 dark:text-brand-600 font-bold">اختر أصلاً لعرض جدول الإهلاك الكامل</div>
+                    ) : (() => {
+                        const lastPosted = [...schedData.schedule].reverse().find(r => r.posted);
+                        const currentBV  = lastPosted ? Number(lastPosted.book_value) : Number(schedData.asset.cost);
+                        const totalDepr  = schedData.schedule.filter(r => r.posted).reduce((s, r) => s + Number(r.depr_amount), 0);
+                        return (
+                            <>
+                                <div className="grid grid-cols-3 gap-3 mb-5">
+                                    {[
+                                        { label: 'التكلفة الأصلية',       val: schedData.asset.cost },
+                                        { label: 'الإهلاك المتراكم المرحّل', val: totalDepr },
+                                        { label: 'القيمة الدفترية الحالية', val: currentBV },
+                                    ].map(c => (
+                                        <div key={c.label} className="bg-slate-50 dark:bg-brand-800/40 rounded-2xl p-3 border border-slate-100 dark:border-brand-700 text-center">
+                                            <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                            <div className="text-xl font-black text-brand-800 dark:text-brand-100">{money(c.val)} <span className="text-sm font-bold text-slate-400">﷼</span></div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-[12px] font-black text-slate-400 dark:text-brand-500 border-b border-slate-100 dark:border-brand-700">
+                                                <th className="text-right py-3 px-3">#</th>
+                                                <th className="text-right py-3 px-3">الفترة</th>
+                                                <th className="text-left py-3 px-3">الإهلاك</th>
+                                                <th className="text-left py-3 px-3">القيمة الدفترية</th>
+                                                <th className="text-center py-3 px-3">مرحّل</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {schedData.schedule.map((r, i) => (
+                                                <tr key={i} className={`border-b border-slate-50 dark:border-brand-700 transition ${r.posted ? 'bg-emerald-50/40 dark:bg-emerald-500/5' : 'hover:bg-slate-50/60 dark:hover:bg-brand-800'}`}>
+                                                    <td className="py-2 px-3 text-[12px] text-slate-400 dark:text-brand-600 tabular-nums">{i + 1}</td>
+                                                    <td className="py-2 px-3 font-bold text-slate-600 dark:text-brand-300" dir="ltr">{r.period.slice(0, 7)}</td>
+                                                    <td className="py-2 px-3 text-left tabular-nums font-bold text-slate-700 dark:text-brand-200" dir="ltr">{money(r.depr_amount)}</td>
+                                                    <td className="py-2 px-3 text-left tabular-nums font-black text-brand-800 dark:text-brand-100" dir="ltr">{money(r.book_value)}</td>
+                                                    <td className="py-2 px-3 text-center">
+                                                        {r.posted
+                                                            ? <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[12px] font-bold"><CheckCircle2 size={13} /> مرحّل</span>
+                                                            : <span className="text-slate-300 dark:text-brand-700 text-xs">—</span>}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        );
+                    })()}
+                </Card>
+            )}
+        </div>
+    );
+}
+
 const TABS = [
     { id: 'chart', label: 'دليل الحسابات', icon: BookOpen },
     { id: 'journal', label: 'القيود اليومية', icon: FileText },
@@ -4129,6 +4509,7 @@ const TABS = [
     { id: 'costcenters', label: 'مراكز التكلفة', icon: Layers },
     { id: 'bank', label: 'المطابقة البنكية', icon: Scale },
     { id: 'budget', label: 'الميزانية التقديرية', icon: TrendingUp },
+    { id: 'assets',  label: 'الأصول الثابتة',  icon: Building2 },
     { id: 'periods', label: 'السنوات المالية', icon: Calendar },
     { id: 'settings', label: 'ملف المنشأة', icon: Settings },
 ];
@@ -4259,6 +4640,7 @@ export default function LedgerHub() {
                     {activeTab === 'costcenters' && <CostCentersTab costCenters={costCenters} reload={loadCostCenters} loading={ccLoading} toast={toast} />}
                     {activeTab === 'bank' && <BankReconcileTab accounts={accounts} toast={toast} />}
                     {activeTab === 'budget' && <BudgetTab accounts={accounts} toast={toast} />}
+                    {activeTab === 'assets'  && <FixedAssetsTab accounts={accounts} toast={toast} />}
                     {activeTab === 'periods' && <FiscalPeriodsTab toast={toast} />}
                     {activeTab === 'settings' && <SettingsTab company={company} reload={loadCompany} toast={toast} />}
                 </div>
