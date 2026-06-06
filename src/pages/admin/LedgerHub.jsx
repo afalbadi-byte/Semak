@@ -2350,7 +2350,24 @@ function PaymentsTab({ parties, toast }) {
                                         <td className="px-3 py-3 font-mono text-slate-400 dark:text-brand-500">{p.invoice_no || '—'}</td>
                                         <td className="px-3 py-3 text-left font-bold">{money(p.amount)}</td>
                                         <td className="px-3 py-3 text-center">
-                                            <button onClick={() => voidPay(p.id)} title="إلغاء" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><RotateCcw size={15} /></button>
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button title="طباعة السند" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 dark:text-brand-400"
+                                                    onClick={() => {
+                                                        const label = p.pay_type === 'receipt' ? 'سند قبض' : 'سند صرف';
+                                                        const method = { cash: 'نقداً', bank: 'بنك', cheque: 'شيك' }[p.method] || p.method || '—';
+                                                        printHtml(`${label} — ${p.pay_no}`,
+                                                            `<h1>${label}</h1><h2>رقم: ${p.pay_no} | التاريخ: ${p.date}</h2>
+                                                            <table><thead><tr><th>الطرف</th><th>الفاتورة</th><th>طريقة السداد</th><th style="text-align:left">المبلغ</th></tr></thead>
+                                                            <tbody><tr><td>${p.party_label||'—'}</td><td>${p.invoice_no||'—'}</td><td>${method}</td><td class="amount" style="font-size:20px;font-weight:900">${money(p.amount)} ﷼</td></tr></tbody></table>
+                                                            ${p.notes?`<p style="margin-top:16px;color:#64748b">ملاحظات: ${p.notes}</p>`:''}
+                                                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:60px">
+                                                                <div style="text-align:center;border-top:1px solid #cbd5e1;padding-top:8px">توقيع المستلم</div>
+                                                                <div style="text-align:center;border-top:1px solid #cbd5e1;padding-top:8px">توقيع المحاسب</div>
+                                                            </div>`
+                                                        );
+                                                    }}><Printer size={15} /></button>
+                                                <button onClick={() => voidPay(p.id)} title="إلغاء" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><RotateCcw size={15} /></button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
