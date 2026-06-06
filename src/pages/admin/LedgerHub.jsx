@@ -192,7 +192,9 @@ function ChartTab({ accounts, reload, loading, toast }) {
                                         <tr key={a.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
                                             <td className="px-3 py-2.5 font-mono font-bold text-brand-800 dark:text-brand-300">{a.code}</td>
                                             <td className="px-3 py-2.5" style={{ paddingRight: `${0.75 + depth * 0.6}rem` }}>
-                                                <span className={isGroup ? 'font-black text-brand-800 dark:text-brand-100' : 'text-slate-700 dark:text-brand-300 dark:text-brand-300'}>{a.name}</span>
+                                                {isGroup
+                                                    ? <span className="font-black text-brand-800 dark:text-brand-100">{a.name}</span>
+                                                    : <EntityLink to={`acct/${a.id}`} muted title="دفتر أستاذ الحساب">{a.name}</EntityLink>}
                                             </td>
                                             <td className="px-3 py-2.5">
                                                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${TYPE_COLORS[a.type]}`}>{TYPE_LABELS[a.type]}</span>
@@ -531,7 +533,10 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                             <tbody>
                                 {viewing.lines.map(l => (
                                     <tr key={l.id} className="border-b border-slate-100 dark:border-brand-700">
-                                        <td className="px-3 py-2"><span className="font-mono text-xs text-slate-400 dark:text-brand-500">{l.account_code}</span> {l.account_name}
+                                        <td className="px-3 py-2">
+                                            {l.account_id
+                                                ? <EntityLink to={`acct/${l.account_id}`} muted title="دفتر أستاذ الحساب"><span className="font-mono text-xs opacity-70">{l.account_code}</span> {l.account_name}</EntityLink>
+                                                : <span><span className="font-mono text-xs text-slate-400 dark:text-brand-500">{l.account_code}</span> {l.account_name}</span>}
                                             {l.description ? <span className="block text-xs text-slate-400 dark:text-brand-500">{l.description}</span> : null}</td>
                                         <td className="px-3 py-2 text-left tabular-nums" dir="ltr">{Number(l.debit) ? money(l.debit) : ''}</td>
                                         <td className="px-3 py-2 text-left tabular-nums" dir="ltr">{Number(l.credit) ? money(l.credit) : ''}</td>
@@ -587,7 +592,7 @@ function TrialBalanceTab({ toast }) {
                             {rows.map(r => (
                                 <tr key={r.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
                                     <td className="px-3 py-2.5 font-mono text-slate-400 dark:text-brand-500">{r.code}</td>
-                                    <td className="px-3 py-2.5 text-slate-700 dark:text-brand-300">{r.name}</td>
+                                    <td className="px-3 py-2.5"><EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب">{r.name}</EntityLink></td>
                                     <td className="px-3 py-2.5 text-left tabular-nums font-bold" dir="ltr">{Number(r.debit_balance) ? money(r.debit_balance) : ''}</td>
                                     <td className="px-3 py-2.5 text-left tabular-nums font-bold" dir="ltr">{Number(r.credit_balance) ? money(r.credit_balance) : ''}</td>
                                 </tr>
@@ -630,7 +635,7 @@ function IncomeTab({ toast }) {
             <div className="space-y-1">
                 {items.map(r => (
                     <div key={r.id} className="flex justify-between text-sm py-1 border-b border-slate-50 dark:border-brand-700">
-                        <span className="text-slate-600 dark:text-brand-300"><span className="font-mono text-xs text-slate-400 dark:text-brand-500">{r.code}</span> {r.name}</span>
+                        <EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب"><span className="font-mono text-xs opacity-70">{r.code}</span> {r.name}</EntityLink>
                         <span className="tabular-nums font-bold" dir="ltr">{money(r.amount)}</span>
                     </div>
                 ))}
@@ -679,7 +684,7 @@ function BalanceSheetTab({ toast }) {
             <div className="space-y-1">
                 {items.map(r => (
                     <div key={r.id} className="flex justify-between text-sm py-1 border-b border-slate-50 dark:border-brand-700">
-                        <span className="text-slate-600 dark:text-brand-300"><span className="font-mono text-xs text-slate-400 dark:text-brand-500">{r.code}</span> {r.name}</span>
+                        <EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب"><span className="font-mono text-xs opacity-70">{r.code}</span> {r.name}</EntityLink>
                         <span className="tabular-nums font-bold" dir="ltr">{money(r.amount)}</span>
                     </div>
                 ))}
@@ -769,7 +774,7 @@ function LedgerTab({ accounts, toast }) {
                             <tbody>
                                 {data.data.map((r, i) => (
                                     <tr key={i} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
-                                        <td className="px-3 py-2.5 font-mono text-xs text-slate-400 dark:text-brand-500">{r.entry_no}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs">{r.entry_id ? <EntityLink to={`entry/${r.entry_id}`} muted title="تفاصيل القيد">{r.entry_no}</EntityLink> : <span className="text-slate-400 dark:text-brand-500">{r.entry_no}</span>}</td>
                                         <td className="px-3 py-2.5 text-slate-600 dark:text-brand-300">{r.date}</td>
                                         <td className="px-3 py-2.5 text-slate-700 dark:text-brand-300">{r.line_desc || r.ent_desc || '—'}</td>
                                         <td className="px-3 py-2.5 text-left tabular-nums" dir="ltr">{Number(r.debit) ? money(r.debit) : ''}</td>
