@@ -434,7 +434,7 @@ function ChartTab({ accounts, reload, loading, toast }) {
 // ════════════════════════════════════════════════════════════════════════════
 //  AccountCombobox — حقل بحث قابل للكتابة عن الحسابات (كود أو اسم)
 // ════════════════════════════════════════════════════════════════════════════
-function AccountCombobox({ accounts, value, onChange, placeholder = 'ابحث بالكود أو الاسم…', className = '' }) {
+function AccountCombobox({ accounts, value, onChange, placeholder = 'ابحث بالكود أو الاسم…', className = '', inputProps = {} }) {
     const [q, setQ]         = useState('');
     const [open, setOpen]   = useState(false);
     const [cursor, setCursor] = useState(0);
@@ -490,6 +490,7 @@ function AccountCombobox({ accounts, value, onChange, placeholder = 'ابحث ب
                 className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm outline-none focus:border-[#c5a059] placeholder-slate-300 dark:placeholder-brand-600"
                 dir="rtl"
                 autoComplete="off"
+                {...inputProps}
             />
             {/* القائمة المنسدلة */}
             {open && filtered.length > 0 && (
@@ -1352,6 +1353,34 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     if (form) {
         const setLine = (i, patch) => setForm(f => ({ ...f, lines: f.lines.map((l, j) => j === i ? { ...l, ...patch } : l) }));
 
+        // ── التنقل بلوحة المفاتيح ─────────────────────────────────
+        const focusLineField = (lineIdx, field /* 'account'|'debit'|'credit' */) => {
+            setTimeout(() => {
+                let el;
+                if (field === 'account') el = document.querySelector(`[data-entry-acct="${lineIdx}"]`);
+                else if (field === 'debit')  el = document.querySelector(`[data-entry-debit="${lineIdx}"]`);
+                else if (field === 'credit') el = document.querySelector(`[data-entry-credit="${lineIdx}"]`);
+                if (el) { el.focus(); if (el.type === 'number') el.select(); }
+            }, 30);
+        };
+
+        const addLineAndFocus = () => {
+            setForm(f => {
+                const next = f.lines.length;
+                setTimeout(() => focusLineField(next, 'account'), 60);
+                return { ...f, lines: [...f.lines, emptyLine()] };
+            });
+        };
+
+        const handleAmountKey = (e, lineIdx, field) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                // Tab to description or, if last line, add a new line
+                if (lineIdx === form.lines.length - 1) addLineAndFocus();
+                else focusLineField(lineIdx + 1, 'account');
+            }
+        };
+
         // توازن تلقائي: يُكمل آخر بند لتوازن القيد
         const autoBalance = () => {
             const diff = Math.round((totals.d - totals.c) * 100) / 100;
@@ -1364,7 +1393,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
         };
         return (
             <>
-            <div className="space-y-4">
+            <div className="space-y-4" onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && balanced) { e.preventDefault(); submit(); } }}>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                     <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">{form.id ? 'تعديل قيد' : 'قيد يومية جديد'}</h3>
                     <div className="flex items-center gap-2">
@@ -1412,15 +1441,22 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                                             <AccountCombobox
                                                 accounts={postable}
                                                 value={l.account_id}
-                                                onChange={v => setLine(i, { account_id: v })}
+                                                onChange={v => { setLine(i, { account_id: v }); focusLineField(i, 'debit'); }}
+                                                inputProps={{ 'data-entry-acct': i }}
                                             />
                                         </td>
                                         <td className="px-2 py-1.5">
-                                            <input type="number" step="0.01" value={l.debit} onChange={e => setLine(i, { debit: e.target.value, credit: '' })}
+                                            <input type="number" step="0.01" value={l.debit}
+                                                data-entry-debit={i}
+                                                onChange={e => setLine(i, { debit: e.target.value, credit: '' })}
+                                                onKeyDown={e => handleAmountKey(e, i, 'debit')}
                                                 className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm tabular-nums outline-none focus:border-emerald-400" dir="ltr" />
                                         </td>
                                         <td className="px-2 py-1.5">
-                                            <input type="number" step="0.01" value={l.credit} onChange={e => setLine(i, { credit: e.target.value, debit: '' })}
+                                            <input type="number" step="0.01" value={l.credit}
+                                                data-entry-credit={i}
+                                                onChange={e => setLine(i, { credit: e.target.value, debit: '' })}
+                                                onKeyDown={e => handleAmountKey(e, i, 'credit')}
                                                 className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm tabular-nums outline-none focus:border-rose-400" dir="ltr" />
                                         </td>
                                         <td className="px-2 py-1.5 space-y-1">
@@ -1472,7 +1508,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                        <Btn color="gray" size="sm" onClick={() => setForm(f => ({ ...f, lines: [...f.lines, emptyLine()] }))}><Plus size={14} /> إضافة بند</Btn>
+                        <Btn color="gray" size="sm" onClick={addLineAndFocus}><Plus size={14} /> إضافة بند</Btn>
                         {!balanced && Math.abs(totals.d - totals.c) > 0.005 && (
                             <Btn color="gray" size="sm" onClick={autoBalance} title="أكمل آخر بند تلقائياً لتوازن القيد">
                                 ⚖ توازن تلقائي ({Math.abs(totals.d - totals.c).toFixed(2)})
@@ -1480,6 +1516,11 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                         )}
                         <div className="flex-1" />
                         <Btn color="green" onClick={submit} disabled={!balanced}><Save size={15} /> {form.id ? 'حفظ التعديل' : 'ترحيل القيد'}</Btn>
+                    </div>
+                    <div className="text-[11px] font-bold text-slate-400 dark:text-brand-600 flex flex-wrap gap-x-4 gap-y-1 pt-1 border-t border-slate-100 dark:border-brand-700">
+                        <span>⌨ <kbd className="bg-slate-100 dark:bg-brand-800 px-1.5 py-0.5 rounded text-[10px]">Ctrl+Enter</kbd> ترحيل</span>
+                        <span><kbd className="bg-slate-100 dark:bg-brand-800 px-1.5 py-0.5 rounded text-[10px]">Enter</kbd> في المبلغ → بند جديد</span>
+                        <span><kbd className="bg-slate-100 dark:bg-brand-800 px-1.5 py-0.5 rounded text-[10px]">⚖</kbd> توازن تلقائي</span>
                     </div>
                 </Card>
             </div>
