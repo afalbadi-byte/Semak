@@ -864,9 +864,30 @@ function TrialBalanceTab({ toast }) {
         <div className="space-y-4">
             <div className="flex items-end justify-between flex-wrap gap-3">
                 <PeriodBar to={to} setTo={setTo} onApply={() => load(to)} showFrom={false} />
-                {rows.length > 0 && <Btn color="gray" size="sm" onClick={() => downloadCSV('trial_balance.csv',
-                    ['الكود', 'الحساب', 'مدين', 'دائن'], rows.map(r => [r.code, r.name, r.debit_balance, r.credit_balance]))}>
-                    <Download size={14} /> تصدير</Btn>}
+                {rows.length > 0 && (
+                    <div className="flex gap-2">
+                        <Btn color="gray" size="sm" onClick={() => downloadCSV('trial_balance.csv',
+                            ['الكود', 'الحساب', 'مدين', 'دائن'], rows.map(r => [r.code, r.name, r.debit_balance, r.credit_balance]))}>
+                            <Download size={14} /> تصدير
+                        </Btn>
+                        <Btn color="gray" size="sm" onClick={() => {
+                            const rowsHtml = rows.map(r =>
+                                `<tr><td style="font-family:monospace;color:#94a3b8">${r.code}</td><td>${r.name}</td>
+                                <td class="amount">${Number(r.debit_balance) ? money(r.debit_balance)+' ﷼' : ''}</td>
+                                <td class="amount">${Number(r.credit_balance) ? money(r.credit_balance)+' ﷼' : ''}</td></tr>`
+                            ).join('');
+                            printHtml('ميزان المراجعة', `
+                                <h1>ميزان المراجعة</h1><h2>حتى تاريخ ${to}</h2>
+                                <table><thead><tr><th>الكود</th><th>الحساب</th><th style="text-align:left">مدين</th><th style="text-align:left">دائن</th></tr></thead>
+                                <tbody>${rowsHtml}</tbody>
+                                <tfoot><tr class="total-row"><td colspan="2">الإجمالي ${data?.totals?.balanced?'✓ متوازن':'✗ غير متوازن'}</td>
+                                <td class="amount">${money(data?.totals?.debit)} ﷼</td><td class="amount">${money(data?.totals?.credit)} ﷼</td></tr></tfoot>
+                                </table>`);
+                        }}>
+                            <Printer size={14} /> طباعة
+                        </Btn>
+                    </div>
+                )}
             </div>
             {loading ? <Spinner /> : rows.length === 0 ? <Empty msg="لا توجد حركات" /> : (
                 <Card>
@@ -1184,20 +1205,48 @@ function VatTab({ toast }) {
 
     return (
         <div className="space-y-4">
-            <PeriodBar from={from} to={to} setFrom={setFrom} setTo={setTo} onApply={load} />
+            <div className="flex items-end justify-between flex-wrap gap-3">
+                <PeriodBar from={from} to={to} setFrom={setFrom} setTo={setTo} onApply={load} />
+                {data && (
+                    <div className="flex gap-2">
+                        <Btn color="gray" size="sm" onClick={() => downloadCSV('vat_return.csv',
+                            ['البيان', 'المبلغ'],
+                            [
+                                ['ضريبة المخرجات (المبيعات) — ح/ 2102', data.output_vat],
+                                ['ضريبة المدخلات (المشتريات) — ح/ 1401', data.input_vat],
+                                ['صافي الضريبة المستحقة', data.net_payable],
+                            ])}>
+                            <Download size={14} /> تصدير
+                        </Btn>
+                        <Btn color="gray" size="sm" onClick={() => printHtml('إقرار ضريبة القيمة المضافة',`
+                            <h1>إقرار ضريبة القيمة المضافة</h1><h2>من ${from} إلى ${to}</h2>
+                            <table><thead><tr><th>البيان</th><th style="text-align:left">المبلغ</th></tr></thead><tbody>
+                            <tr><td>ضريبة المخرجات (المبيعات) — ح/ 2102</td><td class="amount">${money(data.output_vat)} ﷼</td></tr>
+                            <tr><td>ضريبة المدخلات (المشتريات) — ح/ 1401</td><td class="amount">${money(data.input_vat)} ﷼</td></tr>
+                            <tr class="total-row"><td>الفرق (ضريبة قابلة للاسترداد)</td><td class="amount">${money(data.input_vat)} ﷼</td></tr>
+                            <tr class="net-row"><td>صافي الضريبة المستحقة للهيئة</td><td class="amount">${money(data.net_payable)} ﷼</td></tr>
+                            </tbody></table>`)}>
+                            <Printer size={14} /> طباعة
+                        </Btn>
+                    </div>
+                )}
+            </div>
             {loading ? <Spinner /> : !data ? <Empty /> : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Card className="p-5 text-center">
                         <p className="text-sm font-bold text-slate-500 dark:text-brand-400 mb-2">ضريبة المخرجات (المبيعات)</p>
                         <p className="text-2xl font-black text-emerald-700 tabular-nums" dir="ltr">{money(data.output_vat)}</p>
+                        <p className="text-xs text-slate-400 dark:text-brand-500 mt-1">ح/ {data.accounts?.output?.code || '2102'}</p>
                     </Card>
                     <Card className="p-5 text-center">
                         <p className="text-sm font-bold text-slate-500 dark:text-brand-400 mb-2">ضريبة المدخلات (المشتريات)</p>
                         <p className="text-2xl font-black text-blue-700 tabular-nums" dir="ltr">{money(data.input_vat)}</p>
+                        <p className="text-xs text-slate-400 dark:text-brand-500 mt-1">ح/ {data.accounts?.input?.code || '1401'}</p>
                     </Card>
                     <Card className="p-5 text-center bg-brand-800 text-white">
                         <p className="text-sm font-bold text-white/70 mb-2">صافي الضريبة المستحقة</p>
                         <p className="text-2xl font-black tabular-nums" dir="ltr">{money(data.net_payable)} ﷼</p>
+                        <p className="text-xs text-white/50 mt-1">{data.net_payable < 0 ? 'قابلة للاسترداد' : 'مستحقة للهيئة'}</p>
                     </Card>
                 </div>
             )}
