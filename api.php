@@ -4459,6 +4459,34 @@ switch ($action) {
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'gl_cc_report':
+        // تقرير الأرباح والخسائر حسب مراكز التكلفة
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $from = $conn->real_escape_string($_GET['from'] ?? date('Y').'-01-01');
+        $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
+        $sql = "SELECT cc.id, cc.code, cc.name,
+                   COALESCE(SUM(CASE WHEN a.type='revenue'  AND e.is_posted=1 THEN l.credit-l.debit ELSE 0 END),0) AS revenue,
+                   COALESCE(SUM(CASE WHEN a.type='expense'  AND e.is_posted=1 THEN l.debit-l.credit ELSE 0 END),0) AS expense
+                FROM acc_cost_centers cc
+                LEFT JOIN acc_lines   l  ON l.cost_center_id=cc.id AND l.tenant_id=cc.tenant_id
+                LEFT JOIN acc_entries e  ON e.id=l.entry_id AND e.date>='$from' AND e.date<='$to'
+                LEFT JOIN acc_accounts a ON a.id=l.account_id
+                WHERE cc.tenant_id=$tid
+                GROUP BY cc.id, cc.code, cc.name
+                ORDER BY cc.code, cc.name";
+        $res = $conn->query($sql); $rows = [];
+        $totalRev = 0; $totalExp = 0;
+        while ($res && ($x = $res->fetch_assoc())) {
+            $x['revenue'] = round((float)$x['revenue'], 2);
+            $x['expense'] = round((float)$x['expense'], 2);
+            $x['net']     = round($x['revenue'] - $x['expense'], 2);
+            $totalRev += $x['revenue']; $totalExp += $x['expense'];
+            $rows[] = $x;
+        }
+        echo json_encode(['success'=>true,'data'=>$rows,'from'=>$from,'to'=>$to,
+            'totals'=>['revenue'=>round($totalRev,2),'expense'=>round($totalExp,2),'net'=>round($totalRev-$totalExp,2)]], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'gl_cost_center_save':
         $tid  = (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);

@@ -4,7 +4,7 @@ import {
     BookOpen, FileText, Layers, Plus, Trash2, RefreshCw, Save, X, Search,
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
     AlertTriangle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
-    Settings, Printer, Building2,
+    Settings, Printer, Building2, Loader2,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1618,7 +1618,64 @@ function PartiesTab({ parties, reload, loading, toast }) {
 //  تبويب 9: مراكز التكلفة
 // ════════════════════════════════════════════════════════════════════════════
 function CostCentersTab({ costCenters, reload, loading, toast }) {
+    const [sub, setSub]         = useState('list');   // 'list' | 'report'
     const [editing, setEditing] = useState(null);
+
+    // ── تقرير الأرباح والخسائر بمركز التكلفة ──
+    const [rpFrom,    setRpFrom]    = useState(yearStart());
+    const [rpTo,      setRpTo]      = useState(todayISO());
+    const [rpData,    setRpData]    = useState(null);
+    const [rpLoading, setRpLoading] = useState(false);
+
+    const loadReport = useCallback(async () => {
+        setRpLoading(true);
+        try {
+            const r = await api('gl_cc_report', { params: { from: rpFrom, to: rpTo } });
+            if (r.success) setRpData(r); else toast(r.message || 'تعذّر جلب التقرير', 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setRpLoading(false); }
+    }, [rpFrom, rpTo]);
+
+    const exportRpCSV = () => {
+        if (!rpData) return;
+        downloadCSV(
+            `cc_report_${rpFrom}_${rpTo}.csv`,
+            ['مركز التكلفة', 'الكود', 'الإيرادات', 'المصروفات', 'الصافي'],
+            [
+                ...rpData.data.map(r => [r.name, r.code || '', r.revenue, r.expense, r.net]),
+                ['الإجمالي', '', rpData.totals.revenue, rpData.totals.expense, rpData.totals.net],
+            ]
+        );
+    };
+
+    const printReport = () => {
+        if (!rpData) return;
+        const rows = rpData.data.map(r => `
+            <tr>
+                <td>${r.code || '—'}</td><td>${r.name}</td>
+                <td class="amount">${money(r.revenue)}</td>
+                <td class="amount">${money(r.expense)}</td>
+                <td class="amount ${r.net >= 0 ? '' : 'text-rose-700'}">${money(r.net)}</td>
+            </tr>`).join('');
+        const t = rpData.totals;
+        printHtml(`تقرير مراكز التكلفة — ${rpFrom} : ${rpTo}`,
+            `<h1>تقرير الأرباح والخسائر — مراكز التكلفة</h1>
+            <h2>الفترة: ${rpFrom} – ${rpTo}</h2>
+            <table>
+                <thead><tr><th>الكود</th><th>مركز التكلفة</th><th>الإيرادات</th><th>المصروفات</th><th>الصافي</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="2">الإجمالي</td>
+                        <td class="amount">${money(t.revenue)}</td>
+                        <td class="amount">${money(t.expense)}</td>
+                        <td class="amount">${money(t.net)}</td>
+                    </tr>
+                </tfoot>
+            </table>`
+        );
+    };
+
     const blank = { code: '', name: '', parent_id: '' };
     const save = async () => {
         if (!editing.name) { toast('الاسم مطلوب', 'error'); return; }
@@ -1627,32 +1684,146 @@ function CostCentersTab({ costCenters, reload, loading, toast }) {
             if (r.success) { toast('تم الحفظ'); setEditing(null); reload(); } else toast(r.message, 'error');
         } catch (e) { toast(e.message, 'error'); }
     };
+
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-500 dark:text-brand-400">{costCenters.length} مركز</span>
-                <Btn color="green" onClick={() => setEditing({ ...blank })}><Plus size={15} /> مركز جديد</Btn>
+            {/* تبويبات فرعية */}
+            <div className="flex gap-1 border-b border-slate-200 dark:border-brand-700 pb-0">
+                {[
+                    { id: 'list',   label: 'المراكز',       icon: <Layers size={14} /> },
+                    { id: 'report', label: 'قائمة الأرباح', icon: <TrendingUp size={14} /> },
+                ].map(s => (
+                    <button key={s.id} onClick={() => setSub(s.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-t-xl border-b-2 transition
+                            ${sub === s.id
+                                ? 'border-[#c5a059] text-[#c5a059]'
+                                : 'border-transparent text-slate-500 dark:text-brand-400 hover:text-[#c5a059]'}`}>
+                        {s.icon}{s.label}
+                    </button>
+                ))}
             </div>
-            {loading ? <Spinner /> : costCenters.length === 0 ? <Empty msg="لا توجد مراكز تكلفة" /> : (
-                <Card>
-                    <table className="w-full text-right text-sm">
-                        <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
-                            <tr><th className="px-3 py-3 font-bold">الكود</th><th className="px-3 py-3 font-bold">الاسم</th><th className="px-3 py-3 font-bold text-center w-16">تعديل</th></tr>
-                        </thead>
-                        <tbody>
-                            {costCenters.map(c => (
-                                <tr key={c.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
-                                    <td className="px-3 py-2.5 font-mono text-slate-500 dark:text-brand-400">{c.code || '—'}</td>
-                                    <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-brand-300">{c.name}</td>
-                                    <td className="px-3 py-2.5 text-center">
-                                        <button onClick={() => setEditing({ id: c.id, code: c.code || '', name: c.name, parent_id: c.parent_id || '' })} className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
-                                    </td>
-                                </tr>
+
+            {/* ── قائمة المراكز ── */}
+            {sub === 'list' && (<>
+                <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500 dark:text-brand-400">{costCenters.length} مركز</span>
+                    <Btn color="green" onClick={() => setEditing({ ...blank })}><Plus size={15} /> مركز جديد</Btn>
+                </div>
+                {loading ? <Spinner /> : costCenters.length === 0 ? <Empty msg="لا توجد مراكز تكلفة" /> : (
+                    <Card>
+                        <table className="w-full text-right text-sm">
+                            <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
+                                <tr><th className="px-3 py-3 font-bold">الكود</th><th className="px-3 py-3 font-bold">الاسم</th><th className="px-3 py-3 font-bold text-center w-16">تعديل</th></tr>
+                            </thead>
+                            <tbody>
+                                {costCenters.map(c => (
+                                    <tr key={c.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
+                                        <td className="px-3 py-2.5 font-mono text-slate-500 dark:text-brand-400">{c.code || '—'}</td>
+                                        <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-brand-300">{c.name}</td>
+                                        <td className="px-3 py-2.5 text-center">
+                                            <button onClick={() => setEditing({ id: c.id, code: c.code || '', name: c.name, parent_id: c.parent_id || '' })}
+                                                className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </Card>
+                )}
+            </>)}
+
+            {/* ── تقرير الأرباح والخسائر ── */}
+            {sub === 'report' && (
+                <div className="space-y-4">
+                    {/* شريط الفلتر */}
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">من تاريخ</label>
+                            <input type="date" value={rpFrom} onChange={e => setRpFrom(e.target.value)}
+                                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900" />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">إلى تاريخ</label>
+                            <input type="date" value={rpTo} onChange={e => setRpTo(e.target.value)}
+                                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900" />
+                        </div>
+                        <Btn color="navy" onClick={loadReport} disabled={rpLoading}>
+                            {rpLoading ? <Loader2 size={14} className="animate-spin" /> : <FileBarChart2 size={14} />}
+                            {rpLoading ? 'جارٍ التحميل…' : 'توليد التقرير'}
+                        </Btn>
+                        {rpData && (<>
+                            <Btn color="gray" size="sm" onClick={exportRpCSV}><Download size={13} /> CSV</Btn>
+                            <Btn color="gray" size="sm" onClick={printReport}><Printer size={13} /> طباعة</Btn>
+                        </>)}
+                    </div>
+
+                    {rpLoading ? <Spinner /> : !rpData ? (
+                        <div className="text-center py-16 text-slate-300 dark:text-brand-600 font-bold text-sm">
+                            اختر الفترة ثم اضغط «توليد التقرير»
+                        </div>
+                    ) : rpData.data.length === 0 ? <Empty msg="لا توجد حركات في هذه الفترة" /> : (<>
+                        {/* بطاقات ملخص */}
+                        <div className="grid grid-cols-3 gap-3">
+                            {[
+                                { label: 'إجمالي الإيرادات', val: rpData.totals.revenue, cls: 'text-emerald-700 dark:text-emerald-400' },
+                                { label: 'إجمالي المصروفات', val: rpData.totals.expense, cls: 'text-rose-600 dark:text-rose-400' },
+                                { label: 'صافي الربح / الخسارة', val: rpData.totals.net,
+                                  cls: rpData.totals.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400 font-black' },
+                            ].map(c => (
+                                <div key={c.label} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 px-4 py-3 shadow-sm">
+                                    <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                    <div className={`text-xl font-black tabular-nums ${c.cls}`} dir="ltr">{money(c.val)}</div>
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
-                </Card>
+                        </div>
+
+                        {/* جدول التفاصيل */}
+                        <Card>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
+                                        <tr>
+                                            <th className="px-3 py-3 font-bold text-right">مركز التكلفة</th>
+                                            <th className="px-3 py-3 font-bold text-left">الإيرادات</th>
+                                            <th className="px-3 py-3 font-bold text-left">المصروفات</th>
+                                            <th className="px-3 py-3 font-bold text-left">الصافي</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rpData.data.map(r => (
+                                            <tr key={r.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                                <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-brand-300">
+                                                    {r.name}
+                                                    {r.code && <span className="mr-2 text-[11px] font-mono text-slate-400 dark:text-brand-500">{r.code}</span>}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-left tabular-nums text-emerald-700 dark:text-emerald-400 font-bold" dir="ltr">
+                                                    {r.revenue > 0 ? money(r.revenue) : <span className="text-slate-300 dark:text-brand-600">—</span>}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-left tabular-nums text-rose-600 dark:text-rose-400 font-bold" dir="ltr">
+                                                    {r.expense > 0 ? money(r.expense) : <span className="text-slate-300 dark:text-brand-600">—</span>}
+                                                </td>
+                                                <td className={`px-3 py-2.5 text-left tabular-nums font-black ${r.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`} dir="ltr">
+                                                    {money(r.net)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="bg-slate-50 dark:bg-brand-800/60 font-black border-t-2 border-slate-200 dark:border-brand-700">
+                                            <td className="px-3 py-3 text-brand-800 dark:text-brand-100">الإجمالي</td>
+                                            <td className="px-3 py-3 text-left tabular-nums text-emerald-700 dark:text-emerald-400" dir="ltr">{money(rpData.totals.revenue)}</td>
+                                            <td className="px-3 py-3 text-left tabular-nums text-rose-600 dark:text-rose-400" dir="ltr">{money(rpData.totals.expense)}</td>
+                                            <td className={`px-3 py-3 text-left tabular-nums ${rpData.totals.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`} dir="ltr">{money(rpData.totals.net)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </Card>
+                    </>)}
+                </div>
             )}
+
+            {/* مودال التعديل */}
             {editing && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
                     <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()} dir="rtl">
