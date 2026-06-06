@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowDownCircle, ArrowUpCircle, Plus, Calendar, DollarSign,
   Wallet, RefreshCw, AlertTriangle, CheckCircle2, X, Search,
@@ -6,6 +7,7 @@ import {
 } from 'lucide-react';
 
 import { API_URL } from '../../lib/api/client';
+import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 
 // ─── تنسيق الأرقام ───────────────────────────────────────────────
 const fmt = (n) =>
@@ -59,6 +61,9 @@ function SummaryChip({ icon: Icon, label, value, color }) {
 // المكوّن الرئيسي
 // ════════════════════════════════════════════════════════════════
 export default function PaymentsManage() {
+  const navigate   = useNavigate();
+  const partyDir   = usePartyDirectory();
+
   // ─── التبويب النشط ───────────────────────────────────────────
   const [tab, setTab] = useState('collection'); // collection | payments
 
@@ -642,7 +647,17 @@ export default function PaymentsManage() {
                           #{r.invoice_no || '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-700 dark:text-brand-300 font-bold">{r.client || '—'}</td>
+                      <td className="px-4 py-3 text-xs font-bold">
+                        {(() => {
+                          const pid = partyDir.byDaftraId?.[String(r.client_id || '')];
+                          return pid ? (
+                            <button onClick={() => navigate(`/admin/dashboard/parties/${pid}`)}
+                              className="text-brand-800 dark:text-brand-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-right">
+                              {r.client || '—'}
+                            </button>
+                          ) : <span className="text-slate-700 dark:text-brand-300">{r.client || '—'}</span>;
+                        })()}
+                      </td>
                       <td className="px-4 py-3 text-xs font-black text-green-600 dark:text-green-300 whitespace-nowrap">{fmt(r.amount)}</td>
                       <td className="px-4 py-3 text-xs text-slate-600 dark:text-brand-300 font-medium whitespace-nowrap">{methodLabel(r.method)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{r.treasury || '—'}</td>
@@ -732,7 +747,17 @@ export default function PaymentsManage() {
                           #{r.purchase_id || '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-700 dark:text-brand-300 font-bold">{r.supplier || '—'}</td>
+                      <td className="px-4 py-3 text-xs font-bold">
+                        {(() => {
+                          const pid = partyDir.byDaftraId?.[String(r.supplier_id || '')];
+                          return pid ? (
+                            <button onClick={() => navigate(`/admin/dashboard/parties/${pid}`)}
+                              className="text-brand-800 dark:text-brand-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-right">
+                              {r.supplier || '—'}
+                            </button>
+                          ) : <span className="text-slate-700 dark:text-brand-300">{r.supplier || '—'}</span>;
+                        })()}
+                      </td>
                       <td className="px-4 py-3 text-xs font-black text-red-600 dark:text-red-300 whitespace-nowrap">{fmt(r.amount)}</td>
                       <td className="px-4 py-3 text-xs text-slate-600 dark:text-brand-300 font-medium whitespace-nowrap">{methodLabel(r.method)}</td>
                       <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{r.treasury || '—'}</td>

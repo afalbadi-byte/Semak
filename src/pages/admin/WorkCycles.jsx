@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Layers, RefreshCw, ChevronLeft, Building2, DollarSign, ExternalLink,
     TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, ShoppingCart,
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 
 import { API_URL } from '../../lib/api/client';
+import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 const DAFTRA  = "https://semak.daftra.com";
 
 const fmt = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -164,6 +166,8 @@ function Row({ icon: Icon, label, value, highlight }) {
    صفحة التفاصيل الكاملة
 ═══════════════════════════════════════════════════════ */
 function Detail({ wc, onBack }) {
+    const navigate   = useNavigate();
+    const partyDir   = usePartyDirectory();
     const [data,     setData]     = useState(null);
     const [finance,  setFinance]  = useState(null);
     const [invoices, setInvoices] = useState([]);
@@ -330,9 +334,10 @@ function Detail({ wc, onBack }) {
                 <Sec title={`الفواتير (${invoices.length})`} icon={Receipt} color="blue" open={open.invoices} onToggle={() => tog('invoices')}>
                     <TTable rows={invoices} cols={[
                         {key:'no', label:'رقم'}, {key:'date', label:'التاريخ'},
-                        {key:'client', label:'العميل'}, {key:'total', label:'الإجمالي', fmt},
+                        {key:'client', label:'العميل', linkKey:'client_id'},
+                        {key:'total', label:'الإجمالي', fmt},
                         {key:'paid', label:'المدفوع', fmt},
-                    ]}/>
+                    ]} navigate={navigate} partyDir={partyDir}/>
                 </Sec>
             )}
 
@@ -341,8 +346,9 @@ function Detail({ wc, onBack }) {
                 <Sec title={`أوامر الشراء (${purchases.length})`} icon={ShoppingCart} color="amber" open={open.purchases} onToggle={() => tog('purchases')}>
                     <TTable rows={purchases} cols={[
                         {key:'no', label:'رقم'}, {key:'date', label:'التاريخ'},
-                        {key:'supplier', label:'المورد'}, {key:'total', label:'الإجمالي', fmt},
-                    ]}/>
+                        {key:'supplier', label:'المورد', linkKey:'supplier_id'},
+                        {key:'total', label:'الإجمالي', fmt},
+                    ]} navigate={navigate} partyDir={partyDir}/>
                 </Sec>
             )}
 
@@ -436,7 +442,7 @@ function BudgetBar({ f }) {
     );
 }
 
-function TTable({ rows, cols }) {
+function TTable({ rows, cols, navigate, partyDir }) {
     return (
         <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-brand-700">
             <table className="w-full text-right text-sm">
@@ -446,7 +452,24 @@ function TTable({ rows, cols }) {
                 <tbody className="divide-y divide-slate-50 dark:divide-brand-700">
                     {rows.map((row, i) => (
                         <tr key={i} className="hover:bg-slate-50/60 dark:hover:bg-brand-800">
-                            {cols.map(c => <td key={c.key} className="px-3 py-2.5 text-slate-700 dark:text-brand-300">{c.fmt ? c.fmt(row[c.key]) : (row[c.key]||'—')}</td>)}
+                            {cols.map(c => {
+                                const display = c.fmt ? c.fmt(row[c.key]) : (row[c.key] || '—');
+                                const pid = c.linkKey && partyDir
+                                    ? partyDir.byDaftraId?.[String(row[c.linkKey] || '')]
+                                    : null;
+                                return (
+                                    <td key={c.key} className="px-3 py-2.5 text-slate-700 dark:text-brand-300">
+                                        {pid && navigate ? (
+                                            <button
+                                                onClick={() => navigate(`/admin/dashboard/parties/${pid}`)}
+                                                className="font-bold text-brand-800 dark:text-brand-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-right"
+                                            >
+                                                {display}
+                                            </button>
+                                        ) : display}
+                                    </td>
+                                );
+                            })}
                         </tr>
                     ))}
                 </tbody>

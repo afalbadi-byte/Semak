@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-06-v418
+// deploy: 2026-06-06-v419
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -987,7 +987,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v418','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v419','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -6054,7 +6054,7 @@ switch ($action) {
         foreach ($all_inv as $r) {
             $i = $r['Invoice'] ?? [];
             if ((int)($i['work_order_id'] ?? 0) !== $wc_id) continue;
-            $matched_inv[] = ['id'=>$i['id'],'no'=>$i['no'],'date'=>$i['date'],'client'=>$i['client_business_name']??'','total'=>(float)($i['summary_total']??0),'paid'=>(float)($i['summary_paid']??0)];
+            $matched_inv[] = ['id'=>$i['id'],'no'=>$i['no'],'date'=>$i['date'],'client'=>$i['client_business_name']??'','client_id'=>$i['client_id']??'','total'=>(float)($i['summary_total']??0),'paid'=>(float)($i['summary_paid']??0)];
             $rev += (float)($i['summary_total']??0);
             $paid_rev += (float)($i['summary_paid']??0);
         }
@@ -6063,7 +6063,7 @@ switch ($action) {
         foreach ($all_pur as $r) {
             $p = $r['PurchaseOrder'] ?? [];
             if ((int)($p['work_order_id'] ?? 0) !== $wc_id) continue;
-            $matched_pur[] = ['id'=>$p['id'],'no'=>$p['no'],'date'=>$p['date'],'supplier'=>$p['supplier_business_name']??'','total'=>(float)($p['summary_total']??0),'paid'=>(float)($p['summary_paid']??0)];
+            $matched_pur[] = ['id'=>$p['id'],'no'=>$p['no'],'date'=>$p['date'],'supplier'=>$p['supplier_business_name']??'','supplier_id'=>$p['supplier_id']??'','total'=>(float)($p['summary_total']??0),'paid'=>(float)($p['summary_paid']??0)];
             $purchases += (float)($p['summary_total']??0);
         }
 
@@ -7697,13 +7697,13 @@ KNOWLEDGE;
         $type = $conn->real_escape_string($_GET['type'] ?? '');
         $q    = $conn->real_escape_string(trim($_GET['search'] ?? ''));
         $pg   = max(1,(int)($_GET['page'] ?? 1));
-        $lim  = 50; $off = ($pg-1)*$lim;
+        $lim  = min(500,(int)($_GET['limit'] ?? 50)); $off = ($pg-1)*$lim;
         $w    = "p.tenant_id=$tid AND p.status=1";
         if (in_array($type, ['customer','supplier','partner'])) $w .= " AND p.type='$type'";
         if ($q) $w .= " AND (p.name LIKE '%$q%' OR p.phone LIKE '%$q%' OR p.email LIKE '%$q%' OR p.vat_number LIKE '%$q%')";
         $res = $conn->query("
             SELECT p.id,p.type,p.name,p.phone,p.email,p.address,p.vat_number,p.cr_number,
-                   COALESCE(p.notes,'') notes, p.created_at,
+                   COALESCE(p.notes,'') notes, COALESCE(p.daftra_id,'') daftra_id, p.created_at,
                    COALESCE(b.net,0) net
             FROM acc_parties p
             LEFT JOIN (SELECT party_id, SUM(debit-credit) net FROM acc_lines WHERE tenant_id=$tid GROUP BY party_id) b ON b.party_id=p.id

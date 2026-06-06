@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Calendar, User, DollarSign, Receipt,
   Edit3, Trash2, Eye, ChevronLeft, RefreshCw,
@@ -12,6 +13,7 @@ import SortHeader from '../../components/SortHeader';
 import TablePager from '../../components/TablePager';
 
 import { API_URL } from '../../lib/api/client';
+import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 
 // ─── حساب حالة الفاتورة ──────────────────────────────────────────
 function invoiceStatus(total, paid) {
@@ -102,6 +104,9 @@ function ConfirmDialog({ msg, onConfirm, onCancel }) {
 // المكوّن الرئيسي
 // ════════════════════════════════════════════════════════════════
 export default function InvoicesManage({ user, navigateTo, showToast: externalToast }) {
+  const navigate   = useNavigate();
+  const partyDir   = usePartyDirectory();
+
   // ─── حالة العرض ─────────────────────────────────────────────
   const [view, setView]               = useState('list');
   const [invoices, setInvoices]       = useState([]);
@@ -605,7 +610,17 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{inv.date || '—'}</td>
-                        <td className="px-4 py-3 text-xs text-slate-700 dark:text-brand-300 font-bold">{inv.client || '—'}</td>
+                        <td className="px-4 py-3 text-xs font-bold">
+                          {(() => {
+                            const pid = partyDir.byDaftraId?.[String(inv.client_id || '')];
+                            return pid ? (
+                              <button onClick={() => navigate(`/admin/dashboard/parties/${pid}`)}
+                                className="text-brand-800 dark:text-brand-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-right">
+                                {inv.client || '—'}
+                              </button>
+                            ) : <span className="text-slate-700 dark:text-brand-300">{inv.client || '—'}</span>;
+                          })()}
+                        </td>
                         <td className="px-4 py-3 text-xs font-black text-slate-700 dark:text-brand-100 whitespace-nowrap">{fmt(inv.total, inv.currency)}</td>
                         <td className="px-4 py-3 text-xs font-bold text-green-600 whitespace-nowrap">{fmt(inv.paid, inv.currency)}</td>
                         <td className="px-4 py-3 text-xs font-bold text-amber-600 whitespace-nowrap">{fmt(remaining, inv.currency)}</td>

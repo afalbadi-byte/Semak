@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Calendar, DollarSign, ShoppingCart,
   Building, Edit3, ChevronLeft, RefreshCw,
@@ -11,6 +12,7 @@ import SortHeader from '../../components/SortHeader';
 import TablePager from '../../components/TablePager';
 
 import { API_URL } from '../../lib/api/client';
+import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 
 // ─── تنسيق الأرقام ───────────────────────────────────────────────
 const fmt = (n) =>
@@ -57,6 +59,9 @@ function SummaryChip({ icon: Icon, label, value, color }) {
 // المكوّن الرئيسي
 // ════════════════════════════════════════════════════════════════
 export default function PurchasesManage({ user, navigateTo, showToast: externalToast }) {
+  const navigate   = useNavigate();
+  const partyDir   = usePartyDirectory();
+
   // ─── حالة العرض ─────────────────────────────────────────────
   const [view, setView]             = useState('list');
   const [purchases, setPurchases]   = useState([]);
@@ -393,7 +398,15 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <Truck size={13} className="text-slate-300 shrink-0" />
-                            <span className="text-xs text-slate-700 dark:text-brand-300 font-bold">{p.supplier || '—'}</span>
+                            {(() => {
+                              const pid = partyDir.byDaftraId?.[String(p.supplier_id || '')];
+                              return pid ? (
+                                <button onClick={() => navigate(`/admin/dashboard/parties/${pid}`)}
+                                  className="text-xs font-bold text-brand-800 dark:text-brand-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-right">
+                                  {p.supplier || '—'}
+                                </button>
+                              ) : <span className="text-xs text-slate-700 dark:text-brand-300 font-bold">{p.supplier || '—'}</span>;
+                            })()}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs font-black text-slate-700 dark:text-brand-300 whitespace-nowrap">{fmt(p.total)}</td>
