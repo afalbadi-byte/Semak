@@ -4390,6 +4390,117 @@ switch ($action) {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
+    //  القيود المتكررة / المجدولة
+    // ════════════════════════════════════════════════════════════════════
+    case 'gl_recurring_list': {
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_recurring_entries (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tenant_id INT NOT NULL DEFAULT 1,
+            name VARCHAR(200) NOT NULL,
+            template_id INT DEFAULT NULL,
+            frequency ENUM('daily','weekly','monthly','quarterly','annually') NOT NULL DEFAULT 'monthly',
+            next_date DATE NOT NULL,
+            end_date DATE DEFAULT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            last_run_at DATETIME DEFAULT NULL,
+            last_entry_no VARCHAR(30) DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_rec_tenant (tenant_id),
+            KEY idx_rec_next (next_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $rows = [];
+        $today = date('Y-m-d');
+        $res = $conn->query("SELECT r.*,t.name AS tpl_name
+                             FROM acc_recurring_entries r
+                             LEFT JOIN acc_entry_templates t ON t.id=r.template_id
+                             WHERE r.tenant_id=$tid ORDER BY r.next_date ASC");
+        while ($res && ($x = $res->fetch_assoc())) {
+            $x['is_due'] = ($x['next_date'] <= $today && $x['is_active'] && (!$x['end_date'] || $x['end_date'] >= $today)) ? 1 : 0;
+            $rows[] = $x;
+        }
+        $due = count(array_filter($rows, fn($r)=>$r['is_due']));
+        echo json_encode(['success'=>true,'data'=>$rows,'due_count'=>$due], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_recurring_save': {
+        $tid      = (int)($input_data['tenant_id'] ?? 1);
+        $id       = (int)($input_data['id'] ?? 0);
+        $name     = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $tplId    = (int)($input_data['template_id'] ?? 0) ?: 'NULL';
+        $freq     = in_array($input_data['frequency']??'', ['daily','weekly','monthly','quarterly','annually']) ? $input_data['frequency'] : 'monthly';
+        $nextDate = $conn->real_escape_string($input_data['next_date'] ?? date('Y-m-d'));
+        $endDate  = trim($input_data['end_date'] ?? '') ? "'".$conn->real_escape_string($input_data['end_date'])."'" : 'NULL';
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+        if ($id) {
+            $conn->query("UPDATE acc_recurring_entries SET name='$name',template_id=$tplId,frequency='$freq',next_date='$nextDate',end_date=$endDate WHERE id=$id AND tenant_id=$tid");
+        } else {
+            $conn->query("INSERT INTO acc_recurring_entries (tenant_id,name,template_id,frequency,next_date,end_date) VALUES ($tid,'$name',$tplId,'$freq','$nextDate',$endDate)");
+            $id = (int)$conn->insert_id;
+        }
+        echo json_encode(['success'=>true,'id'=>$id,'message'=>'تم الحفظ'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_recurring_toggle': {
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $id   = (int)($input_data['id'] ?? 0);
+        $conn->query("UPDATE acc_recurring_entries SET is_active = 1-is_active WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>true,'message'=>'تم التحديث'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_recurring_delete': {
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $id  = (int)($input_data['id'] ?? 0);
+        $conn->query("DELETE FROM acc_recurring_entries WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>true,'message'=>'تم الحذف'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_recurring_run': {
+        // ترحيل قيد متكرر مستحق: يُنشئ قيداً من القالب ويُحدّث next_date
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $id  = (int)($input_data['id'] ?? 0);
+        $rr  = $conn->query("SELECT r.*,t.name AS tpl_name FROM acc_recurring_entries r LEFT JOIN acc_entry_templates t ON t.id=r.template_id WHERE r.id=$id AND r.tenant_id=$tid LIMIT 1");
+        $rec = $rr ? $rr->fetch_assoc() : null;
+        if (!$rec) { echo json_encode(['success'=>false,'message'=>'قيد غير موجود']); break; }
+        if (!$rec['template_id']) { echo json_encode(['success'=>false,'message'=>'لا يوجد قالب مرتبط بهذا القيد']); break; }
+
+        // جلب بنود القالب
+        $lr = $conn->query("SELECT * FROM acc_entry_template_lines WHERE template_id={$rec['template_id']} AND tenant_id=$tid ORDER BY seq");
+        $lines = []; while ($lr && ($l = $lr->fetch_assoc())) $lines[] = ['account_id'=>(int)$l['account_id'],'debit'=>(float)$l['debit'],'credit'=>(float)$l['credit'],'description'=>$l['description'],'cost_center_id'=>$l['cost_center_id']?:(int)0?:null];
+        if (count($lines) < 2) { echo json_encode(['success'=>false,'message'=>'القالب يحتاج بندين على الأقل']); break; }
+
+        $conn->begin_transaction();
+        try {
+            $today = date('Y-m-d');
+            $r = acc_post_entry($conn, $tid, $today, $rec['name'], 'recurring', $id, null, $lines, 1);
+
+            // احسب next_date التالية
+            $nd = new DateTime($rec['next_date']);
+            switch ($rec['frequency']) {
+                case 'daily':     $nd->modify('+1 day');    break;
+                case 'weekly':    $nd->modify('+7 days');   break;
+                case 'monthly':   $nd->modify('+1 month');  break;
+                case 'quarterly': $nd->modify('+3 months'); break;
+                case 'annually':  $nd->modify('+1 year');   break;
+            }
+            $nextDate = $nd->format('Y-m-d');
+            $eno = $conn->real_escape_string($r['eno']);
+            $conn->query("UPDATE acc_recurring_entries SET next_date='$nextDate',last_run_at=NOW(),last_entry_no='$eno' WHERE id=$id AND tenant_id=$tid");
+            $conn->commit();
+            acc_audit($conn,$tid,'gl',null,'recurring_run',"id=$id eno={$r['eno']} next=$nextDate",null);
+            echo json_encode(['success'=>true,'entry_no'=>$r['eno'],'next_date'=>$nextDate,'message'=>"تم ترحيل القيد ({$r['eno']})"], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>'فشل الترحيل: '.$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
     //  قوالب القيود اليومية
     // ════════════════════════════════════════════════════════════════════
     case 'gl_templates': {

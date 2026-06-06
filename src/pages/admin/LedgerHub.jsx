@@ -641,6 +641,200 @@ function TemplatesManager({ templates, reload, accounts, costCenters, onBack, on
     );
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+//  القيود المتكررة / المجدولة
+// ════════════════════════════════════════════════════════════════════════════
+const FREQ_LABELS = { daily:'يومي', weekly:'أسبوعي', monthly:'شهري', quarterly:'ربع سنوي', annually:'سنوي' };
+const FREQ_OPTS   = ['daily','weekly','monthly','quarterly','annually'];
+
+function RecurringManager({ templates, onBack, toast }) {
+    const [items,   setItems]   = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [busy,    setBusy]    = useState(null);
+
+    const blank = () => ({ id:0, name:'', template_id:'', frequency:'monthly', next_date: todayISO(), end_date:'' });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try { const r = await api('gl_recurring_list'); if (r.success) setItems(r.data||[]); }
+        catch (e) { toast(e.message,'error'); } finally { setLoading(false); }
+    }, [toast]);
+    useEffect(() => { load(); }, [load]);
+
+    const save = async () => {
+        if (!editing.name) { toast('الاسم مطلوب','error'); return; }
+        if (!editing.template_id) { toast('اختر قالباً','error'); return; }
+        try {
+            const r = await api('gl_recurring_save', { method:'POST', body:{ ...editing, id:editing.id||0 }});
+            if (r.success) { toast(r.message); setEditing(null); load(); } else toast(r.message,'error');
+        } catch (e) { toast(e.message,'error'); }
+    };
+
+    const toggle = async (id) => {
+        try { const r = await api('gl_recurring_toggle', { method:'POST', body:{ id }}); if (r.success) load(); else toast(r.message,'error'); }
+        catch (e) { toast(e.message,'error'); }
+    };
+
+    const del = async (id) => {
+        if (!window.confirm('حذف هذا القيد المتكرر؟')) return;
+        try { const r = await api('gl_recurring_delete', { method:'POST', body:{ id }}); if (r.success) { toast(r.message); load(); } else toast(r.message,'error'); }
+        catch (e) { toast(e.message,'error'); }
+    };
+
+    const run = async (id) => {
+        setBusy(id);
+        try {
+            const r = await api('gl_recurring_run', { method:'POST', body:{ id }});
+            if (r.success) { toast(`✓ ${r.message}`); load(); } else toast(r.message,'error');
+        } catch (e) { toast(e.message,'error'); } finally { setBusy(null); }
+    };
+
+    const today = todayISO();
+    const dueItems = items.filter(i => i.is_due);
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                    <button onClick={onBack} className="text-slate-400 dark:text-brand-500 hover:text-brand-800 dark:hover:text-brand-100"><X size={18}/></button>
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">
+                        القيود المتكررة
+                        {dueItems.length > 0 && <span className="mr-2 text-sm px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{dueItems.length} مستحق</span>}
+                    </h3>
+                </div>
+                <div className="flex gap-2">
+                    {dueItems.length > 0 && (
+                        <Btn color="green" size="sm" onClick={async () => {
+                            for (const it of dueItems) { await run(it.id); }
+                        }}>
+                            <CheckCircle2 size={13}/> ترحيل الكل المستحق ({dueItems.length})
+                        </Btn>
+                    )}
+                    <Btn color="green" onClick={() => setEditing(blank())}><Plus size={15}/> قيد متكرر جديد</Btn>
+                </div>
+            </div>
+
+            {/* تحذير الاستحقاق */}
+            {dueItems.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-2xl px-4 py-3 flex items-center gap-3">
+                    <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                    <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                        يوجد {dueItems.length} قيد متكرر مستحق الترحيل — راجع القائمة واضغط «ترحيل» لكل قيد أو «ترحيل الكل».
+                    </p>
+                </div>
+            )}
+
+            {loading ? <Spinner /> : items.length === 0 ? <Empty msg="لا توجد قيود متكررة — أنشئ قيداً مجدولاً بناءً على قالب" /> : (
+                <div className="space-y-2">
+                    {items.map(it => {
+                        const isDue = it.is_due == 1;
+                        const isRunning = busy === it.id;
+                        return (
+                            <div key={it.id} className={`bg-white dark:bg-brand-900 rounded-2xl border shadow-sm p-4 flex flex-wrap items-center gap-4 transition
+                                ${isDue ? 'border-amber-300 dark:border-amber-500/40 ring-1 ring-amber-200 dark:ring-amber-500/20' : 'border-slate-100 dark:border-brand-700'}
+                                ${!it.is_active ? 'opacity-60' : ''}`}>
+                                {/* أيقونة */}
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
+                                    ${isDue ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                            : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'}`}>
+                                    <RefreshCw size={18} className={isDue ? 'animate-pulse' : ''}/>
+                                </div>
+                                {/* معلومات */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-bold text-brand-800 dark:text-brand-100">{it.name}</span>
+                                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-500/30">
+                                            {FREQ_LABELS[it.frequency]||it.frequency}
+                                        </span>
+                                        {isDue && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">⚡ مستحق</span>}
+                                        {!it.is_active && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-brand-800 dark:text-brand-400">متوقف</span>}
+                                    </div>
+                                    <div className="text-xs text-slate-400 dark:text-brand-500 mt-0.5 flex flex-wrap gap-3">
+                                        {it.tpl_name && <span>القالب: {it.tpl_name}</span>}
+                                        <span dir="ltr">التالي: {it.next_date}</span>
+                                        {it.end_date && <span dir="ltr">ينتهي: {it.end_date}</span>}
+                                        {it.last_entry_no && <span>آخر ترحيل: {it.last_entry_no}</span>}
+                                    </div>
+                                </div>
+                                {/* أزرار */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    {it.is_active && isDue && (
+                                        <Btn color="green" size="sm" onClick={() => run(it.id)} disabled={isRunning}>
+                                            {isRunning ? <Loader2 size={13} className="animate-spin"/> : <CheckCircle2 size={13}/>}
+                                            ترحيل
+                                        </Btn>
+                                    )}
+                                    <button onClick={() => toggle(it.id)} title={it.is_active?'إيقاف':'تفعيل'}
+                                        className={`text-xs font-bold px-2 py-1 rounded-lg border transition
+                                            ${it.is_active
+                                                ? 'border-slate-200 dark:border-brand-700 text-slate-500 dark:text-brand-400 hover:border-amber-400 hover:text-amber-600'
+                                                : 'border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50'}`}>
+                                        {it.is_active?'إيقاف':'تفعيل'}
+                                    </button>
+                                    <button onClick={() => setEditing({ id:it.id, name:it.name, template_id:it.template_id||'', frequency:it.frequency, next_date:it.next_date, end_date:it.end_date||'' })}
+                                        className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15}/></button>
+                                    <button onClick={() => del(it.id)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15}/></button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* مودال التعديل */}
+            {editing && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-sm p-6" onClick={e=>e.stopPropagation()} dir="rtl">
+                        <div className="flex items-center justify-between mb-5">
+                            <h3 className="font-black text-brand-800 dark:text-brand-100">{editing.id?'تعديل':'قيد متكرر جديد'}</h3>
+                            <button onClick={()=>setEditing(null)} className="text-slate-400 hover:text-red-500"><X size={18}/></button>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">الاسم <span className="text-red-500">*</span></label>
+                                <input value={editing.name} onChange={e=>setEditing(ed=>({...ed,name:e.target.value}))} placeholder="مثال: إهلاك شهري"
+                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">القالب <span className="text-red-500">*</span></label>
+                                <select value={editing.template_id} onChange={e=>setEditing(ed=>({...ed,template_id:e.target.value}))}
+                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                    <option value="">— اختر قالباً —</option>
+                                    {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">التكرار</label>
+                                <select value={editing.frequency} onChange={e=>setEditing(ed=>({...ed,frequency:e.target.value}))}
+                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                    {FREQ_OPTS.map(f => <option key={f} value={f}>{FREQ_LABELS[f]}</option>)}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">التاريخ التالي</label>
+                                    <input type="date" value={editing.next_date} onChange={e=>setEditing(ed=>({...ed,next_date:e.target.value}))}
+                                        className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">تاريخ الانتهاء (اختياري)</label>
+                                    <input type="date" value={editing.end_date} onChange={e=>setEditing(ed=>({...ed,end_date:e.target.value}))}
+                                        className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 mt-5">
+                            <Btn color="green" onClick={save}><Save size={14}/> حفظ</Btn>
+                            <Btn color="gray" onClick={()=>setEditing(null)}>إلغاء</Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function JournalTab({ accounts, parties, costCenters, toast }) {
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -655,7 +849,8 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     const postable = useMemo(() => accounts.filter(a => Number(a.is_group) === 0), [accounts]);
 
     // ── القوالب ───────────────────────────────────────────────────────────
-    const [listSub,     setListSub]     = useState('entries'); // 'entries'|'templates'
+    const [listSub,     setListSub]     = useState('entries'); // 'entries'|'templates'|'recurring'
+    const [dueCount,    setDueCount]    = useState(0);
     const [templates,   setTemplates]   = useState([]);
     const [tmplPicker,  setTmplPicker]  = useState(false); // modal: pick a template to fill form
     const [tmplSaveDlg, setTmplSaveDlg] = useState(false); // modal: save form lines as template
@@ -667,6 +862,11 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
         catch { /* صامت */ }
     }, []);
     useEffect(() => { loadTemplates(); }, [loadTemplates]);
+
+    // فحص القيود المتكررة المستحقة عند التحميل
+    useEffect(() => {
+        api('gl_recurring_list').then(r => { if (r.success) setDueCount(r.due_count||0); }).catch(()=>{});
+    }, []);
 
     const applyTemplate = async (tplId) => {
         try {
@@ -993,6 +1193,16 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     }
 
     // ── قائمة القيود / القوالب ──
+    if (listSub === 'recurring') {
+        return (
+            <RecurringManager
+                templates={templates}
+                onBack={() => { setListSub('entries'); api('gl_recurring_list').then(r=>{ if(r.success) setDueCount(r.due_count||0); }).catch(()=>{}); }}
+                toast={toast}
+            />
+        );
+    }
+
     if (listSub === 'templates') {
         return (
             <TemplatesManager
@@ -1031,6 +1241,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                 {[
                     { id: 'entries',   label: 'القيود اليومية', icon: <FileText size={14} /> },
                     { id: 'templates', label: `القوالب${templates.length > 0 ? ` (${templates.length})` : ''}`, icon: <Copy size={14} /> },
+                    { id: 'recurring', label: `المتكررة${dueCount > 0 ? ` 🔔 ${dueCount}` : ''}`, icon: <RefreshCw size={14} /> },
                 ].map(s => (
                     <button key={s.id} onClick={() => setListSub(s.id)}
                         className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-t-xl border-b-2 transition
