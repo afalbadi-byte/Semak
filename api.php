@@ -4280,6 +4280,68 @@ switch ($action) {
         break;
     }
 
+    case 'gl_assets_depreciate_batch': {
+        // ترحيل إهلاك شهر كامل لجميع الأصول النشطة
+        $tid    = (int)($input_data['tenant_id'] ?? 1);
+        $period = $conn->real_escape_string($input_data['period'] ?? ''); // YYYY-MM-DD (first of month)
+        if (!$period) { echo json_encode(['success'=>false,'message'=>'حدّد الشهر']); break; }
+        $perKey = substr($period, 0, 7);
+
+        // جلب الأصول النشطة غير المكتملة
+        $ra = $conn->query("SELECT a.*,
+            (SELECT COALESCE(SUM(amount),0) FROM acc_asset_depreciations WHERE asset_id=a.id AND tenant_id=$tid) total_depr,
+            (SELECT COUNT(*) FROM acc_asset_depreciations WHERE asset_id=a.id AND tenant_id=$tid) depr_count
+            FROM acc_fixed_assets a
+            WHERE a.tenant_id=$tid AND a.disposed_at IS NULL");
+        $assets = [];
+        while ($ra && ($x=$ra->fetch_assoc())) {
+            $bv = (float)$x['cost'] - (float)$x['total_depr'];
+            if ($bv <= (float)$x['residual_value'] || (int)$x['depr_count'] >= (int)$x['useful_life_months']) continue;
+            // تحقق أن الشهر لم يُرحَّل
+            $ex = $conn->query("SELECT id FROM acc_asset_depreciations WHERE asset_id={$x['id']} AND tenant_id=$tid AND LEFT(period_date,7)='$perKey' LIMIT 1");
+            if ($ex && $ex->num_rows > 0) continue; // تم الترحيل مسبقاً
+            $assets[] = $x;
+        }
+        if (empty($assets)) { echo json_encode(['success'=>false,'message'=>"لا توجد أصول لترحيل إهلاكها في $perKey (قد تكون مكتملة أو مرحّلة مسبقاً)"], JSON_UNESCAPED_UNICODE); break; }
+
+        $results = []; $errors = [];
+        foreach ($assets as $a) {
+            $aid = (int)$a['id'];
+            if (!$a['expense_account_id'] || !$a['accum_depr_account_id']) {
+                $errors[] = "الأصل «{$a['name']}»: غير مرتبط بحسابات إهلاك";
+                continue;
+            }
+            $bv   = (float)$a['cost'] - (float)$a['total_depr'];
+            $resv = (float)$a['residual_value'];
+            $dm   = $a['depreciation_method']; $ulm = (int)$a['useful_life_months'];
+            $mleft= max(0, $ulm - (int)$a['depr_count']);
+            if ($dm === 'straight_line') {
+                $depr = $mleft === 1 ? round($bv - $resv, 2) : round(((float)$a['cost'] - $resv) / $ulm, 2);
+            } else {
+                $rate = 2.0/$ulm; $depr = round($bv*$rate/12,2);
+                if ($depr+$resv > $bv) $depr = max(0,$bv-$resv);
+            }
+            if ($depr <= 0) continue;
+            $bvAfter = round($bv - $depr, 2);
+            $assetName = $conn->real_escape_string($a['name']);
+            $lines = [
+                ['account_id'=>(int)$a['expense_account_id'], 'debit'=>$depr,'credit'=>0,'description'=>"إهلاك $assetName — $perKey"],
+                ['account_id'=>(int)$a['accum_depr_account_id'],'debit'=>0,'credit'=>$depr,'description'=>"مجمع إهلاك $assetName — $perKey"],
+            ];
+            $conn->begin_transaction();
+            try {
+                $er  = acc_post_entry($conn,$tid,$period,"إهلاك: $assetName ($perKey)",'depreciation',$aid,null,$lines,1);
+                $eid = (int)$conn->query("SELECT id FROM acc_entries WHERE entry_no='".$conn->real_escape_string($er['eno'])."' AND tenant_id=$tid LIMIT 1")->fetch_assoc()['id'];
+                $conn->query("INSERT INTO acc_asset_depreciations (tenant_id,asset_id,period_date,amount,book_value_after,entry_id) VALUES ($tid,$aid,'$period',$depr,$bvAfter,$eid)");
+                $conn->commit();
+                $results[] = ['asset'=>$a['name'],'entry_no'=>$er['eno'],'amount'=>$depr,'book_value_after'=>$bvAfter];
+            } catch (Exception $e) { $conn->rollback(); $errors[] = "الأصل «{$a['name']}»: ".$e->getMessage(); }
+        }
+        echo json_encode(['success'=>count($results)>0,'posted'=>$results,'errors'=>$errors,
+            'message'=>count($results).' أصل — '.count($errors).' خطأ'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  بيان التدفقات النقدية (الطريقة غير المباشرة)
     // ════════════════════════════════════════════════════════════════════

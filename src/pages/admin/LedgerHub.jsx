@@ -3,7 +3,7 @@ import QRCode from 'react-qr-code';
 import {
     BookOpen, FileText, Layers, Plus, Trash2, RefreshCw, Save, X, Search,
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
-    AlertTriangle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
+    AlertTriangle, AlertCircle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
     Settings, Printer, Building2, Loader2, Package, Calendar, Lock, Unlock,
     ChevronRight, Activity, ArrowRightLeft,
 } from 'lucide-react';
@@ -4647,10 +4647,12 @@ function FixedAssetsTab({ accounts, toast }) {
     const [busy, setBusy]       = useState(false);
 
     // ترحيل الإهلاك
-    const [deprAsset,  setDeprAsset]  = useState('');
-    const [deprPeriod, setDeprPeriod] = useState(() => todayISO().slice(0, 7));
-    const [deprResult, setDeprResult] = useState(null);
-    const [deprBusy,   setDeprBusy]   = useState(false);
+    const [deprAsset,    setDeprAsset]    = useState('');
+    const [deprPeriod,   setDeprPeriod]   = useState(() => todayISO().slice(0, 7));
+    const [deprResult,   setDeprResult]   = useState(null);
+    const [deprBusy,     setDeprBusy]     = useState(false);
+    const [batchResult,  setBatchResult]  = useState(null);
+    const [batchBusy,    setBatchBusy]    = useState(false);
 
     // جدول الإهلاك
     const [schedAsset, setSchedAsset] = useState('');
@@ -4698,6 +4700,23 @@ function FixedAssetsTab({ accounts, toast }) {
             else toast(r.message || 'خطأ', 'error');
         } catch { toast('خطأ في الاتصال', 'error'); }
         finally { setDeprBusy(false); }
+    };
+
+    const runBatch = async () => {
+        if (!deprPeriod) return toast('اختر الشهر أولاً', 'error');
+        setBatchBusy(true); setBatchResult(null);
+        try {
+            const r = await api('gl_assets_depreciate_batch', { method: 'POST', body: { tenant_id: 1, period: deprPeriod + '-01' } });
+            if (r.success && r.posted?.length > 0) {
+                toast(r.message, 'success');
+                setBatchResult(r);
+                loadAssets();
+            } else {
+                toast(r.message || 'لا توجد أصول مؤهلة للترحيل في هذا الشهر', 'error');
+                if (r.errors?.length) setBatchResult(r);
+            }
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setBatchBusy(false); }
     };
 
     const loadSchedule = useCallback(async (aid) => {
@@ -4915,6 +4934,70 @@ function FixedAssetsTab({ accounts, toast }) {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* ── ترحيل دُفعي لكل الأصول ── */}
+                    <div className="mt-6 pt-5 border-t border-slate-100 dark:border-brand-700">
+                        <h4 className="font-black text-brand-800 dark:text-brand-100 mb-1">ترحيل إهلاك جميع الأصول دفعةً واحدة</h4>
+                        <p className="text-[12px] text-slate-500 dark:text-brand-400 mb-4">يُرحّل قيد إهلاك لكل أصل نشط لم يُرحَّل بعد في الشهر المحدد أعلاه.</p>
+                        <Btn color="navy" onClick={runBatch} disabled={batchBusy || !deprPeriod}>
+                            {batchBusy ? <Loader2 size={14} className="animate-spin" /> : <ArrowRightLeft size={14} />}
+                            ترحيل إهلاك الكل
+                        </Btn>
+                    </div>
+
+                    {batchResult && (
+                        <div className="mt-5 space-y-3">
+                            {batchResult.posted?.length > 0 && (
+                                <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-black">
+                                            <CheckCircle2 size={16} /> تم ترحيل {batchResult.posted.length} أصل
+                                        </span>
+                                        <span className="text-[12px] font-bold text-slate-500 dark:text-brand-400">
+                                            إجمالي: {money(batchResult.posted.reduce((s, r) => s + Number(r.amount), 0))} ﷼
+                                        </span>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-xs">
+                                            <thead>
+                                                <tr className="text-slate-400 dark:text-brand-500 font-black border-b border-emerald-100 dark:border-emerald-500/20">
+                                                    <th className="text-right py-1.5 px-2">الأصل</th>
+                                                    <th className="text-left py-1.5 px-2">مبلغ الإهلاك</th>
+                                                    <th className="text-left py-1.5 px-2">القيمة الدفترية بعده</th>
+                                                    <th className="text-right py-1.5 px-2">رقم القيد</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {batchResult.posted.map((r, i) => (
+                                                    <tr key={i} className="border-b border-emerald-50 dark:border-emerald-500/10">
+                                                        <td className="py-1.5 px-2 font-bold text-brand-800 dark:text-brand-100">{r.asset}</td>
+                                                        <td className="py-1.5 px-2 text-left tabular-nums" dir="ltr">{money(r.amount)} ﷼</td>
+                                                        <td className="py-1.5 px-2 text-left tabular-nums" dir="ltr">{money(r.book_value_after)} ﷼</td>
+                                                        <td className="py-1.5 px-2 font-mono text-slate-500 dark:text-brand-400">{r.entry_no}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                            {batchResult.errors?.length > 0 && (
+                                <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30">
+                                    <div className="font-black text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-2">
+                                        <AlertCircle size={15} /> أخطاء ({batchResult.errors.length})
+                                    </div>
+                                    <ul className="space-y-1">
+                                        {batchResult.errors.map((e, i) => (
+                                            <li key={i} className="text-xs font-bold text-rose-600 dark:text-rose-400 flex gap-2">
+                                                <span className="shrink-0">·</span>
+                                                <span>{e.asset}: {e.error}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     )}
                 </Card>
