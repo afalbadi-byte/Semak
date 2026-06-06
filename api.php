@@ -3768,10 +3768,11 @@ switch ($action) {
         // دليل الحسابات + الرصيد المحسوب من البنود (كودنا يحسب)
         $tid = (int)($_GET['tenant'] ?? 1);
         $sql = "SELECT a.*,
-                   COALESCE(SUM(l.debit),0)  AS sum_debit,
-                   COALESCE(SUM(l.credit),0) AS sum_credit
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 THEN l.debit  ELSE 0 END),0) AS sum_debit,
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 THEN l.credit ELSE 0 END),0) AS sum_credit
                 FROM acc_accounts a
-                LEFT JOIN acc_lines l ON l.account_id=a.id AND l.tenant_id=a.tenant_id
+                LEFT JOIN acc_lines   l ON l.account_id=a.id AND l.tenant_id=a.tenant_id
+                LEFT JOIN acc_entries e ON e.id=l.entry_id
                 WHERE a.tenant_id=$tid
                 GROUP BY a.id
                 ORDER BY a.code";

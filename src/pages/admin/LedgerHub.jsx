@@ -1146,6 +1146,17 @@ function LedgerTab({ accounts, toast }) {
                         <span className="font-black text-brand-800 dark:text-brand-100">{data.account.code} · {data.account.name}</span>
                         <div className="flex items-center gap-3">
                             <span className="text-sm text-slate-500 dark:text-brand-400">رصيد افتتاحي: <span className="font-bold tabular-nums" dir="ltr">{money(data.opening)}</span></span>
+                            <Btn color="gray" size="sm" onClick={() => {
+                                const rows = data.data.map(r =>
+                                    `<tr><td dir="ltr">${r.entry_no}</td><td>${r.date}</td><td>${r.line_desc || r.ent_desc || '—'}</td><td class="amount">${r.debit ? money(r.debit) : ''}</td><td class="amount">${r.credit ? money(r.credit) : ''}</td><td class="amount" style="font-weight:800">${money(r.balance)}</td></tr>`
+                                ).join('');
+                                const tot = `<tr class="total-row"><td colspan="3">الإجمالي</td><td class="amount">${money(data.totals.debit)}</td><td class="amount">${money(data.totals.credit)}</td><td class="amount">${money(data.totals.closing)}</td></tr>`;
+                                printHtml(`كشف حساب: ${data.account.code} · ${data.account.name}`,
+                                    `<h1>كشف حساب: ${data.account.name}</h1><h2>الفترة: ${from} — ${to} | رصيد افتتاحي: ${money(data.opening)} ﷼</h2><table><thead><tr><th>القيد</th><th>التاريخ</th><th>البيان</th><th style="text-align:left">مدين</th><th style="text-align:left">دائن</th><th style="text-align:left">الرصيد</th></tr></thead><tbody>${rows}${tot}</tbody></table>`
+                                );
+                            }}>
+                                <Printer size={14} /> طباعة
+                            </Btn>
                             <Btn color="gray" size="sm" onClick={() => downloadCSV(`ledger_${data.account.code}.csv`,
                                 ['القيد', 'التاريخ', 'البيان', 'مدين', 'دائن', 'الرصيد'],
                                 data.data.map(r => [r.entry_no, r.date, r.line_desc || r.ent_desc || '', r.debit || '', r.credit || '', r.balance]))}>
@@ -1364,7 +1375,21 @@ function PartiesTab({ parties, reload, loading, toast }) {
                     </Card>
                 )
             ) : (
-                agingLoading ? <Spinner /> : !aging || aging.data.length === 0 ? <Empty msg="لا توجد أرصدة" /> : (
+                agingLoading ? <Spinner /> : !aging || aging.data.length === 0 ? <Empty msg="لا توجد أرصدة" /> : (<>
+                    {/* شريط الملخص */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                            { label: 'الإجمالي', val: aging.totals.total, cls: 'text-brand-800 dark:text-brand-100' },
+                            { label: 'جارٍ (غير متأخر)', val: aging.totals.current, cls: 'text-emerald-700 dark:text-emerald-400' },
+                            { label: 'متأخر 1-60 يوم', val: (aging.totals.d30||0)+(aging.totals.d60||0), cls: 'text-amber-600 dark:text-amber-400' },
+                            { label: 'متأخر +60 يوم', val: (aging.totals.d90||0)+(aging.totals.d90p||0), cls: 'text-rose-600 dark:text-rose-400 font-black' },
+                        ].map(({ label, val, cls }) => (
+                            <div key={label} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 px-4 py-3 shadow-sm">
+                                <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{label}</div>
+                                <div className={`text-lg font-black tabular-nums ${cls}`} dir="ltr">{money(val)}</div>
+                            </div>
+                        ))}
+                    </div>
                     <Card>
                         <div className="overflow-x-auto">
                             <table className="w-full text-right text-sm">
@@ -1401,7 +1426,7 @@ function PartiesTab({ parties, reload, loading, toast }) {
                             </table>
                         </div>
                     </Card>
-                )
+                </>)
             )}
 
             {/* نموذج طرف */}
