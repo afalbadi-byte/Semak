@@ -5,7 +5,7 @@ import {
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
     AlertTriangle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
     Settings, Printer, Building2, Loader2, Package, Calendar, Lock, Unlock,
-    ChevronRight, Activity,
+    ChevronRight, Activity, ArrowRightLeft,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1011,6 +1011,32 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     // ── القوالب ───────────────────────────────────────────────────────────
     const [listSub,     setListSub]     = useState('entries'); // 'entries'|'templates'|'recurring'|'opening'
     const [dueCount,    setDueCount]    = useState(0);
+
+    // ── تحويل سريع ───────────────────────────────────────────────────────────
+    const [showXfer,  setShowXfer]  = useState(false);
+    const [xfer,      setXfer]      = useState({ from_id:'', to_id:'', amount:'', date: todayISO(), desc:'' });
+    const [xferBusy,  setXferBusy]  = useState(false);
+    const submitXfer = async () => {
+        if (!xfer.from_id || !xfer.to_id) return toast('اختر الحساب المصدر والوجهة', 'error');
+        if (xfer.from_id === xfer.to_id) return toast('الحساب المصدر والوجهة متطابقان', 'error');
+        const amt = Number(xfer.amount); if (!amt || amt <= 0) return toast('المبلغ غير صالح', 'error');
+        setXferBusy(true);
+        try {
+            const r = await api('gl_entry_create', { method: 'POST', body: {
+                tenant_id: 1, date: xfer.date, description: xfer.desc || 'تحويل',
+                lines: [
+                    { account_id: Number(xfer.from_id), debit: amt,  credit: 0,   description: xfer.desc || 'تحويل' },
+                    { account_id: Number(xfer.to_id),   debit: 0,    credit: amt, description: xfer.desc || 'تحويل' },
+                ],
+            }});
+            if (r.success) {
+                toast(`تم التحويل — قيد ${r.entry_no}`, 'success');
+                setShowXfer(false); setXfer({ from_id:'', to_id:'', amount:'', date: todayISO(), desc:'' });
+                load();
+            } else toast(r.message || 'خطأ', 'error');
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setXferBusy(false); }
+    };
     const [templates,   setTemplates]   = useState([]);
     const [tmplPicker,  setTmplPicker]  = useState(false); // modal: pick a template to fill form
     const [tmplSaveDlg, setTmplSaveDlg] = useState(false); // modal: save form lines as template
@@ -1458,6 +1484,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                     <Btn color="gray" size="sm" onClick={load}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> تحديث</Btn>
+                    <Btn color="gray" size="sm" onClick={() => setShowXfer(true)}><ArrowRightLeft size={13} /> تحويل سريع</Btn>
                     <Btn color="green" onClick={newEntry}><Plus size={15} /> قيد جديد</Btn>
                 </div>
             </div>
@@ -1557,6 +1584,55 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                                 </tr>
                             </tfoot>
                         </table>
+                    </div>
+                </div>
+            )}
+
+            {/* ── مودال: تحويل سريع ── */}
+            {showXfer && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowXfer(false)}>
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()} dir="rtl">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-black text-brand-800 dark:text-brand-100 flex items-center gap-2">
+                                <ArrowRightLeft size={18} className="text-[#c5a059]" /> تحويل سريع بين حسابين
+                            </h3>
+                            <button onClick={() => setShowXfer(false)} className="text-slate-400 hover:text-red-500"><X size={18} /></button>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">من حساب (مدين)</label>
+                                <AccountCombobox accounts={postable} value={xfer.from_id} onChange={v => setXfer(f=>({...f,from_id:v}))} />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">إلى حساب (دائن)</label>
+                                <AccountCombobox accounts={postable} value={xfer.to_id} onChange={v => setXfer(f=>({...f,to_id:v}))} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">المبلغ</label>
+                                    <input type="number" step="0.01" value={xfer.amount} onChange={e => setXfer(f=>({...f,amount:e.target.value}))}
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" dir="ltr" />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">التاريخ</label>
+                                    <input type="date" value={xfer.date} onChange={e => setXfer(f=>({...f,date:e.target.value}))}
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">البيان</label>
+                                <input value={xfer.desc} onChange={e => setXfer(f=>({...f,desc:e.target.value}))}
+                                    placeholder="مثال: إيداع بنكي، سحب نقدي…"
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100 dark:border-brand-700">
+                            <Btn color="gray" onClick={() => setShowXfer(false)}>إلغاء</Btn>
+                            <Btn color="gold" onClick={submitXfer} disabled={xferBusy}>
+                                {xferBusy ? <Loader2 size={14} className="animate-spin"/> : <ArrowRightLeft size={14}/>}
+                                تأكيد التحويل
+                            </Btn>
+                        </div>
                     </div>
                 </div>
             )}
