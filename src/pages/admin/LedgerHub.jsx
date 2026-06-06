@@ -5,7 +5,7 @@ import {
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
     AlertTriangle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
     Settings, Printer, Building2, Loader2, Package, Calendar, Lock, Unlock,
-    ChevronRight,
+    ChevronRight, Activity,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -4114,6 +4114,286 @@ function BudgetTab({ accounts, toast }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  بيان التدفقات النقدية (الطريقة غير المباشرة)
+// ════════════════════════════════════════════════════════════════════
+function CashFlowTab({ accounts, toast }) {
+    const [from, setFrom] = useState(() => todayISO().slice(0, 4) + '-01-01');
+    const [to,   setTo  ] = useState(todayISO);
+    const [data, setData] = useState(null);
+    const [loading, setLoad] = useState(false);
+
+    // مودال تصنيف الحسابات
+    const [showCls, setShowCls]   = useState(false);
+    const [clsEdits, setClsEdits] = useState({});
+    const [clsBusy,  setClsBusy]  = useState(false);
+
+    const load = useCallback(async () => {
+        setLoad(true); setData(null);
+        try {
+            const r = await api('gl_cash_flow', { params: { from, to } });
+            if (r.success) setData(r);
+            else toast(r.message || 'خطأ في جلب البيانات', 'error');
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setLoad(false); }
+    }, [from, to]);
+
+    const openCls = () => {
+        const edits = {};
+        accounts.filter(a => !Number(a.is_group) && !['revenue','expense'].includes(a.type))
+                .forEach(a => { edits[a.id] = a.cf_section || 'none'; });
+        setClsEdits(edits);
+        setShowCls(true);
+    };
+
+    const saveCls = async () => {
+        setClsBusy(true);
+        try {
+            const updates = Object.entries(clsEdits).map(([id, cf_section]) => ({ id: Number(id), cf_section }));
+            const r = await api('gl_cf_section_save', { method: 'POST', body: { tenant_id: 1, updates } });
+            if (r.success) { toast('تم حفظ التصنيفات', 'success'); setShowCls(false); load(); }
+            else toast(r.message || 'خطأ', 'error');
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setClsBusy(false); }
+    };
+
+    const bsAccounts = accounts.filter(a => !Number(a.is_group) && !['revenue','expense'].includes(a.type));
+
+    const CFSection = ({ title, items, total, addItems = [] }) => (
+        <div className="mb-5">
+            <div className="flex items-center gap-2 mb-2">
+                <div className="flex-1 h-px bg-slate-200 dark:bg-brand-700" />
+                <span className="text-xs font-black text-slate-500 dark:text-brand-400 px-2 whitespace-nowrap">{title}</span>
+                <div className="flex-1 h-px bg-slate-200 dark:bg-brand-700" />
+            </div>
+            <div className="space-y-0.5">
+                {addItems.map((ai, i) => (
+                    <div key={i} className="flex justify-between py-1.5 px-3 text-sm">
+                        <span className="text-slate-600 dark:text-brand-300 font-bold">{ai.label}</span>
+                        <span className={`tabular-nums font-bold ${Number(ai.value) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`} dir="ltr">
+                            {Number(ai.value) >= 0 ? '+' : ''}{money(ai.value)}
+                        </span>
+                    </div>
+                ))}
+                {items.map(item => (
+                    <div key={item.id} className="flex justify-between py-1.5 px-3 text-sm hover:bg-slate-50 dark:hover:bg-brand-800 rounded-xl transition">
+                        <span className="text-slate-600 dark:text-brand-300">
+                            <span className="font-mono text-[11px] text-slate-400 dark:text-brand-600 ml-2" dir="ltr">{item.code}</span>
+                            {item.name}
+                        </span>
+                        <span className={`tabular-nums font-bold ${item.cf >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`} dir="ltr">
+                            {item.cf >= 0 ? '+' : ''}{money(item.cf)}
+                        </span>
+                    </div>
+                ))}
+                {items.length === 0 && addItems.length === 0 && (
+                    <div className="text-center py-3 text-slate-300 dark:text-brand-700 text-sm font-bold">لا يوجد بنود مصنّفة في هذا القسم</div>
+                )}
+            </div>
+            <div className="flex justify-between items-center mt-2 px-3 py-2.5 bg-slate-50 dark:bg-brand-800/60 rounded-2xl border border-slate-100 dark:border-brand-700 font-black">
+                <span className="text-brand-800 dark:text-brand-100">{title}</span>
+                <span className={`tabular-nums text-lg ${total >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`} dir="ltr">
+                    {total >= 0 ? '+' : ''}{money(total)} <span className="text-sm font-bold text-slate-400">﷼</span>
+                </span>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-4" dir="rtl">
+            {/* أدوات التصفية */}
+            <div className="flex flex-wrap items-end gap-3">
+                <div>
+                    <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">من</label>
+                    <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                        className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                </div>
+                <div>
+                    <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">إلى</label>
+                    <input type="date" value={to} onChange={e => setTo(e.target.value)}
+                        className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                </div>
+                <Btn color="navy" onClick={load} disabled={loading}>
+                    {loading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} عرض
+                </Btn>
+                <Btn color="gray" size="sm" onClick={openCls}>
+                    <Settings size={14} /> تصنيف الحسابات
+                </Btn>
+                {data && <>
+                    <Btn color="gray" size="sm" onClick={() => downloadCSV('cash_flow.csv', ['البيان', 'المبلغ (ريال)'], [
+                        ['صافي الدخل', data.net_income],
+                        ['الإهلاك (تعديل)', data.depreciation],
+                        ...data.operating.items.map(r => [r.name, r.cf]),
+                        ['إجمالي الأنشطة التشغيلية', data.operating.total],
+                        ...data.investing.items.map(r => [r.name, r.cf]),
+                        ['إجمالي الأنشطة الاستثمارية', data.investing.total],
+                        ...data.financing.items.map(r => [r.name, r.cf]),
+                        ['إجمالي الأنشطة التمويلية', data.financing.total],
+                        ['صافي التغير في النقدية', data.net_change],
+                    ])}>
+                        <Download size={14} /> CSV
+                    </Btn>
+                    <Btn color="gray" size="sm" onClick={() => {
+                        const row = (lbl, val, bold) => `<tr${bold?' class="tot"':''}><td>${lbl}</td><td style="text-align:left;direction:ltr">${money(val)} ﷼</td></tr>`;
+                        const mapR = arr => arr.map(r => row(r.name, r.cf)).join('');
+                        printHtml('بيان التدفقات النقدية',
+                            `<style>.tot td{font-weight:900;background:#f8fafc;border-top:2px solid #e2e8f0}</style>
+                             <h1>بيان التدفقات النقدية (الطريقة غير المباشرة)</h1>
+                             <h2>الفترة: ${data.period.from} — ${data.period.to}</h2>
+                             <table><thead><tr><th>البيان</th><th style="text-align:left">المبلغ (ريال)</th></tr></thead><tbody>
+                             <tr><td colspan="2"><strong>أولاً: الأنشطة التشغيلية</strong></td></tr>
+                             ${row('صافي الدخل', data.net_income)}
+                             ${data.depreciation ? row('يُضاف: الإهلاك', data.depreciation) : ''}
+                             ${mapR(data.operating.items)}
+                             ${row('إجمالي التشغيلية', data.operating.total, true)}
+                             <tr><td colspan="2"><strong>ثانياً: الأنشطة الاستثمارية</strong></td></tr>
+                             ${mapR(data.investing.items)}
+                             ${row('إجمالي الاستثمارية', data.investing.total, true)}
+                             <tr><td colspan="2"><strong>ثالثاً: الأنشطة التمويلية</strong></td></tr>
+                             ${mapR(data.financing.items)}
+                             ${row('إجمالي التمويلية', data.financing.total, true)}
+                             ${row('صافي التغير في النقدية', data.net_change, true)}
+                             ${(data.cash_opening || data.cash_closing) ? row('رصيد النقدية أول الفترة', data.cash_opening) + row('رصيد النقدية آخر الفترة', data.cash_closing, true) : ''}
+                             </tbody></table>`
+                        );
+                    }}>
+                        <Printer size={14} /> طباعة
+                    </Btn>
+                </>}
+            </div>
+
+            {loading ? (
+                <div className="text-center py-20"><Loader2 className="animate-spin mx-auto text-slate-400" size={30} /></div>
+            ) : !data ? (
+                <Card>
+                    <div className="text-center py-16 text-slate-300 dark:text-brand-600 font-bold">
+                        <Activity size={36} className="mx-auto mb-3 opacity-40" />
+                        اختر الفترة واضغط «عرض» لاستعراض بيان التدفقات النقدية
+                        <div className="mt-2 text-sm text-slate-400 dark:text-brand-500 font-bold">
+                            الطريقة غير المباشرة — صنّف حساباتك أولاً عبر «تصنيف الحسابات»
+                        </div>
+                    </div>
+                </Card>
+            ) : (
+                <>
+                    {/* KPI summary */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                            { label: 'التشغيلية',   val: data.operating.total },
+                            { label: 'الاستثمارية', val: data.investing.total },
+                            { label: 'التمويلية',   val: data.financing.total },
+                            { label: 'صافي التغير', val: data.net_change      },
+                        ].map(c => {
+                            const pos = Number(c.val) >= 0;
+                            return (
+                                <div key={c.label} className={`rounded-2xl p-4 border text-center ${pos ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30' : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}>
+                                    <div className={`text-[11px] font-bold mb-1 ${pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{c.label}</div>
+                                    <div className={`text-xl font-black ${pos ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`} dir="ltr">{pos ? '+' : ''}{money(c.val)} ﷼</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Statement body */}
+                    <Card>
+                        <div className="text-center mb-5">
+                            <div className="text-lg font-black text-brand-800 dark:text-brand-100">بيان التدفقات النقدية</div>
+                            <div className="text-sm text-slate-400 dark:text-brand-500 font-bold mt-1">الطريقة غير المباشرة · {data.period.from} ← {data.period.to}</div>
+                        </div>
+
+                        <CFSection
+                            title="الأنشطة التشغيلية"
+                            items={data.operating.items}
+                            total={data.operating.total}
+                            addItems={[
+                                { label: 'صافي الدخل',              value: data.net_income   },
+                                ...(data.depreciation ? [{ label: 'يُضاف: الإهلاك (بند غير نقدي)', value: data.depreciation }] : []),
+                            ]}
+                        />
+                        <CFSection title="الأنشطة الاستثمارية" items={data.investing.items} total={data.investing.total} />
+                        <CFSection title="الأنشطة التمويلية"   items={data.financing.items} total={data.financing.total} />
+
+                        {/* Summary box */}
+                        <div className="mt-4 p-4 rounded-2xl bg-brand-800 dark:bg-brand-700 text-white space-y-2">
+                            <div className="flex justify-between font-black text-lg">
+                                <span>صافي التغير في النقدية</span>
+                                <span dir="ltr">{Number(data.net_change) >= 0 ? '+' : ''}{money(data.net_change)} ﷼</span>
+                            </div>
+                            {(Number(data.cash_opening) !== 0 || Number(data.cash_closing) !== 0) && (
+                                <>
+                                    <div className="h-px bg-white/20" />
+                                    <div className="flex justify-between text-sm font-bold text-white/80">
+                                        <span>رصيد النقدية في بداية الفترة</span>
+                                        <span dir="ltr">{money(data.cash_opening)} ﷼</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm font-bold text-white/80">
+                                        <span>رصيد النقدية في نهاية الفترة</span>
+                                        <span dir="ltr">{money(data.cash_closing)} ﷼</span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </Card>
+                </>
+            )}
+
+            {/* مودال تصنيف الحسابات */}
+            {showCls && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 pt-8 overflow-y-auto" onClick={() => setShowCls(false)}>
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-2xl p-6" onClick={e => e.stopPropagation()} dir="rtl">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">تصنيف حسابات التدفق النقدي</h3>
+                            <button onClick={() => setShowCls(false)} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
+                        </div>
+                        <div className="text-xs font-bold text-slate-400 dark:text-brand-500 mb-4 p-3 bg-slate-50 dark:bg-brand-800 rounded-xl leading-relaxed">
+                            <strong className="text-brand-800 dark:text-brand-100">💵 نقدية</strong> = حسابات النقد والبنك ·
+                            <strong className="text-brand-800 dark:text-brand-100"> 🔄 تشغيلي</strong> = مدينون، دائنون، مخزون ·
+                            <strong className="text-brand-800 dark:text-brand-100"> 📦 استثماري</strong> = أصول ثابتة، استثمارات ·
+                            <strong className="text-brand-800 dark:text-brand-100"> 🏦 تمويلي</strong> = قروض، حقوق ملكية
+                        </div>
+                        <div className="space-y-0.5 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                            <div className="grid grid-cols-[1fr_136px] gap-2 text-[11px] font-black text-slate-400 dark:text-brand-500 pb-2 border-b border-slate-100 dark:border-brand-700 px-2">
+                                <span>الحساب</span><span>التصنيف</span>
+                            </div>
+                            {bsAccounts.map(a => (
+                                <div key={a.id} className="grid grid-cols-[1fr_136px] gap-2 items-center hover:bg-slate-50 dark:hover:bg-brand-800 rounded-xl px-2 py-1.5">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <span className="font-mono text-[11px] text-slate-400 dark:text-brand-600 shrink-0" dir="ltr">{a.code}</span>
+                                        <span className="text-sm font-bold text-brand-800 dark:text-brand-100 truncate">{a.name}</span>
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                                            a.type === 'asset'     ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
+                                          : a.type === 'liability' ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                                          :                          'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                        }`}>
+                                            {a.type === 'asset' ? 'أصول' : a.type === 'liability' ? 'خصوم' : 'حقوق'}
+                                        </span>
+                                    </div>
+                                    <select value={clsEdits[a.id] || 'none'}
+                                        onChange={e => setClsEdits(p => ({...p, [a.id]: e.target.value}))}
+                                        className="px-2 py-1.5 rounded-xl border border-slate-200 dark:border-brand-700 text-xs font-bold text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059] w-full">
+                                        <option value="none">غير مصنّف</option>
+                                        <option value="cash">💵 نقدية</option>
+                                        <option value="operating">🔄 تشغيلي</option>
+                                        <option value="investing">📦 استثماري</option>
+                                        <option value="financing">🏦 تمويلي</option>
+                                    </select>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-brand-700">
+                            <Btn color="gray" onClick={() => setShowCls(false)}>إلغاء</Btn>
+                            <Btn color="navy" onClick={saveCls} disabled={clsBusy}>
+                                {clsBusy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                حفظ التصنيفات
+                            </Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════
 //  الأصول الثابتة
 // ════════════════════════════════════════════════════════════════════
 function FixedAssetsTab({ accounts, toast }) {
@@ -4502,7 +4782,8 @@ const TABS = [
     { id: 'products', label: 'المنتجات والخدمات', icon: Package },
     { id: 'trial', label: 'ميزان المراجعة', icon: Scale },
     { id: 'income', label: 'قائمة الدخل', icon: TrendingUp },
-    { id: 'balance', label: 'الميزانية العمومية', icon: PieChart },
+    { id: 'balance',   label: 'الميزانية العمومية',   icon: PieChart    },
+    { id: 'cashflow',  label: 'التدفقات النقدية',    icon: Activity    },
     { id: 'ledger', label: 'كشف حساب', icon: FileBarChart2 },
     { id: 'vat', label: 'إقرار الضريبة', icon: Banknote },
     { id: 'parties', label: 'العملاء والموردون', icon: Users },
@@ -4633,7 +4914,8 @@ export default function LedgerHub() {
                     {activeTab === 'products' && <ProductsTab products={products} reload={loadProducts} loading={prodLoading} toast={toast} />}
                     {activeTab === 'trial' && <TrialBalanceTab toast={toast} />}
                     {activeTab === 'income' && <IncomeTab toast={toast} />}
-                    {activeTab === 'balance' && <BalanceSheetTab toast={toast} />}
+                    {activeTab === 'balance'   && <BalanceSheetTab toast={toast} />}
+                    {activeTab === 'cashflow'  && <CashFlowTab accounts={accounts} toast={toast} />}
                     {activeTab === 'ledger' && <LedgerTab accounts={accounts} toast={toast} />}
                     {activeTab === 'vat' && <VatTab toast={toast} />}
                     {activeTab === 'parties' && <PartiesTab parties={parties} reload={loadParties} loading={partyLoading} toast={toast} />}

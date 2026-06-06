@@ -3795,13 +3795,15 @@ switch ($action) {
         $type = $conn->real_escape_string($input_data['type'] ?? 'asset');
         $pid  = isset($input_data['parent_id']) && $input_data['parent_id'] !== '' ? (int)$input_data['parent_id'] : 'NULL';
         $grp  = (int)($input_data['is_group'] ?? 0);
+        $cfs  = $conn->real_escape_string($input_data['cf_section'] ?? 'none');
+        if (!in_array($cfs,['none','cash','operating','investing','financing'])) $cfs='none';
         if (!$code || !$name) { echo json_encode(['success'=>false,'message'=>'الكود والاسم مطلوبان']); break; }
         if (!in_array($type, ['asset','liability','equity','revenue','expense'])) $type = 'asset';
         if ($id) {
-            $conn->query("UPDATE acc_accounts SET code='$code',name='$name',type='$type',parent_id=$pid,is_group=$grp WHERE id=$id AND tenant_id=$tid");
+            $conn->query("UPDATE acc_accounts SET code='$code',name='$name',type='$type',parent_id=$pid,is_group=$grp,cf_section='$cfs' WHERE id=$id AND tenant_id=$tid");
             echo json_encode(['success'=>true,'id'=>$id]);
         } else {
-            $ok = $conn->query("INSERT INTO acc_accounts (tenant_id,code,name,type,parent_id,is_group) VALUES ($tid,'$code','$name','$type',$pid,$grp)");
+            $ok = $conn->query("INSERT INTO acc_accounts (tenant_id,code,name,type,parent_id,is_group,cf_section) VALUES ($tid,'$code','$name','$type',$pid,$grp,'$cfs')");
             echo json_encode(['success'=>$ok,'id'=>$conn->insert_id,'message'=>$ok?'تم':$conn->error], JSON_UNESCAPED_UNICODE);
         }
         break;
@@ -4231,6 +4233,105 @@ switch ($action) {
             $conn->rollback();
             echo json_encode(['success'=>false,'message'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
+        break;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  بيان التدفقات النقدية (الطريقة غير المباشرة)
+    // ════════════════════════════════════════════════════════════════════
+    case 'gl_cash_flow': {
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
+        $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-12-31'));
+
+        // ─── auto-migrate: cf_section column ─────────────────────────
+        $conn->query("ALTER TABLE acc_accounts ADD COLUMN IF NOT EXISTS cf_section ENUM('none','cash','operating','investing','financing') NOT NULL DEFAULT 'none'");
+
+        // ─── كل الحسابات الفرعية (غير المجمّعة) ──────────────────────
+        $accts = [];
+        $ra = $conn->query("SELECT id,code,name,type,cf_section FROM acc_accounts WHERE tenant_id=$tid AND is_group=0 ORDER BY code");
+        while ($ra && ($x=$ra->fetch_assoc())) $accts[(int)$x['id']] = $x;
+
+        // ─── أرصدة ختامية حتى اليوم السابق لبداية الفترة ────────────
+        $prevDate = date('Y-m-d', strtotime($from.' -1 day'));
+        $obMap = []; $cbMap = [];
+        $r = $conn->query("SELECT l.account_id, COALESCE(SUM(l.debit-l.credit),0) bal FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE e.tenant_id=$tid AND e.is_posted=1 AND e.date<='$prevDate' GROUP BY l.account_id");
+        while ($r && ($x=$r->fetch_assoc())) $obMap[(int)$x['account_id']] = (float)$x['bal'];
+        $r = $conn->query("SELECT l.account_id, COALESCE(SUM(l.debit-l.credit),0) bal FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE e.tenant_id=$tid AND e.is_posted=1 AND e.date<='$to' GROUP BY l.account_id");
+        while ($r && ($x=$r->fetch_assoc())) $cbMap[(int)$x['account_id']] = (float)$x['bal'];
+
+        // ─── صافي الدخل (إيرادات − مصروفات) للفترة ──────────────────
+        $revR = $conn->query("SELECT COALESCE(SUM(l.credit-l.debit),0) v FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id JOIN acc_accounts a ON a.id=l.account_id WHERE e.tenant_id=$tid AND e.is_posted=1 AND e.date>='$from' AND e.date<='$to' AND a.type='revenue'");
+        $expR = $conn->query("SELECT COALESCE(SUM(l.debit-l.credit),0) v FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id JOIN acc_accounts a ON a.id=l.account_id WHERE e.tenant_id=$tid AND e.is_posted=1 AND e.date>='$from' AND e.date<='$to' AND a.type='expense'");
+        $netIncome = round((float)($revR?$revR->fetch_assoc()['v']:0) - (float)($expR?$expR->fetch_assoc()['v']:0), 2);
+
+        // ─── الإهلاك المرحّل في الفترة ────────────────────────────────
+        $dpR = $conn->query("SELECT COALESCE(SUM(amount),0) d FROM acc_asset_depreciations WHERE tenant_id=$tid AND period_date>='$from' AND period_date<='$to'");
+        $deprTotal = $dpR ? round((float)$dpR->fetch_assoc()['d'], 2) : 0;
+
+        // ─── تصنيف الحسابات وحساب التغيرات ───────────────────────────
+        $opItems = []; $invItems = []; $finItems = [];
+        $cashOpening = 0; $cashClosing = 0;
+
+        foreach ($accts as $id => $acct) {
+            $sec  = $acct['cf_section'];
+            $type = $acct['type'];
+            if ($sec === 'none' || $type === 'revenue' || $type === 'expense') continue;
+
+            $ob  = $obMap[$id] ?? 0;
+            $cb  = $cbMap[$id] ?? 0;
+            $chg = round($cb - $ob, 2);
+
+            if ($sec === 'cash') { $cashOpening += $ob; $cashClosing += $cb; continue; }
+
+            // أصول: زيادة = استخدام نقدية (سالب) | خصوم وحقوق: زيادة = مصدر نقدية (موجب)
+            $cf = ($type === 'asset') ? -$chg : $chg;
+            $item = ['id'=>$id,'code'=>$acct['code'],'name'=>$acct['name'],'opening'=>round($ob,2),'closing'=>round($cb,2),'change'=>$chg,'cf'=>round($cf,2)];
+
+            if ($sec === 'operating')  $opItems[]  = $item;
+            elseif ($sec === 'investing') $invItems[] = $item;
+            elseif ($sec === 'financing') $finItems[] = $item;
+        }
+
+        $opCF  = round(array_sum(array_column($opItems,  'cf')) + $netIncome + $deprTotal, 2);
+        $invCF = round(array_sum(array_column($invItems, 'cf')), 2);
+        $finCF = round(array_sum(array_column($finItems, 'cf')), 2);
+        $netChange = round($opCF + $invCF + $finCF, 2);
+
+        echo json_encode([
+            'success'      => true,
+            'period'       => ['from'=>$from,'to'=>$to],
+            'net_income'   => $netIncome,
+            'depreciation' => $deprTotal,
+            'operating'    => ['items'=>$opItems,  'total'=>$opCF],
+            'investing'    => ['items'=>$invItems,  'total'=>$invCF],
+            'financing'    => ['items'=>$finItems,  'total'=>$finCF],
+            'net_change'   => $netChange,
+            'cash_opening' => round($cashOpening, 2),
+            'cash_closing' => round($cashClosing, 2),
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_cf_section_save': {
+        // تحديث تصنيف CF للحساب (one at a time, or bulk via array)
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $updates = $input_data['updates'] ?? [];   // [{id, cf_section}]
+        if (!is_array($updates) || empty($updates)) {
+            // single update fallback
+            $id  = (int)($input_data['id']         ?? 0);
+            $sec = $conn->real_escape_string($input_data['cf_section'] ?? 'none');
+            if (!in_array($sec,['none','cash','operating','investing','financing'])) $sec='none';
+            $conn->query("UPDATE acc_accounts SET cf_section='$sec' WHERE id=$id AND tenant_id=$tid");
+        } else {
+            foreach ($updates as $u) {
+                $id  = (int)($u['id']         ?? 0);
+                $sec = $conn->real_escape_string($u['cf_section'] ?? 'none');
+                if (!in_array($sec,['none','cash','operating','investing','financing'])) $sec='none';
+                if ($id) $conn->query("UPDATE acc_accounts SET cf_section='$sec' WHERE id=$id AND tenant_id=$tid");
+            }
+        }
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
         break;
     }
 
