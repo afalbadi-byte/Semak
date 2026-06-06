@@ -1839,6 +1839,17 @@ th{background:#f8fafc;color:#475569;font-weight:700}
 
             {/* قائمة الفواتير */}
             <Card>
+                {!loading && list.length > 0 && (
+                    <div className="px-4 pt-3 pb-1 flex items-center gap-3 border-b border-slate-100 dark:border-brand-700">
+                        <span className="text-xs text-slate-400 dark:text-brand-500 font-bold">{list.length} فاتورة | الإجمالي: <span className="text-brand-800 dark:text-brand-200 tabular-nums" dir="ltr">{money(list.reduce((s,i)=>s+Number(i.total||0),0))}</span> ﷼</span>
+                        <div className="flex-1" />
+                        <Btn color="gray" size="sm" onClick={() => downloadCSV(`invoices_${docType}.csv`,
+                            [isSales ? 'رقم الفاتورة' : 'رقم مستند الشراء', 'التاريخ', 'الاستحقاق', 'الطرف', 'قبل الضريبة', 'الضريبة', 'الإجمالي', 'المدفوع', 'الحالة'],
+                            list.map(inv => [inv.invoice_no, inv.issue_date, inv.due_date||'', inv.party_label||inv.party_name||'', inv.subtotal||0, inv.tax_total||0, inv.total||0, inv.paid||0, INV_STATUS[inv.status]?.label||inv.status]))}>
+                            <Download size={13} /> تصدير
+                        </Btn>
+                    </div>
+                )}
                 {loading ? <Spinner /> : list.length === 0 ? <Empty msg="لا توجد فواتير" /> : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -2129,6 +2140,17 @@ function PaymentsTab({ parties, toast }) {
             </div>
 
             <Card>
+                {!loading && list.length > 0 && (
+                    <div className="px-4 pt-3 pb-1 flex items-center gap-3 border-b border-slate-100 dark:border-brand-700">
+                        <span className="text-xs text-slate-400 dark:text-brand-500 font-bold">{list.length} سند | الإجمالي: <span className="text-brand-800 dark:text-brand-200 tabular-nums" dir="ltr">{money(list.reduce((s,p)=>s+Number(p.amount||0),0))}</span> ﷼</span>
+                        <div className="flex-1" />
+                        <Btn color="gray" size="sm" onClick={() => downloadCSV('payments.csv',
+                            ['الرقم', 'النوع', 'التاريخ', 'الطرف', 'الفاتورة', 'المبلغ', 'وسيلة السداد'],
+                            list.map(p => [p.pay_no, p.pay_type === 'receipt' ? 'قبض' : 'صرف', p.date, p.party_label||'', p.invoice_no||'', p.amount||0, p.method||'']))}>
+                            <Download size={13} /> تصدير
+                        </Btn>
+                    </div>
+                )}
                 {loading ? <Spinner /> : list.length === 0 ? <Empty msg="لا توجد سندات" /> : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
