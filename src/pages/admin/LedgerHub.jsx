@@ -491,6 +491,166 @@ function ProductCombobox({ products, onSelect, placeholder = 'اختر منتج�
 const emptyLine = () => ({ account_id: '', debit: '', credit: '', party_type: '', party_id: '', due_date: '', cost_center_id: '', description: '' });
 
 // ════════════════════════════════════════════════════════════════════════════
+//  معالج الأرصدة الافتتاحية
+// ════════════════════════════════════════════════════════════════════════════
+function OpeningBalanceWizard({ accounts, toast, onBack }) {
+    const [date,     setDate]   = useState(() => todayISO().slice(0, 4) + '-01-01');
+    const [lines,    setLines]  = useState([{ account_id: '', debit: '', credit: '' }]);
+    const [existing, setExist]  = useState([]);
+    const [loadEx,   setLoadEx] = useState(true);
+    const [saving,   setSaving] = useState(false);
+
+    useEffect(() => {
+        setLoadEx(true);
+        api('gl_opening_balance_get')
+            .then(r => { if (r.success) setExist(r.data || []); })
+            .catch(() => {})
+            .finally(() => setLoadEx(false));
+    }, []);
+
+    const setLine = (i, patch) => setLines(prev => prev.map((l, j) => j === i ? { ...l, ...patch } : l));
+    const totals = lines.reduce((a, l) => ({ d: a.d + (Number(l.debit) || 0), c: a.c + (Number(l.credit) || 0) }), { d: 0, c: 0 });
+    const balanced  = Math.abs(totals.d - totals.c) < 0.005;
+    const hasValues = lines.some(l => (Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0);
+
+    const post = async () => {
+        const validLines = lines.filter(l => l.account_id && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0));
+        if (!validLines.length) return toast('لا توجد بنود بمبالغ صالحة', 'error');
+        if (!balanced) return toast('القيد غير متوازن', 'error');
+        setSaving(true);
+        try {
+            const r = await api('gl_opening_balance_post', { method: 'POST', body: { tenant_id: 1, date, lines: validLines } });
+            if (r.success) {
+                toast(r.message, 'success');
+                setLines([{ account_id: '', debit: '', credit: '' }]);
+                api('gl_opening_balance_get').then(r2 => { if (r2.success) setExist(r2.data || []); });
+            } else toast(r.message || 'خطأ', 'error');
+        } catch { toast('خطأ في الاتصال', 'error'); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                <button onClick={onBack} className="inline-flex items-center gap-1 text-[13px] font-bold text-slate-500 dark:text-brand-400 hover:text-[#c5a059] transition">
+                    <ArrowLeft size={14} /> رجوع
+                </button>
+                <span className="text-slate-300 dark:text-brand-700">|</span>
+                <h3 className="font-black text-brand-800 dark:text-brand-100">الأرصدة الافتتاحية</h3>
+            </div>
+
+            <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 rounded-2xl border border-amber-200 dark:border-amber-500/30 text-sm font-bold text-amber-800 dark:text-amber-300">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                أدخل أرصدة الحسابات عند البدء باستخدام النظام. القيد يجب أن يكون متوازناً (مجموع المدين = مجموع الدائن).
+            </div>
+
+            {/* قيود موجودة */}
+            {!loadEx && existing.length > 0 && (
+                <Card>
+                    <h4 className="font-black text-brand-800 dark:text-brand-100 mb-3">قيود الأرصدة الافتتاحية المرحّلة</h4>
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-[11px] font-black text-slate-400 dark:text-brand-500 border-b border-slate-100 dark:border-brand-700">
+                                    <th className="text-right py-2 px-3" dir="ltr">رقم القيد</th>
+                                    <th className="text-right py-2 px-3">الحساب</th>
+                                    <th className="text-left py-2 px-3">مدين</th>
+                                    <th className="text-left py-2 px-3">دائن</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {existing.map((r, i) => (
+                                    <tr key={i} className="border-b border-slate-50 dark:border-brand-700">
+                                        <td className="py-2 px-3 font-mono text-xs text-slate-500 dark:text-brand-400" dir="ltr">{r.entry_no}</td>
+                                        <td className="py-2 px-3 font-bold text-brand-800 dark:text-brand-100">
+                                            <span className="font-mono text-[11px] text-slate-400 dark:text-brand-600 ml-2" dir="ltr">{r.acct_code}</span>{r.acct_name}
+                                        </td>
+                                        <td className="py-2 px-3 text-left tabular-nums text-emerald-600 dark:text-emerald-400" dir="ltr">{Number(r.debit) > 0 ? money(r.debit) : '—'}</td>
+                                        <td className="py-2 px-3 text-left tabular-nums text-rose-600 dark:text-rose-400" dir="ltr">{Number(r.credit) > 0 ? money(r.credit) : '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
+
+            {/* نموذج الإدخال */}
+            <Card>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <h4 className="font-black text-brand-800 dark:text-brand-100">إدخال أرصدة جديدة</h4>
+                    <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-bold text-slate-400 dark:text-brand-500">تاريخ البداية</label>
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-[12px] font-black text-slate-400 dark:text-brand-500 border-b border-slate-100 dark:border-brand-700">
+                                <th className="text-right py-2 px-2">الحساب</th>
+                                <th className="text-left py-2 px-2 w-28">مدين</th>
+                                <th className="text-left py-2 px-2 w-28">دائن</th>
+                                <th className="w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {lines.map((l, i) => (
+                                <tr key={i} className="border-b border-slate-100 dark:border-brand-700">
+                                    <td className="py-1.5 px-2">
+                                        <AccountCombobox accounts={accounts} value={l.account_id} onChange={v => setLine(i, { account_id: v })} />
+                                    </td>
+                                    <td className="py-1.5 px-2">
+                                        <input type="number" step="0.01" value={l.debit} onChange={e => setLine(i, { debit: e.target.value, credit: '' })}
+                                            className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm tabular-nums outline-none focus:border-emerald-400" dir="ltr" />
+                                    </td>
+                                    <td className="py-1.5 px-2">
+                                        <input type="number" step="0.01" value={l.credit} onChange={e => setLine(i, { credit: e.target.value, debit: '' })}
+                                            className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm tabular-nums outline-none focus:border-rose-400" dir="ltr" />
+                                    </td>
+                                    <td className="py-1.5 px-2 text-center">
+                                        {lines.length > 1 && (
+                                            <button onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}
+                                                className="text-slate-300 hover:text-red-500"><Trash2 size={14} /></button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot>
+                            <tr className="bg-slate-50 dark:bg-brand-800/60 font-black text-brand-800 dark:text-brand-100 border-t border-slate-200 dark:border-brand-700">
+                                <td className="py-2.5 px-2">الإجماليات</td>
+                                <td className="py-2.5 px-2 tabular-nums" dir="ltr">{money(totals.d)}</td>
+                                <td className="py-2.5 px-2 tabular-nums" dir="ltr">{money(totals.c)}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <Btn color="gray" size="sm" onClick={() => setLines(ls => [...ls, { account_id: '', debit: '', credit: '' }])}>
+                        <Plus size={14} /> إضافة حساب
+                    </Btn>
+                    {hasValues && (
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${balanced ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'}`}>
+                            {balanced ? '✓ متوازن' : `فرق ${money(Math.abs(totals.d - totals.c))} ﷼`}
+                        </span>
+                    )}
+                    <div className="flex-1" />
+                    <Btn color="navy" onClick={post} disabled={saving || !balanced || !hasValues}>
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                        ترحيل الأرصدة الافتتاحية
+                    </Btn>
+                </div>
+            </Card>
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  إدارة قوالب القيود اليومية
 // ════════════════════════════════════════════════════════════════════════════
 function TemplatesManager({ templates, reload, accounts, costCenters, onBack, onUse, toast }) {
@@ -849,7 +1009,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     const postable = useMemo(() => accounts.filter(a => Number(a.is_group) === 0), [accounts]);
 
     // ── القوالب ───────────────────────────────────────────────────────────
-    const [listSub,     setListSub]     = useState('entries'); // 'entries'|'templates'|'recurring'
+    const [listSub,     setListSub]     = useState('entries'); // 'entries'|'templates'|'recurring'|'opening'
     const [dueCount,    setDueCount]    = useState(0);
     const [templates,   setTemplates]   = useState([]);
     const [tmplPicker,  setTmplPicker]  = useState(false); // modal: pick a template to fill form
@@ -1203,6 +1363,12 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
         );
     }
 
+    if (listSub === 'opening') {
+        return (
+            <OpeningBalanceWizard accounts={postable} toast={toast} onBack={() => setListSub('entries')} />
+        );
+    }
+
     if (listSub === 'templates') {
         return (
             <TemplatesManager
@@ -1239,9 +1405,10 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
             {/* تبويبات فرعية */}
             <div className="flex gap-1 border-b border-slate-200 dark:border-brand-700 pb-0">
                 {[
-                    { id: 'entries',   label: 'القيود اليومية', icon: <FileText size={14} /> },
+                    { id: 'entries',   label: 'القيود اليومية',   icon: <FileText size={14} /> },
                     { id: 'templates', label: `القوالب${templates.length > 0 ? ` (${templates.length})` : ''}`, icon: <Copy size={14} /> },
                     { id: 'recurring', label: `المتكررة${dueCount > 0 ? ` 🔔 ${dueCount}` : ''}`, icon: <RefreshCw size={14} /> },
+                    { id: 'opening',   label: 'أرصدة افتتاحية',  icon: <BookOpen size={14} /> },
                 ].map(s => (
                     <button key={s.id} onClick={() => setListSub(s.id)}
                         className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-t-xl border-b-2 transition

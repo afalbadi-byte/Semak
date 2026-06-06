@@ -3808,6 +3808,50 @@ switch ($action) {
         }
         break;
 
+    case 'gl_opening_balance_get': {
+        // جلب بنود قيود الأرصدة الافتتاحية المرحّلة
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $rows = [];
+        $r = $conn->query("SELECT e.id,e.entry_no,e.date,l.account_id,l.debit,l.credit,
+                                  a.code AS acct_code,a.name AS acct_name,a.type AS acct_type
+                           FROM acc_entries e
+                           JOIN acc_lines  l ON l.entry_id=e.id AND l.tenant_id=e.tenant_id
+                           JOIN acc_accounts a ON a.id=l.account_id AND a.tenant_id=e.tenant_id
+                           WHERE e.tenant_id=$tid AND e.ref_type='opening' AND e.is_posted=1
+                           ORDER BY e.date DESC, a.code ASC LIMIT 500");
+        while ($r && ($x=$r->fetch_assoc())) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_opening_balance_post': {
+        // ترحيل قيد الأرصدة الافتتاحية
+        $tid      = (int)($input_data['tenant_id'] ?? 1);
+        $date     = $conn->real_escape_string($input_data['date'] ?? date('Y-01-01'));
+        $rawLines = $input_data['lines'] ?? [];
+        $lines    = [];
+        foreach ($rawLines as $rl) {
+            $aid = (int)($rl['account_id'] ?? 0);
+            $d   = round((float)($rl['debit']  ?? 0), 2);
+            $c   = round((float)($rl['credit'] ?? 0), 2);
+            if (!$aid || ($d == 0 && $c == 0)) continue;
+            $lines[] = ['account_id'=>$aid,'debit'=>$d,'credit'=>$c,'description'=>'رصيد افتتاحي'];
+        }
+        if (empty($lines)) { echo json_encode(['success'=>false,'message'=>'لا توجد بنود بمبالغ صالحة'], JSON_UNESCAPED_UNICODE); break; }
+        $td = array_sum(array_column($lines,'debit'));
+        $tc = array_sum(array_column($lines,'credit'));
+        if (abs($td - $tc) > 0.01) {
+            echo json_encode(['success'=>false,'message'=>'القيد غير متوازن: مدين '.round($td,2).' ≠ دائن '.round($tc,2)], JSON_UNESCAPED_UNICODE); break;
+        }
+        try {
+            $r = acc_post_entry($conn, $tid, $date, 'أرصدة افتتاحية', 'opening', null, null, $lines, 1);
+            echo json_encode(['success'=>true,'entry_no'=>$r['eno'],'message'=>'تم ترحيل الأرصدة الافتتاحية: '.$r['eno']], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            echo json_encode(['success'=>false,'message'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
     case 'gl_entry_create':
     case 'gl_entry_update':
         // إنشاء/تعديل قيد متوازن — كودنا يتحقق أن المدين = الدائن ويرحّل في معاملة واحدة
