@@ -3990,8 +3990,34 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                                     <div className="flex justify-between text-slate-500 dark:text-brand-400"><span>الضريبة</span><span>{money(viewing.invoice.tax_total)}</span></div>
                                     <div className="flex justify-between font-black text-brand-800 dark:text-brand-100"><span>الإجمالي</span><span>{money(viewing.invoice.total)} ﷼</span></div>
                                     <div className="flex justify-between text-emerald-600"><span>المدفوع</span><span>{money(viewing.invoice.paid)}</span></div>
+                                    {Number(viewing.invoice.total) - Number(viewing.invoice.paid) > 0.01 && (
+                                        <div className="flex justify-between font-black text-amber-600 dark:text-amber-400 pt-1 border-t border-slate-100 dark:border-brand-700">
+                                            <span>الرصيد المستحق</span>
+                                            <span dir="ltr">{money(Number(viewing.invoice.total) - Number(viewing.invoice.paid))} ﷼</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+                            {/* سجل الدفعات */}
+                            {viewing.payments?.length > 0 && (
+                                <div className="border border-slate-100 dark:border-brand-700 rounded-xl overflow-hidden">
+                                    <div className="px-3 py-2 bg-slate-50 dark:bg-brand-800/50 text-xs font-black text-slate-500 dark:text-brand-400 border-b border-slate-100 dark:border-brand-700">
+                                        سجل الدفعات
+                                    </div>
+                                    <table className="w-full text-xs">
+                                        <tbody className="divide-y divide-slate-50 dark:divide-brand-700">
+                                            {viewing.payments.map((p, i) => (
+                                                <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-brand-800/30">
+                                                    <td className="px-3 py-2 font-mono font-bold text-slate-500 dark:text-brand-400" dir="ltr">{p.pay_no}</td>
+                                                    <td className="px-3 py-2 text-slate-500 dark:text-brand-400" dir="ltr">{p.date}</td>
+                                                    <td className="px-3 py-2 text-slate-500 dark:text-brand-400">{p.method === 'bank' ? 'بنك' : 'نقداً'}</td>
+                                                    <td className="px-3 py-2 text-left font-black text-emerald-700 dark:text-emerald-400 tabular-nums" dir="ltr">{money(p.amount)} ﷼</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                             {viewing.invoice.entry_id && <p className="text-xs text-slate-400 dark:text-brand-500">القيد المرتبط: #{viewing.invoice.entry_id}</p>}
                             {viewing.invoice.qr_base64 && (
                                 <div className="flex items-center gap-4 pt-3 border-t border-slate-100 dark:border-brand-700">

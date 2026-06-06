@@ -6267,7 +6267,10 @@ switch ($action) {
         if (!$head) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة']); break; }
         $ir = $conn->query("SELECT * FROM acc_invoice_items WHERE invoice_id=$id AND tenant_id=$tid ORDER BY id");
         $items = []; while ($ir && ($x = $ir->fetch_assoc())) $items[] = $x;
-        echo json_encode(['success'=>true,'invoice'=>$head,'items'=>$items], JSON_UNESCAPED_UNICODE);
+        // سجل الدفعات المرتبطة بالفاتورة
+        $pr = $conn->query("SELECT pay_no,date,method,amount FROM acc_payments WHERE invoice_id=$id AND tenant_id=$tid ORDER BY date,id");
+        $payments = []; while ($pr && ($x = $pr->fetch_assoc())) $payments[] = $x;
+        echo json_encode(['success'=>true,'invoice'=>$head,'items'=>$items,'payments'=>$payments], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_product_ledger':
