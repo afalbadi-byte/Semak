@@ -2686,24 +2686,42 @@ function PartiesTab({ parties, reload, loading, toast }) {
                     <Card>
                         <table className="w-full text-right text-sm">
                             <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
-                                <tr><th className="px-3 py-3 font-bold">الاسم</th><th className="px-3 py-3 font-bold">الرقم الضريبي</th>
-                                    <th className="px-3 py-3 font-bold">الجوال</th><th className="px-3 py-3 font-bold text-center w-32">إجراءات</th></tr>
+                                <tr>
+                                    <th className="px-3 py-3 font-bold">الاسم</th>
+                                    <th className="px-3 py-3 font-bold">الرقم الضريبي</th>
+                                    <th className="px-3 py-3 font-bold">الجوال</th>
+                                    <th className="px-3 py-3 font-bold text-left">{type === 'customer' ? 'الذمم المستحقة' : 'المستحق للمورد'}</th>
+                                    <th className="px-3 py-3 font-bold text-center w-32">إجراءات</th>
+                                </tr>
                             </thead>
                             <tbody>
-                                {filtered.map(p => (
-                                    <tr key={p.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
-                                        <td className="px-3 py-2.5 font-bold"><EntityLink to={`parties/${p.id}`} title="كشف حساب الطرف">{p.name}</EntityLink></td>
-                                        <td className="px-3 py-2.5 font-mono text-xs text-slate-500 dark:text-brand-400">{p.vat_number || '—'}</td>
-                                        <td className="px-3 py-2.5 text-slate-600 dark:text-brand-300" dir="ltr">{p.phone || '—'}</td>
-                                        <td className="px-3 py-2.5">
-                                            <div className="flex items-center justify-center gap-1.5">
-                                                <button onClick={() => openLedger(p)} title="كشف حساب" className="text-slate-400 dark:text-brand-500 dark:text-brand-500 hover:text-brand-800 dark:hover:text-brand-300"><FileText size={15} /></button>
-                                                <button onClick={() => setEditing({ id: p.id, type: p.type, name: p.name, vat_number: p.vat_number || '', cr_number: p.cr_number || '', phone: p.phone || '', email: p.email || '', address: p.address || '' })} title="تعديل" className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
-                                                <button onClick={() => del(p.id)} title="حذف" className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15} /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {filtered.map(p => {
+                                    const bal = Number(p.open_balance || 0);
+                                    const cnt = Number(p.open_invoices || 0);
+                                    return (
+                                        <tr key={p.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
+                                            <td className="px-3 py-2.5 font-bold"><EntityLink to={`parties/${p.id}`} title="كشف حساب الطرف">{p.name}</EntityLink></td>
+                                            <td className="px-3 py-2.5 font-mono text-xs text-slate-500 dark:text-brand-400">{p.vat_number || '—'}</td>
+                                            <td className="px-3 py-2.5 text-slate-600 dark:text-brand-300" dir="ltr">{p.phone || '—'}</td>
+                                            <td className="px-3 py-2.5 text-left">
+                                                {bal > 0.01
+                                                    ? <span className="inline-flex items-center gap-1.5">
+                                                        <span className="font-black tabular-nums text-amber-700 dark:text-amber-400" dir="ltr">{money(bal)} ﷼</span>
+                                                        {cnt > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">{cnt} فاتورة</span>}
+                                                      </span>
+                                                    : <span className="text-slate-300 dark:text-brand-700 text-xs font-bold">—</span>
+                                                }
+                                            </td>
+                                            <td className="px-3 py-2.5">
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    <button onClick={() => openLedger(p)} title="كشف حساب" className="text-slate-400 dark:text-brand-500 hover:text-brand-800 dark:hover:text-brand-300"><FileText size={15} /></button>
+                                                    <button onClick={() => setEditing({ id: p.id, type: p.type, name: p.name, vat_number: p.vat_number || '', cr_number: p.cr_number || '', phone: p.phone || '', email: p.email || '', address: p.address || '' })} title="تعديل" className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
+                                                    <button onClick={() => del(p.id)} title="حذف" className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </Card>

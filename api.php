@@ -5312,12 +5312,17 @@ switch ($action) {
         break;
 
     case 'gl_parties':
-        // دفتر الأطراف (عملاء/موردون)
+        // دفتر الأطراف (عملاء/موردون) — يشمل الذمم المفتوحة من الفواتير المُرحّلة
         $tid  = (int)($_GET['tenant'] ?? 1);
         $type = $conn->real_escape_string($_GET['type'] ?? '');
-        $w = "tenant_id=$tid";
-        if (in_array($type, ['customer','supplier','partner'])) $w .= " AND type='$type'";
-        $res = $conn->query("SELECT * FROM acc_parties WHERE $w ORDER BY name");
+        $w = "p.tenant_id=$tid";
+        if (in_array($type, ['customer','supplier','partner'])) $w .= " AND p.type='$type'";
+        $res = $conn->query("SELECT p.*,
+                   COALESCE(SUM(CASE WHEN i.status IN ('posted','partial') THEN ROUND(i.total - i.paid, 2) ELSE 0 END), 0) AS open_balance,
+                   COUNT(CASE WHEN i.status IN ('posted','partial') THEN 1 END) AS open_invoices
+                 FROM acc_parties p
+                 LEFT JOIN acc_invoices i ON i.party_id=p.id AND i.tenant_id=p.tenant_id
+                 WHERE $w GROUP BY p.id ORDER BY p.name");
         $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
