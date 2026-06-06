@@ -136,22 +136,19 @@ function Browse({ tenant }) {
 function Detail({ entryId, setActiveTab, tenant }) {
     const [entry, setEntry]   = useState(null);
     const [lines, setLines]   = useState([]);
-    const [pmap, setPmap]     = useState({});
     const [loading, setLoad]  = useState(true);
     const [err, setErr]       = useState('');
 
     const load = useCallback(() => {
         setLoad(true); setErr('');
-        Promise.all([
-            apiGet('gl_entry_single', { tenant, id: entryId }),
-            apiGet('gl_parties', { tenant }),
-        ]).then(([r, pr]) => {
-            if (r?.success) { setEntry(r.entry); setLines(Array.isArray(r.lines) ? r.lines : []); }
-            else { setErr(r?.message || 'تعذّر جلب القيد'); setEntry(null); }
-            const m = {};
-            (Array.isArray(pr?.data) ? pr.data : []).forEach(p => { m[`${p.type}:${p.id}`] = p.name; });
-            setPmap(m);
-        }).catch(() => setErr('خطأ في الاتصال')).finally(() => setLoad(false));
+        // party_name يأتي الآن من JOIN في gl_entry_single — لا حاجة لجلب كل الأطراف
+        apiGet('gl_entry_single', { tenant, id: entryId })
+            .then(r => {
+                if (r?.success) { setEntry(r.entry); setLines(Array.isArray(r.lines) ? r.lines : []); }
+                else { setErr(r?.message || 'تعذّر جلب القيد'); setEntry(null); }
+            })
+            .catch(() => setErr('خطأ في الاتصال'))
+            .finally(() => setLoad(false));
     }, [tenant, entryId]);
 
     useEffect(() => { load(); }, [load]);
@@ -237,9 +234,9 @@ function Detail({ entryId, setActiveTab, tenant }) {
                                     {lines.length === 0 ? (
                                         <tr><td colSpan={5} className="py-12 text-center text-slate-300 font-bold">لا توجد بنود</td></tr>
                                     ) : lines.map((l, i) => {
-                                        const pid  = Number(l.party_id) || 0;
-                                        const pkey = `${l.party_type}:${pid}`;
-                                        const pname = pid ? (pmap[pkey] || `طرف #${pid}`) : null;
+                                        const pid   = Number(l.party_id) || 0;
+                                        // party_name تأتي من JOIN في gl_entry_single مباشرة
+                                        const pname = pid ? (l.party_name || `طرف #${pid}`) : null;
                                         return (
                                             <tr key={l.id || i} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
                                                 <td className="py-2.5 px-3">

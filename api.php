@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-06-v421
+// deploy: 2026-06-06-v422
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -987,17 +987,34 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v421','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v422','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
 
     case 'login':
-        $email    = $conn->real_escape_string($input_data['email']);
-        $password = $conn->real_escape_string($input_data['password']);
-        $ip       = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
-        $res = $conn->query("SELECT * FROM users WHERE email='$email' AND password='$password' LIMIT 1");
-        if ($res && $row = $res->fetch_assoc()) {
+        $email   = $conn->real_escape_string($input_data['email'] ?? '');
+        $rawPass = (string)($input_data['password'] ?? ''); // لا نهرب — نقارنها مع الهاش
+        $ip      = $conn->real_escape_string($_SERVER['REMOTE_ADDR'] ?? '');
+        // جلب المستخدم بالإيميل فقط أولاً ثم نتحقق من كلمة المرور بشكل آمن
+        $res = $conn->query("SELECT * FROM users WHERE email='$email' LIMIT 1");
+        $loginOk = false; $row = null;
+        if ($res && ($row = $res->fetch_assoc())) {
+            $stored = $row['password'] ?? '';
+            if (strlen($stored) > 40 && ($stored[0] ?? '') === '$') {
+                // مُشفَّر مسبقًا (bcrypt/argon)
+                $loginOk = password_verify($rawPass, $stored);
+            } else {
+                // نص صريح — فحص مباشر + ترقية فورية للـ bcrypt
+                $loginOk = ($stored === $rawPass);
+                if ($loginOk) {
+                    $h = password_hash($rawPass, PASSWORD_BCRYPT);
+                    $he = $conn->real_escape_string($h);
+                    $conn->query("UPDATE users SET password='$he' WHERE id={$row['id']}");
+                }
+            }
+        }
+        if ($loginOk) {
             $uid   = (int)$row['id'];
             $twofa = (int)($row['twofa'] ?? 0);
 
@@ -1884,13 +1901,15 @@ switch ($action) {
         break;
 
     case 'add_user':
-        $name     = $conn->real_escape_string($input_data['name'] ?? '');
-        $email    = $conn->real_escape_string($input_data['email'] ?? '');
-        $password = $conn->real_escape_string($input_data['password'] ?? '');
-        $role     = $conn->real_escape_string($input_data['role'] ?? 'employee');
-        $check    = $conn->query("SELECT id FROM users WHERE email='$email'");
+        $name  = $conn->real_escape_string($input_data['name'] ?? '');
+        $email = $conn->real_escape_string($input_data['email'] ?? '');
+        $role  = $conn->real_escape_string($input_data['role'] ?? 'employee');
+        // تشفير كلمة المرور — لا تُخزَّن أبدًا كنص صريح
+        $rawPw  = (string)($input_data['password'] ?? '');
+        $pwHash = $conn->real_escape_string(password_hash($rawPw, PASSWORD_BCRYPT));
+        $check  = $conn->query("SELECT id FROM users WHERE email='$email'");
         if ($check && $check->num_rows > 0) { echo json_encode(["success" => false, "message" => "هذا البريد موجود مسبقاً"]); break; }
-        $sql = "INSERT INTO users (name, email, password, role, job, phone, department, permissions) VALUES ('$name', '$email', '$password', '$role', '', '', '', '[]')";
+        $sql = "INSERT INTO users (name, email, password, role, job, phone, department, permissions) VALUES ('$name', '$email', '$pwHash', '$role', '', '', '', '[]')";
         if ($conn->query($sql)) {
             echo json_encode(["success" => true]);
         } else {
@@ -1905,8 +1924,8 @@ switch ($action) {
         $role  = $conn->real_escape_string($input_data['role']);
         $sql   = "UPDATE users SET name='$name', email='$email', role='$role'";
         if (!empty($input_data['password'])) {
-            $password = $conn->real_escape_string($input_data['password']);
-            $sql .= ", password='$password'";
+            $pwH = $conn->real_escape_string(password_hash((string)$input_data['password'], PASSWORD_BCRYPT));
+            $sql .= ", password='$pwH'";
         }
         $sql .= " WHERE id=$id";
         if ($conn->query($sql)) {
@@ -3853,7 +3872,8 @@ switch ($action) {
         $h = $conn->query("SELECT * FROM acc_entries WHERE id=$eid AND tenant_id=$tid LIMIT 1");
         $head = $h ? $h->fetch_assoc() : null;
         if (!$head) { echo json_encode(['success'=>false,'message'=>'القيد غير موجود']); break; }
-        $lr = $conn->query("SELECT l.*, a.code account_code, a.name account_name FROM acc_lines l JOIN acc_accounts a ON a.id=l.account_id WHERE l.entry_id=$eid ORDER BY l.id");
+        // party_name من JOIN مباشر — يلغي الحاجة لجلب كل الأطراف في الواجهة
+        $lr = $conn->query("SELECT l.*, a.code account_code, a.name account_name, p.name party_name, p.type party_type_label FROM acc_lines l JOIN acc_accounts a ON a.id=l.account_id LEFT JOIN acc_parties p ON p.id=l.party_id AND p.tenant_id=l.tenant_id WHERE l.entry_id=$eid ORDER BY l.id");
         $lines = []; while ($lr && ($x=$lr->fetch_assoc())) $lines[] = $x;
         echo json_encode(['success'=>true,'entry'=>$head,'lines'=>$lines], JSON_UNESCAPED_UNICODE);
         break;
@@ -5057,7 +5077,10 @@ switch ($action) {
         if ($inv['status'] !== 'draft') { echo json_encode(['success'=>false,'message'=>'الفاتورة مُرحّلة مسبقًا']); break; }
         $sub = round((float)$inv['subtotal'],2); $taxT = round((float)$inv['tax_total'],2); $tot = round((float)$inv['total'],2);
         if ($tot <= 0) { echo json_encode(['success'=>false,'message'=>'إجمالي الفاتورة صفر']); break; }
-        $ar = acc_id_by_code($conn,$tid,'1103'); $ap = acc_id_by_code($conn,$tid,'2101'); $vat = acc_id_by_code($conn,$tid,'2102');
+        $ar     = acc_id_by_code($conn,$tid,'1103'); // ذمم عملاء
+        $ap     = acc_id_by_code($conn,$tid,'2101'); // ذمم موردين
+        $vatOut = acc_id_by_code($conn,$tid,'2102'); // ضريبة مخرجات (خصوم) — للمبيعات
+        $vatIn  = acc_id_by_code($conn,$tid,'1401') ?: $vatOut; // ضريبة مدخلات (أصول) — للمشتريات، يرجع لـ2102 إن لم يوجد 1401
         $defRev = acc_id_by_code($conn,$tid,'4101'); $defExp = acc_id_by_code($conn,$tid,'5104');
         $partyId = $inv['party_id'] !== null ? (int)$inv['party_id'] : null;
         $due = $inv['due_date'];
@@ -5072,7 +5095,7 @@ switch ($action) {
                     ['account_id'=>$ar,'debit'=>$tot,'credit'=>0,'party_type'=>'customer','party_id'=>$partyId,'due_date'=>$due,'description'=>'ذمم عميل'],
                     ['account_id'=>$rev,'debit'=>0,'credit'=>$sub,'description'=>'إيراد'],
                 ];
-                if ($taxT > 0) { if(!$vat) throw new Exception('حساب الضريبة 2102 غير موجود'); $lines[] = ['account_id'=>$vat,'debit'=>0,'credit'=>$taxT,'description'=>'ضريبة مخرجات']; }
+                if ($taxT > 0) { if(!$vatOut) throw new Exception('حساب ضريبة المخرجات 2102 غير موجود'); $lines[] = ['account_id'=>$vatOut,'debit'=>0,'credit'=>$taxT,'description'=>'ضريبة مخرجات']; }
                 $reft = 'sales_invoice';
             } else {
                 if (!$ap) throw new Exception('حساب الموردين 2101 غير موجود');
@@ -5081,7 +5104,8 @@ switch ($action) {
                 $lines = [
                     ['account_id'=>$exp,'debit'=>$sub,'credit'=>0,'description'=>'مصروف/مشتريات'],
                 ];
-                if ($taxT > 0) { if(!$vat) throw new Exception('حساب الضريبة 2102 غير موجود'); $lines[] = ['account_id'=>$vat,'debit'=>$taxT,'credit'=>0,'description'=>'ضريبة مدخلات']; }
+                // ضريبة المدخلات في 1401 (أصول قابلة للاسترداد) أو 2102 إن لم يوجد 1401
+                if ($taxT > 0) { $lines[] = ['account_id'=>$vatIn,'debit'=>$taxT,'credit'=>0,'description'=>'ضريبة مدخلات']; }
                 $lines[] = ['account_id'=>$ap,'debit'=>0,'credit'=>$tot,'party_type'=>'supplier','party_id'=>$partyId,'due_date'=>$due,'description'=>'ذمم مورد'];
                 $reft = 'purchase_invoice';
             }
@@ -5138,24 +5162,32 @@ switch ($action) {
         $crow = $cs ? $cs->fetch_assoc() : null;
         if (!$crow) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة']); break; }
         if ($crow['status'] !== 'draft') { echo json_encode(['success'=>false,'message'=>'لا يُحذف إلا المسودات — استخدم الإلغاء']); break; }
-        $conn->query("DELETE FROM acc_invoice_items WHERE invoice_id=$id AND tenant_id=$tid");
-        $conn->query("DELETE FROM acc_invoices WHERE id=$id AND tenant_id=$tid");
-        acc_audit($conn, $tid, 'invoice', $id, 'delete', 'حذف مسودة', $input_data['actor'] ?? null);
-        echo json_encode(['success'=>true,'message'=>'تم حذف المسودة']);
+        $conn->begin_transaction();
+        try {
+            if (!$conn->query("DELETE FROM acc_invoice_items WHERE invoice_id=$id AND tenant_id=$tid")) throw new Exception($conn->error);
+            if (!$conn->query("DELETE FROM acc_invoices WHERE id=$id AND tenant_id=$tid")) throw new Exception($conn->error);
+            $conn->commit();
+            acc_audit($conn, $tid, 'invoice', $id, 'delete', 'حذف مسودة', $input_data['actor'] ?? null);
+            echo json_encode(['success'=>true,'message'=>'تم حذف المسودة']);
+        } catch (Exception $e) { $conn->rollback(); echo json_encode(['success'=>false,'message'=>'فشل الحذف: '.$e->getMessage()], JSON_UNESCAPED_UNICODE); }
         break;
 
     case 'pay_list':
         $tid  = (int)($_GET['tenant'] ?? 1);
         $pt   = $conn->real_escape_string($_GET['pay_type'] ?? '');
+        $lim  = min(500, max(1, (int)($_GET['limit']  ?? 100)));
+        $off  = max(0,           (int)($_GET['offset'] ?? 0));
         $w = "pm.tenant_id=$tid";
         if (in_array($pt, ['receipt','payment'])) $w .= " AND pm.pay_type='$pt'";
+        $tr = $conn->query("SELECT COUNT(*) c FROM acc_payments pm WHERE $w");
+        $total = $tr ? (int)$tr->fetch_assoc()['c'] : 0;
         $res = $conn->query("SELECT pm.*, p.name party_label, i.invoice_no
                              FROM acc_payments pm
                              LEFT JOIN acc_parties p ON p.id=pm.party_id
                              LEFT JOIN acc_invoices i ON i.id=pm.invoice_id
-                             WHERE $w ORDER BY pm.date DESC, pm.id DESC LIMIT 500");
+                             WHERE $w ORDER BY pm.date DESC, pm.id DESC LIMIT $lim OFFSET $off");
         $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$total,'limit'=>$lim,'offset'=>$off], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'pay_save':
@@ -7811,7 +7843,8 @@ KNOWLEDGE;
     // ────────────────────────────────────────────────────────────────────────
 
     default:
-        echo json_encode(["success" => false, "message" => "إجراء غير معروف"]);
+        http_response_code(400);
+        echo json_encode(["success" => false, "message" => "إجراء غير معروف: ".htmlspecialchars($_GET['action'] ?? '', ENT_QUOTES)]);
         break;
 }
 

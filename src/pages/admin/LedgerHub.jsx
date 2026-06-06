@@ -1326,7 +1326,7 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                                             <div className="flex items-center justify-center gap-1">
                                                 <button onClick={() => openView(inv.id)} title="عرض" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 dark:text-brand-400"><Eye size={15} /></button>
                                                 {inv.status === 'draft' && <button onClick={() => editDraft(inv.id)} title="تعديل" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><Edit2 size={15} /></button>}
-                                                {inv.status === 'draft' && <button onClick={() => act('inv_post', inv.id)} title="ترحيل" className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600"><CheckCircle2 size={15} /></button>}
+                                                {inv.status === 'draft' && <button onClick={() => act('inv_post', inv.id, `ترحيل ${inv.invoice_no} (${money(inv.total)} ﷼)؟\nبعد الترحيل لا يمكن التعديل — يلزم إلغاء وعكس القيد.`)} title="ترحيل" className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600"><CheckCircle2 size={15} /></button>}
                                                 {inv.status === 'draft' && <button onClick={() => act('inv_delete', inv.id, 'حذف المسودة؟')} title="حذف" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={15} /></button>}
                                                 {(inv.status === 'posted') && <button onClick={() => act('inv_void', inv.id, 'إلغاء الفاتورة وعكس قيدها؟')} title="إلغاء" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><RotateCcw size={15} /></button>}
                                             </div>
