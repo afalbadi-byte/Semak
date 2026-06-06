@@ -2239,91 +2239,186 @@ function IncomeTab({ toast }) {
 //  تبويب 5: الميزانية العمومية
 // ════════════════════════════════════════════════════════════════════════════
 function BalanceSheetTab({ toast }) {
-    const [to, setTo] = useState(todayISO());
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [to,       setTo]       = useState(todayISO());
+    const [data,     setData]     = useState(null);
+    const [loading,  setLoading]  = useState(false);
+    const [compare,  setCompare]  = useState(false);
+    const [priorTo,  setPriorTo]  = useState(() => { const y = new Date().getFullYear()-1; return `${y}-12-31`; });
+    const [prior,    setPrior]    = useState(null);
+
     const load = useCallback(async (t) => {
         setLoading(true);
         try { const r = await api('gl_balance_sheet', { params: { to: t } }); setData(r); }
         catch (e) { toast(e.message, 'error'); } finally { setLoading(false); }
     }, [toast]);
-    useEffect(() => { load(to); }, []); // eslint-disable-line
 
-    const col = (title, items, total, color, extra) => (
-        <Card className="p-5">
-            <h4 className={`text-base font-black mb-3 ${color}`}>{title}</h4>
-            <div className="space-y-1">
-                {items.map(r => (
-                    <div key={r.id} className="flex justify-between text-sm py-1 border-b border-slate-50 dark:border-brand-700">
-                        <EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب"><span className="font-mono text-xs opacity-70">{r.code}</span> {r.name}</EntityLink>
-                        <span className="tabular-nums font-bold" dir="ltr">{money(r.amount)}</span>
-                    </div>
-                ))}
-                {extra}
-            </div>
-            <div className="flex justify-between mt-3 pt-3 border-t-2 border-slate-100 dark:border-brand-700 font-black text-brand-800 dark:text-brand-100">
-                <span>الإجمالي</span><span className="tabular-nums" dir="ltr">{money(total)} ﷼</span>
-            </div>
-        </Card>
+    const loadPrior = useCallback(async (pt) => {
+        try { const r = await api('gl_balance_sheet', { params: { to: pt } }); if (r.success) setPrior(r); }
+        catch { /* silent */ }
+    }, []);
+
+    useEffect(() => { load(to); }, []); // eslint-disable-line
+    useEffect(() => { if (compare) loadPrior(priorTo); else setPrior(null); }, [compare, priorTo, loadPrior]);
+
+    // خريطة أرصدة الفترة المقارنة
+    const priorMap = useMemo(() => {
+        if (!prior) return {};
+        const m = {};
+        [...(prior.assets||[]), ...(prior.liabilities||[]), ...(prior.equity||[])].forEach(r => { m[r.id] = r.amount; });
+        return m;
+    }, [prior]);
+
+    const varCell = (cur, priorAmt) => {
+        if (!compare || !prior) return null;
+        const diff = cur - (priorAmt ?? 0);
+        const pos = diff >= 0;
+        return <td className={`py-2 px-3 text-left tabular-nums text-[12px] font-bold ${pos?'text-emerald-600 dark:text-emerald-400':'text-rose-600 dark:text-rose-400'}`} dir="ltr">
+            {pos?'+':''}{money(diff)}
+        </td>;
+    };
+
+    const section = (title, items, total, secColor, extraRow) => (
+        <div>
+            <tr className={`bg-slate-50/80 dark:bg-brand-800/50 border-y border-slate-100 dark:border-brand-700`}>
+                <td className={`py-2 px-3 font-black text-sm ${secColor}`} colSpan={compare&&prior?4:2}>{title}</td>
+            </tr>
+            {items.map(r => (
+                <tr key={r.id} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                    <td className="py-2 px-3 text-sm">
+                        <EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب">
+                            <span className="font-mono text-[11px] opacity-60 ml-2">{r.code}</span>{r.name}
+                        </EntityLink>
+                    </td>
+                    {compare && prior && <td className="py-2 px-3 text-left tabular-nums text-sm text-slate-400 dark:text-brand-600 font-bold" dir="ltr">{money(priorMap[r.id]??0)}</td>}
+                    <td className="py-2 px-3 text-left tabular-nums font-bold text-sm" dir="ltr">{money(r.amount)}</td>
+                    {varCell(r.amount, priorMap[r.id])}
+                </tr>
+            ))}
+            {extraRow}
+            <tr className="border-b-2 border-slate-200 dark:border-brand-600 bg-slate-50/50 dark:bg-brand-800/30 font-black">
+                <td className="py-2.5 px-3 text-sm text-brand-800 dark:text-brand-100">الإجمالي</td>
+                {compare && prior && <td className="py-2.5 px-3 text-left tabular-nums text-sm text-slate-400 dark:text-brand-500 font-bold" dir="ltr">
+                    {money((prior?.totals?.[title==='الأصول'?'assets':title==='الخصوم'?'liabilities':'equity'])??0)}
+                </td>}
+                <td className="py-2.5 px-3 text-left tabular-nums font-black text-brand-800 dark:text-brand-100" dir="ltr">{money(total)} ﷼</td>
+                {compare && prior && varCell(total, prior?.totals?.[title==='الأصول'?'assets':title==='الخصوم'?'liabilities':'equity'])}
+            </tr>
+        </div>
     );
+
+    const printBS = () => {
+        if (!data) return;
+        const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+        const cmpHead = compare&&prior?`<th style="text-align:left">${priorTo}</th><th style="text-align:left">التغيير</th>`:'';
+        const r2 = (code,name,cur,pid) => {
+            const pa = compare&&prior ? (priorMap[pid]??0) : null;
+            const cmpCols = compare&&prior?`<td class="amount">${money(pa)} ﷼</td><td class="amount ${cur-pa>=0?'':'neg'}">${cur-pa>=0?'+':''}${money(cur-pa)} ﷼</td>`:'';
+            return `<tr><td>${esc(code)} · ${esc(name)}</td><td class="amount">${money(cur)} ﷼</td>${cmpCols}</tr>`;
+        };
+        const totR = (lbl,cur,prior_v,cls='total-row') => {
+            const cmpCols = compare&&prior?`<td class="amount">${money(prior_v??0)} ﷼</td><td class="amount">${money(cur-(prior_v??0))} ﷼</td>`:'';
+            return `<tr class="${cls}"><td>${lbl}</td><td class="amount">${money(cur)} ﷼</td>${cmpCols}</tr>`;
+        };
+        printHtml('الميزانية العمومية', `
+            <style>.neg{color:#b91c1c}</style>
+            <h1>الميزانية العمومية</h1><h2>بتاريخ ${to}${compare&&prior?` (مقارنة: ${priorTo})`:''}</h2>
+            <table><thead><tr><th>الحساب</th><th style="text-align:left">${to}</th>${cmpHead}</tr></thead><tbody>
+            <tr class="section-header"><td colspan="4">الأصول</td></tr>
+            ${(data.assets||[]).map(r=>r2(r.code,r.name,r.amount,r.id)).join('')}
+            ${totR('إجمالي الأصول',data.totals.assets,prior?.totals?.assets)}
+            <tr class="section-header"><td colspan="4">الخصوم</td></tr>
+            ${(data.liabilities||[]).map(r=>r2(r.code,r.name,r.amount,r.id)).join('')}
+            ${totR('إجمالي الخصوم',data.totals.liabilities,prior?.totals?.liabilities)}
+            <tr class="section-header"><td colspan="4">حقوق الملكية</td></tr>
+            ${(data.equity||[]).map(r=>r2(r.code,r.name,r.amount,r.id)).join('')}
+            <tr><td>صافي دخل الفترة</td><td class="amount">${money(data.net_income)} ﷼</td>${compare&&prior?`<td class="amount">${money(prior?.net_income??0)} ﷼</td><td class="amount">${money(data.net_income-(prior?.net_income??0))} ﷼</td>`:''}</tr>
+            ${totR('إجمالي حقوق الملكية',data.totals.equity,prior?.totals?.equity)}
+            ${totR('إجمالي الخصوم + حقوق الملكية',data.totals.liabilities+data.totals.equity,(prior?.totals?.liabilities??0)+(prior?.totals?.equity??0),'net-row')}
+            </tbody></table>`);
+    };
 
     return (
         <div className="space-y-4">
             <div className="flex items-end justify-between flex-wrap gap-3">
                 <PeriodBar to={to} setTo={setTo} onApply={() => load(to)} showFrom={false} />
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* مقارنة */}
+                    <button onClick={() => setCompare(p => !p)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border transition ${
+                            compare ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-indigo-400'
+                        }`}>
+                        <ArrowRightLeft size={13} /> مقارنة
+                    </button>
+                    {compare && (
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-slate-400 dark:text-brand-500">بتاريخ</span>
+                            <input type="date" value={priorTo} onChange={e => setPriorTo(e.target.value)}
+                                className="px-2 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-500/30 text-[13px] font-bold dark:bg-brand-900 dark:text-brand-100 outline-none focus:border-indigo-400" />
+                        </div>
+                    )}
                     {data && <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${data.totals.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {data.totals.balanced ? '✓ الميزانية متوازنة' : '✗ غير متوازنة'}</span>}
+                        {data.totals.balanced ? '✓ متوازنة' : '✗ غير متوازنة'}</span>}
                     {data && <>
                         <Btn color="gray" size="sm" onClick={() => downloadCSV('balance_sheet.csv',
-                            ['الفئة', 'الكود', 'الحساب', 'المبلغ'],
+                            ['الفئة','الكود','الحساب', to, ...(compare&&prior?[priorTo,'التغيير']:[])],
                             [
-                                ...(data.assets      || []).map(r => ['أصول',   r.code, r.name, r.amount]),
-                                ['', '', 'إجمالي الأصول', data.totals.assets],
-                                ...(data.liabilities || []).map(r => ['خصوم',   r.code, r.name, r.amount]),
-                                ['', '', 'إجمالي الخصوم', data.totals.liabilities],
-                                ...(data.equity      || []).map(r => ['ملكية',  r.code, r.name, r.amount]),
-                                ['صافي دخل الفترة', '', '', data.net_income],
-                                ['', '', 'إجمالي حقوق الملكية', data.totals.equity],
+                                ...(data.assets||[]).map(r=>['أصول',r.code,r.name,r.amount,...(compare&&prior?[priorMap[r.id]??0,r.amount-(priorMap[r.id]??0)]:[])]),
+                                ['','','إجمالي الأصول',data.totals.assets,...(compare&&prior?[prior.totals.assets,data.totals.assets-prior.totals.assets]:[])],
+                                ...(data.liabilities||[]).map(r=>['خصوم',r.code,r.name,r.amount,...(compare&&prior?[priorMap[r.id]??0,r.amount-(priorMap[r.id]??0)]:[])]),
+                                ['','','إجمالي الخصوم',data.totals.liabilities,...(compare&&prior?[prior.totals.liabilities,data.totals.liabilities-prior.totals.liabilities]:[])],
+                                ...(data.equity||[]).map(r=>['ملكية',r.code,r.name,r.amount,...(compare&&prior?[priorMap[r.id]??0,r.amount-(priorMap[r.id]??0)]:[])]),
+                                ['صافي دخل','','',data.net_income,...(compare&&prior?[prior.net_income,data.net_income-prior.net_income]:[])],
                             ])}>
                             <Download size={14} /> تصدير
                         </Btn>
-                        <Btn color="gray" size="sm" onClick={() => {
-                            const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-                            const r2 = (code,name,amt) => `<tr><td>${esc(code)} · ${esc(name)}</td><td class="amount">${money(amt)} ﷼</td></tr>`;
-                            const totR = (label,amt,cls='total-row') => `<tr class="${cls}"><td>${esc(label)}</td><td class="amount">${money(amt)} ﷼</td></tr>`;
-                            printHtml('الميزانية العمومية', `
-                                <h1>الميزانية العمومية</h1><h2>بتاريخ ${to}</h2>
-                                <table><thead><tr><th>الحساب</th><th style="text-align:left">المبلغ</th></tr></thead><tbody>
-                                <tr class="section-header"><td colspan="2">الأصول</td></tr>
-                                ${(data.assets||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
-                                ${totR('إجمالي الأصول',data.totals.assets)}
-                                <tr class="section-header"><td colspan="2">الخصوم</td></tr>
-                                ${(data.liabilities||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
-                                ${totR('إجمالي الخصوم',data.totals.liabilities)}
-                                <tr class="section-header"><td colspan="2">حقوق الملكية</td></tr>
-                                ${(data.equity||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
-                                <tr><td>صافي دخل الفترة</td><td class="amount">${money(data.net_income)} ﷼</td></tr>
-                                ${totR('إجمالي حقوق الملكية',data.totals.equity)}
-                                ${totR('إجمالي الخصوم + حقوق الملكية',data.totals.liabilities+data.totals.equity,'net-row')}
-                                </tbody></table>`);
-                        }}>
-                            <Printer size={14} /> طباعة
-                        </Btn>
+                        <Btn color="gray" size="sm" onClick={printBS}><Printer size={14} /> طباعة</Btn>
                     </>}
                 </div>
             </div>
-            {loading ? <Spinner /> : !data ? <Empty /> : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {col('الأصول', data.assets, data.totals.assets, 'text-blue-700')}
-                    <div className="space-y-4">
-                        {col('الخصوم', data.liabilities, data.totals.liabilities, 'text-amber-700')}
-                        {col('حقوق الملكية', data.equity, data.totals.equity, 'text-purple-700',
-                            <div className="flex justify-between text-sm py-1 border-b border-slate-50 dark:border-brand-700 text-slate-500 dark:text-brand-400 italic">
-                                <span>صافي دخل الفترة</span><span className="tabular-nums" dir="ltr">{money(data.net_income)}</span>
-                            </div>)}
-                    </div>
+
+            {/* رأس المقارنة */}
+            {compare && prior && (
+                <div className="flex justify-end gap-4 text-[11px] font-bold text-slate-400 dark:text-brand-500 px-1">
+                    <span>{priorTo}</span>
+                    <span>التغيير</span>
+                    <span className="min-w-[80px] text-left">{to}</span>
                 </div>
+            )}
+
+            {loading ? <Spinner /> : !data ? <Empty /> : (
+                <Card>
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="text-[11px] font-black text-slate-400 dark:text-brand-500 border-b border-slate-100 dark:border-brand-700 bg-slate-50/70 dark:bg-brand-800/40">
+                                    <th className="text-right py-2.5 px-3">الحساب</th>
+                                    {compare && prior && <th className="text-left py-2.5 px-3">{priorTo}</th>}
+                                    <th className="text-left py-2.5 px-3">{to}</th>
+                                    {compare && prior && <th className="text-left py-2.5 px-3">التغيير</th>}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {section('الأصول', data.assets||[], data.totals.assets, 'text-blue-700 dark:text-blue-400')}
+                                {section('الخصوم', data.liabilities||[], data.totals.liabilities, 'text-amber-700 dark:text-amber-400')}
+                                {section('حقوق الملكية', data.equity||[], data.totals.equity, 'text-purple-700 dark:text-purple-400',
+                                    <tr className="border-b border-slate-50 dark:border-brand-700 italic">
+                                        <td className="py-2 px-3 text-sm text-slate-500 dark:text-brand-400">صافي دخل الفترة</td>
+                                        {compare && prior && <td className="py-2 px-3 text-left tabular-nums text-sm text-slate-400 dark:text-brand-600" dir="ltr">{money(prior.net_income??0)}</td>}
+                                        <td className="py-2 px-3 text-left tabular-nums text-sm font-bold" dir="ltr">{money(data.net_income)}</td>
+                                        {varCell(data.net_income, prior?.net_income)}
+                                    </tr>
+                                )}
+                                {/* الإجمالي العام */}
+                                <tr className="bg-brand-50 dark:bg-brand-800/60 font-black text-brand-800 dark:text-brand-100 border-t-2 border-brand-200 dark:border-brand-600">
+                                    <td className="py-3 px-3">إجمالي الخصوم + حقوق الملكية</td>
+                                    {compare && prior && <td className="py-3 px-3 text-left tabular-nums" dir="ltr">{money((prior.totals.liabilities||0)+(prior.totals.equity||0))}</td>}
+                                    <td className="py-3 px-3 text-left tabular-nums" dir="ltr">{money(data.totals.liabilities+data.totals.equity)} ﷼</td>
+                                    {varCell(data.totals.liabilities+data.totals.equity, (prior?.totals?.liabilities||0)+(prior?.totals?.equity||0))}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
             )}
         </div>
     );
