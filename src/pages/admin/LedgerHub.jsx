@@ -31,8 +31,34 @@ const TYPE_COLORS = {
 
 // ─── أدوات مساعدة ────────────────────────────────────────────────────────────
 const money = formatMoney; // مشترك من Money.jsx — تنسيق موحّد
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const yearStart = () => new Date().getFullYear() + '-01-01';
+const todayISO   = () => new Date().toISOString().slice(0, 10);
+const yearStart  = () => new Date().getFullYear() + '-01-01';
+const monthStart = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; };
+const prevMonth  = () => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
+    const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0');
+    const last = new Date(y, d.getMonth()+1, 0).getDate();
+    return { from: `${y}-${m}-01`, to: `${y}-${m}-${last}` };
+};
+
+// فتح نافذة طباعة نظيفة بمحتوى HTML
+const printHtml = (title, bodyHtml) => {
+    const w = window.open('', '_blank', 'width=840,height=1000');
+    if (!w) return;
+    w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title}</title>
+<style>*{box-sizing:border-box}body{font-family:'Cairo','Segoe UI',Arial,sans-serif;color:#1a365d;margin:0;padding:28px;font-size:13px}
+h1{font-size:18px;font-weight:800;margin:0 0 4px}h2{font-size:13px;font-weight:600;color:#64748b;margin:0 0 20px}
+table{width:100%;border-collapse:collapse}th,td{padding:7px 10px}
+thead th{background:#1a365d;color:#fff;font-weight:700;text-align:right}
+tr:nth-child(even){background:#f8fafc}
+.section-header td{background:#f1f5f9;font-weight:700;font-size:12px;color:#475569;text-transform:uppercase;letter-spacing:.5px}
+.total-row td{border-top:2px solid #c5a059;font-weight:800;font-size:14px}
+.net-row td{background:#1a365d;color:#fff;font-weight:900;font-size:15px}
+.amount{text-align:left;font-family:monospace;dir:ltr}
+@media print{@page{size:A4;margin:15mm}}</style>
+</head><body>${bodyHtml}<script>setTimeout(()=>{try{print();}catch(e){}},250)</script></body></html>`);
+    w.document.close();
+};
 
 async function api(action, { method = 'GET', params = {}, body = null } = {}) {
     const qs = new URLSearchParams({ action, tenant: TENANT, ...params }).toString();
@@ -692,9 +718,22 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                     <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)}
                         title="إلى تاريخ"
                         className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059] w-36" />
+                    {/* اختصارات زمنية */}
+                    {[
+                        { label: 'اليوم', f: todayISO(), t: todayISO() },
+                        { label: 'هذا الشهر', f: monthStart(), t: todayISO() },
+                        { label: 'هذه السنة', f: yearStart(), t: todayISO() },
+                        { label: 'الشهر الماضي', ...prevMonth() },
+                    ].map(({ label, f, t }) => (
+                        <button key={label}
+                            onClick={() => { setFilterFrom(f); setFilterTo(t); }}
+                            className={`text-xs px-2 py-1 rounded-lg font-bold border transition ${filterFrom===f&&filterTo===t?'bg-brand-800 text-white border-brand-800':'bg-slate-50 border-slate-200 dark:bg-brand-800 dark:border-brand-700 text-slate-500 dark:text-brand-300 hover:border-[#c5a059]'}`}>
+                            {label}
+                        </button>
+                    ))}
                     {(filterFrom || filterTo || search) && (
                         <button onClick={() => { setSearch(''); setFilterFrom(''); setFilterTo(''); }}
-                            className="text-xs text-slate-400 hover:text-red-500 font-bold px-1" title="مسح الفلتر">✕</button>
+                            className="text-xs text-slate-400 hover:text-red-500 font-bold px-1" title="مسح الفلتر">✕ مسح</button>
                     )}
                     <span className="text-sm text-slate-500 dark:text-brand-400 shrink-0">{total.toLocaleString()} قيد</span>
                 </div>
@@ -895,17 +934,38 @@ function IncomeTab({ toast }) {
         <div className="space-y-4">
             <div className="flex items-end justify-between flex-wrap gap-3">
                 <PeriodBar from={from} to={to} setFrom={setFrom} setTo={setTo} onApply={load} />
-                {data && <Btn color="gray" size="sm" onClick={() => downloadCSV('income_statement.csv',
-                    ['النوع', 'الكود', 'الحساب', 'مبلغ'],
-                    [
-                        ...( data.revenue  || []).map(r => ['إيرادات', r.code, r.name, r.amount]),
-                        ...( data.expenses || []).map(r => ['مصروفات', r.code, r.name, r.amount]),
-                        ['', '', 'إجمالي الإيرادات', data.totals.revenue],
-                        ['', '', 'إجمالي المصروفات', data.totals.expenses],
-                        ['', '', 'صافي الدخل', data.totals.net],
-                    ])}>
-                    <Download size={14} /> تصدير
-                </Btn>}
+                {data && (
+                    <div className="flex gap-2">
+                        <Btn color="gray" size="sm" onClick={() => downloadCSV('income_statement.csv',
+                            ['النوع', 'الكود', 'الحساب', 'مبلغ'],
+                            [
+                                ...( data.revenue  || []).map(r => ['إيرادات', r.code, r.name, r.amount]),
+                                ...( data.expenses || []).map(r => ['مصروفات', r.code, r.name, r.amount]),
+                                ['', '', 'إجمالي الإيرادات', data.totals.revenue],
+                                ['', '', 'إجمالي المصروفات', data.totals.expenses],
+                                ['', '', 'صافي الدخل', data.totals.net],
+                            ])}>
+                            <Download size={14} /> تصدير
+                        </Btn>
+                        <Btn color="gray" size="sm" onClick={() => {
+                            const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+                            const r2 = (code,name,amt) => `<tr><td>${esc(code)} · ${esc(name)}</td><td class="amount">${money(amt)} ﷼</td></tr>`;
+                            printHtml('قائمة الدخل', `
+                                <h1>قائمة الدخل</h1><h2>من ${from} إلى ${to}</h2>
+                                <table><thead><tr><th>الحساب</th><th style="text-align:left">المبلغ</th></tr></thead><tbody>
+                                <tr class="section-header"><td colspan="2">الإيرادات</td></tr>
+                                ${(data.revenue||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
+                                <tr class="total-row"><td>إجمالي الإيرادات</td><td class="amount">${money(data.totals.revenue)} ﷼</td></tr>
+                                <tr class="section-header"><td colspan="2">المصروفات</td></tr>
+                                ${(data.expenses||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
+                                <tr class="total-row"><td>إجمالي المصروفات</td><td class="amount">${money(data.totals.expenses)} ﷼</td></tr>
+                                <tr class="net-row"><td>صافي الدخل</td><td class="amount">${money(data.totals.net)} ﷼</td></tr>
+                                </tbody></table>`);
+                        }}>
+                            <Printer size={14} /> طباعة
+                        </Btn>
+                    </div>
+                )}
             </div>
             {loading ? <Spinner /> : !data ? <Empty /> : (
                 <Card className="p-5 md:p-6 space-y-5">
@@ -964,19 +1024,43 @@ function BalanceSheetTab({ toast }) {
                 <div className="flex items-center gap-2">
                     {data && <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${data.totals.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                         {data.totals.balanced ? '✓ الميزانية متوازنة' : '✗ غير متوازنة'}</span>}
-                    {data && <Btn color="gray" size="sm" onClick={() => downloadCSV('balance_sheet.csv',
-                        ['الفئة', 'الكود', 'الحساب', 'المبلغ'],
-                        [
-                            ...(data.assets      || []).map(r => ['أصول',   r.code, r.name, r.amount]),
-                            ['', '', 'إجمالي الأصول', data.totals.assets],
-                            ...(data.liabilities || []).map(r => ['خصوم',   r.code, r.name, r.amount]),
-                            ['', '', 'إجمالي الخصوم', data.totals.liabilities],
-                            ...(data.equity      || []).map(r => ['ملكية',  r.code, r.name, r.amount]),
-                            ['صافي دخل الفترة', '', '', data.net_income],
-                            ['', '', 'إجمالي حقوق الملكية', data.totals.equity],
-                        ])}>
-                        <Download size={14} /> تصدير
-                    </Btn>}
+                    {data && <>
+                        <Btn color="gray" size="sm" onClick={() => downloadCSV('balance_sheet.csv',
+                            ['الفئة', 'الكود', 'الحساب', 'المبلغ'],
+                            [
+                                ...(data.assets      || []).map(r => ['أصول',   r.code, r.name, r.amount]),
+                                ['', '', 'إجمالي الأصول', data.totals.assets],
+                                ...(data.liabilities || []).map(r => ['خصوم',   r.code, r.name, r.amount]),
+                                ['', '', 'إجمالي الخصوم', data.totals.liabilities],
+                                ...(data.equity      || []).map(r => ['ملكية',  r.code, r.name, r.amount]),
+                                ['صافي دخل الفترة', '', '', data.net_income],
+                                ['', '', 'إجمالي حقوق الملكية', data.totals.equity],
+                            ])}>
+                            <Download size={14} /> تصدير
+                        </Btn>
+                        <Btn color="gray" size="sm" onClick={() => {
+                            const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+                            const r2 = (code,name,amt) => `<tr><td>${esc(code)} · ${esc(name)}</td><td class="amount">${money(amt)} ﷼</td></tr>`;
+                            const totR = (label,amt,cls='total-row') => `<tr class="${cls}"><td>${esc(label)}</td><td class="amount">${money(amt)} ﷼</td></tr>`;
+                            printHtml('الميزانية العمومية', `
+                                <h1>الميزانية العمومية</h1><h2>بتاريخ ${to}</h2>
+                                <table><thead><tr><th>الحساب</th><th style="text-align:left">المبلغ</th></tr></thead><tbody>
+                                <tr class="section-header"><td colspan="2">الأصول</td></tr>
+                                ${(data.assets||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
+                                ${totR('إجمالي الأصول',data.totals.assets)}
+                                <tr class="section-header"><td colspan="2">الخصوم</td></tr>
+                                ${(data.liabilities||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
+                                ${totR('إجمالي الخصوم',data.totals.liabilities)}
+                                <tr class="section-header"><td colspan="2">حقوق الملكية</td></tr>
+                                ${(data.equity||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
+                                <tr><td>صافي دخل الفترة</td><td class="amount">${money(data.net_income)} ﷼</td></tr>
+                                ${totR('إجمالي حقوق الملكية',data.totals.equity)}
+                                ${totR('إجمالي الخصوم + حقوق الملكية',data.totals.liabilities+data.totals.equity,'net-row')}
+                                </tbody></table>`);
+                        }}>
+                            <Printer size={14} /> طباعة
+                        </Btn>
+                    </>}
                 </div>
             </div>
             {loading ? <Spinner /> : !data ? <Empty /> : (
@@ -1129,6 +1213,9 @@ function PartiesTab({ parties, reload, loading, toast }) {
     const [type, setType] = useState('customer');
     const [editing, setEditing] = useState(null);
     const [ledger, setLedger] = useState(null);
+    const [ledgerFrom, setLedgerFrom] = useState('');
+    const [ledgerTo,   setLedgerTo]   = useState('');
+    const [ledgerLoading, setLedgerLoading] = useState(false);
     const [aging, setAging] = useState(null);
     const [agingLoading, setAgingLoading] = useState(false);
 
@@ -1147,9 +1234,16 @@ function PartiesTab({ parties, reload, loading, toast }) {
         try { const r = await api('gl_party_delete', { method: 'POST', body: { id } }); if (r.success) { toast(r.message); reload(); } else toast(r.message, 'error'); }
         catch (e) { toast(e.message, 'error'); }
     };
-    const openLedger = async (p) => {
-        try { const r = await api('gl_party_ledger', { params: { party_id: p.id } }); if (r.success) setLedger(r); else toast(r.message, 'error'); }
-        catch (e) { toast(e.message, 'error'); }
+    const openLedger = async (p, fr, to) => {
+        setLedgerLoading(true);
+        try {
+            const params = { party_id: p ? p.id : (ledger?.party?.id) };
+            if (fr) params.from = fr; else if (ledgerFrom) params.from = ledgerFrom;
+            if (to) params.to   = to; else if (ledgerTo)   params.to   = ledgerTo;
+            const r = await api('gl_party_ledger', { params });
+            if (r.success) setLedger(r); else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setLedgerLoading(false); }
     };
     const loadAging = async () => {
         setAgingLoading(true);
@@ -1307,21 +1401,38 @@ function PartiesTab({ parties, reload, loading, toast }) {
             {ledger && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setLedger(null)}>
                     <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-2xl p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()} dir="rtl">
-                        <div className="flex items-center justify-between mb-4 gap-3">
-                            <div>
-                                <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">كشف حساب: {ledger.party.name}</h3>
-                                <p className="text-xs text-slate-500 dark:text-brand-400">رصيد افتتاحي: <span className="font-bold tabular-nums" dir="ltr">{money(ledger.opening)}</span></p>
+                        <div className="space-y-3 mb-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">كشف حساب: {ledger.party.name}</h3>
+                                    <p className="text-xs text-slate-500 dark:text-brand-400">رصيد افتتاحي: <span className="font-bold tabular-nums" dir="ltr">{money(ledger.opening)}</span></p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {ledger.data.length > 0 && (
+                                        <Btn color="gray" size="sm" onClick={() => downloadCSV(
+                                            `party_${ledger.party.name}.csv`,
+                                            ['القيد', 'التاريخ', 'مدين', 'دائن', 'الرصيد'],
+                                            ledger.data.map(r => [r.entry_no, r.date, r.debit || '', r.credit || '', r.balance]))}>
+                                            <Download size={13} /> تصدير
+                                        </Btn>
+                                    )}
+                                    <button onClick={() => setLedger(null)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><X size={20} /></button>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                                {ledger.data.length > 0 && (
-                                    <Btn color="gray" size="sm" onClick={() => downloadCSV(
-                                        `party_${ledger.party.name}.csv`,
-                                        ['القيد', 'التاريخ', 'مدين', 'دائن', 'الرصيد'],
-                                        ledger.data.map(r => [r.entry_no, r.date, r.debit || '', r.credit || '', r.balance]))}>
-                                        <Download size={13} /> تصدير
-                                    </Btn>
+                            {/* فلتر التاريخ */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <input type="date" value={ledgerFrom} onChange={e => setLedgerFrom(e.target.value)}
+                                    className="bg-slate-50 border border-slate-200 dark:bg-brand-800 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059] w-32" />
+                                <span className="text-xs text-slate-400">—</span>
+                                <input type="date" value={ledgerTo} onChange={e => setLedgerTo(e.target.value)}
+                                    className="bg-slate-50 border border-slate-200 dark:bg-brand-800 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059] w-32" />
+                                <Btn color="gold" size="sm" onClick={() => openLedger(null, ledgerFrom, ledgerTo)}>
+                                    {ledgerLoading ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />} عرض
+                                </Btn>
+                                {(ledgerFrom || ledgerTo) && (
+                                    <button onClick={() => { setLedgerFrom(''); setLedgerTo(''); openLedger(null, '', ''); }}
+                                        className="text-xs text-slate-400 hover:text-red-500 font-bold px-1" title="مسح الفلتر">✕ كل التواريخ</button>
                                 )}
-                                <button onClick={() => setLedger(null)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><X size={20} /></button>
                             </div>
                         </div>
                         {ledger.data.length === 0 ? <Empty msg="لا توجد حركات" /> : (
