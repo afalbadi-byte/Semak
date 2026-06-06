@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-06-v420
+// deploy: 2026-06-06-v421
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -987,7 +987,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v420','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v421','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -3833,15 +3833,19 @@ switch ($action) {
         break;
 
     case 'gl_entries':
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid  = (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? '');
         $to   = $conn->real_escape_string($_GET['to'] ?? '');
+        $lim  = min(500, max(1, (int)($_GET['limit']  ?? 100)));
+        $off  = max(0,           (int)($_GET['offset'] ?? 0));
         $w = "tenant_id=$tid";
         if ($from) $w .= " AND date>='$from'";
         if ($to)   $w .= " AND date<='$to'";
-        $res = $conn->query("SELECT * FROM acc_entries WHERE $w ORDER BY date DESC, id DESC LIMIT 500");
+        $tr = $conn->query("SELECT COUNT(*) c FROM acc_entries WHERE $w");
+        $total = $tr ? (int)$tr->fetch_assoc()['c'] : 0;
+        $res = $conn->query("SELECT * FROM acc_entries WHERE $w ORDER BY date DESC, id DESC LIMIT $lim OFFSET $off");
         $rows = []; while ($res && ($x=$res->fetch_assoc())) $rows[] = $x;
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$total,'limit'=>$lim,'offset'=>$off], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_entry_single':
@@ -3855,15 +3859,16 @@ switch ($action) {
         break;
 
     case 'gl_trial_balance':
-        // ميزان المراجعة — يحسبه كودنا من البنود (إثبات الاستقلال)
+        // ميزان المراجعة — يحسبه كودنا من البنود المُرحَّلة فقط (is_posted=1)
         $tid = (int)($_GET['tenant'] ?? 1);
         $to  = $conn->real_escape_string($_GET['to'] ?? '');
-        $dateJoin = $to ? "AND e.date<='$to'" : '';
+        $dateCond = $to ? "AND e.date<='$to'" : '';
+        // INNER JOIN بدل LEFT JOIN لضمان أن SUM يشمل فقط بنود القيود المُرحَّلة ضمن الفترة
         $sql = "SELECT a.id,a.code,a.name,a.type,
                    COALESCE(SUM(l.debit),0) debit, COALESCE(SUM(l.credit),0) credit
                 FROM acc_accounts a
-                LEFT JOIN acc_lines l ON l.account_id=a.id
-                LEFT JOIN acc_entries e ON e.id=l.entry_id $dateJoin
+                JOIN acc_lines l ON l.account_id=a.id
+                JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1 $dateCond
                 WHERE a.tenant_id=$tid AND a.is_group=0
                 GROUP BY a.id HAVING debit<>0 OR credit<>0
                 ORDER BY a.code";
@@ -3962,11 +3967,12 @@ switch ($action) {
         $isDebitNat = in_array($accRow['type'], ['asset','expense']);
         $opD = 0; $opC = 0;
         if ($from) {
-            $o = $conn->query("SELECT COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.account_id=$acc AND l.tenant_id=$tid AND e.date<'$from'");
+            // الرصيد الافتتاحي: المُرحَّل فقط قبل تاريخ البداية
+            $o = $conn->query("SELECT COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.account_id=$acc AND l.tenant_id=$tid AND e.is_posted=1 AND e.date<'$from'");
             if ($o && ($x = $o->fetch_assoc())) { $opD = (float)$x['d']; $opC = (float)$x['c']; }
         }
         $opening = $isDebitNat ? ($opD - $opC) : ($opC - $opD);
-        $w = "l.account_id=$acc AND l.tenant_id=$tid";
+        $w = "l.account_id=$acc AND l.tenant_id=$tid AND e.is_posted=1";
         if ($from) $w .= " AND e.date>='$from'";
         if ($to)   $w .= " AND e.date<='$to'";
         $res = $conn->query("SELECT e.id entry_id,e.entry_no,e.date,e.description ent_desc,l.debit,l.credit,l.description line_desc,l.party_type,l.party_id FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE $w ORDER BY e.date,e.id,l.id");
@@ -3981,14 +3987,17 @@ switch ($action) {
         break;
 
     case 'gl_income_statement':
-        // قائمة الدخل — إيرادات ومصروفات للفترة (كودنا يحسب)
+        // قائمة الدخل — إيرادات ومصروفات للفترة (المُرحَّلة فقط)
         $tid  = (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
-        $sql = "SELECT a.id,a.code,a.name,a.type, COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c
+        // CASE داخل SUM لضمان تصفية صحيحة حتى مع LEFT JOIN — لا تُجمع إلا الحركات المُرحَّلة ضمن الفترة
+        $sql = "SELECT a.id,a.code,a.name,a.type,
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to' THEN l.debit  ELSE 0 END),0) d,
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to' THEN l.credit ELSE 0 END),0) c
                 FROM acc_accounts a
                 LEFT JOIN acc_lines l ON l.account_id=a.id AND l.tenant_id=a.tenant_id
-                LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.date>='$from' AND e.date<='$to'
+                LEFT JOIN acc_entries e ON e.id=l.entry_id
                 WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('revenue','expense')
                 GROUP BY a.id ORDER BY a.code";
         $res = $conn->query($sql); $rev = []; $exp = []; $totRev = 0; $totExp = 0;
@@ -4001,13 +4010,16 @@ switch ($action) {
         break;
 
     case 'gl_balance_sheet':
-        // الميزانية العمومية حتى تاريخ — أصول/خصوم/حقوق ملكية + صافي الدخل (كودنا يحسب)
+        // الميزانية العمومية حتى تاريخ — أصول/خصوم/حقوق ملكية + صافي الدخل (المُرحَّلة فقط)
         $tid = (int)($_GET['tenant'] ?? 1);
         $to  = $conn->real_escape_string($_GET['to'] ?? date('Y-m-d'));
-        $sql = "SELECT a.id,a.code,a.name,a.type, COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c
+        // CASE داخل SUM لضمان تصفية صحيحة حتى مع LEFT JOIN
+        $sql = "SELECT a.id,a.code,a.name,a.type,
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date<='$to' THEN l.debit  ELSE 0 END),0) d,
+                   COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date<='$to' THEN l.credit ELSE 0 END),0) c
                 FROM acc_accounts a
                 LEFT JOIN acc_lines l ON l.account_id=a.id AND l.tenant_id=a.tenant_id
-                LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.date<='$to'
+                LEFT JOIN acc_entries e ON e.id=l.entry_id
                 WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('asset','liability','equity')
                 GROUP BY a.id ORDER BY a.code";
         $res = $conn->query($sql); $assets = []; $liab = []; $eq = []; $tA = 0; $tL = 0; $tE = 0;
@@ -4018,23 +4030,40 @@ switch ($action) {
             else { $amt = round($c - $d, 2); $x['amount'] = $amt; $tE += $amt; $eq[] = $x; }
         }
         // صافي الدخل المتراكم حتى التاريخ يُضاف لحقوق الملكية (الأرباح غير المُرحَّلة)
-        $ni = $conn->query("SELECT COALESCE(SUM(CASE WHEN a.type='revenue' THEN l.credit-l.debit ELSE 0 END),0) rev, COALESCE(SUM(CASE WHEN a.type='expense' THEN l.debit-l.credit ELSE 0 END),0) exp FROM acc_lines l JOIN acc_accounts a ON a.id=l.account_id JOIN acc_entries e ON e.id=l.entry_id WHERE l.tenant_id=$tid AND e.date<='$to' AND a.type IN ('revenue','expense')");
+        $ni = $conn->query("SELECT COALESCE(SUM(CASE WHEN a.type='revenue' THEN l.credit-l.debit ELSE 0 END),0) rev, COALESCE(SUM(CASE WHEN a.type='expense' THEN l.debit-l.credit ELSE 0 END),0) exp FROM acc_lines l JOIN acc_accounts a ON a.id=l.account_id JOIN acc_entries e ON e.id=l.entry_id WHERE l.tenant_id=$tid AND e.is_posted=1 AND e.date<='$to' AND a.type IN ('revenue','expense')");
         $netIncome = 0; if ($ni && ($nr = $ni->fetch_assoc())) $netIncome = round((float)$nr['rev'] - (float)$nr['exp'], 2);
         $tE2 = round($tE + $netIncome, 2);
         echo json_encode(['success'=>true,'as_of'=>$to,'assets'=>$assets,'liabilities'=>$liab,'equity'=>$eq,'net_income'=>$netIncome,'totals'=>['assets'=>round($tA,2),'liabilities'=>round($tL,2),'equity'=>$tE2,'liab_plus_equity'=>round($tL+$tE2,2),'balanced'=>round($tA,2)==round($tL+$tE2,2)]], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_vat_report':
-        // إقرار ضريبة القيمة المضافة — حساب 2102 (مخرجات دائن / مدخلات مدين)
+        // إقرار ضريبة القيمة المضافة — مخرجات (2102) ومدخلات (1401) بشكل منفصل — المُرحَّلة فقط
         $tid  = (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
+        // ضريبة المخرجات: الدائن صافي في حساب 2102 (ضريبة مبيعات مستحقة)
         $ar = $conn->query("SELECT id FROM acc_accounts WHERE tenant_id=$tid AND code='2102' LIMIT 1");
-        $vatId = $ar ? (int)($ar->fetch_assoc()['id'] ?? 0) : 0;
-        if (!$vatId) { echo json_encode(['success'=>false,'message'=>'حساب ضريبة القيمة المضافة (2102) غير موجود']); break; }
-        $r = $conn->query("SELECT COALESCE(SUM(l.credit),0) out_vat, COALESCE(SUM(l.debit),0) in_vat FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.account_id=$vatId AND l.tenant_id=$tid AND e.date>='$from' AND e.date<='$to'");
-        $out = 0; $in = 0; if ($r && ($x = $r->fetch_assoc())) { $out = (float)$x['out_vat']; $in = (float)$x['in_vat']; }
-        echo json_encode(['success'=>true,'period'=>['from'=>$from,'to'=>$to],'output_vat'=>round($out,2),'input_vat'=>round($in,2),'net_payable'=>round($out-$in,2)], JSON_UNESCAPED_UNICODE);
+        $outVatId = $ar ? (int)($ar->fetch_assoc()['id'] ?? 0) : 0;
+        // ضريبة المدخلات: المدين صافي في حساب 1401 (ضريبة مشتريات قابلة للاسترداد)
+        $ar2 = $conn->query("SELECT id FROM acc_accounts WHERE tenant_id=$tid AND code='1401' LIMIT 1");
+        $inVatId = $ar2 ? (int)($ar2->fetch_assoc()['id'] ?? 0) : 0;
+        $out = 0; $in = 0;
+        if ($outVatId) {
+            $r = $conn->query("SELECT COALESCE(SUM(l.credit),0) cr, COALESCE(SUM(l.debit),0) dr FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.account_id=$outVatId AND l.tenant_id=$tid AND e.is_posted=1 AND e.date>='$from' AND e.date<='$to'");
+            if ($r && ($x=$r->fetch_assoc())) $out = round((float)$x['cr'] - (float)$x['dr'], 2);
+        }
+        if ($inVatId) {
+            $r2 = $conn->query("SELECT COALESCE(SUM(l.debit),0) dr, COALESCE(SUM(l.credit),0) cr FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.account_id=$inVatId AND l.tenant_id=$tid AND e.is_posted=1 AND e.date>='$from' AND e.date<='$to'");
+            if ($r2 && ($x2=$r2->fetch_assoc())) $in = round((float)$x2['dr'] - (float)$x2['cr'], 2);
+        }
+        echo json_encode([
+            'success'     => true,
+            'period'      => ['from'=>$from,'to'=>$to],
+            'output_vat'  => round($out, 2),
+            'input_vat'   => round($in,  2),
+            'net_payable' => round($out - $in, 2),
+            'accounts'    => ['output'=>['code'=>'2102','id'=>$outVatId],'input'=>['code'=>'1401','id'=>$inVatId]],
+        ], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_parties':
@@ -4124,11 +4153,11 @@ switch ($action) {
         $sign = $party['type'] === 'customer' ? 1 : -1;
         $opD = 0; $opC = 0;
         if ($from) {
-            $o = $conn->query("SELECT COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.party_id=$pid AND l.tenant_id=$tid AND e.date<'$from'");
+            $o = $conn->query("SELECT COALESCE(SUM(l.debit),0) d, COALESCE(SUM(l.credit),0) c FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE l.party_id=$pid AND l.tenant_id=$tid AND e.is_posted=1 AND e.date<'$from'");
             if ($o && ($x = $o->fetch_assoc())) { $opD = (float)$x['d']; $opC = (float)$x['c']; }
         }
         $opening = $sign * ($opD - $opC);
-        $w = "l.party_id=$pid AND l.tenant_id=$tid";
+        $w = "l.party_id=$pid AND l.tenant_id=$tid AND e.is_posted=1";
         if ($from) $w .= " AND e.date>='$from'";
         if ($to)   $w .= " AND e.date<='$to'";
         $res = $conn->query("SELECT e.id entry_id,e.entry_no,e.date,e.description ent_desc,l.debit,l.credit,l.due_date,l.description line_desc FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id WHERE $w ORDER BY e.date,e.id,l.id");
@@ -4147,16 +4176,17 @@ switch ($action) {
         if (!in_array($ptype, ['customer','supplier'])) $ptype = 'customer';
         $asof  = $conn->real_escape_string($_GET['as_of'] ?? date('Y-m-d'));
         $sign  = $ptype === 'customer' ? 1 : -1;
+        // يشمل فقط القيود المُرحَّلة حتى تاريخ as_of — فلتر is_posted=1 في الجوين، وفلتر التاريخ في CASE
         $sql = "SELECT p.id,p.name,
-                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date))<=0 THEN (l.debit-l.credit) ELSE 0 END),0) b_cur,
-                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 1 AND 30 THEN (l.debit-l.credit) ELSE 0 END),0) b30,
-                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 31 AND 60 THEN (l.debit-l.credit) ELSE 0 END),0) b60,
-                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 61 AND 90 THEN (l.debit-l.credit) ELSE 0 END),0) b90,
-                  COALESCE(SUM(CASE WHEN DATEDIFF('$asof', COALESCE(l.due_date,e.date))>90 THEN (l.debit-l.credit) ELSE 0 END),0) b90p,
-                  COALESCE(SUM(l.debit-l.credit),0) net
+                  COALESCE(SUM(CASE WHEN e.date<='$asof' AND DATEDIFF('$asof', COALESCE(l.due_date,e.date))<=0         THEN (l.debit-l.credit) ELSE 0 END),0) b_cur,
+                  COALESCE(SUM(CASE WHEN e.date<='$asof' AND DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 1  AND 30  THEN (l.debit-l.credit) ELSE 0 END),0) b30,
+                  COALESCE(SUM(CASE WHEN e.date<='$asof' AND DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 31 AND 60  THEN (l.debit-l.credit) ELSE 0 END),0) b60,
+                  COALESCE(SUM(CASE WHEN e.date<='$asof' AND DATEDIFF('$asof', COALESCE(l.due_date,e.date)) BETWEEN 61 AND 90  THEN (l.debit-l.credit) ELSE 0 END),0) b90,
+                  COALESCE(SUM(CASE WHEN e.date<='$asof' AND DATEDIFF('$asof', COALESCE(l.due_date,e.date))>90               THEN (l.debit-l.credit) ELSE 0 END),0) b90p,
+                  COALESCE(SUM(CASE WHEN e.date<='$asof' THEN (l.debit-l.credit) ELSE 0 END),0) net
                 FROM acc_parties p
                 LEFT JOIN acc_lines l ON l.party_id=p.id AND l.party_type=p.type AND l.tenant_id=p.tenant_id
-                LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.date<='$asof'
+                LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1
                 WHERE p.tenant_id=$tid AND p.type='$ptype'
                 GROUP BY p.id HAVING ABS(net)>0.001 ORDER BY p.name";
         $res = $conn->query($sql); $rows = []; $tot = ['current'=>0,'d30'=>0,'d60'=>0,'d90'=>0,'d90p'=>0,'total'=>0];
