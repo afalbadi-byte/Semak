@@ -3177,6 +3177,315 @@ function SettingsTab({ company, reload, toast }) {
     );
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+//  تبويب الميزانية التقديرية — إدخال + مقارنة بالفعلي
+// ════════════════════════════════════════════════════════════════════════════
+function BudgetTab({ accounts, toast }) {
+    const curY = new Date().getFullYear();
+    const [sub,        setSub]        = useState('input');   // 'input' | 'compare'
+    const [fy,         setFy]         = useState(curY);
+    const [budgetRows, setBudgetRows] = useState([]);  // { account_id, code, name, type, amount }
+    const [editAmts,   setEditAmts]   = useState({});  // accountId → draftAmount string
+    const [budLoading, setBudLoading] = useState(false);
+    const [saving,     setSaving]     = useState(false);
+    const [cmpData,    setCmpData]    = useState(null);
+    const [cmpLoading, setCmpLoading] = useState(false);
+
+    // حسابات الإيرادات والمصروفات (غير مجمّعة)
+    const incomeAccounts = useMemo(() => accounts.filter(a => Number(a.is_group) === 0 && ['revenue','expense'].includes(a.type)), [accounts]);
+
+    const loadBudget = useCallback(async (y) => {
+        setBudLoading(true);
+        try {
+            const r = await api('gl_budget_get', { params: { fy: y } });
+            if (!r.success) { toast(r.message, 'error'); return; }
+            // اربط بكل الحسابات الإيراد/المصاريف، وضع القيم المحفوظة حيث وُجدت
+            const saved = {};
+            (r.data || []).forEach(row => { saved[row.account_id] = String(row.amount || ''); });
+            const merged = incomeAccounts.map(a => ({
+                account_id: a.id, code: a.code, name: a.name, type: a.type,
+                saved: saved[a.id] || '',
+            }));
+            setBudgetRows(merged);
+            setEditAmts(saved);
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setBudLoading(false); }
+    }, [incomeAccounts, toast]);
+
+    useEffect(() => { if (incomeAccounts.length > 0) loadBudget(fy); }, [fy, incomeAccounts.length]); // eslint-disable-line
+
+    const saveBudget = async () => {
+        setSaving(true);
+        try {
+            const rows = Object.entries(editAmts)
+                .filter(([, v]) => v !== '' && !isNaN(Number(v)))
+                .map(([account_id, amount]) => ({ account_id: Number(account_id), amount: Number(amount) }));
+            const r = await api('gl_budget_save', { method: 'POST', body: { fy, rows } });
+            if (r.success) { toast(r.message); loadBudget(fy); }
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setSaving(false); }
+    };
+
+    const loadCompare = useCallback(async (y) => {
+        setCmpLoading(true);
+        try {
+            const r = await api('gl_budget_vs_actual', { params: { fy: y } });
+            if (r.success) setCmpData(r); else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setCmpLoading(false); }
+    }, [toast]);
+
+    useEffect(() => { if (sub === 'compare') loadCompare(fy); }, [sub, fy]); // eslint-disable-line
+
+    const exportCmp = () => {
+        if (!cmpData) return;
+        downloadCSV(`budget_vs_actual_${fy}.csv`,
+            ['النوع','الكود','الحساب','الميزانية','الفعلي','الفرق','% التحقق'],
+            cmpData.data.map(r => [
+                TYPE_LABELS[r.type]||r.type, r.code, r.name,
+                r.budget, r.actual, r.variance, r.pct !== null ? r.pct+'%' : '—'
+            ])
+        );
+    };
+
+    const printCmp = () => {
+        if (!cmpData) return;
+        const t = cmpData.totals;
+        const rows = cmpData.data.map(r => `
+            <tr>
+                <td>${r.code}</td><td>${r.name}</td>
+                <td class="amount">${money(r.budget)}</td>
+                <td class="amount">${money(r.actual)}</td>
+                <td class="amount ${r.variance>=0?'':'text-rose-700'}">${money(r.variance)}</td>
+                <td class="amount">${r.pct!==null?r.pct+'%':'—'}</td>
+            </tr>`).join('');
+        printHtml(`الميزانية التقديرية مقابل الفعلي ${fy}`,
+            `<h1>الميزانية التقديرية مقابل الفعلي — ${fy}</h1>
+            <table>
+                <thead><tr><th>الكود</th><th>الحساب</th><th>الميزانية</th><th>الفعلي</th><th>الفرق</th><th>%</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr class="total-row"><td colspan="2">الإيرادات</td><td class="amount">${money(t.rev_budget)}</td><td class="amount">${money(t.rev_actual)}</td><td class="amount">${money(t.rev_variance)}</td><td>—</td></tr>
+                    <tr class="total-row"><td colspan="2">المصروفات</td><td class="amount">${money(t.exp_budget)}</td><td class="amount">${money(t.exp_actual)}</td><td class="amount">${money(t.exp_variance)}</td><td>—</td></tr>
+                    <tr class="net-row"><td colspan="2">الصافي</td><td class="amount">${money(t.net_budget)}</td><td class="amount">${money(t.net_actual)}</td><td class="amount">${money(t.net_variance)}</td><td>—</td></tr>
+                </tfoot>
+            </table>`
+        );
+    };
+
+    const revRows = budgetRows.filter(r => r.type === 'revenue');
+    const expRows = budgetRows.filter(r => r.type === 'expense');
+
+    const totalBudget = Object.values(editAmts).reduce((s, v) => s + (Number(v)||0), 0);
+
+    return (
+        <div className="space-y-4">
+            {/* رأس الصفحة */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center">
+                        <TrendingUp size={20} className="text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">الميزانية التقديرية</h3>
+                        <p className="text-xs text-slate-500 dark:text-brand-400">حدّد أهداف الإيرادات والمصروفات ثم قارنها بالأرقام الفعلية</p>
+                    </div>
+                </div>
+                {/* اختيار السنة */}
+                <select value={fy} onChange={e => setFy(Number(e.target.value))}
+                    className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900">
+                    {[curY+1, curY, curY-1, curY-2, curY-3].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+            </div>
+
+            {/* تبويبات فرعية */}
+            <div className="flex gap-1 border-b border-slate-200 dark:border-brand-700">
+                {[
+                    { id: 'input',   label: 'إدخال الميزانية' },
+                    { id: 'compare', label: 'مقارنة بالفعلي' },
+                ].map(s => (
+                    <button key={s.id} onClick={() => setSub(s.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-t-xl border-b-2 transition
+                            ${sub === s.id ? 'border-[#c5a059] text-[#c5a059]' : 'border-transparent text-slate-500 dark:text-brand-400 hover:text-[#c5a059]'}`}>
+                        {s.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* ── إدخال الميزانية ── */}
+            {sub === 'input' && (
+                <>
+                    {budLoading ? <Spinner /> : incomeAccounts.length === 0 ? (
+                        <Empty msg="لا توجد حسابات إيرادات أو مصروفات — تأكد من إنشاء دليل الحسابات أولاً" />
+                    ) : (
+                        <div className="space-y-4">
+                            {/* ملخص سريع */}
+                            <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-2xl px-4 py-3 text-sm font-bold text-purple-700 dark:text-purple-300 flex items-center justify-between flex-wrap gap-2">
+                                <span>إجمالي الميزانية المدخلة: <span className="tabular-nums" dir="ltr">{money(totalBudget)}</span></span>
+                                <Btn color="green" onClick={saveBudget} disabled={saving}><Save size={14} /> {saving ? 'جارٍ الحفظ…' : `حفظ ميزانية ${fy}`}</Btn>
+                            </div>
+
+                            {[{ label: 'الإيرادات', rows: revRows, cls: 'text-emerald-700 dark:text-emerald-400' }, { label: 'المصروفات', rows: expRows, cls: 'text-rose-600 dark:text-rose-400' }].map(sec => (
+                                <Card key={sec.label}>
+                                    <div className="px-3 py-2 bg-slate-50 dark:bg-brand-800/40 border-b border-slate-100 dark:border-brand-700">
+                                        <h4 className={`text-sm font-black ${sec.cls}`}>{sec.label} ({sec.rows.length} حساب)</h4>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="text-xs text-slate-400 dark:text-brand-500 bg-slate-50/60 dark:bg-brand-800/20">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-right font-bold">الكود</th>
+                                                    <th className="px-3 py-2 text-right font-bold">الحساب</th>
+                                                    <th className="px-3 py-2 text-left font-bold w-44">المبلغ التقديري</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {sec.rows.map(r => (
+                                                    <tr key={r.account_id} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/50 dark:hover:bg-brand-800/40">
+                                                        <td className="px-3 py-2 font-mono text-slate-400 dark:text-brand-500 text-xs">{r.code}</td>
+                                                        <td className="px-3 py-2 font-bold text-slate-700 dark:text-brand-300">{r.name}</td>
+                                                        <td className="px-3 py-2">
+                                                            <input
+                                                                type="number" step="0.01" min="0"
+                                                                value={editAmts[r.account_id] ?? r.saved ?? ''}
+                                                                onChange={e => setEditAmts(prev => ({ ...prev, [r.account_id]: e.target.value }))}
+                                                                placeholder="0.00"
+                                                                className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 px-2 py-1.5 rounded-lg text-sm tabular-nums text-left outline-none focus:border-[#c5a059] dark:text-brand-50"
+                                                                dir="ltr" />
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* ── مقارنة بالفعلي ── */}
+            {sub === 'compare' && (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                        <Btn color="navy" onClick={() => loadCompare(fy)} disabled={cmpLoading}>
+                            {cmpLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                            {cmpLoading ? 'جارٍ التحميل…' : 'تحديث المقارنة'}
+                        </Btn>
+                        {cmpData && (
+                            <div className="flex gap-2">
+                                <Btn color="gray" size="sm" onClick={exportCmp}><Download size={13} /> CSV</Btn>
+                                <Btn color="gray" size="sm" onClick={printCmp}><Printer size={13} /> طباعة</Btn>
+                            </div>
+                        )}
+                    </div>
+                    {cmpLoading ? <Spinner /> : !cmpData ? (
+                        <div className="text-center py-16 text-slate-300 dark:text-brand-600 font-bold text-sm">اضغط «تحديث المقارنة» لعرض النتائج</div>
+                    ) : cmpData.data.length === 0 ? <Empty msg="لا توجد بيانات — أدخل الميزانية التقديرية أولاً" /> : (
+                        <>
+                            {/* بطاقات ملخص */}
+                            <div className="grid grid-cols-3 gap-3">
+                                {[
+                                    { label: 'صافي الدخل المستهدف', budget: cmpData.totals.net_budget, actual: cmpData.totals.net_actual },
+                                    { label: 'إيرادات', budget: cmpData.totals.rev_budget, actual: cmpData.totals.rev_actual },
+                                    { label: 'مصروفات', budget: cmpData.totals.exp_budget, actual: cmpData.totals.exp_actual },
+                                ].map(c => {
+                                    const pct = c.budget ? Math.round((c.actual/c.budget)*100) : null;
+                                    return (
+                                        <div key={c.label} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm px-4 py-3">
+                                            <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                            <div className="text-lg font-black tabular-nums" dir="ltr">{money(c.actual)}</div>
+                                            <div className="text-xs text-slate-400 dark:text-brand-500 mt-0.5" dir="ltr">
+                                                من {money(c.budget)}{pct !== null && ` · ${pct}%`}
+                                            </div>
+                                            {c.budget > 0 && (
+                                                <div className="mt-2 h-1.5 rounded-full bg-slate-100 dark:bg-brand-700 overflow-hidden">
+                                                    <div className={`h-full rounded-full ${pct>=100?'bg-emerald-500':'bg-brand-700'}`}
+                                                        style={{ width: `${Math.min(pct||0, 100)}%` }} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* جدول التفاصيل */}
+                            <Card>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
+                                            <tr>
+                                                <th className="px-3 py-3 text-right font-bold">الحساب</th>
+                                                <th className="px-3 py-3 text-left font-bold">الميزانية</th>
+                                                <th className="px-3 py-3 text-left font-bold">الفعلي</th>
+                                                <th className="px-3 py-3 text-left font-bold">الفرق</th>
+                                                <th className="px-3 py-3 text-center font-bold w-24">% التحقق</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {cmpData.data.map((r, idx, arr) => {
+                                                const prevType = idx > 0 ? arr[idx-1].type : null;
+                                                const isNewSection = r.type !== prevType;
+                                                return (
+                                                    <React.Fragment key={r.account_id}>
+                                                        {isNewSection && (
+                                                            <tr className="bg-slate-50 dark:bg-brand-800/40 border-b border-slate-100 dark:border-brand-700">
+                                                                <td className={`px-3 py-2 text-xs font-black ${r.type==='revenue'?'text-emerald-700 dark:text-emerald-400':'text-rose-600 dark:text-rose-400'}`} colSpan={5}>
+                                                                    {TYPE_LABELS[r.type]||r.type}
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                        <tr className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                                            <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-brand-300">
+                                                                <span className="font-mono text-[11px] text-slate-400 dark:text-brand-500 ml-2">{r.code}</span>{r.name}
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-left tabular-nums font-bold text-slate-500 dark:text-brand-400" dir="ltr">
+                                                                {r.budget > 0 ? money(r.budget) : <span className="text-slate-300 dark:text-brand-600">—</span>}
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-left tabular-nums font-bold text-brand-800 dark:text-brand-100" dir="ltr">{money(r.actual)}</td>
+                                                            <td className={`px-3 py-2.5 text-left tabular-nums font-bold ${r.variance>=0?'text-emerald-700 dark:text-emerald-400':'text-rose-600 dark:text-rose-400'}`} dir="ltr">{money(r.variance)}</td>
+                                                            <td className="px-3 py-2.5 text-center">
+                                                                {r.pct !== null ? (
+                                                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full
+                                                                        ${r.pct>=100?'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                                                                   :'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>
+                                                                        {r.pct}%
+                                                                    </span>
+                                                                ) : <span className="text-slate-300 dark:text-brand-600 text-xs">—</span>}
+                                                            </td>
+                                                        </tr>
+                                                    </React.Fragment>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot>
+                                            {[
+                                                { label:'إجمالي الإيرادات', b:cmpData.totals.rev_budget, a:cmpData.totals.rev_actual, v:cmpData.totals.rev_variance },
+                                                { label:'إجمالي المصروفات', b:cmpData.totals.exp_budget, a:cmpData.totals.exp_actual, v:cmpData.totals.exp_variance },
+                                                { label:'صافي الدخل',       b:cmpData.totals.net_budget, a:cmpData.totals.net_actual, v:cmpData.totals.net_variance },
+                                            ].map(r => (
+                                                <tr key={r.label} className="bg-slate-50 dark:bg-brand-800/60 font-black border-t-2 border-slate-200 dark:border-brand-600">
+                                                    <td className="px-3 py-3 text-brand-800 dark:text-brand-100">{r.label}</td>
+                                                    <td className="px-3 py-3 text-left tabular-nums text-slate-500 dark:text-brand-400" dir="ltr">{money(r.b)}</td>
+                                                    <td className="px-3 py-3 text-left tabular-nums" dir="ltr">{money(r.a)}</td>
+                                                    <td className={`px-3 py-3 text-left tabular-nums ${r.v>=0?'text-emerald-700 dark:text-emerald-400':'text-rose-600 dark:text-rose-400'}`} dir="ltr">{money(r.v)}</td>
+                                                    <td></td>
+                                                </tr>
+                                            ))}
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </Card>
+                        </>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 const TABS = [
     { id: 'chart', label: 'دليل الحسابات', icon: BookOpen },
     { id: 'journal', label: 'القيود اليومية', icon: FileText },
@@ -3191,6 +3500,7 @@ const TABS = [
     { id: 'vat', label: 'إقرار الضريبة', icon: Banknote },
     { id: 'parties', label: 'العملاء والموردون', icon: Users },
     { id: 'costcenters', label: 'مراكز التكلفة', icon: Layers },
+    { id: 'budget', label: 'الميزانية التقديرية', icon: TrendingUp },
     { id: 'periods', label: 'السنوات المالية', icon: Calendar },
     { id: 'settings', label: 'ملف المنشأة', icon: Settings },
 ];
@@ -3319,6 +3629,7 @@ export default function LedgerHub() {
                     {activeTab === 'vat' && <VatTab toast={toast} />}
                     {activeTab === 'parties' && <PartiesTab parties={parties} reload={loadParties} loading={partyLoading} toast={toast} />}
                     {activeTab === 'costcenters' && <CostCentersTab costCenters={costCenters} reload={loadCostCenters} loading={ccLoading} toast={toast} />}
+                    {activeTab === 'budget' && <BudgetTab accounts={accounts} toast={toast} />}
                     {activeTab === 'periods' && <FiscalPeriodsTab toast={toast} />}
                     {activeTab === 'settings' && <SettingsTab company={company} reload={loadCompany} toast={toast} />}
                 </div>

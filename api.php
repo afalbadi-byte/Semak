@@ -4311,6 +4311,122 @@ switch ($action) {
         break;
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  الميزانية التقديرية (Budget)
+    // ════════════════════════════════════════════════════════════════════
+    case 'gl_budget_get': {
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $fy  = (int)($_GET['fy'] ?? date('Y'));
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_budget (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tenant_id INT NOT NULL DEFAULT 1,
+            fy SMALLINT NOT NULL,
+            account_id INT NOT NULL,
+            amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+            UNIQUE KEY uk_budget (tenant_id,fy,account_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $rows = [];
+        $res = $conn->query("SELECT b.id,b.account_id,b.amount,a.code,a.name,a.type
+                             FROM acc_budget b
+                             JOIN acc_accounts a ON a.id=b.account_id
+                             WHERE b.tenant_id=$tid AND b.fy=$fy
+                             ORDER BY a.code");
+        while ($res && ($x = $res->fetch_assoc())) { $x['amount'] = round((float)$x['amount'],2); $rows[] = $x; }
+        echo json_encode(['success'=>true,'data'=>$rows,'fy'=>$fy], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_budget_save': {
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $fy   = (int)($input_data['fy'] ?? date('Y'));
+        $rows = $input_data['rows'] ?? [];
+        if ($fy < 2000 || $fy > 2100) { echo json_encode(['success'=>false,'message'=>'سنة غير صالحة']); break; }
+        $conn->begin_transaction();
+        try {
+            $saved = 0;
+            foreach ($rows as $row) {
+                $aid = (int)($row['account_id'] ?? 0);
+                $amt = round((float)($row['amount'] ?? 0), 2);
+                if (!$aid) continue;
+                $conn->query("INSERT INTO acc_budget (tenant_id,fy,account_id,amount) VALUES ($tid,$fy,$aid,$amt)
+                              ON DUPLICATE KEY UPDATE amount=$amt");
+                $saved++;
+            }
+            $conn->commit();
+            echo json_encode(['success'=>true,'saved'=>$saved,'message'=>"تم حفظ $saved بند في الميزانية $fy"], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
+    case 'gl_budget_vs_actual': {
+        // مقارنة الميزانية التقديرية بالفعلي لسنة مالية
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $fy   = (int)($_GET['fy'] ?? date('Y'));
+        $from = "$fy-01-01"; $to = "$fy-12-31";
+
+        // الفعلي: إيرادات + مصروفات مرحّلة خلال السنة
+        $sqlAct = "SELECT a.id,a.code,a.name,a.type,
+                       COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to'
+                                         AND (e.ref_type IS NULL OR e.ref_type NOT IN ('year_close'))
+                                         THEN l.debit  ELSE 0 END),0) d,
+                       COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to'
+                                         AND (e.ref_type IS NULL OR e.ref_type NOT IN ('year_close'))
+                                         THEN l.credit ELSE 0 END),0) c
+                    FROM acc_accounts a
+                    LEFT JOIN acc_lines l   ON l.account_id=a.id AND l.tenant_id=a.tenant_id
+                    LEFT JOIN acc_entries e ON e.id=l.entry_id
+                    WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('revenue','expense')
+                    GROUP BY a.id ORDER BY a.type,a.code";
+
+        $actMap = [];
+        $resA = $conn->query($sqlAct);
+        while ($resA && ($x = $resA->fetch_assoc())) {
+            $d = (float)$x['d']; $c = (float)$x['c'];
+            $actual = $x['type']==='revenue' ? round($c-$d,2) : round($d-$c,2);
+            $actMap[(int)$x['id']] = ['code'=>$x['code'],'name'=>$x['name'],'type'=>$x['type'],'actual'=>$actual];
+        }
+
+        // الميزانية
+        $budMap = [];
+        $resB = $conn->query("SELECT account_id,amount FROM acc_budget WHERE tenant_id=$tid AND fy=$fy");
+        while ($resB && ($x = $resB->fetch_assoc())) $budMap[(int)$x['account_id']] = round((float)$x['amount'],2);
+
+        // دمج: كل حساب له ميزانية أو فعلي
+        $allIds = array_unique(array_merge(array_keys($actMap), array_keys($budMap)));
+        $rows = []; $totalBudRev=0; $totalActRev=0; $totalBudExp=0; $totalActExp=0;
+        // اجلب أسماء الحسابات التي في الميزانية فقط
+        foreach ($allIds as $aid) {
+            if (!isset($actMap[$aid])) {
+                $ra = $conn->query("SELECT code,name,type FROM acc_accounts WHERE id=$aid AND tenant_id=$tid LIMIT 1");
+                if ($ra && ($ra2 = $ra->fetch_assoc())) $actMap[$aid] = ['code'=>$ra2['code'],'name'=>$ra2['name'],'type'=>$ra2['type'],'actual'=>0];
+                else continue;
+            }
+            $info   = $actMap[$aid];
+            $budget = $budMap[$aid] ?? 0;
+            $actual = $info['actual'];
+            $var    = round($actual - $budget, 2);
+            $pct    = $budget != 0 ? round(($actual/$budget)*100, 1) : null;
+            $row = ['account_id'=>$aid,'code'=>$info['code'],'name'=>$info['name'],'type'=>$info['type'],
+                    'budget'=>$budget,'actual'=>$actual,'variance'=>$var,'pct'=>$pct];
+            $rows[] = $row;
+            if ($info['type']==='revenue') { $totalBudRev+=$budget; $totalActRev+=$actual; }
+            else { $totalBudExp+=$budget; $totalActExp+=$actual; }
+        }
+        // ترتيب: إيرادات أولاً ثم مصروفات، ثم حسب الكود
+        usort($rows, fn($a,$b) => [$a['type']==='expense'?1:0,$a['code']] <=> [$b['type']==='expense'?1:0,$b['code']]);
+        echo json_encode(['success'=>true,'fy'=>$fy,'data'=>$rows,
+            'totals'=>[
+                'rev_budget'=>round($totalBudRev,2),'rev_actual'=>round($totalActRev,2),'rev_variance'=>round($totalActRev-$totalBudRev,2),
+                'exp_budget'=>round($totalBudExp,2),'exp_actual'=>round($totalActExp,2),'exp_variance'=>round($totalActExp-$totalBudExp,2),
+                'net_budget'=>round($totalBudRev-$totalBudExp,2),'net_actual'=>round($totalActRev-$totalActExp,2),
+                'net_variance'=>round(($totalActRev-$totalActExp)-($totalBudRev-$totalBudExp),2),
+            ]], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_balance_sheet':
         // الميزانية العمومية حتى تاريخ — أصول/خصوم/حقوق ملكية + صافي الدخل (المُرحَّلة فقط)
         $tid = (int)($_GET['tenant'] ?? 1);
