@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Building,
@@ -11,43 +11,44 @@ import {
     Menu, X, ChevronDown, ExternalLink, Bell, ScrollText
 } from 'lucide-react';
 
-import UnitInspection   from './UnitInspection';
-import SnagList         from './SnagList';
-import UsersManage      from './UsersManage';
-import MaintenanceManage from './MaintenanceManage';
-import LeadsManage      from './LeadsManage';
-import BotSettings      from './BotSettings';
-import Finance          from './Finance';
-import DaftraExplorer   from './DaftraExplorer';
-import WorkCycles       from './WorkCycles';
-import FeasibilityCalc  from './FeasibilityCalc';
-import UnitsOverview    from './UnitsOverview';
-import ProjectsManage   from './ProjectsManage';
-import UnitsEdit        from './UnitsEdit';
-import WhatsAppInbox    from './WhatsAppInbox';
-import InvoicesManage   from './InvoicesManage';
-import PurchasesManage  from './PurchasesManage';
-import TreasuryManage   from './TreasuryManage';
-import ReportsHub       from './ReportsHub';
-import QuotationsManage from './QuotationsManage';
-import ExpensesManage   from './ExpensesManage';
-import ClientsManage    from './ClientsManage';
-import SuppliersManage  from './SuppliersManage';
-import ProductsManage   from './ProductsManage';
-import ChequesManage    from './ChequesManage';
-import RentalsManage    from './RentalsManage';
-import PaymentsManage   from './PaymentsManage';
-import AccountingHub    from './AccountingHub';
-import LedgerHub        from './LedgerHub';
-import NotesReturns     from './NotesReturns';
-import DaftraLink       from './DaftraLink';
-import PartyDetail      from './PartyDetail';
-import EntryDetail      from './EntryDetail';
-import InvoiceDetail    from './InvoiceDetail';
-import AccountDetail    from './AccountDetail';
-import ProductMovement  from './ProductMovement';
-import ActivityLog      from './ActivityLog';
-import SecuritySettings  from './SecuritySettings';
+// ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
+const UnitInspection    = React.lazy(() => import('./UnitInspection'));
+const SnagList          = React.lazy(() => import('./SnagList'));
+const UsersManage       = React.lazy(() => import('./UsersManage'));
+const MaintenanceManage = React.lazy(() => import('./MaintenanceManage'));
+const LeadsManage       = React.lazy(() => import('./LeadsManage'));
+const BotSettings       = React.lazy(() => import('./BotSettings'));
+const Finance           = React.lazy(() => import('./Finance'));
+const DaftraExplorer    = React.lazy(() => import('./DaftraExplorer'));
+const WorkCycles        = React.lazy(() => import('./WorkCycles'));
+const FeasibilityCalc   = React.lazy(() => import('./FeasibilityCalc'));
+const UnitsOverview     = React.lazy(() => import('./UnitsOverview'));
+const ProjectsManage    = React.lazy(() => import('./ProjectsManage'));
+const UnitsEdit         = React.lazy(() => import('./UnitsEdit'));
+const WhatsAppInbox     = React.lazy(() => import('./WhatsAppInbox'));
+const InvoicesManage    = React.lazy(() => import('./InvoicesManage'));
+const PurchasesManage   = React.lazy(() => import('./PurchasesManage'));
+const TreasuryManage    = React.lazy(() => import('./TreasuryManage'));
+const ReportsHub        = React.lazy(() => import('./ReportsHub'));
+const QuotationsManage  = React.lazy(() => import('./QuotationsManage'));
+const ExpensesManage    = React.lazy(() => import('./ExpensesManage'));
+const ClientsManage     = React.lazy(() => import('./ClientsManage'));
+const SuppliersManage   = React.lazy(() => import('./SuppliersManage'));
+const ProductsManage    = React.lazy(() => import('./ProductsManage'));
+const ChequesManage     = React.lazy(() => import('./ChequesManage'));
+const RentalsManage     = React.lazy(() => import('./RentalsManage'));
+const PaymentsManage    = React.lazy(() => import('./PaymentsManage'));
+const AccountingHub     = React.lazy(() => import('./AccountingHub'));
+const LedgerHub         = React.lazy(() => import('./LedgerHub'));
+const NotesReturns      = React.lazy(() => import('./NotesReturns'));
+const DaftraLink        = React.lazy(() => import('./DaftraLink'));
+const PartyDetail       = React.lazy(() => import('./PartyDetail'));
+const EntryDetail       = React.lazy(() => import('./EntryDetail'));
+const InvoiceDetail     = React.lazy(() => import('./InvoiceDetail'));
+const AccountDetail     = React.lazy(() => import('./AccountDetail'));
+const ProductMovement   = React.lazy(() => import('./ProductMovement'));
+const ActivityLog       = React.lazy(() => import('./ActivityLog'));
+const SecuritySettings  = React.lazy(() => import('./SecuritySettings'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
@@ -979,6 +980,11 @@ function DashboardInner({ onLogout }) {
 
                 {/* ════ محتوى التبويبات ════ */}
                 <ErrorBoundary key={activeTab}>
+                <Suspense fallback={
+                    <div className="flex items-center justify-center py-24">
+                        <Loader2 size={32} className="animate-spin text-brand-300 dark:text-brand-500" />
+                    </div>
+                }>
                 {activeTab === 'projects'    && hasPermission('projects')    && <ProjectsManage />}
                 {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={showToast} />}
                 {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={showToast} /></div>}
@@ -1017,6 +1023,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
                 {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
+                </Suspense>
                 </ErrorBoundary>
 
             </main>
