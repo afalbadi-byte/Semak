@@ -4057,6 +4057,180 @@ switch ($action) {
         echo json_encode(['success'=>true,'period'=>['from'=>$from,'to'=>$to],'revenue'=>$rev,'expenses'=>$exp,'totals'=>['revenue'=>round($totRev,2),'expenses'=>round($totExp,2),'net'=>round($totRev-$totExp,2)]], JSON_UNESCAPED_UNICODE);
         break;
 
+    // ════════════════════════════════════════════════════════════════════
+    //  المطابقة البنكية
+    // ════════════════════════════════════════════════════════════════════
+    case 'gl_bank_accounts': {
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_bank_accounts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tenant_id INT NOT NULL DEFAULT 1,
+            name VARCHAR(200) NOT NULL,
+            gl_account_id INT DEFAULT NULL,
+            bank_name VARCHAR(200) DEFAULT '',
+            account_number VARCHAR(100) DEFAULT '',
+            iban VARCHAR(50) DEFAULT '',
+            currency VARCHAR(10) DEFAULT 'SAR',
+            is_active TINYINT(1) DEFAULT 1,
+            KEY idx_bk_tenant (tenant_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_bank_stmt_lines (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tenant_id INT NOT NULL DEFAULT 1,
+            bank_account_id INT NOT NULL,
+            stmt_date DATE NOT NULL,
+            description VARCHAR(500) DEFAULT '',
+            debit DECIMAL(15,2) DEFAULT 0,
+            credit DECIMAL(15,2) DEFAULT 0,
+            ref VARCHAR(200) DEFAULT '',
+            reconciled TINYINT(1) DEFAULT 0,
+            gl_entry_id INT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_bsl_ba (bank_account_id),
+            KEY idx_bsl_date (stmt_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $rows = [];
+        $res = $conn->query("SELECT b.*,a.code AS gl_code,a.name AS gl_name
+                             FROM acc_bank_accounts b
+                             LEFT JOIN acc_accounts a ON a.id=b.gl_account_id
+                             WHERE b.tenant_id=$tid AND b.is_active=1 ORDER BY b.name");
+        while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_bank_account_save': {
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $id   = (int)($input_data['id'] ?? 0);
+        $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $gaid = (int)($input_data['gl_account_id'] ?? 0) ?: 'NULL';
+        $bname= $conn->real_escape_string($input_data['bank_name'] ?? '');
+        $ano  = $conn->real_escape_string($input_data['account_number'] ?? '');
+        $iban = $conn->real_escape_string($input_data['iban'] ?? '');
+        $cur  = $conn->real_escape_string($input_data['currency'] ?? 'SAR');
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+        if ($id) {
+            $conn->query("UPDATE acc_bank_accounts SET name='$name',gl_account_id=$gaid,bank_name='$bname',account_number='$ano',iban='$iban',currency='$cur' WHERE id=$id AND tenant_id=$tid");
+        } else {
+            $conn->query("INSERT INTO acc_bank_accounts (tenant_id,name,gl_account_id,bank_name,account_number,iban,currency) VALUES ($tid,'$name',$gaid,'$bname','$ano','$iban','$cur')");
+            $id = (int)$conn->insert_id;
+        }
+        echo json_encode(['success'=>true,'id'=>$id,'message'=>'تم الحفظ'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_bank_stmt_list': {
+        // قائمة بنود كشف الحساب البنكي لحساب + فترة
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $baid = (int)($_GET['bank_account_id'] ?? 0);
+        $from = $conn->real_escape_string($_GET['from'] ?? date('Y').'-01-01');
+        $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
+        $w    = "s.tenant_id=$tid AND s.bank_account_id=$baid AND s.stmt_date>='$from' AND s.stmt_date<='$to'";
+        if (isset($_GET['unreconciled']) && $_GET['unreconciled'] == '1') $w .= " AND s.reconciled=0";
+        $rows = [];
+        $res = $conn->query("SELECT s.*,e.entry_no FROM acc_bank_stmt_lines s
+                             LEFT JOIN acc_entries e ON e.id=s.gl_entry_id
+                             WHERE $w ORDER BY s.stmt_date ASC, s.id ASC");
+        while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
+        // إجماليات
+        $tot = $conn->query("SELECT COALESCE(SUM(debit),0) d,COALESCE(SUM(credit),0) c,COUNT(*) cnt,
+                                    COALESCE(SUM(CASE WHEN reconciled=1 THEN debit END),0) rd,
+                                    COALESCE(SUM(CASE WHEN reconciled=1 THEN credit END),0) rc,
+                                    COALESCE(SUM(CASE WHEN reconciled=0 THEN 1 END),0) unmatched
+                             FROM acc_bank_stmt_lines s WHERE $w");
+        $totals = $tot ? $tot->fetch_assoc() : [];
+        echo json_encode(['success'=>true,'data'=>$rows,'totals'=>$totals], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_bank_stmt_add': {
+        // إضافة بنود كشف الحساب (دفعة واحدة)
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $baid = (int)($input_data['bank_account_id'] ?? 0);
+        $lines= $input_data['lines'] ?? [];
+        if (!$baid || empty($lines)) { echo json_encode(['success'=>false,'message'=>'بيانات ناقصة']); break; }
+        $conn->begin_transaction();
+        try {
+            $added = 0;
+            foreach ($lines as $l) {
+                $d    = $conn->real_escape_string($l['stmt_date'] ?? '');
+                $desc = $conn->real_escape_string($l['description'] ?? '');
+                $dr   = round((float)($l['debit']  ?? 0), 2);
+                $cr   = round((float)($l['credit'] ?? 0), 2);
+                $ref  = $conn->real_escape_string($l['ref'] ?? '');
+                if (!$d) continue;
+                $conn->query("INSERT INTO acc_bank_stmt_lines (tenant_id,bank_account_id,stmt_date,description,debit,credit,ref)
+                              VALUES ($tid,$baid,'$d','$desc',$dr,$cr,'$ref')");
+                $added++;
+            }
+            $conn->commit();
+            echo json_encode(['success'=>true,'added'=>$added,'message'=>"تمت إضافة $added بند"], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
+    case 'gl_bank_stmt_delete': {
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $id  = (int)($input_data['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف مطلوب']); break; }
+        $conn->query("DELETE FROM acc_bank_stmt_lines WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>$conn->affected_rows>0,'message'=>'تم الحذف'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_bank_reconcile_mark': {
+        // مطابقة / إلغاء مطابقة بند
+        $tid       = (int)($input_data['tenant_id'] ?? 1);
+        $id        = (int)($input_data['id'] ?? 0);
+        $reconciled= (int)($input_data['reconciled'] ?? 0) ? 1 : 0;
+        $entryId   = (int)($input_data['gl_entry_id'] ?? 0) ?: 'NULL';
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف مطلوب']); break; }
+        $conn->query("UPDATE acc_bank_stmt_lines SET reconciled=$reconciled,gl_entry_id=$entryId WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>true,'message'=>$reconciled?'تمت المطابقة':'تم إلغاء المطابقة'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_bank_recon_report': {
+        // تقرير المطابقة: رصيد دفتر الأستاذ vs رصيد كشف البنك + البنود غير المطابقة
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $baid = (int)($_GET['bank_account_id'] ?? 0);
+        $to   = $conn->real_escape_string($_GET['to'] ?? date('Y-m-d'));
+
+        // جلب بيانات الحساب البنكي
+        $br = $conn->query("SELECT * FROM acc_bank_accounts WHERE id=$baid AND tenant_id=$tid LIMIT 1");
+        $bankAcc = $br ? $br->fetch_assoc() : null;
+        if (!$bankAcc) { echo json_encode(['success'=>false,'message'=>'حساب بنكي غير موجود']); break; }
+
+        $gaid = (int)($bankAcc['gl_account_id'] ?? 0);
+        $glBalance = 0;
+        if ($gaid) {
+            $glr = $conn->query("SELECT COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date<='$to' THEN l.debit  ELSE 0 END),0) d,
+                                         COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date<='$to' THEN l.credit ELSE 0 END),0) c
+                                  FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id
+                                  WHERE l.account_id=$gaid AND l.tenant_id=$tid");
+            if ($glr && ($gr = $glr->fetch_assoc())) $glBalance = round((float)$gr['d']-(float)$gr['c'],2);
+        }
+
+        // البنود غير المطابقة من كشف البنك
+        $stmtUnmatched = [];
+        $sr = $conn->query("SELECT * FROM acc_bank_stmt_lines WHERE tenant_id=$tid AND bank_account_id=$baid AND reconciled=0 AND stmt_date<='$to' ORDER BY stmt_date ASC");
+        while ($sr && ($x = $sr->fetch_assoc())) $stmtUnmatched[] = $x;
+
+        $totStmtD = array_sum(array_column($stmtUnmatched,'debit'));
+        $totStmtC = array_sum(array_column($stmtUnmatched,'credit'));
+
+        echo json_encode(['success'=>true,'bank_account'=>$bankAcc,'as_of'=>$to,
+            'gl_balance'=>$glBalance,
+            'stmt_unmatched'=>$stmtUnmatched,
+            'stmt_unmatched_debit'=>round($totStmtD,2),'stmt_unmatched_credit'=>round($totStmtC,2),
+            'adjusted_balance'=>round($glBalance+$totStmtD-$totStmtC,2)
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_fiscal_years': {
         // قائمة السنوات المالية (من acc_periods) + السنة الحالية إن لم تُسجَّل
         $tid  = (int)($_GET['tenant'] ?? 1);

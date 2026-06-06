@@ -3178,6 +3178,422 @@ function SettingsTab({ company, reload, toast }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  المطابقة البنكية
+// ════════════════════════════════════════════════════════════════════════════
+function BankReconcileTab({ accounts, toast }) {
+    const [sub, setSub]               = useState('accounts'); // 'accounts'|'statement'|'report'
+    const [bankAccounts, setBankAccs] = useState([]);
+    const [baLoading,    setBaLoad]   = useState(false);
+    const [editing,      setEditing]  = useState(null);
+    const [selBa,        setSelBa]    = useState('');         // selected bank_account_id
+    const [from,         setFrom]     = useState(monthStart());
+    const [to,           setTo]       = useState(todayISO());
+    const [stmtLines,    setStmt]     = useState([]);
+    const [stmtLoad,     setStmtLoad] = useState(false);
+    const [newLines,     setNewLines] = useState([{ stmt_date: todayISO(), description: '', debit: '', credit: '', ref: '' }]);
+    const [adding,       setAdding]   = useState(false);
+    const [report,       setReport]   = useState(null);
+    const [rptLoad,      setRptLoad]  = useState(false);
+
+    const assetAccounts = useMemo(() => accounts.filter(a => Number(a.is_group)===0 && a.type==='asset'), [accounts]);
+
+    const loadBankAccs = useCallback(async () => {
+        setBaLoad(true);
+        try { const r = await api('gl_bank_accounts'); if (r.success) setBankAccs(r.data||[]); }
+        catch (e) { toast(e.message,'error'); } finally { setBaLoad(false); }
+    }, [toast]);
+    useEffect(() => { loadBankAccs(); }, [loadBankAccs]);
+
+    const saveBankAcc = async () => {
+        if (!editing.name) { toast('الاسم مطلوب','error'); return; }
+        try {
+            const r = await api('gl_bank_account_save', { method:'POST', body: { ...editing, id: editing.id||0 }});
+            if (r.success) { toast(r.message); setEditing(null); loadBankAccs(); } else toast(r.message,'error');
+        } catch (e) { toast(e.message,'error'); }
+    };
+
+    const loadStmt = useCallback(async () => {
+        if (!selBa) return;
+        setStmtLoad(true);
+        try { const r = await api('gl_bank_stmt_list', { params: { bank_account_id: selBa, from, to }}); if (r.success) setStmt(r.data||[]); }
+        catch (e) { toast(e.message,'error'); } finally { setStmtLoad(false); }
+    }, [selBa, from, to, toast]);
+    useEffect(() => { if (sub==='statement') loadStmt(); }, [sub, selBa, from, to]); // eslint-disable-line
+
+    const addLines = async () => {
+        const valid = newLines.filter(l => l.stmt_date && (Number(l.debit)||Number(l.credit)));
+        if (!valid.length) { toast('أدخل بند واحد على الأقل','error'); return; }
+        setAdding(true);
+        try {
+            const r = await api('gl_bank_stmt_add', { method:'POST', body: { bank_account_id: Number(selBa), lines: valid }});
+            if (r.success) { toast(r.message); setNewLines([{ stmt_date: todayISO(), description:'', debit:'', credit:'', ref:'' }]); loadStmt(); }
+            else toast(r.message,'error');
+        } catch (e) { toast(e.message,'error'); } finally { setAdding(false); }
+    };
+
+    const toggleMatch = async (line) => {
+        const newVal = line.reconciled ? 0 : 1;
+        try {
+            const r = await api('gl_bank_reconcile_mark', { method:'POST', body: { id: line.id, reconciled: newVal }});
+            if (r.success) { toast(r.message); setStmt(prev => prev.map(l => l.id===line.id ? {...l, reconciled: newVal} : l)); }
+            else toast(r.message,'error');
+        } catch (e) { toast(e.message,'error'); }
+    };
+
+    const deleteStmtLine = async (id) => {
+        try {
+            const r = await api('gl_bank_stmt_delete', { method:'POST', body: { id }});
+            if (r.success) { toast(r.message); setStmt(prev => prev.filter(l => l.id!==id)); }
+            else toast(r.message,'error');
+        } catch (e) { toast(e.message,'error'); }
+    };
+
+    const loadReport = useCallback(async () => {
+        if (!selBa) { toast('اختر حساباً بنكياً','error'); return; }
+        setRptLoad(true);
+        try { const r = await api('gl_bank_recon_report', { params: { bank_account_id: selBa, to }}); if (r.success) setReport(r); else toast(r.message,'error'); }
+        catch (e) { toast(e.message,'error'); } finally { setRptLoad(false); }
+    }, [selBa, to, toast]);
+
+    const importCSV = (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const text = ev.target.result;
+            const lines = text.split('\n').slice(1).filter(l => l.trim()); // skip header
+            const parsed = lines.map(l => {
+                const cols = l.split(',').map(c => c.replace(/^"|"$/g,'').trim());
+                return { stmt_date: cols[0]||'', description: cols[1]||'', debit: cols[2]||'', credit: cols[3]||'', ref: cols[4]||'' };
+            }).filter(l => l.stmt_date);
+            setNewLines(parsed.length ? parsed : newLines);
+            toast(`تم تحليل ${parsed.length} سطر من الملف`);
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
+    const printReport = () => {
+        if (!report) return;
+        const ba = report.bank_account;
+        const rows = (report.stmt_unmatched||[]).map(l =>
+            `<tr><td dir="ltr">${l.stmt_date}</td><td>${l.description}</td>
+             <td class="amount">${Number(l.debit)?money(l.debit):''}</td>
+             <td class="amount">${Number(l.credit)?money(l.credit):''}</td></tr>`).join('');
+        printHtml(`تقرير المطابقة البنكية — ${ba.name}`,
+            `<h1>تقرير المطابقة البنكية</h1>
+            <h2>${ba.name} · حتى ${report.as_of}</h2>
+            <table>
+                <thead><tr><th>التاريخ</th><th>البيان</th><th>مدين</th><th>دائن</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <div style="margin-top:20px;border-top:2px solid #c5a059;padding-top:10px">
+                <p><strong>رصيد دفتر الأستاذ (حتى ${report.as_of}): ${money(report.gl_balance)}</strong></p>
+                <p>بنود غير مطابقة (مدين): ${money(report.stmt_unmatched_debit)}</p>
+                <p>بنود غير مطابقة (دائن): ${money(report.stmt_unmatched_credit)}</p>
+                <p style="font-size:16px;font-weight:900;border-top:1px solid #ccc;padding-top:8px;margin-top:8px">
+                    الرصيد المعدّل: ${money(report.adjusted_balance)}</p>
+            </div>`
+        );
+    };
+
+    const blankBa = { id:0, name:'', bank_name:'', account_number:'', iban:'', currency:'SAR', gl_account_id:'' };
+
+    return (
+        <div className="space-y-4">
+            {/* رأس */}
+            <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
+                    <Scale size={20} className="text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">المطابقة البنكية</h3>
+                    <p className="text-xs text-slate-500 dark:text-brand-400">طابق بنود كشف حساب البنك مع حركات دفتر الأستاذ</p>
+                </div>
+            </div>
+
+            {/* تبويبات فرعية */}
+            <div className="flex gap-1 border-b border-slate-200 dark:border-brand-700">
+                {[
+                    { id:'accounts',  label:'الحسابات البنكية' },
+                    { id:'statement', label:'كشف الحساب' },
+                    { id:'report',    label:'تقرير المطابقة' },
+                ].map(s => (
+                    <button key={s.id} onClick={() => setSub(s.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-t-xl border-b-2 transition
+                            ${sub===s.id?'border-[#c5a059] text-[#c5a059]':'border-transparent text-slate-500 dark:text-brand-400 hover:text-[#c5a059]'}`}>
+                        {s.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* ── الحسابات البنكية ── */}
+            {sub === 'accounts' && (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-500 dark:text-brand-400">{bankAccounts.length} حساب</span>
+                        <Btn color="green" onClick={() => setEditing({...blankBa})}><Plus size={15} /> حساب بنكي جديد</Btn>
+                    </div>
+                    {baLoading ? <Spinner /> : bankAccounts.length===0 ? <Empty msg="لا توجد حسابات بنكية — أضف حساب البنك وربطه بحساب في دفتر الأستاذ" /> : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {bankAccounts.map(ba => (
+                                <div key={ba.id} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm p-4 flex items-start gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center shrink-0">
+                                        <Banknote size={18} className="text-emerald-700 dark:text-emerald-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-bold text-brand-800 dark:text-brand-100">{ba.name}</div>
+                                        <div className="text-xs text-slate-400 dark:text-brand-500 mt-0.5 space-y-0.5">
+                                            {ba.bank_name && <div>{ba.bank_name}</div>}
+                                            {ba.account_number && <div dir="ltr" className="font-mono">{ba.account_number}</div>}
+                                            {ba.iban && <div dir="ltr" className="font-mono text-[10px]">{ba.iban}</div>}
+                                            {ba.gl_name && <div className="text-indigo-600 dark:text-indigo-400 font-bold">{ba.gl_code} · {ba.gl_name}</div>}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setEditing({ id:ba.id, name:ba.name, bank_name:ba.bank_name||'', account_number:ba.account_number||'', iban:ba.iban||'', currency:ba.currency||'SAR', gl_account_id:ba.gl_account_id||'' })}
+                                        className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059] shrink-0"><Edit2 size={16} /></button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {editing && (
+                        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
+                            <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-sm p-6" onClick={e=>e.stopPropagation()} dir="rtl">
+                                <div className="flex items-center justify-between mb-5">
+                                    <h3 className="font-black text-brand-800 dark:text-brand-100">{editing.id?'تعديل حساب':'حساب بنكي جديد'}</h3>
+                                    <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-red-500"><X size={18}/></button>
+                                </div>
+                                <div className="space-y-3">
+                                    {[
+                                        { k:'name', label:'اسم الحساب', req:true },
+                                        { k:'bank_name', label:'اسم البنك' },
+                                        { k:'account_number', label:'رقم الحساب', dir:'ltr' },
+                                        { k:'iban', label:'IBAN', dir:'ltr' },
+                                    ].map(f => (
+                                        <div key={f.k}>
+                                            <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">{f.label}{f.req&&<span className="text-red-500"> *</span>}</label>
+                                            <input value={editing[f.k]||''} onChange={e=>setEditing(ed=>({...ed,[f.k]:e.target.value}))} dir={f.dir||'rtl'}
+                                                className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                        </div>
+                                    ))}
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">حساب الأستاذ (أصول/بنك)</label>
+                                        <AccountCombobox accounts={assetAccounts} value={editing.gl_account_id} onChange={v=>setEditing(ed=>({...ed,gl_account_id:v}))} />
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 mt-5">
+                                    <Btn color="green" onClick={saveBankAcc}><Save size={14}/> حفظ</Btn>
+                                    <Btn color="gray" onClick={()=>setEditing(null)}>إلغاء</Btn>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── كشف الحساب ── */}
+            {sub === 'statement' && (
+                <div className="space-y-4">
+                    {/* فلتر */}
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">الحساب البنكي</label>
+                            <select value={selBa} onChange={e=>setSelBa(e.target.value)}
+                                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900 min-w-[180px]">
+                                <option value="">— اختر حساباً —</option>
+                                {bankAccounts.map(ba => <option key={ba.id} value={ba.id}>{ba.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">من</label>
+                            <input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900" />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">إلى</label>
+                            <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900" />
+                        </div>
+                        <Btn color="navy" onClick={loadStmt} disabled={!selBa||stmtLoad}>
+                            {stmtLoad?<Loader2 size={14} className="animate-spin"/>:<Search size={14}/>} عرض
+                        </Btn>
+                    </div>
+
+                    {/* جدول البنود */}
+                    {stmtLoad ? <Spinner /> : selBa && stmtLines.length > 0 && (
+                        <Card>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
+                                        <tr>
+                                            <th className="px-3 py-3 text-right font-bold">التاريخ</th>
+                                            <th className="px-3 py-3 text-right font-bold">البيان</th>
+                                            <th className="px-3 py-3 text-right font-bold">المرجع</th>
+                                            <th className="px-3 py-3 text-left font-bold">مدين</th>
+                                            <th className="px-3 py-3 text-left font-bold">دائن</th>
+                                            <th className="px-3 py-3 text-center font-bold w-24">مطابق</th>
+                                            <th className="px-3 py-3 w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {stmtLines.map(l => (
+                                            <tr key={l.id} className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition ${l.reconciled?'opacity-60':''}`}>
+                                                <td className="px-3 py-2.5 font-bold text-slate-500 dark:text-brand-400" dir="ltr">{l.stmt_date}</td>
+                                                <td className="px-3 py-2.5 text-slate-700 dark:text-brand-300">{l.description||'—'}</td>
+                                                <td className="px-3 py-2.5 text-xs text-slate-400 dark:text-brand-500 font-mono">{l.ref||'—'}</td>
+                                                <td className="px-3 py-2.5 text-left tabular-nums font-bold text-emerald-700 dark:text-emerald-400" dir="ltr">{Number(l.debit)?money(l.debit):''}</td>
+                                                <td className="px-3 py-2.5 text-left tabular-nums font-bold text-rose-600 dark:text-rose-400" dir="ltr">{Number(l.credit)?money(l.credit):''}</td>
+                                                <td className="px-3 py-2.5 text-center">
+                                                    <button onClick={()=>toggleMatch(l)}
+                                                        className={`w-8 h-5 rounded-full relative inline-flex transition-colors duration-200 ${l.reconciled?'bg-emerald-500':'bg-slate-200 dark:bg-brand-700'}`}>
+                                                        <span className={`inline-block w-4 h-4 bg-white rounded-full shadow absolute top-0.5 transition-all duration-200 ${l.reconciled?'right-0.5':'left-0.5'}`}/>
+                                                    </button>
+                                                </td>
+                                                <td className="px-3 py-2.5 text-center">
+                                                    <button onClick={()=>deleteStmtLine(l.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* إضافة بنود جديدة */}
+                    {selBa && (
+                        <Card>
+                            <div className="px-3 py-2.5 bg-slate-50 dark:bg-brand-800/40 border-b border-slate-100 dark:border-brand-700 flex items-center justify-between">
+                                <h4 className="text-sm font-black text-slate-700 dark:text-brand-300">إضافة بنود جديدة</h4>
+                                <label className="cursor-pointer">
+                                    <input type="file" accept=".csv" className="hidden" onChange={importCSV} />
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
+                                        <Download size={12}/> استيراد CSV
+                                    </span>
+                                </label>
+                            </div>
+                            <div className="p-3 overflow-x-auto">
+                                <table className="w-full text-xs">
+                                    <thead className="text-slate-400 dark:text-brand-500">
+                                        <tr>
+                                            <th className="px-2 py-1.5 text-right font-bold w-36">التاريخ</th>
+                                            <th className="px-2 py-1.5 text-right font-bold">البيان</th>
+                                            <th className="px-2 py-1.5 text-right font-bold w-20">مرجع</th>
+                                            <th className="px-2 py-1.5 text-left font-bold w-28">مدين (وارد)</th>
+                                            <th className="px-2 py-1.5 text-left font-bold w-28">دائن (صادر)</th>
+                                            <th className="w-7"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {newLines.map((l, i) => (
+                                            <tr key={i} className="border-b border-slate-50 dark:border-brand-700">
+                                                <td className="px-1 py-1"><input type="date" value={l.stmt_date} onChange={e=>setNewLines(nl=>nl.map((x,j)=>j===i?{...x,stmt_date:e.target.value}:x))}
+                                                    className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059]" /></td>
+                                                <td className="px-1 py-1"><input value={l.description} onChange={e=>setNewLines(nl=>nl.map((x,j)=>j===i?{...x,description:e.target.value}:x))}
+                                                    className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059]" /></td>
+                                                <td className="px-1 py-1"><input value={l.ref} onChange={e=>setNewLines(nl=>nl.map((x,j)=>j===i?{...x,ref:e.target.value}:x))}
+                                                    className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059]" /></td>
+                                                <td className="px-1 py-1"><input type="number" step="0.01" value={l.debit} onChange={e=>setNewLines(nl=>nl.map((x,j)=>j===i?{...x,debit:e.target.value}:x))}
+                                                    className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs tabular-nums outline-none focus:border-emerald-400" dir="ltr" /></td>
+                                                <td className="px-1 py-1"><input type="number" step="0.01" value={l.credit} onChange={e=>setNewLines(nl=>nl.map((x,j)=>j===i?{...x,credit:e.target.value}:x))}
+                                                    className="w-full bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs tabular-nums outline-none focus:border-rose-400" dir="ltr" /></td>
+                                                <td className="px-1 py-1 text-center">
+                                                    {newLines.length > 1 && <button onClick={()=>setNewLines(nl=>nl.filter((_,j)=>j!==i))} className="text-slate-300 hover:text-red-500"><X size={13}/></button>}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-brand-700">
+                                    <Btn color="gray" size="sm" onClick={()=>setNewLines(nl=>[...nl,{stmt_date:todayISO(),description:'',debit:'',credit:'',ref:''}])}><Plus size={12}/> بند</Btn>
+                                    <div className="flex-1"/>
+                                    <Btn color="green" onClick={addLines} disabled={adding||!selBa}>
+                                        {adding?<Loader2 size={13} className="animate-spin"/>:<Save size={13}/>}
+                                        {adding?'جارٍ الحفظ…':'حفظ البنود'}
+                                    </Btn>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+                    {!selBa && <Empty msg="اختر حساباً بنكياً لعرض أو إضافة بنود" />}
+                </div>
+            )}
+
+            {/* ── تقرير المطابقة ── */}
+            {sub === 'report' && (
+                <div className="space-y-4">
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">الحساب البنكي</label>
+                            <select value={selBa} onChange={e=>setSelBa(e.target.value)}
+                                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900 min-w-[180px]">
+                                <option value="">— اختر حساباً —</option>
+                                {bankAccounts.map(ba=><option key={ba.id} value={ba.id}>{ba.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">حتى تاريخ</label>
+                            <input type="date" value={to} onChange={e=>setTo(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] dark:bg-brand-900" />
+                        </div>
+                        <Btn color="navy" onClick={loadReport} disabled={rptLoad||!selBa}>
+                            {rptLoad?<Loader2 size={14} className="animate-spin"/>:<FileBarChart2 size={14}/>}
+                            توليد التقرير
+                        </Btn>
+                        {report && <Btn color="gray" size="sm" onClick={printReport}><Printer size={13}/> طباعة</Btn>}
+                    </div>
+
+                    {rptLoad ? <Spinner /> : report && (
+                        <div className="space-y-4">
+                            {/* بطاقات ملخص */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {[
+                                    { label:'رصيد دفتر الأستاذ', val:report.gl_balance, cls:'text-brand-800 dark:text-brand-100' },
+                                    { label:'بنود غير مطابقة (صافي)', val:report.stmt_unmatched_debit-report.stmt_unmatched_credit, cls:'text-amber-700 dark:text-amber-400' },
+                                    { label:'الرصيد المعدّل', val:report.adjusted_balance, cls:'text-emerald-700 dark:text-emerald-400 font-black' },
+                                ].map(c=>(
+                                    <div key={c.label} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm px-4 py-3">
+                                        <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                        <div className={`text-xl font-black tabular-nums ${c.cls}`} dir="ltr">{money(c.val)}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {report.stmt_unmatched?.length > 0 && (
+                                <Card>
+                                    <div className="px-3 py-2.5 bg-amber-50 dark:bg-amber-500/10 border-b border-amber-100 dark:border-amber-500/30">
+                                        <h4 className="text-sm font-black text-amber-700 dark:text-amber-400">البنود غير المطابقة ({report.stmt_unmatched.length})</h4>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="text-xs text-slate-400 dark:text-brand-500 bg-slate-50/60 dark:bg-brand-800/20">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-right font-bold">التاريخ</th>
+                                                    <th className="px-3 py-2 text-right font-bold">البيان</th>
+                                                    <th className="px-3 py-2 text-left font-bold">مدين</th>
+                                                    <th className="px-3 py-2 text-left font-bold">دائن</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {report.stmt_unmatched.map(l=>(
+                                                    <tr key={l.id} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800">
+                                                        <td className="px-3 py-2 font-bold text-slate-500 dark:text-brand-400" dir="ltr">{l.stmt_date}</td>
+                                                        <td className="px-3 py-2 text-slate-700 dark:text-brand-300">{l.description||'—'}</td>
+                                                        <td className="px-3 py-2 text-left tabular-nums text-emerald-700 dark:text-emerald-400 font-bold" dir="ltr">{Number(l.debit)?money(l.debit):''}</td>
+                                                        <td className="px-3 py-2 text-left tabular-nums text-rose-600 dark:text-rose-400 font-bold" dir="ltr">{Number(l.credit)?money(l.credit):''}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </Card>
+                            )}
+                        </div>
+                    )}
+                    {!selBa && <Empty msg="اختر حساباً بنكياً لتوليد تقرير المطابقة" />}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  تبويب الميزانية التقديرية — إدخال + مقارنة بالفعلي
 // ════════════════════════════════════════════════════════════════════════════
 function BudgetTab({ accounts, toast }) {
@@ -3500,6 +3916,7 @@ const TABS = [
     { id: 'vat', label: 'إقرار الضريبة', icon: Banknote },
     { id: 'parties', label: 'العملاء والموردون', icon: Users },
     { id: 'costcenters', label: 'مراكز التكلفة', icon: Layers },
+    { id: 'bank', label: 'المطابقة البنكية', icon: Scale },
     { id: 'budget', label: 'الميزانية التقديرية', icon: TrendingUp },
     { id: 'periods', label: 'السنوات المالية', icon: Calendar },
     { id: 'settings', label: 'ملف المنشأة', icon: Settings },
@@ -3629,6 +4046,7 @@ export default function LedgerHub() {
                     {activeTab === 'vat' && <VatTab toast={toast} />}
                     {activeTab === 'parties' && <PartiesTab parties={parties} reload={loadParties} loading={partyLoading} toast={toast} />}
                     {activeTab === 'costcenters' && <CostCentersTab costCenters={costCenters} reload={loadCostCenters} loading={ccLoading} toast={toast} />}
+                    {activeTab === 'bank' && <BankReconcileTab accounts={accounts} toast={toast} />}
                     {activeTab === 'budget' && <BudgetTab accounts={accounts} toast={toast} />}
                     {activeTab === 'periods' && <FiscalPeriodsTab toast={toast} />}
                     {activeTab === 'settings' && <SettingsTab company={company} reload={loadCompany} toast={toast} />}
