@@ -446,6 +446,44 @@ function PartyCombobox({ parties, value, onChange, placeholder = 'ابحث با�
     );
 }
 
+// ─── ProductCombobox ─────────────────────────────────────────────────────────
+function ProductCombobox({ products, onSelect, placeholder = 'اختر منتجاً أو خدمة…', className = '' }) {
+    const [q, setQ]       = useState('');
+    const [open, setOpen] = useState(false);
+    const filtered = React.useMemo(() => {
+        const s = q.trim().toLowerCase();
+        if (!s) return products.slice(0, 30);
+        return products.filter(p =>
+            p.name.toLowerCase().includes(s) || (p.code && p.code.toLowerCase().includes(s))
+        ).slice(0, 20);
+    }, [q, products]);
+    const pick = (p) => { onSelect(p); setQ(''); setOpen(false); };
+    return (
+        <div className={`relative ${className}`}>
+            <input type="text" value={q} placeholder={placeholder}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                onChange={e => { setQ(e.target.value); setOpen(true); }}
+                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059] placeholder-slate-300 dark:placeholder-brand-600"
+                dir="rtl" autoComplete="off" />
+            {open && filtered.length > 0 && (
+                <ul className="absolute z-50 mt-0.5 w-60 max-h-48 overflow-y-auto bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl shadow-lg text-xs">
+                    {filtered.map(p => (
+                        <li key={p.id} onMouseDown={() => pick(p)}
+                            className="px-3 py-1.5 cursor-pointer flex items-center justify-between gap-2 hover:bg-slate-50 dark:hover:bg-brand-800/60">
+                            <div className="min-w-0">
+                                <div className="font-bold truncate text-slate-700 dark:text-brand-200">{p.name}</div>
+                                {p.code && <div className="text-[10px] text-slate-400 dark:text-brand-500 font-mono">{p.code}</div>}
+                            </div>
+                            <span className="shrink-0 tabular-nums font-bold text-brand-800 dark:text-brand-300" dir="ltr">{money(p.unit_price)}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 //  تبويب 2: القيود اليومية + نموذج قيد
 // ════════════════════════════════════════════════════════════════════════════
@@ -1635,6 +1673,133 @@ function CostCentersTab({ costCenters, reload, loading, toast }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  كتالوج المنتجات والخدمات
+// ════════════════════════════════════════════════════════════════════════════
+function ProductsTab({ products, reload, loading, toast }) {
+    const [editing, setEditing] = useState(null);
+    const [search, setSearch]   = useState('');
+    const blank = { code: '', name: '', unit: 'قطعة', unit_price: 0, buy_price: 0, tax_rate: 15, description: '' };
+
+    const save = async () => {
+        if (!editing.name) { toast('الاسم مطلوب', 'error'); return; }
+        try {
+            const r = await api('acc_product_save', { method: 'POST', body: { ...editing, id: editing.id || 0 } });
+            if (r.success) { toast(editing.id ? 'تم التحديث' : 'تمت الإضافة'); setEditing(null); reload(); }
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+    };
+    const del = async (id) => {
+        if (!window.confirm('حذف هذا الصنف؟')) return;
+        try { const r = await api('acc_product_delete', { method: 'POST', body: { id } }); if (r.success) { toast(r.message); reload(); } else toast(r.message, 'error'); }
+        catch (e) { toast(e.message, 'error'); }
+    };
+
+    const filtered = products.filter(p => !search || p.name.includes(search) || (p.code||'').includes(search));
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="relative flex-1 max-w-xs">
+                    <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-500" />
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم أو الكود…"
+                        className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 pr-8 pl-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-500 dark:text-brand-400">{products.length} صنف</span>
+                    <Btn color="gray" size="sm" onClick={reload}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> تحديث</Btn>
+                    <Btn color="green" onClick={() => setEditing({ ...blank })}><Plus size={15} /> صنف جديد</Btn>
+                </div>
+            </div>
+            {loading ? <Spinner /> : filtered.length === 0 ? <Empty msg="لا توجد منتجات" /> : (
+                <Card>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-right text-sm">
+                            <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
+                                <tr>
+                                    <th className="px-3 py-3 font-bold">الكود</th>
+                                    <th className="px-3 py-3 font-bold">الاسم</th>
+                                    <th className="px-3 py-3 font-bold">الوحدة</th>
+                                    <th className="px-3 py-3 font-bold text-left">سعر البيع</th>
+                                    <th className="px-3 py-3 font-bold text-left">سعر الشراء</th>
+                                    <th className="px-3 py-3 font-bold text-center">ض.ق.م %</th>
+                                    <th className="px-3 py-3 font-bold text-center w-20">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.map(p => (
+                                    <tr key={p.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
+                                        <td className="px-3 py-2.5 font-mono text-xs text-slate-500 dark:text-brand-400">{p.code || '—'}</td>
+                                        <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-brand-300">{p.name}</td>
+                                        <td className="px-3 py-2.5 text-slate-600 dark:text-brand-400">{p.unit || '—'}</td>
+                                        <td className="px-3 py-2.5 text-left tabular-nums font-bold text-emerald-700 dark:text-emerald-400" dir="ltr">{money(p.unit_price)}</td>
+                                        <td className="px-3 py-2.5 text-left tabular-nums text-slate-500 dark:text-brand-400" dir="ltr">{money(p.buy_price)}</td>
+                                        <td className="px-3 py-2.5 text-center">{p.tax_rate}%</td>
+                                        <td className="px-3 py-2.5 text-center">
+                                            <div className="flex items-center justify-center gap-1.5">
+                                                <button onClick={() => setEditing({ id: p.id, code: p.code||'', name: p.name, unit: p.unit||'قطعة', unit_price: p.unit_price||0, buy_price: p.buy_price||0, tax_rate: p.tax_rate||15, description: p.description||'' })} className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
+                                                <button onClick={() => del(p.id)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
+            {editing && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()} dir="rtl">
+                        <div className="flex items-center justify-between mb-5">
+                            <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">{editing.id ? 'تعديل صنف' : 'صنف جديد'}</h3>
+                            <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">الكود (اختياري)</label>
+                                    <input value={editing.code} onChange={e => setEditing({...editing,code:e.target.value})} className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm font-mono outline-none focus:border-[#c5a059]" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">الوحدة</label>
+                                    <input value={editing.unit} onChange={e => setEditing({...editing,unit:e.target.value})} className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">الاسم <span className="text-rose-500">*</span></label>
+                                <input value={editing.name} onChange={e => setEditing({...editing,name:e.target.value})} className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">سعر البيع</label>
+                                    <input type="number" step="0.01" value={editing.unit_price} onChange={e => setEditing({...editing,unit_price:e.target.value})} className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" dir="ltr" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">سعر الشراء</label>
+                                    <input type="number" step="0.01" value={editing.buy_price} onChange={e => setEditing({...editing,buy_price:e.target.value})} className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" dir="ltr" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">ض.ق.م %</label>
+                                    <input type="number" step="0.001" value={editing.tax_rate} onChange={e => setEditing({...editing,tax_rate:e.target.value})} className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" dir="ltr" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">الوصف (اختياري)</label>
+                                <input value={editing.description} onChange={e => setEditing({...editing,description:e.target.value})} className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                            </div>
+                        </div>
+                        <div className="flex gap-2 mt-6">
+                            <Btn color="green" onClick={save}><Save size={15} /> حفظ</Btn>
+                            <Btn color="gray" onClick={() => setEditing(null)}>إلغاء</Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  المكوّن الرئيسي
 // ════════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════════
@@ -1663,7 +1828,7 @@ function calcTotals(items) {
     return { sub: r(sub), tax: r(tax), total: r(sub + tax) };
 }
 
-function InvoicesTab({ docType, parties, accounts, company = {}, toast }) {
+function InvoicesTab({ docType, parties, accounts, products = [], company = {}, toast }) {
     const isSales = docType === 'sales';
     const [list, setList] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -1953,6 +2118,7 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                                 <table className="w-full text-sm">
                                     <thead className="bg-slate-50 dark:bg-brand-800/60 text-slate-500 dark:text-brand-400 text-xs">
                                         <tr>
+                                            {products.length > 0 && <th className="px-2 py-2 font-bold w-44">صنف سريع</th>}
                                             <th className="px-2 py-2 text-right font-bold">الوصف</th>
                                             <th className="px-2 py-2 font-bold w-20">الكمية</th>
                                             <th className="px-2 py-2 font-bold w-28">السعر</th>
@@ -1968,6 +2134,15 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                                             const lt = net + net * (Number(it.tax_rate) || 0) / 100;
                                             return (
                                                 <tr key={i} className="border-t border-slate-50 dark:border-brand-700">
+                                                    {products.length > 0 && (
+                                                        <td className="px-2 py-1.5">
+                                                            <ProductCombobox products={products} onSelect={p => {
+                                                                setEditing(e => ({ ...e, items: e.items.map((it2, idx) => idx !== i ? it2 : {
+                                                                    ...it2, description: p.name, unit_price: Number(p.unit_price)||0, tax_rate: Number(p.tax_rate)||15,
+                                                                })}));
+                                                            }} />
+                                                        </td>
+                                                    )}
                                                     <td className="px-2 py-1.5"><input value={it.description} onChange={e => setItem(i, 'description', e.target.value)} placeholder="وصف البند" className="w-full bg-transparent px-2 py-1.5 outline-none" /></td>
                                                     <td className="px-2 py-1.5"><input type="number" value={it.qty} onChange={e => setItem(i, 'qty', e.target.value)} className="w-full bg-slate-50 rounded-lg px-2 py-1.5 text-center outline-none" /></td>
                                                     <td className="px-2 py-1.5"><input type="number" value={it.unit_price} onChange={e => setItem(i, 'unit_price', e.target.value)} className="w-full bg-slate-50 rounded-lg px-2 py-1.5 text-center outline-none" /></td>
@@ -2310,6 +2485,7 @@ const TABS = [
     { id: 'sales', label: 'فواتير البيع', icon: FileText },
     { id: 'purchases', label: 'فواتير الشراء', icon: FileText },
     { id: 'payments', label: 'سندات القبض/الصرف', icon: Wallet },
+    { id: 'products', label: 'المنتجات والخدمات', icon: Package },
     { id: 'trial', label: 'ميزان المراجعة', icon: Scale },
     { id: 'income', label: 'قائمة الدخل', icon: TrendingUp },
     { id: 'balance', label: 'الميزانية العمومية', icon: PieChart },
@@ -2331,6 +2507,8 @@ export default function LedgerHub() {
     const [partyLoading, setPartyLoading] = useState(false);
     const [costCenters, setCostCenters] = useState([]);
     const [ccLoading, setCcLoading] = useState(false);
+    const [products, setProducts] = useState([]);
+    const [prodLoading, setProdLoading] = useState(false);
     const [company, setCompany] = useState({});
     const [seeded, setSeeded] = useState(false);
 
@@ -2349,12 +2527,17 @@ export default function LedgerHub() {
         try { const r = await api('gl_cost_centers'); setCostCenters(r.data || []); }
         catch (e) { toast(e.message, 'error'); } finally { setCcLoading(false); }
     }, [toast]);
+    const loadProducts = useCallback(async () => {
+        setProdLoading(true);
+        try { const r = await api('acc_products_list', { params: { limit: 500 } }); setProducts(r.data || []); }
+        catch (e) { /* صامت */ } finally { setProdLoading(false); }
+    }, []);
     const loadCompany = useCallback(async () => {
         try { const r = await api('gl_settings_get'); if (r.success) setCompany(r.settings || {}); }
         catch (e) { /* صامت — لا يعطّل الواجهة */ }
     }, []);
 
-    useEffect(() => { loadAccounts(); loadParties(); loadCostCenters(); loadCompany(); }, [loadAccounts, loadParties, loadCostCenters, loadCompany]);
+    useEffect(() => { loadAccounts(); loadParties(); loadCostCenters(); loadProducts(); loadCompany(); }, [loadAccounts, loadParties, loadCostCenters, loadProducts, loadCompany]);
 
     // زرع دليل الحسابات إن كان فارغاً
     const seed = async () => {
@@ -2402,9 +2585,10 @@ export default function LedgerHub() {
                 <div className="p-4 md:p-6">
                     {activeTab === 'chart' && <ChartTab accounts={accounts} reload={loadAccounts} loading={accLoading} toast={toast} />}
                     {activeTab === 'journal' && <JournalTab accounts={accounts} parties={parties} costCenters={costCenters} toast={toast} />}
-                    {activeTab === 'sales' && <InvoicesTab docType="sales" parties={parties} accounts={accounts} company={company} toast={toast} />}
-                    {activeTab === 'purchases' && <InvoicesTab docType="purchase" parties={parties} accounts={accounts} company={company} toast={toast} />}
+                    {activeTab === 'sales' && <InvoicesTab docType="sales" parties={parties} accounts={accounts} products={products} company={company} toast={toast} />}
+                    {activeTab === 'purchases' && <InvoicesTab docType="purchase" parties={parties} accounts={accounts} products={products} company={company} toast={toast} />}
                     {activeTab === 'payments' && <PaymentsTab parties={parties} accounts={accounts} toast={toast} />}
+                    {activeTab === 'products' && <ProductsTab products={products} reload={loadProducts} loading={prodLoading} toast={toast} />}
                     {activeTab === 'trial' && <TrialBalanceTab toast={toast} />}
                     {activeTab === 'income' && <IncomeTab toast={toast} />}
                     {activeTab === 'balance' && <BalanceSheetTab toast={toast} />}
