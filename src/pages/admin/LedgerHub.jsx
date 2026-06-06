@@ -3163,7 +3163,181 @@ function CostCentersTab({ costCenters, reload, loading, toast }) {
 function ProductsTab({ products, reload, loading, toast }) {
     const [editing, setEditing] = useState(null);
     const [search, setSearch]   = useState('');
+    const [plProduct, setPlProduct]   = useState(null);    // product being viewed in ledger
+    const [plData,    setPlData]      = useState(null);
+    const [plLoading, setPlLoading]   = useState(false);
+    const [plFrom,    setPlFrom]      = useState('');
+    const [plTo,      setPlTo]        = useState('');
+
     const blank = { code: '', name: '', unit: 'قطعة', unit_price: 0, buy_price: 0, tax_rate: 15, description: '' };
+
+    const openProductLedger = async (prod, fr, to) => {
+        setPlProduct(prod); setPlData(null); setPlLoading(true);
+        try {
+            const params = { product_id: prod.id };
+            if (fr !== undefined ? fr : plFrom) params.from = fr !== undefined ? fr : plFrom;
+            if (to !== undefined ? to : plTo) params.to = to !== undefined ? to : plTo;
+            const r = await api('gl_product_ledger', { params });
+            if (r.success) setPlData(r); else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setPlLoading(false); }
+    };
+
+    if (plProduct) {
+        const rows    = plData?.data || [];
+        const totals  = plData?.totals || {};
+        const opening = plData?.opening ?? 0;
+        return (
+            <div className="space-y-4 animate-fadeIn">
+                {/* شريط التنقل */}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => { setPlProduct(null); setPlData(null); }}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059] transition">
+                            <ArrowLeft size={15} /> قائمة الأصناف
+                        </button>
+                        <div>
+                            <h3 className="text-base font-black text-brand-800 dark:text-brand-100">{plProduct.name}</h3>
+                            <p className="text-xs text-slate-400 dark:text-brand-500 font-bold">{plProduct.code || 'بدون كود'} · {plProduct.unit || 'قطعة'}</p>
+                        </div>
+                    </div>
+                    {plData && (
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => {
+                                const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+                                const header = ['التاريخ','الفاتورة','الطرف','وارد','منصرف','الرصيد'].map(esc).join(',');
+                                const dataRows = rows.map(r => [esc(r.issue_date),esc(r.invoice_no),esc(r.party_label||''),esc(r.qty_in||''),esc(r.qty_out||''),esc(r.balance)].join(','));
+                                const csv = '﻿' + [header,...dataRows].join('\r\n');
+                                const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a'); a.href=url; a.download=`stock_${plProduct.code||plProduct.name}.csv`;
+                                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                            }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
+                                <Download size={15} /> CSV
+                            </button>
+                            <button onClick={() => {
+                                const rowsHtml = rows.map(r =>
+                                    `<tr><td>${r.issue_date}</td><td style="font-family:monospace">${r.invoice_no}</td><td>${r.party_label||'—'}</td>
+                                    <td style="text-align:left;color:#059669">${r.qty_in||''}</td>
+                                    <td style="text-align:left;color:#e11d48">${r.qty_out||''}</td>
+                                    <td style="text-align:left;font-weight:700">${r.balance}</td></tr>`
+                                ).join('');
+                                printHtml(`حركة صنف: ${plProduct.name}`,
+                                    `<h1>حركة صنف: ${plProduct.name}</h1><h2>الكود: ${plProduct.code||'—'} · الوحدة: ${plProduct.unit||'قطعة'}</h2>
+                                    <table><thead><tr><th>التاريخ</th><th>الفاتورة</th><th>الطرف</th><th style="text-align:left">وارد</th><th style="text-align:left">منصرف</th><th style="text-align:left">الرصيد</th></tr></thead>
+                                    <tbody>
+                                    <tr><td colspan="3">رصيد افتتاحي</td><td></td><td></td><td style="text-align:left;font-weight:700">${opening}</td></tr>
+                                    ${rowsHtml}
+                                    </tbody>
+                                    <tfoot><tr class="total-row"><td colspan="3">الإجمالي</td><td style="text-align:left;color:#059669">${totals.in||0}</td><td style="text-align:left;color:#e11d48">${totals.out||0}</td><td style="text-align:left">${totals.closing||0}</td></tr></tfoot>
+                                    </table>`
+                                );
+                            }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold bg-brand-800 text-white hover:bg-brand-900 transition">
+                                <Printer size={15} /> طباعة
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* KPI */}
+                {plData && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                            { label: 'رصيد افتتاحي', val: opening, unit: plProduct.unit||'قطعة', cls: 'text-slate-600 dark:text-brand-300' },
+                            { label: 'إجمالي الوارد', val: totals.in??0, unit: plProduct.unit||'قطعة', cls: 'text-emerald-700 dark:text-emerald-400' },
+                            { label: 'إجمالي المنصرف', val: totals.out??0, unit: plProduct.unit||'قطعة', cls: 'text-rose-600 dark:text-rose-400' },
+                            { label: 'الرصيد الحالي', val: totals.closing??0, unit: plProduct.unit||'قطعة', cls: 'text-brand-800 dark:text-brand-100 font-black' },
+                        ].map(c => (
+                            <div key={c.label} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm px-4 py-3">
+                                <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                <div className={`text-xl font-black tabular-nums ${c.cls}`} dir="ltr">{c.val}</div>
+                                <div className="text-[11px] text-slate-400 dark:text-brand-600 mt-0.5">{c.unit}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* فلتر التاريخ */}
+                <div className="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">من تاريخ</label>
+                        <input type="date" value={plFrom} onChange={e => setPlFrom(e.target.value)}
+                            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <div>
+                        <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">إلى تاريخ</label>
+                        <input type="date" value={plTo} onChange={e => setPlTo(e.target.value)}
+                            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]" />
+                    </div>
+                    <Btn color="navy" size="sm" onClick={() => openProductLedger(plProduct)}>
+                        {plLoading ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />} عرض
+                    </Btn>
+                    {(plFrom || plTo) && (
+                        <button onClick={() => { setPlFrom(''); setPlTo(''); openProductLedger(plProduct, '', ''); }}
+                            className="px-3 py-2 rounded-xl text-[13px] font-bold border border-slate-200 dark:border-brand-700 text-slate-500 dark:text-brand-400 hover:border-rose-400 hover:text-rose-500 transition">مسح</button>
+                    )}
+                </div>
+
+                {/* جدول الحركة */}
+                {plLoading ? <Spinner /> : (
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-slate-400 dark:text-brand-500 text-[12px] font-black border-b border-slate-100 dark:border-brand-700">
+                                        <th className="text-right py-3 px-3">التاريخ</th>
+                                        <th className="text-right py-3 px-3">الفاتورة</th>
+                                        <th className="text-right py-3 px-3">الطرف</th>
+                                        <th className="text-left py-3 px-3 text-emerald-600 dark:text-emerald-400">وارد</th>
+                                        <th className="text-left py-3 px-3 text-rose-600 dark:text-rose-400">منصرف</th>
+                                        <th className="text-left py-3 px-3">الرصيد</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr className="border-b border-slate-50 dark:border-brand-700 bg-amber-50/30 dark:bg-amber-500/10">
+                                        <td className="py-2.5 px-3 text-slate-400 dark:text-brand-500 font-bold" colSpan={3}>رصيد افتتاحي</td>
+                                        <td className="py-2.5 px-3"></td>
+                                        <td className="py-2.5 px-3"></td>
+                                        <td className="py-2.5 px-3 text-left font-black tabular-nums" dir="ltr">{opening}</td>
+                                    </tr>
+                                    {rows.length === 0 ? (
+                                        <tr><td colSpan={6} className="py-12 text-center text-slate-300 dark:text-brand-700 font-bold">لا توجد حركات{(plFrom||plTo)?' في هذه الفترة':''}</td></tr>
+                                    ) : rows.map((r, i) => (
+                                        <tr key={i} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                            <td className="py-2.5 px-3 text-slate-500 dark:text-brand-400 font-bold" dir="ltr">{r.issue_date}</td>
+                                            <td className="py-2.5 px-3 font-mono text-[12px]">
+                                                {r.invoice_id
+                                                    ? <EntityLink to={`entry/${r.invoice_id}`} muted>{r.invoice_no}</EntityLink>
+                                                    : <span className="text-slate-400 dark:text-brand-500">{r.invoice_no}</span>}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-slate-600 dark:text-brand-300 font-bold">
+                                                {r.party_id
+                                                    ? <EntityLink to={`parties/${r.party_id}`} muted>{r.party_label||'—'}</EntityLink>
+                                                    : (r.party_label||'—')}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-left font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" dir="ltr">{r.qty_in ? r.qty_in : ''}</td>
+                                            <td className="py-2.5 px-3 text-left font-bold text-rose-600 dark:text-rose-400 tabular-nums" dir="ltr">{r.qty_out ? r.qty_out : ''}</td>
+                                            <td className="py-2.5 px-3 text-left font-black tabular-nums" dir="ltr">{r.balance}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                {plData && rows.length > 0 && (
+                                    <tfoot>
+                                        <tr className="bg-slate-50 dark:bg-brand-800/60 font-black text-brand-800 dark:text-brand-100 border-t-2 border-slate-200 dark:border-brand-700">
+                                            <td className="py-3 px-3" colSpan={3}>الإجماليات</td>
+                                            <td className="py-3 px-3 text-left text-emerald-700 dark:text-emerald-400 tabular-nums" dir="ltr">{totals.in??0}</td>
+                                            <td className="py-3 px-3 text-left text-rose-600 dark:text-rose-400 tabular-nums" dir="ltr">{totals.out??0}</td>
+                                            <td className="py-3 px-3 text-left tabular-nums" dir="ltr">{totals.closing??0}</td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     const save = async () => {
         if (!editing.name) { toast('الاسم مطلوب', 'error'); return; }
@@ -3221,8 +3395,9 @@ function ProductsTab({ products, reload, loading, toast }) {
                                         <td className="px-3 py-2.5 text-center">{p.tax_rate}%</td>
                                         <td className="px-3 py-2.5 text-center">
                                             <div className="flex items-center justify-center gap-1.5">
-                                                <button onClick={() => setEditing({ id: p.id, code: p.code||'', name: p.name, unit: p.unit||'قطعة', unit_price: p.unit_price||0, buy_price: p.buy_price||0, tax_rate: p.tax_rate||15, description: p.description||'' })} className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
-                                                <button onClick={() => del(p.id)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15} /></button>
+                                                <button onClick={() => openProductLedger(p)} title="حركة الصنف" className="text-slate-400 dark:text-brand-500 hover:text-indigo-600 dark:hover:text-indigo-400"><Eye size={15} /></button>
+                                                <button onClick={() => setEditing({ id: p.id, code: p.code||'', name: p.name, unit: p.unit||'قطعة', unit_price: p.unit_price||0, buy_price: p.buy_price||0, tax_rate: p.tax_rate||15, description: p.description||'' })} title="تعديل" className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
+                                                <button onClick={() => del(p.id)} title="حذف" className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15} /></button>
                                             </div>
                                         </td>
                                     </tr>
