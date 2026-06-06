@@ -13,6 +13,7 @@ import {
 // ════════════════════════════════════════════════════════════════════════════
 
 import { API_URL } from '../../lib/api/client';
+import EntityLink from '../../components/ui/EntityLink';
 const TENANT = 1;
 
 const TYPE_LABELS = {
@@ -489,7 +490,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                                     const locked = e.ref_type && !['', 'manual', 'proof'].includes(e.ref_type);
                                     return (
                                         <tr key={e.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
-                                            <td className="px-3 py-2.5 font-mono font-bold text-brand-800 dark:text-brand-300">{e.entry_no}</td>
+                                            <td className="px-3 py-2.5 font-mono font-bold"><EntityLink to={`entry/${e.id}`} title="تفاصيل القيد">{e.entry_no}</EntityLink></td>
                                             <td className="px-3 py-2.5 text-slate-600 dark:text-brand-300">{e.date}</td>
                                             <td className="px-3 py-2.5 text-slate-700 dark:text-brand-300 max-w-xs truncate" title={e.description}>{e.description || '—'}</td>
                                             <td className="px-3 py-2.5">
@@ -892,7 +893,7 @@ function PartiesTab({ parties, reload, loading, toast }) {
                             <tbody>
                                 {filtered.map(p => (
                                     <tr key={p.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
-                                        <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-brand-300">{p.name}</td>
+                                        <td className="px-3 py-2.5 font-bold"><EntityLink to={`parties/${p.id}`} title="كشف حساب الطرف">{p.name}</EntityLink></td>
                                         <td className="px-3 py-2.5 font-mono text-xs text-slate-500 dark:text-brand-400">{p.vat_number || '—'}</td>
                                         <td className="px-3 py-2.5 text-slate-600 dark:text-brand-300" dir="ltr">{p.phone || '—'}</td>
                                         <td className="px-3 py-2.5">
@@ -922,7 +923,7 @@ function PartiesTab({ parties, reload, loading, toast }) {
                                 <tbody>
                                     {aging.data.map(r => (
                                         <tr key={r.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
-                                            <td className="px-3 py-2.5 font-bold text-slate-700 dark:text-brand-300">{r.name}</td>
+                                            <td className="px-3 py-2.5 font-bold"><EntityLink to={`parties/${r.id}`} title="كشف حساب الطرف">{r.name}</EntityLink></td>
                                             <td className="px-3 py-2.5 text-left tabular-nums" dir="ltr">{money(r.current)}</td>
                                             <td className="px-3 py-2.5 text-left tabular-nums" dir="ltr">{money(r.d30)}</td>
                                             <td className="px-3 py-2.5 text-left tabular-nums" dir="ltr">{money(r.d60)}</td>
@@ -1024,7 +1025,7 @@ function PartiesTab({ parties, reload, loading, toast }) {
                                 <tbody>
                                     {ledger.data.map((r, i) => (
                                         <tr key={i} className="border-b border-slate-100 dark:border-brand-700">
-                                            <td className="px-3 py-2 font-mono text-xs text-slate-400 dark:text-brand-500">{r.entry_no}</td>
+                                            <td className="px-3 py-2 font-mono text-xs"><EntityLink to={`entry/${r.entry_id}`} muted title="تفاصيل القيد">{r.entry_no}</EntityLink></td>
                                             <td className="px-3 py-2 text-slate-600 dark:text-brand-300">{r.date}</td>
                                             <td className="px-3 py-2 text-left tabular-nums" dir="ltr">{Number(r.debit) ? money(r.debit) : ''}</td>
                                             <td className="px-3 py-2 text-left tabular-nums" dir="ltr">{Number(r.credit) ? money(r.credit) : ''}</td>

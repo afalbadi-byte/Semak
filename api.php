@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-05-v414
+// deploy: 2026-06-06-v415
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -985,7 +985,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v414','deployed'=>'2026-06-05'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v415','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -4867,11 +4867,13 @@ switch ($action) {
         $st   = $conn->real_escape_string($_GET['status'] ?? '');
         $from = $conn->real_escape_string($_GET['from'] ?? '');
         $to   = $conn->real_escape_string($_GET['to'] ?? '');
+        $pid  = (int)($_GET['party_id'] ?? 0);
         $w = "i.tenant_id=$tid";
         if (in_array($dt, ['sales','purchase'])) $w .= " AND i.doc_type='$dt'";
         if (in_array($st, ['draft','posted','partial','paid','void'])) $w .= " AND i.status='$st'";
         if ($from) $w .= " AND i.issue_date>='$from'";
         if ($to)   $w .= " AND i.issue_date<='$to'";
+        if ($pid)  $w .= " AND i.party_id=$pid";
         $res = $conn->query("SELECT i.*, COALESCE(p.name,i.party_name) party_label
                              FROM acc_invoices i LEFT JOIN acc_parties p ON p.id=i.party_id
                              WHERE $w ORDER BY i.issue_date DESC, i.id DESC LIMIT 500");

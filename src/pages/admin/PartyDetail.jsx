@@ -137,6 +137,8 @@ function Statement({ partyId, setActiveTab, tenant }) {
     const [err, setErr]      = useState('');
     const [from, setFrom]    = useState('');
     const [to, setTo]        = useState('');
+    const [invoices, setInvoices] = useState([]);
+    const [invLoading, setInvLoading] = useState(true);
 
     const load = useCallback(() => {
         setLoad(true); setErr('');
@@ -147,6 +149,14 @@ function Statement({ partyId, setActiveTab, tenant }) {
     }, [tenant, partyId, from, to]);
 
     useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        setInvLoading(true);
+        apiGet('inv_list', { tenant, party_id: partyId })
+            .then(r => setInvoices(Array.isArray(r?.data) ? r.data : []))
+            .catch(() => setInvoices([]))
+            .finally(() => setInvLoading(false));
+    }, [tenant, partyId]);
 
     const party   = data?.party;
     const rows    = data?.data || [];
@@ -286,6 +296,43 @@ function Statement({ partyId, setActiveTab, tenant }) {
                                 </tfoot>
                             </table>
                         </div>
+                    </div>
+
+                    {/* فواتير الطرف */}
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden mt-5">
+                        <div className="px-5 md:px-6 py-4 border-b border-slate-100 dark:border-brand-700 flex items-center gap-2">
+                            <FileText size={16} className="text-indigo-600 dark:text-indigo-300" />
+                            <h3 className="text-sm font-black text-brand-800 dark:text-brand-100">فواتير الطرف</h3>
+                            {!invLoading && <span className="text-[11px] font-bold text-slate-400 dark:text-brand-500">({invoices.length})</span>}
+                        </div>
+                        {invLoading ? (
+                            <div className="text-center py-10 text-slate-400 dark:text-brand-500"><Loader2 className="animate-spin mx-auto" size={22} /></div>
+                        ) : invoices.length === 0 ? (
+                            <div className="text-center py-10 text-slate-300 dark:text-brand-600 font-bold text-sm">لا توجد فواتير لهذا الطرف</div>
+                        ) : (
+                            <div className="overflow-x-auto custom-scrollbar">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-slate-400 dark:text-brand-500 text-[12px] font-black border-b border-slate-100 dark:border-brand-700">
+                                            <th className="text-right py-3 px-3">رقم الفاتورة</th>
+                                            <th className="text-right py-3 px-3">التاريخ</th>
+                                            <th className="text-left py-3 px-3">الإجمالي</th>
+                                            <th className="text-center py-3 px-3">الحالة</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {invoices.map(inv => (
+                                            <tr key={inv.id} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                                <td className="py-2.5 px-3"><EntityLink to={`inv/${inv.id}`} icon={Hash}>{inv.invoice_no || `#${inv.id}`}</EntityLink></td>
+                                                <td className="py-2.5 px-3 text-slate-500 dark:text-brand-400 font-bold whitespace-nowrap" dir="ltr">{inv.issue_date}</td>
+                                                <td className="py-2.5 px-3 text-left font-black"><Money value={inv.total} /></td>
+                                                <td className="py-2.5 px-3 text-center"><StatusPill status={inv.status} /></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </>
             )}
