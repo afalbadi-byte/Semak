@@ -4103,6 +4103,38 @@ switch ($action) {
         echo json_encode(['success'=>true,'period'=>['from'=>$from,'to'=>$to],'revenue'=>$rev,'expenses'=>$exp,'totals'=>['revenue'=>round($totRev,2),'expenses'=>round($totExp,2),'net'=>round($totRev-$totExp,2)]], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'gl_income_monthly': {
+        // تحليل الدخل الشهري — إيرادات ومصروفات لكل شهر في السنة
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $year = $conn->real_escape_string($_GET['year'] ?? date('Y'));
+        $sql  = "SELECT DATE_FORMAT(e.date,'%Y-%m') AS mo,
+                    COALESCE(SUM(CASE WHEN a.type='revenue' THEN ROUND(l.credit-l.debit,2) ELSE 0 END),0) AS revenue,
+                    COALESCE(SUM(CASE WHEN a.type='expense' THEN ROUND(l.debit-l.credit,2) ELSE 0 END),0) AS expenses
+                 FROM acc_entries e
+                 JOIN acc_lines l ON l.entry_id=e.id
+                 JOIN acc_accounts a ON a.id=l.account_id AND a.tenant_id=e.tenant_id
+                 WHERE e.tenant_id=$tid AND e.is_posted=1
+                   AND e.date LIKE '$year-%'
+                   AND a.type IN ('revenue','expense') AND a.is_group=0
+                 GROUP BY DATE_FORMAT(e.date,'%Y-%m')
+                 ORDER BY mo";
+        $res  = $conn->query($sql);
+        $byMo = [];
+        while ($res && ($x = $res->fetch_assoc())) {
+            $byMo[$x['mo']] = ['revenue'=>round((float)$x['revenue'],2),'expenses'=>round((float)$x['expenses'],2),'net'=>round((float)$x['revenue']-(float)$x['expenses'],2)];
+        }
+        // ضمان وجود كل الأشهر الـ 12
+        $months = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $k = $year.'-'.str_pad($m,2,'0',STR_PAD_LEFT);
+            $months[] = array_merge(['month'=>$k], $byMo[$k] ?? ['revenue'=>0,'expenses'=>0,'net'=>0]);
+        }
+        $totRev = array_sum(array_column($months,'revenue'));
+        $totExp = array_sum(array_column($months,'expenses'));
+        echo json_encode(['success'=>true,'year'=>$year,'months'=>$months,'totals'=>['revenue'=>round($totRev,2),'expenses'=>round($totExp,2),'net'=>round($totRev-$totExp,2)]], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // ════════════════════════════════════════════════════════════════════
     //  الأصول الثابتة

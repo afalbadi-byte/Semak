@@ -1731,26 +1731,93 @@ function TrialBalanceTab({ toast }) {
 // ════════════════════════════════════════════════════════════════════════════
 //  تبويب 4: قائمة الدخل
 // ════════════════════════════════════════════════════════════════════════════
+const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
 function IncomeTab({ toast }) {
-    const [from, setFrom] = useState(yearStart());
-    const [to, setTo] = useState(todayISO());
-    const [data, setData] = useState(null);
+    const [sub,     setSub]     = useState('statement'); // 'statement' | 'monthly'
+    const [from,    setFrom]    = useState(yearStart());
+    const [to,      setTo]      = useState(todayISO());
+    const [data,    setData]    = useState(null);
     const [loading, setLoading] = useState(false);
+    const [compare, setCompare] = useState(false);
+    const [prior,   setPrior]   = useState(null);
+    // Monthly trend
+    const [year,    setYear]    = useState(new Date().getFullYear().toString());
+    const [monthly, setMonthly] = useState(null);
+    const [mLoad,   setMLoad]   = useState(false);
+
+    // ─── helpers ────────────────────────────────────────────────────
+    const priorRange = useMemo(() => {
+        if (!from || !to) return null;
+        const f = new Date(from), t = new Date(to);
+        const dur = t - f; // ms
+        const pTo = new Date(f.getTime() - 86400000);
+        const pFrom = new Date(pTo.getTime() - dur);
+        return { from: pFrom.toISOString().slice(0,10), to: pTo.toISOString().slice(0,10) };
+    }, [from, to]);
+
+    // ─── loaders ────────────────────────────────────────────────────
     const load = useCallback(async () => {
         setLoading(true);
         try { const r = await api('gl_income_statement', { params: { from, to } }); setData(r); }
         catch (e) { toast(e.message, 'error'); } finally { setLoading(false); }
     }, [from, to, toast]);
+
+    const loadPrior = useCallback(async () => {
+        if (!priorRange) return;
+        try { const r = await api('gl_income_statement', { params: { from: priorRange.from, to: priorRange.to } }); setPrior(r); }
+        catch { /* silent */ }
+    }, [priorRange]);
+
+    const loadMonthly = useCallback(async () => {
+        setMLoad(true);
+        try { const r = await api('gl_income_monthly', { params: { year } }); setMonthly(r); }
+        catch (e) { toast(e.message, 'error'); } finally { setMLoad(false); }
+    }, [year, toast]);
+
     useEffect(() => { load(); }, []); // eslint-disable-line
+    useEffect(() => { if (compare) loadPrior(); else setPrior(null); }, [compare, loadPrior]);
+    useEffect(() => { if (sub === 'monthly') loadMonthly(); }, [sub, loadMonthly]);
+
+    // ─── rendering helpers ──────────────────────────────────────────
+    const pMap = useMemo(() => {
+        if (!prior) return {};
+        const m = {};
+        [...(prior.revenue||[]), ...(prior.expenses||[])].forEach(r => { m[r.id] = r.amount; });
+        return m;
+    }, [prior]);
+
+    const varBadge = (cur, priorAmt) => {
+        if (!compare || prior == null) return null;
+        const diff = cur - (priorAmt ?? 0);
+        const pct  = priorAmt ? (diff / Math.abs(priorAmt)) * 100 : null;
+        const pos  = diff >= 0;
+        return (
+            <span className={`text-[11px] font-bold tabular-nums mr-2 ${pos ? 'text-emerald-600' : 'text-rose-500'}`} dir="ltr">
+                {pos ? '+' : ''}{money(diff)}
+                {pct != null && <span className="opacity-70"> ({pct > 0 ? '+' : ''}{pct.toFixed(1)}%)</span>}
+            </span>
+        );
+    };
 
     const section = (title, items, color) => (
         <div>
             <h4 className={`text-sm font-black mb-2 ${color}`}>{title}</h4>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
                 {items.map(r => (
-                    <div key={r.id} className="flex justify-between text-sm py-1 border-b border-slate-50 dark:border-brand-700">
-                        <EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب"><span className="font-mono text-xs opacity-70">{r.code}</span> {r.name}</EntityLink>
-                        <span className="tabular-nums font-bold" dir="ltr">{money(r.amount)}</span>
+                    <div key={r.id} className="flex items-center justify-between text-sm py-1 border-b border-slate-50 dark:border-brand-700">
+                        <EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب">
+                            <span className="font-mono text-xs opacity-70">{r.code}</span> {r.name}
+                        </EntityLink>
+                        <div className="flex items-center gap-1">
+                            {compare && prior && (
+                                <span className="tabular-nums text-xs text-slate-400 dark:text-brand-600 font-bold" dir="ltr">
+                                    {money(pMap[r.id] ?? 0)}
+                                </span>
+                            )}
+                            {varBadge(r.amount, pMap[r.id])}
+                            <span className="tabular-nums font-bold min-w-[80px] text-left" dir="ltr">{money(r.amount)}</span>
+                        </div>
                     </div>
                 ))}
             </div>
@@ -1759,54 +1826,216 @@ function IncomeTab({ toast }) {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-end justify-between flex-wrap gap-3">
-                <PeriodBar from={from} to={to} setFrom={setFrom} setTo={setTo} onApply={load} />
-                {data && (
-                    <div className="flex gap-2">
-                        <Btn color="gray" size="sm" onClick={() => downloadCSV('income_statement.csv',
-                            ['النوع', 'الكود', 'الحساب', 'مبلغ'],
-                            [
-                                ...( data.revenue  || []).map(r => ['إيرادات', r.code, r.name, r.amount]),
-                                ...( data.expenses || []).map(r => ['مصروفات', r.code, r.name, r.amount]),
-                                ['', '', 'إجمالي الإيرادات', data.totals.revenue],
-                                ['', '', 'إجمالي المصروفات', data.totals.expenses],
-                                ['', '', 'صافي الدخل', data.totals.net],
-                            ])}>
-                            <Download size={14} /> تصدير
-                        </Btn>
-                        <Btn color="gray" size="sm" onClick={() => {
-                            const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-                            const r2 = (code,name,amt) => `<tr><td>${esc(code)} · ${esc(name)}</td><td class="amount">${money(amt)} ﷼</td></tr>`;
-                            printHtml('قائمة الدخل', `
-                                <h1>قائمة الدخل</h1><h2>من ${from} إلى ${to}</h2>
-                                <table><thead><tr><th>الحساب</th><th style="text-align:left">المبلغ</th></tr></thead><tbody>
-                                <tr class="section-header"><td colspan="2">الإيرادات</td></tr>
-                                ${(data.revenue||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
-                                <tr class="total-row"><td>إجمالي الإيرادات</td><td class="amount">${money(data.totals.revenue)} ﷼</td></tr>
-                                <tr class="section-header"><td colspan="2">المصروفات</td></tr>
-                                ${(data.expenses||[]).map(r=>r2(r.code,r.name,r.amount)).join('')}
-                                <tr class="total-row"><td>إجمالي المصروفات</td><td class="amount">${money(data.totals.expenses)} ﷼</td></tr>
-                                <tr class="net-row"><td>صافي الدخل</td><td class="amount">${money(data.totals.net)} ﷼</td></tr>
-                                </tbody></table>`);
-                        }}>
-                            <Printer size={14} /> طباعة
-                        </Btn>
-                    </div>
-                )}
+            {/* تبويبات فرعية */}
+            <div className="flex flex-wrap gap-2">
+                {[
+                    { id: 'statement', label: 'قائمة الدخل' },
+                    { id: 'monthly',   label: 'التحليل الشهري' },
+                ].map(s => (
+                    <button key={s.id} onClick={() => setSub(s.id)}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold transition border ${
+                            sub === s.id
+                                ? 'bg-brand-800 text-white border-brand-800 dark:bg-brand-700 dark:border-brand-600'
+                                : 'border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059]'
+                        }`}>{s.label}</button>
+                ))}
             </div>
-            {loading ? <Spinner /> : !data ? <Empty /> : (
-                <Card className="p-5 md:p-6 space-y-5">
-                    {section('الإيرادات', data.revenue || [], 'text-emerald-700')}
-                    {section('المصروفات', data.expenses || [], 'text-rose-700')}
-                    <div className="border-t-2 border-slate-100 dark:border-brand-700 pt-4 space-y-2">
-                        <div className="flex justify-between text-sm"><span className="font-bold text-slate-500 dark:text-brand-400">إجمالي الإيرادات</span><span className="tabular-nums font-bold text-emerald-700" dir="ltr">{money(data.totals.revenue)}</span></div>
-                        <div className="flex justify-between text-sm"><span className="font-bold text-slate-500 dark:text-brand-400">إجمالي المصروفات</span><span className="tabular-nums font-bold text-rose-700" dir="ltr">{money(data.totals.expenses)}</span></div>
-                        <div className="flex justify-between text-lg pt-2 border-t border-slate-100 dark:border-brand-700">
-                            <span className="font-black text-brand-800 dark:text-brand-100">صافي الدخل</span>
-                            <span className={`tabular-nums font-black ${data.totals.net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`} dir="ltr">{money(data.totals.net)} ﷼</span>
+
+            {/* ── قائمة الدخل ── */}
+            {sub === 'statement' && (
+                <>
+                    <div className="flex items-end justify-between flex-wrap gap-3">
+                        <PeriodBar from={from} to={to} setFrom={setFrom} setTo={setTo} onApply={load} />
+                        <div className="flex items-center gap-2">
+                            {/* مقارنة بالفترة السابقة */}
+                            <button onClick={() => setCompare(p => !p)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border transition ${
+                                    compare
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : 'border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-indigo-400'
+                                }`}>
+                                <ArrowRightLeft size={13} /> مقارنة بالسابق
+                            </button>
+                            {data && <>
+                                <Btn color="gray" size="sm" onClick={() => downloadCSV('income_statement.csv',
+                                    ['النوع','الكود','الحساب','الفترة الحالية', ...(compare && prior ? ['الفترة السابقة','التغيير'] : [])],
+                                    [
+                                        ...(data.revenue||[]).map(r  => ['إيرادات',r.code,r.name,r.amount,...(compare&&prior?[pMap[r.id]??0,r.amount-(pMap[r.id]??0)]:[])]),
+                                        ...(data.expenses||[]).map(r => ['مصروفات',r.code,r.name,r.amount,...(compare&&prior?[pMap[r.id]??0,r.amount-(pMap[r.id]??0)]:[])]),
+                                        ['','','إجمالي الإيرادات',data.totals.revenue,...(compare&&prior?[prior.totals.revenue,data.totals.revenue-prior.totals.revenue]:[])],
+                                        ['','','إجمالي المصروفات',data.totals.expenses,...(compare&&prior?[prior.totals.expenses,data.totals.expenses-prior.totals.expenses]:[])],
+                                        ['','','صافي الدخل',data.totals.net,...(compare&&prior?[prior.totals.net,data.totals.net-prior.totals.net]:[])],
+                                    ])}>
+                                    <Download size={14} /> تصدير
+                                </Btn>
+                                <Btn color="gray" size="sm" onClick={() => {
+                                    const esc = s => String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+                                    const cmpHead = compare && prior ? `<th style="text-align:left">السابق</th><th style="text-align:left">التغيير</th>` : '';
+                                    const r2 = (code,name,amt,pid) => {
+                                        const pa = compare&&prior ? pMap[pid]??0 : null;
+                                        const cmpCols = compare&&prior ? `<td class="amount">${money(pa)} ﷼</td><td class="amount ${amt-pa>=0?'':'neg'}">${amt-pa>=0?'+':''}${money(amt-pa)} ﷼</td>` : '';
+                                        return `<tr><td>${esc(code)} · ${esc(name)}</td><td class="amount">${money(amt)} ﷼</td>${cmpCols}</tr>`;
+                                    };
+                                    printHtml('قائمة الدخل', `
+                                        <style>.neg{color:#b91c1c}</style>
+                                        <h1>قائمة الدخل</h1><h2>من ${from} إلى ${to}${compare&&prior?` (مقارنة: ${priorRange?.from} → ${priorRange?.to})`:''}</h2>
+                                        <table><thead><tr><th>الحساب</th><th style="text-align:left">الحالي</th>${cmpHead}</tr></thead><tbody>
+                                        <tr class="section-header"><td colspan="4">الإيرادات</td></tr>
+                                        ${(data.revenue||[]).map(r=>r2(r.code,r.name,r.amount,r.id)).join('')}
+                                        <tr class="total-row"><td>إجمالي الإيرادات</td><td class="amount">${money(data.totals.revenue)} ﷼</td>${compare&&prior?`<td class="amount">${money(prior.totals.revenue)} ﷼</td><td class="amount">${money(data.totals.revenue-prior.totals.revenue)} ﷼</td>`:''}</tr>
+                                        <tr class="section-header"><td colspan="4">المصروفات</td></tr>
+                                        ${(data.expenses||[]).map(r=>r2(r.code,r.name,r.amount,r.id)).join('')}
+                                        <tr class="total-row"><td>إجمالي المصروفات</td><td class="amount">${money(data.totals.expenses)} ﷼</td>${compare&&prior?`<td class="amount">${money(prior.totals.expenses)} ﷼</td><td class="amount">${money(data.totals.expenses-prior.totals.expenses)} ﷼</td>`:''}</tr>
+                                        <tr class="net-row"><td>صافي الدخل</td><td class="amount">${money(data.totals.net)} ﷼</td>${compare&&prior?`<td class="amount">${money(prior.totals.net)} ﷼</td><td class="amount">${money(data.totals.net-prior.totals.net)} ﷼</td>`:''}</tr>
+                                        </tbody></table>`);
+                                }}>
+                                    <Printer size={14} /> طباعة
+                                </Btn>
+                            </>}
                         </div>
                     </div>
-                </Card>
+                    {/* رأس المقارنة */}
+                    {compare && prior && (
+                        <div className="flex justify-end gap-4 text-[11px] font-bold text-slate-400 dark:text-brand-500 px-1">
+                            <span>السابق ({priorRange?.from} → {priorRange?.to})</span>
+                            <span>التغيير</span>
+                            <span className="min-w-[80px] text-left">الحالي</span>
+                        </div>
+                    )}
+                    {loading ? <Spinner /> : !data ? <Empty /> : (
+                        <Card className="p-5 md:p-6 space-y-5">
+                            {section('الإيرادات', data.revenue || [], 'text-emerald-700 dark:text-emerald-400')}
+                            {section('المصروفات', data.expenses || [], 'text-rose-700 dark:text-rose-400')}
+                            <div className="border-t-2 border-slate-100 dark:border-brand-700 pt-4 space-y-2">
+                                {[
+                                    { label: 'إجمالي الإيرادات', cur: data.totals.revenue, prev: prior?.totals.revenue, cls: 'text-emerald-700 dark:text-emerald-400' },
+                                    { label: 'إجمالي المصروفات', cur: data.totals.expenses, prev: prior?.totals.expenses, cls: 'text-rose-700 dark:text-rose-400' },
+                                ].map(({label,cur,prev,cls}) => (
+                                    <div key={label} className="flex items-center justify-between text-sm">
+                                        <span className="font-bold text-slate-500 dark:text-brand-400">{label}</span>
+                                        <div className="flex items-center gap-1">
+                                            {compare && prior && <span className="tabular-nums text-xs text-slate-400 dark:text-brand-600 font-bold" dir="ltr">{money(prev??0)}</span>}
+                                            {varBadge(cur, prev)}
+                                            <span className={`tabular-nums font-bold min-w-[80px] text-left ${cls}`} dir="ltr">{money(cur)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="flex items-center justify-between text-lg pt-2 border-t border-slate-100 dark:border-brand-700">
+                                    <span className="font-black text-brand-800 dark:text-brand-100">صافي الدخل</span>
+                                    <div className="flex items-center gap-1">
+                                        {compare && prior && <span className="tabular-nums text-sm text-slate-400 dark:text-brand-600 font-bold" dir="ltr">{money(prior.totals.net)}</span>}
+                                        {varBadge(data.totals.net, prior?.totals.net)}
+                                        <span className={`tabular-nums font-black min-w-[80px] text-left ${data.totals.net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`} dir="ltr">{money(data.totals.net)} ﷼</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+                </>
+            )}
+
+            {/* ── التحليل الشهري ── */}
+            {sub === 'monthly' && (
+                <div className="space-y-4">
+                    <div className="flex items-end gap-3 flex-wrap">
+                        <div>
+                            <label className="block text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">السنة</label>
+                            <select value={year} onChange={e => setYear(e.target.value)}
+                                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm text-brand-800 dark:text-brand-100 dark:bg-brand-900 outline-none focus:border-[#c5a059]">
+                                {Array.from({length:5},(_,i)=> new Date().getFullYear()-i).map(y=>(
+                                    <option key={y} value={y}>{y}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <Btn color="navy" size="sm" onClick={loadMonthly} disabled={mLoad}>
+                            {mLoad ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} تحديث
+                        </Btn>
+                        {monthly && (
+                            <>
+                                <Btn color="gray" size="sm" onClick={() => downloadCSV(`income_monthly_${year}.csv`,
+                                    ['الشهر','الإيرادات','المصروفات','صافي الدخل'],
+                                    monthly.months.map(m=>[AR_MONTHS[parseInt(m.month.slice(5))-1]+' '+year,m.revenue,m.expenses,m.net])
+                                )}><Download size={14} /> CSV</Btn>
+                                <Btn color="gray" size="sm" onClick={() => {
+                                    const maxVal = Math.max(...monthly.months.map(m=>Math.max(m.revenue,m.expenses)),1);
+                                    const bar = (v,cls) => `<div style="display:inline-block;width:${Math.max(2,(v/maxVal*160)).toFixed(0)}px;height:12px;border-radius:3px;${cls}"></div>`;
+                                    const rows = monthly.months.map((m,i)=>`<tr>
+                                        <td>${AR_MONTHS[i]}</td>
+                                        <td class="amount">${money(m.revenue)} ﷼ ${bar(m.revenue,'background:#16a34a30;border:1px solid #16a34a')}</td>
+                                        <td class="amount">${money(m.expenses)} ﷼ ${bar(m.expenses,'background:#dc262630;border:1px solid #dc2626')}</td>
+                                        <td class="amount ${m.net<0?'neg':''}">${m.net<0?'('+money(-m.net)+')':money(m.net)} ﷼</td>
+                                    </tr>`).join('');
+                                    printHtml(`التحليل الشهري ${year}`,`
+                                        <style>.neg{color:#b91c1c}</style>
+                                        <h1>التحليل الشهري لقائمة الدخل — ${year}</h1>
+                                        <table><thead><tr><th>الشهر</th><th style="text-align:left">الإيرادات</th><th style="text-align:left">المصروفات</th><th style="text-align:left">صافي الدخل</th></tr></thead>
+                                        <tbody>${rows}</tbody>
+                                        <tfoot><tr class="total-row"><td>الإجمالي</td><td class="amount">${money(monthly.totals.revenue)} ﷼</td><td class="amount">${money(monthly.totals.expenses)} ﷼</td><td class="amount">${money(monthly.totals.net)} ﷼</td></tr></tfoot>
+                                        </table>`);
+                                }}><Printer size={14} /> طباعة</Btn>
+                            </>
+                        )}
+                    </div>
+
+                    {mLoad ? <Spinner /> : !monthly ? null : (() => {
+                        const maxVal = Math.max(...monthly.months.map(m => Math.max(m.revenue, m.expenses)), 1);
+                        return (
+                            <Card>
+                                <div className="overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-[12px] font-black text-slate-400 dark:text-brand-500 border-b border-slate-100 dark:border-brand-700">
+                                                <th className="text-right py-3 px-3">الشهر</th>
+                                                <th className="text-left py-3 px-3">الإيرادات</th>
+                                                <th className="text-left py-3 px-3">المصروفات</th>
+                                                <th className="text-left py-3 px-3">صافي الدخل</th>
+                                                <th className="py-3 px-3 min-w-[140px]">الإيرادات مقابل المصروفات</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {monthly.months.map((m, i) => {
+                                                const revW = (m.revenue / maxVal * 100).toFixed(1);
+                                                const expW = (m.expenses / maxVal * 100).toFixed(1);
+                                                const net = m.net;
+                                                return (
+                                                    <tr key={m.month} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                                        <td className="py-2.5 px-3 font-bold text-brand-800 dark:text-brand-100 whitespace-nowrap">
+                                                            {AR_MONTHS[i]}
+                                                        </td>
+                                                        <td className="py-2.5 px-3 tabular-nums font-bold text-emerald-700 dark:text-emerald-400 text-left" dir="ltr">
+                                                            {m.revenue > 0 ? money(m.revenue) : <span className="text-slate-300 dark:text-brand-700">—</span>}
+                                                        </td>
+                                                        <td className="py-2.5 px-3 tabular-nums font-bold text-rose-600 dark:text-rose-400 text-left" dir="ltr">
+                                                            {m.expenses > 0 ? money(m.expenses) : <span className="text-slate-300 dark:text-brand-700">—</span>}
+                                                        </td>
+                                                        <td className={`py-2.5 px-3 tabular-nums font-black text-left ${net > 0 ? 'text-emerald-700 dark:text-emerald-400' : net < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-brand-600'}`} dir="ltr">
+                                                            {net !== 0 ? money(net) : '—'}
+                                                        </td>
+                                                        <td className="py-2.5 px-3">
+                                                            <div className="flex flex-col gap-0.5 min-w-[120px]">
+                                                                {m.revenue > 0 && <div className="h-2 rounded-full bg-emerald-500/70" style={{width:`${revW}%`,minWidth:'3px'}} title={`إيرادات: ${money(m.revenue)}`} />}
+                                                                {m.expenses > 0 && <div className="h-2 rounded-full bg-rose-500/70" style={{width:`${expW}%`,minWidth:'3px'}} title={`مصروفات: ${money(m.expenses)}`} />}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="bg-slate-50 dark:bg-brand-800/60 font-black text-brand-800 dark:text-brand-100 border-t-2 border-slate-200 dark:border-brand-700">
+                                                <td className="py-3 px-3">الإجمالي</td>
+                                                <td className="py-3 px-3 tabular-nums text-emerald-700 dark:text-emerald-400 text-left" dir="ltr">{money(monthly.totals.revenue)}</td>
+                                                <td className="py-3 px-3 tabular-nums text-rose-600 dark:text-rose-400 text-left" dir="ltr">{money(monthly.totals.expenses)}</td>
+                                                <td className={`py-3 px-3 tabular-nums text-left ${monthly.totals.net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`} dir="ltr">{money(monthly.totals.net)}</td>
+                                                <td />
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </Card>
+                        );
+                    })()}
+                </div>
             )}
         </div>
     );
