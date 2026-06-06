@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import QRCode from 'react-qr-code';
 import {
     Loader2, ArrowLeft, Search, Printer, RefreshCw, FileText, Hash,
-    Building2, Calendar, Link2, ShoppingCart, Receipt, Wallet
+    Building2, Calendar, Link2, ShoppingCart, Receipt, Wallet,
+    ShieldCheck, ShieldAlert,
 } from 'lucide-react';
-import { apiGet } from '../../lib/api/client';
+import { apiGet, API_URL } from '../../lib/api/client';
 import { Money, StatusPill, EntityLink, Breadcrumbs } from '../../components/ui';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -137,10 +138,12 @@ function Browse({ tenant }) {
 
 // ─── تفاصيل فاتورة ───────────────────────────────────────────────────────────
 function Detail({ invoiceId, setActiveTab, tenant }) {
-    const [inv, setInv]      = useState(null);
-    const [items, setItems]  = useState([]);
-    const [loading, setLoad] = useState(true);
-    const [err, setErr]      = useState('');
+    const [inv, setInv]       = useState(null);
+    const [items, setItems]   = useState([]);
+    const [loading, setLoad]  = useState(true);
+    const [err, setErr]       = useState('');
+    const [stamping, setStamp] = useState(false);
+    const [stampMsg, setStampMsg] = useState('');
 
     const load = useCallback(() => {
         setLoad(true); setErr('');
@@ -156,6 +159,22 @@ function Detail({ invoiceId, setActiveTab, tenant }) {
     useEffect(() => { load(); }, [load]);
 
     const isSales = inv?.doc_type === 'sales';
+    const isStamped = inv?.zatca_status === 'stamped_simulation';
+
+    const doStamp = async () => {
+        if (!inv) return;
+        setStamp(true); setStampMsg('');
+        try {
+            const res = await fetch(`${API_URL}?action=zatca_stamp`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant_id: tenant, id: inv.id }),
+            });
+            const d = await res.json();
+            if (d.success) { setStampMsg('تم الختم بنجاح'); load(); }
+            else setStampMsg(d.message || 'فشل الختم');
+        } catch { setStampMsg('خطأ في الاتصال'); }
+        finally { setStamp(false); }
+    };
 
     return (
         <div className="animate-fadeIn p-4 md:p-8 max-w-4xl mx-auto" dir="rtl">
@@ -219,7 +238,32 @@ function Detail({ invoiceId, setActiveTab, tenant }) {
                                         <div id="zatca-qr-box" className="bg-white p-2 rounded-lg border border-slate-200">
                                             <QRCode value={inv.qr_base64} size={92} />
                                         </div>
-                                        <div className="text-[10px] font-bold text-slate-400 mt-1">رمز هيئة الزكاة</div>
+                                        {isStamped ? (
+                                            <div className="flex items-center justify-center gap-1 mt-1 text-[10px] font-bold text-green-600 dark:text-green-400">
+                                                <ShieldCheck size={11} /> Phase-2 مختوم
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-center gap-1 mt-1 text-[10px] font-bold text-amber-500">
+                                                <ShieldAlert size={11} /> Phase-1
+                                            </div>
+                                        )}
+                                        {isSales && !isStamped && inv.status === 'posted' && (
+                                            <button onClick={doStamp} disabled={stamping}
+                                                className="mt-1.5 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-brand-800 text-white hover:bg-brand-700 disabled:opacity-50 transition no-print">
+                                                {stamping ? <Loader2 size={10} className="animate-spin" /> : <ShieldCheck size={10} />}
+                                                ختم
+                                            </button>
+                                        )}
+                                        {stampMsg && <div className="text-[10px] font-bold text-red-500 mt-1">{stampMsg}</div>}
+                                    </div>
+                                ) : (isSales && inv.status === 'posted') ? (
+                                    <div className="text-center">
+                                        <button onClick={doStamp} disabled={stamping}
+                                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-brand-800 text-white hover:bg-brand-700 disabled:opacity-50 transition no-print">
+                                            {stamping ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+                                            ختم ZATCA
+                                        </button>
+                                        {stampMsg && <div className="text-[10px] font-bold text-red-500 mt-1">{stampMsg}</div>}
                                     </div>
                                 ) : null}
                                 <div className="text-left bg-slate-50 dark:bg-brand-800/40 rounded-2xl px-5 py-3 border border-slate-100 dark:border-brand-700">
