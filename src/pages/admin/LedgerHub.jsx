@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import QRCode from 'react-qr-code';
 import {
     BookOpen, FileText, Layers, Plus, Trash2, RefreshCw, Save, X, Search,
-    Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download,
+    Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
     AlertTriangle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
     Settings, Printer, Building2,
 } from 'lucide-react';
@@ -341,6 +341,86 @@ function AccountCombobox({ accounts, value, onChange, placeholder = 'ابحث ب
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  PartyCombobox — حقل بحث للأطراف (عملاء / موردون)
+// ════════════════════════════════════════════════════════════════════════════
+function PartyCombobox({ parties, value, onChange, placeholder = 'ابحث باسم الطرف…', className = '', rawId = false }) {
+    const [q, setQ]         = useState('');
+    const [open, setOpen]   = useState(false);
+    const [cursor, setCursor] = useState(0);
+    const listRef  = React.useRef(null);
+
+    // rawId=true → value is just party id; rawId=false → "type:id"
+    const selected = rawId
+        ? parties.find(p => String(p.id) === String(value))
+        : parties.find(p => `${p.type}:${p.id}` === value);
+    const displayText = selected ? `${selected.type === 'customer' ? 'عميل' : 'مورد'}: ${selected.name}` : '';
+
+    const filtered = React.useMemo(() => {
+        const s = q.trim().toLowerCase();
+        if (!s) return parties.slice(0, 50);
+        return parties.filter(p =>
+            p.name.toLowerCase().includes(s) || (p.phone && p.phone.includes(s))
+        ).slice(0, 30);
+    }, [q, parties]);
+
+    const pick  = (p) => { onChange(rawId ? String(p.id) : `${p.type}:${p.id}`); setQ(''); setOpen(false); };
+    const clear = ()  => { onChange(''); setQ(''); setOpen(false); };
+
+    const handleKeyDown = (e) => {
+        if (!open) { if (e.key !== 'Escape') setOpen(true); return; }
+        // cursor 0 = "بدون طرف", 1..n = filtered entries
+        if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, filtered.length)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)); }
+        else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (cursor === 0) clear();
+            else if (filtered[cursor - 1]) pick(filtered[cursor - 1]);
+        }
+        else if (e.key === 'Escape') { setOpen(false); setQ(''); }
+    };
+
+    React.useEffect(() => {
+        if (!listRef.current) return;
+        const el = listRef.current.children[cursor];
+        if (el) el.scrollIntoView({ block: 'nearest' });
+    }, [cursor]);
+
+    return (
+        <div className={`relative ${className}`}>
+            <input type="text"
+                value={open ? q : displayText}
+                placeholder={placeholder}
+                onFocus={() => { setOpen(true); setQ(''); setCursor(0); }}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                onChange={e => { setQ(e.target.value); setCursor(0); if (!open) setOpen(true); }}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059] placeholder-slate-300 dark:placeholder-brand-600"
+                dir="rtl" autoComplete="off" />
+            {open && (
+                <ul ref={listRef} className="absolute z-50 mt-0.5 w-full max-h-48 overflow-y-auto bg-white dark:bg-brand-900 border border-slate-200 dark:border-brand-700 rounded-xl shadow-lg text-xs">
+                    <li onMouseDown={clear}
+                        className={`px-3 py-1.5 cursor-pointer italic text-slate-400 dark:text-brand-500 ${cursor === 0 ? 'bg-brand-50 dark:bg-brand-800' : 'hover:bg-slate-50 dark:hover:bg-brand-800/60'}`}>
+                        — بدون طرف —
+                    </li>
+                    {filtered.map((p, idx) => (
+                        <li key={p.id} onMouseDown={() => pick(p)}
+                            className={`px-3 py-1.5 cursor-pointer flex items-center gap-2 ${idx + 1 === cursor ? 'bg-brand-50 dark:bg-brand-800' : 'hover:bg-slate-50 dark:hover:bg-brand-800/60'}`}>
+                            <span className={`shrink-0 px-1.5 py-0.5 rounded font-bold text-[10px]
+                                ${p.type === 'customer'
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                    : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'}`}>
+                                {p.type === 'customer' ? 'عميل' : 'مورد'}
+                            </span>
+                            <span className="font-bold text-slate-700 dark:text-brand-200 truncate">{p.name}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  تبويب 2: القيود اليومية + نموذج قيد
 // ════════════════════════════════════════════════════════════════════════════
 const emptyLine = () => ({ account_id: '', debit: '', credit: '', party_type: '', party_id: '', due_date: '', cost_center_id: '', description: '' });
@@ -350,24 +430,37 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     const [loading, setLoading] = useState(false);
     const [form, setForm] = useState(null);  // null = list view
     const [viewing, setViewing] = useState(null);
-    const [page, setPage]   = useState(1);
-    const [total, setTotal] = useState(0);
+    const [page, setPage]     = useState(1);
+    const [total, setTotal]   = useState(0);
+    const [search, setSearch] = useState('');
+    const [filterFrom, setFilterFrom] = useState('');
+    const [filterTo,   setFilterTo]   = useState('');
     const PAGE_SIZE = 30;
     const postable = useMemo(() => accounts.filter(a => Number(a.is_group) === 0), [accounts]);
 
-    const loadPage = useCallback(async (pg) => {
+    const loadPage = useCallback(async (pg, q, fr, to) => {
         setLoading(true);
         try {
-            const r = await api('gl_entries', { params: { limit: PAGE_SIZE, offset: (pg - 1) * PAGE_SIZE } });
+            const params = { limit: PAGE_SIZE, offset: (pg - 1) * PAGE_SIZE };
+            if (q)  params.search = q;
+            if (fr) params.from   = fr;
+            if (to) params.to     = to;
+            const r = await api('gl_entries', { params });
             setEntries(r.data || []);
             setTotal(r.total || 0);
         }
         catch (e) { toast(e.message, 'error'); }
         finally { setLoading(false); }
     }, [toast]);
-    useEffect(() => { loadPage(page); }, [loadPage, page]);
+    useEffect(() => { loadPage(page, search, filterFrom, filterTo); }, [loadPage, page]); // eslint-disable-line
     // load: يعيد للصفحة الأولى ويحدّث — يُستدعى بعد كل تعديل/حذف/إنشاء
-    const load = useCallback(() => { setPage(1); loadPage(1); }, [loadPage]);
+    const load = useCallback(() => { setPage(1); loadPage(1, search, filterFrom, filterTo); }, [loadPage, search, filterFrom, filterTo]);
+
+    // بحث: debounce 400ms
+    useEffect(() => {
+        const t = setTimeout(() => { setPage(1); loadPage(1, search, filterFrom, filterTo); }, 400);
+        return () => clearTimeout(t);
+    }, [search, filterFrom, filterTo]); // eslint-disable-line
 
     const newEntry = () => setForm({ id: 0, date: todayISO(), description: '', lines: [emptyLine(), emptyLine()] });
 
@@ -383,6 +476,23 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                 lines: r.lines.map(l => ({
                     account_id: l.account_id, debit: Number(l.debit) || '', credit: Number(l.credit) || '',
                     party_type: l.party_type || '', party_id: l.party_id || '', due_date: l.due_date || '',
+                    cost_center_id: l.cost_center_id || '', description: l.description || '',
+                })),
+            });
+        } catch (e) { toast(e.message, 'error'); }
+    };
+
+    const duplicateEntry = async (id) => {
+        try {
+            const r = await api('gl_entry_single', { params: { id } });
+            if (!r.success) { toast(r.message || 'تعذّر الجلب', 'error'); return; }
+            setForm({
+                id: 0, // قيد جديد
+                date: todayISO(),
+                description: r.entry.description ? `نسخة: ${r.entry.description}` : '',
+                lines: r.lines.map(l => ({
+                    account_id: l.account_id, debit: Number(l.debit) || '', credit: Number(l.credit) || '',
+                    party_type: l.party_type || '', party_id: l.party_id || '', due_date: '',
                     cost_center_id: l.cost_center_id || '', description: l.description || '',
                 })),
             });
@@ -499,14 +609,15 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                                                 className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm tabular-nums outline-none focus:border-rose-400" dir="ltr" />
                                         </td>
                                         <td className="px-2 py-1.5 space-y-1">
-                                            <select value={l.party_id ? `${l.party_type}:${l.party_id}` : ''} onChange={e => {
-                                                if (!e.target.value) { setLine(i, { party_type: '', party_id: '' }); return; }
-                                                const [pt, pid] = e.target.value.split(':'); setLine(i, { party_type: pt, party_id: pid });
-                                            }}
-                                                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059]">
-                                                <option value="">— بدون طرف —</option>
-                                                {parties.map(p => <option key={p.id} value={`${p.type}:${p.id}`}>{p.type === 'customer' ? 'عميل' : 'مورد'}: {p.name}</option>)}
-                                            </select>
+                                            <PartyCombobox
+                                                parties={parties}
+                                                value={l.party_id ? `${l.party_type}:${l.party_id}` : ''}
+                                                onChange={v => {
+                                                    if (!v) { setLine(i, { party_type: '', party_id: '' }); return; }
+                                                    const [pt, pid] = v.split(':');
+                                                    setLine(i, { party_type: pt, party_id: pid });
+                                                }}
+                                            />
                                             <input type="date" title="تاريخ الاستحقاق" value={l.due_date} onChange={e => setLine(i, { due_date: e.target.value })}
                                                 className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059]" />
                                         </td>
@@ -523,7 +634,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                                         </td>
                                         <td className="px-2 py-1.5 text-center">
                                             {form.lines.length > 2 && (
-                                                <button onClick={() => setForm({ ...form, lines: form.lines.filter((_, j) => j !== i) })}
+                                                <button onClick={() => setForm(f => ({ ...f, lines: f.lines.filter((_, j) => j !== i) }))}
                                                     className="text-slate-300 hover:text-red-500"><Trash2 size={15} /></button>
                                             )}
                                         </td>
@@ -563,9 +674,31 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     // ── قائمة القيود ──
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-                <span className="text-sm text-slate-500 dark:text-brand-400">{total > 0 ? total.toLocaleString() : entries.length} قيد</span>
-                <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                    {/* بحث */}
+                    <div className="relative min-w-[160px] flex-1 max-w-xs">
+                        <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                            type="text" value={search} onChange={e => setSearch(e.target.value)}
+                            placeholder="بحث في القيود…"
+                            className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 pr-8 pl-3 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059]"
+                            dir="rtl" />
+                    </div>
+                    {/* فلتر التاريخ */}
+                    <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)}
+                        title="من تاريخ"
+                        className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059] w-36" />
+                    <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)}
+                        title="إلى تاريخ"
+                        className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059] w-36" />
+                    {(filterFrom || filterTo || search) && (
+                        <button onClick={() => { setSearch(''); setFilterFrom(''); setFilterTo(''); }}
+                            className="text-xs text-slate-400 hover:text-red-500 font-bold px-1" title="مسح الفلتر">✕</button>
+                    )}
+                    <span className="text-sm text-slate-500 dark:text-brand-400 shrink-0">{total.toLocaleString()} قيد</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
                     <Btn color="gray" size="sm" onClick={load}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> تحديث</Btn>
                     <Btn color="green" onClick={newEntry}><Plus size={15} /> قيد جديد</Btn>
                 </div>
@@ -601,6 +734,7 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                                                 <div className="flex items-center justify-center gap-1.5">
                                                     <button onClick={() => viewEntry(e.id)} title="عرض" className="text-slate-400 dark:text-brand-500 dark:text-brand-500 hover:text-brand-800 dark:hover:text-brand-300"><Eye size={15} /></button>
                                                     {!locked && <button onClick={() => editEntry(e.id)} title="تعديل" className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>}
+                                                    <button onClick={() => duplicateEntry(e.id)} title="نسخ كقيد جديد" className="text-slate-400 dark:text-brand-500 hover:text-blue-600"><Copy size={15} /></button>
                                                     <button onClick={() => reverse(e.id)} title="عكس" className="text-slate-400 dark:text-brand-500 hover:text-amber-600"><RotateCcw size={15} /></button>
                                                     {!locked && <button onClick={() => del(e.id)} title="حذف" className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15} /></button>}
                                                 </div>
@@ -759,7 +893,20 @@ function IncomeTab({ toast }) {
 
     return (
         <div className="space-y-4">
-            <PeriodBar from={from} to={to} setFrom={setFrom} setTo={setTo} onApply={load} />
+            <div className="flex items-end justify-between flex-wrap gap-3">
+                <PeriodBar from={from} to={to} setFrom={setFrom} setTo={setTo} onApply={load} />
+                {data && <Btn color="gray" size="sm" onClick={() => downloadCSV('income_statement.csv',
+                    ['النوع', 'الكود', 'الحساب', 'مبلغ'],
+                    [
+                        ...( data.revenue  || []).map(r => ['إيرادات', r.code, r.name, r.amount]),
+                        ...( data.expenses || []).map(r => ['مصروفات', r.code, r.name, r.amount]),
+                        ['', '', 'إجمالي الإيرادات', data.totals.revenue],
+                        ['', '', 'إجمالي المصروفات', data.totals.expenses],
+                        ['', '', 'صافي الدخل', data.totals.net],
+                    ])}>
+                    <Download size={14} /> تصدير
+                </Btn>}
+            </div>
             {loading ? <Spinner /> : !data ? <Empty /> : (
                 <Card className="p-5 md:p-6 space-y-5">
                     {section('الإيرادات', data.revenue || [], 'text-emerald-700')}
@@ -814,8 +961,23 @@ function BalanceSheetTab({ toast }) {
         <div className="space-y-4">
             <div className="flex items-end justify-between flex-wrap gap-3">
                 <PeriodBar to={to} setTo={setTo} onApply={() => load(to)} showFrom={false} />
-                {data && <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${data.totals.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                    {data.totals.balanced ? '✓ الميزانية متوازنة' : '✗ غير متوازنة'}</span>}
+                <div className="flex items-center gap-2">
+                    {data && <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${data.totals.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                        {data.totals.balanced ? '✓ الميزانية متوازنة' : '✗ غير متوازنة'}</span>}
+                    {data && <Btn color="gray" size="sm" onClick={() => downloadCSV('balance_sheet.csv',
+                        ['الفئة', 'الكود', 'الحساب', 'المبلغ'],
+                        [
+                            ...(data.assets      || []).map(r => ['أصول',   r.code, r.name, r.amount]),
+                            ['', '', 'إجمالي الأصول', data.totals.assets],
+                            ...(data.liabilities || []).map(r => ['خصوم',   r.code, r.name, r.amount]),
+                            ['', '', 'إجمالي الخصوم', data.totals.liabilities],
+                            ...(data.equity      || []).map(r => ['ملكية',  r.code, r.name, r.amount]),
+                            ['صافي دخل الفترة', '', '', data.net_income],
+                            ['', '', 'إجمالي حقوق الملكية', data.totals.equity],
+                        ])}>
+                        <Download size={14} /> تصدير
+                    </Btn>}
+                </div>
             </div>
             {loading ? <Spinner /> : !data ? <Empty /> : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -875,9 +1037,16 @@ function LedgerTab({ accounts, toast }) {
 
             {loading ? <Spinner /> : !data ? <Empty msg="اختر حساباً واضغط عرض" /> : (
                 <Card>
-                    <div className="px-4 py-3 bg-slate-50 dark:bg-brand-800/40 border-b border-slate-100 dark:border-brand-700 flex justify-between items-center">
+                    <div className="px-4 py-3 bg-slate-50 dark:bg-brand-800/40 border-b border-slate-100 dark:border-brand-700 flex justify-between items-center gap-3 flex-wrap">
                         <span className="font-black text-brand-800 dark:text-brand-100">{data.account.code} · {data.account.name}</span>
-                        <span className="text-sm text-slate-500 dark:text-brand-400">رصيد افتتاحي: <span className="font-bold tabular-nums" dir="ltr">{money(data.opening)}</span></span>
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-500 dark:text-brand-400">رصيد افتتاحي: <span className="font-bold tabular-nums" dir="ltr">{money(data.opening)}</span></span>
+                            <Btn color="gray" size="sm" onClick={() => downloadCSV(`ledger_${data.account.code}.csv`,
+                                ['القيد', 'التاريخ', 'البيان', 'مدين', 'دائن', 'الرصيد'],
+                                data.data.map(r => [r.entry_no, r.date, r.line_desc || r.ent_desc || '', r.debit || '', r.credit || '', r.balance]))}>
+                                <Download size={14} /> تصدير
+                            </Btn>
+                        </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-right text-sm">
@@ -1000,6 +1169,16 @@ function PartiesTab({ parties, reload, loading, toast }) {
                     <button onClick={() => setTab('aging')} className={`px-4 py-2 rounded-xl text-sm font-bold transition ${tab === 'aging' ? 'bg-amber-50 text-gold-500 border border-[#c5a059]' : 'bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300 dark:text-brand-300'}`}>أعمار الذمم</button>
                 </div>
                 {tab === 'list' && <Btn color="green" onClick={() => setEditing({ ...blank, type })}><Plus size={15} /> طرف جديد</Btn>}
+                {tab === 'aging' && aging && aging.data.length > 0 && (
+                    <Btn color="gray" size="sm" onClick={() => downloadCSV(`aging_${type}.csv`,
+                        ['الطرف', 'جارٍ', '1-30 يوم', '31-60 يوم', '61-90 يوم', '+90 يوم', 'الإجمالي'],
+                        [
+                            ...aging.data.map(r => [r.name, r.current, r.d30, r.d60, r.d90, r.d90p, r.total]),
+                            ['الإجمالي', aging.totals.current, aging.totals.d30, aging.totals.d60, aging.totals.d90, aging.totals.d90p, aging.totals.total],
+                        ])}>
+                        <Download size={14} /> تصدير
+                    </Btn>
+                )}
             </div>
 
             {tab === 'list' ? (
@@ -1128,12 +1307,22 @@ function PartiesTab({ parties, reload, loading, toast }) {
             {ledger && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setLedger(null)}>
                     <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-2xl p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()} dir="rtl">
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center justify-between mb-4 gap-3">
                             <div>
                                 <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">كشف حساب: {ledger.party.name}</h3>
                                 <p className="text-xs text-slate-500 dark:text-brand-400">رصيد افتتاحي: <span className="font-bold tabular-nums" dir="ltr">{money(ledger.opening)}</span></p>
                             </div>
-                            <button onClick={() => setLedger(null)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><X size={20} /></button>
+                            <div className="flex items-center gap-2 shrink-0">
+                                {ledger.data.length > 0 && (
+                                    <Btn color="gray" size="sm" onClick={() => downloadCSV(
+                                        `party_${ledger.party.name}.csv`,
+                                        ['القيد', 'التاريخ', 'مدين', 'دائن', 'الرصيد'],
+                                        ledger.data.map(r => [r.entry_no, r.date, r.debit || '', r.credit || '', r.balance]))}>
+                                        <Download size={13} /> تصدير
+                                    </Btn>
+                                )}
+                                <button onClick={() => setLedger(null)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><X size={20} /></button>
+                            </div>
                         </div>
                         {ledger.data.length === 0 ? <Empty msg="لا توجد حركات" /> : (
                             <table className="w-full text-right text-sm">
@@ -1466,12 +1655,14 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">{isSales ? 'العميل' : 'المورد'}</label>
-                                    <select value={editing.party_id}
-                                        onChange={e => { const p = partyOptions.find(x => String(x.id) === e.target.value); setEditing(ed => ({ ...ed, party_id: e.target.value, party_name: p ? p.name : ed.party_name })); }}
-                                        className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
-                                        <option value="">— اختر —</option>
-                                        {partyOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                    </select>
+                                    <PartyCombobox
+                                        parties={partyOptions}
+                                        value={editing.party_id}
+                                        rawId
+                                        onChange={v => { const p = partyOptions.find(x => String(x.id) === v); setEditing(ed => ({ ...ed, party_id: v, party_name: p ? p.name : ed.party_name })); }}
+                                        placeholder={isSales ? 'ابحث باسم العميل…' : 'ابحث باسم المورد…'}
+                                        className="[&_input]:py-2 [&_input]:rounded-xl [&_input]:bg-slate-50 [&_input]:text-sm"
+                                    />
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">تاريخ الإصدار</label>
@@ -1719,11 +1910,14 @@ function PaymentsTab({ parties, toast }) {
                         <div className="p-6 space-y-3">
                             <div>
                                 <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">{editing.pay_type === 'receipt' ? 'العميل' : 'المورد'}</label>
-                                <select value={editing.party_id} onChange={e => setEditing(ed => ({ ...ed, party_id: e.target.value }))}
-                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
-                                    <option value="">— اختر —</option>
-                                    {partyOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
+                                <PartyCombobox
+                                    parties={partyOptions}
+                                    value={editing.party_id}
+                                    rawId
+                                    onChange={v => setEditing(ed => ({ ...ed, party_id: v }))}
+                                    placeholder={editing.pay_type === 'receipt' ? 'ابحث باسم العميل…' : 'ابحث باسم المورد…'}
+                                    className="[&_input]:py-2 [&_input]:rounded-xl [&_input]:bg-slate-50 [&_input]:text-sm"
+                                />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>

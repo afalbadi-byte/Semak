@@ -3880,11 +3880,13 @@ switch ($action) {
         $tid  = (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? '');
         $to   = $conn->real_escape_string($_GET['to'] ?? '');
+        $srch = $conn->real_escape_string(trim($_GET['search'] ?? ''));
         $lim  = min(500, max(1, (int)($_GET['limit']  ?? 100)));
         $off  = max(0,           (int)($_GET['offset'] ?? 0));
         $w = "tenant_id=$tid";
         if ($from) $w .= " AND date>='$from'";
         if ($to)   $w .= " AND date<='$to'";
+        if ($srch) $w .= " AND (description LIKE '%$srch%' OR entry_no LIKE '%$srch%')";
         $tr = $conn->query("SELECT COUNT(*) c FROM acc_entries WHERE $w");
         $total = $tr ? (int)$tr->fetch_assoc()['c'] : 0;
         $res = $conn->query("SELECT * FROM acc_entries WHERE $w ORDER BY date DESC, id DESC LIMIT $lim OFFSET $off");
@@ -4347,6 +4349,67 @@ switch ($action) {
             $run += $sign * ($d - $c); $x['balance'] = round($run, 2); $sd += $d; $sc += $c; $rows[] = $x;
         }
         echo json_encode(['success'=>true,'party'=>$party,'opening'=>round($opening,2),'data'=>$rows,'totals'=>['debit'=>round($sd,2),'credit'=>round($sc,2),'closing'=>round($run,2)]], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'gl_dashboard_kpis':
+        // مؤشرات لوحة القيادة من محرّك المحاسبة المستقل
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $yr   = (int)date('Y');
+        $from = "$yr-01-01";
+        $to   = date('Y-m-d');
+
+        // ذمم العملاء (AR)
+        $arR = $conn->query("SELECT COALESCE(SUM(l.debit-l.credit),0) total
+            FROM acc_lines l
+            JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1
+            JOIN acc_parties p ON p.id=l.party_id AND p.tenant_id=$tid AND p.type='customer'
+            WHERE l.tenant_id=$tid");
+        $ar = $arR ? round((float)$arR->fetch_assoc()['total'], 2) : 0;
+
+        // ذمم الموردين (AP)
+        $apR = $conn->query("SELECT COALESCE(SUM(l.credit-l.debit),0) total
+            FROM acc_lines l
+            JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1
+            JOIN acc_parties p ON p.id=l.party_id AND p.tenant_id=$tid AND p.type='supplier'
+            WHERE l.tenant_id=$tid");
+        $ap = $apR ? round((float)$apR->fetch_assoc()['total'], 2) : 0;
+
+        // صافي دخل السنة من قائمة الدخل
+        $niR = $conn->query("SELECT a.type,
+            COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to'
+                              AND (e.ref_type IS NULL OR e.ref_type NOT IN ('year_close'))
+                              THEN l.debit ELSE 0 END),0) d,
+            COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$from' AND e.date<='$to'
+                              AND (e.ref_type IS NULL OR e.ref_type NOT IN ('year_close'))
+                              THEN l.credit ELSE 0 END),0) c
+            FROM acc_accounts a
+            JOIN acc_lines l ON l.account_id=a.id
+            JOIN acc_entries e ON e.id=l.entry_id
+            WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('revenue','expense')
+            GROUP BY a.type");
+        $rev=0; $exp=0;
+        while ($niR && ($nx=$niR->fetch_assoc())) {
+            if ($nx['type']==='revenue') $rev = round((float)$nx['c'] - (float)$nx['d'], 2);
+            if ($nx['type']==='expense') $exp = round((float)$nx['d'] - (float)$nx['c'], 2);
+        }
+
+        // عدد الأطراف بذمم متأخرة +30 يوم
+        $overdR = $conn->query("SELECT COUNT(*) c FROM (
+            SELECT p.id,
+                SUM(CASE WHEN e.date<='$to' AND DATEDIFF('$to',COALESCE(l.due_date,e.date))>30
+                         THEN ABS(l.debit-l.credit) ELSE 0 END) over30
+            FROM acc_parties p
+            LEFT JOIN acc_lines l ON l.party_id=p.id AND l.tenant_id=p.tenant_id
+            LEFT JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1
+            WHERE p.tenant_id=$tid GROUP BY p.id HAVING over30>0.01
+        ) x");
+        $overdue = $overdR ? (int)$overdR->fetch_assoc()['c'] : 0;
+
+        echo json_encode([
+            'success'=>true,'ar'=>$ar,'ap'=>$ap,
+            'net_income_ytd'=>round($rev-$exp,2),'revenue_ytd'=>$rev,'expenses_ytd'=>$exp,
+            'overdue_parties'=>$overdue,'year'=>$yr
+        ], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_aging':

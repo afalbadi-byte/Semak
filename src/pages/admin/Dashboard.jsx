@@ -603,6 +603,8 @@ function DashboardInner({ onLogout }) {
     const [statsLoading,setStatsLoading]= useState(false);
     const [trend,       setTrend]       = useState(null);
     const [trendLoading,setTrendLoading]= useState(false);
+    const [glKpis,      setGlKpis]      = useState(null);
+    const [glKpisLoading,setGlKpisLoading]= useState(false);
 
     const loadDashboardCounts = async () => {
         try {
@@ -632,11 +634,22 @@ function DashboardInner({ onLogout }) {
         finally { setTrendLoading(false); }
     };
 
+    const loadGlKpis = async () => {
+        setGlKpisLoading(true);
+        try {
+            const res  = await fetch(`${API_URL}?action=gl_dashboard_kpis`);
+            const data = await res.json();
+            if (data.success) setGlKpis(data);
+        } catch {}
+        finally { setGlKpisLoading(false); }
+    };
+
     useEffect(() => {
         if (activeTab === 'overview') {
             loadDashboardCounts();
             loadDeptStats();
             loadTrend();
+            loadGlKpis();
         }
     }, [activeTab]);
 
@@ -918,6 +931,58 @@ function DashboardInner({ onLogout }) {
                             <KpiCard icon={Receipt} tone="gold" label="فواتير الشهر"
                                 value={String(deptStats?.sales?.invoices_month ?? '—')} sub={`${deptStats?.sales?.clients ?? 0} عميل مسجّل`} loading={statsLoading}/>
                         </div>
+
+                        {/* ─── مؤشرات المحاسبة من المحرّك المستقل ──────── */}
+                        {(glKpis || glKpisLoading) && (
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            {/* AR */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center shrink-0">
+                                    <ArrowRightLeft size={18} className="text-blue-600 dark:text-blue-400"/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">ذمم العملاء (AR)</p>
+                                    {glKpisLoading ? <div className="h-5 w-20 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className="text-base font-black text-blue-700 dark:text-blue-400 tabular-nums leading-tight" dir="ltr">{fmtSAR(glKpis?.ar)}</p>}
+                                </div>
+                            </div>
+                            {/* AP */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
+                                    <ArrowRightLeft size={18} className="text-amber-600 dark:text-amber-400"/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">ذمم الموردين (AP)</p>
+                                    {glKpisLoading ? <div className="h-5 w-20 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className="text-base font-black text-amber-700 dark:text-amber-400 tabular-nums leading-tight" dir="ltr">{fmtSAR(glKpis?.ap)}</p>}
+                                </div>
+                            </div>
+                            {/* صافي الدخل YTD */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${(glKpis?.net_income_ytd??0)>=0?'bg-emerald-50 dark:bg-emerald-500/10':'bg-red-50 dark:bg-red-500/10'}`}>
+                                    <TrendingUp size={18} className={(glKpis?.net_income_ytd??0)>=0?'text-emerald-600 dark:text-emerald-400':'text-red-500'}/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">صافي الدخل {glKpis?.year ?? new Date().getFullYear()}</p>
+                                    {glKpisLoading ? <div className="h-5 w-20 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className={`text-base font-black tabular-nums leading-tight ${(glKpis?.net_income_ytd??0)>=0?'text-emerald-700 dark:text-emerald-400':'text-red-600'}`} dir="ltr">{fmtSAR(glKpis?.net_income_ytd)}</p>}
+                                </div>
+                            </div>
+                            {/* ذمم متأخرة */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${(glKpis?.overdue_parties??0)>0?'bg-red-50 dark:bg-red-500/10':'bg-emerald-50 dark:bg-emerald-500/10'}`}>
+                                    <AlertTriangle size={18} className={(glKpis?.overdue_parties??0)>0?'text-red-500':'text-emerald-600 dark:text-emerald-400'}/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">ذمم متأخرة +30 يوم</p>
+                                    {glKpisLoading ? <div className="h-5 w-16 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className={`text-base font-black tabular-nums leading-tight ${(glKpis?.overdue_parties??0)>0?'text-red-600':'text-emerald-700 dark:text-emerald-400'}`}>
+                                        {glKpis?.overdue_parties ?? 0} طرف
+                                    </p>}
+                                </div>
+                            </div>
+                        </div>
+                        )}
 
                         {/* ─── الرسم البياني + المهام ───────────────────── */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
