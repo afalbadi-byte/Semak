@@ -890,6 +890,7 @@ function TrialBalanceTab({ toast }) {
     const [to, setTo] = useState(todayISO());
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [typeFilter, setTypeFilter] = useState('');
     const load = useCallback(async (t) => {
         setLoading(true);
         try { const r = await api('gl_trial_balance', { params: t ? { to: t } : {} }); setData(r); }
@@ -897,12 +898,20 @@ function TrialBalanceTab({ toast }) {
     }, [toast]);
     useEffect(() => { load(to); }, []); // eslint-disable-line
 
-    const rows = data?.data || [];
+    const allRows = data?.data || [];
+    const rows = typeFilter ? allRows.filter(r => r.type === typeFilter) : allRows;
     return (
         <div className="space-y-4">
             <div className="flex items-end justify-between flex-wrap gap-3">
-                <PeriodBar to={to} setTo={setTo} onApply={() => load(to)} showFrom={false} />
-                {rows.length > 0 && (
+                <div className="flex items-end gap-2 flex-wrap">
+                    <PeriodBar to={to} setTo={setTo} onApply={() => load(to)} showFrom={false} />
+                    <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                        <option value="">كل الأنواع</option>
+                        {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                </div>
+                {allRows.length > 0 && (
                     <div className="flex gap-2">
                         <Btn color="gray" size="sm" onClick={() => downloadCSV('trial_balance.csv',
                             ['الكود', 'الحساب', 'مدين', 'دائن'], rows.map(r => [r.code, r.name, r.debit_balance, r.credit_balance]))}>
@@ -932,6 +941,7 @@ function TrialBalanceTab({ toast }) {
                     <table className="w-full text-right text-sm">
                         <thead className="bg-brand-800 text-white text-xs dark:bg-brand-900">
                             <tr><th className="px-3 py-3 font-bold">الكود</th><th className="px-3 py-3 font-bold">الحساب</th>
+                                <th className="px-3 py-3 font-bold">النوع</th>
                                 <th className="px-3 py-3 font-bold text-left">مدين</th><th className="px-3 py-3 font-bold text-left">دائن</th></tr>
                         </thead>
                         <tbody>
@@ -939,6 +949,7 @@ function TrialBalanceTab({ toast }) {
                                 <tr key={r.id} className="border-b border-slate-100 dark:border-brand-700 hover:bg-slate-50/70 dark:hover:bg-brand-800">
                                     <td className="px-3 py-2.5 font-mono text-slate-400 dark:text-brand-500">{r.code}</td>
                                     <td className="px-3 py-2.5"><EntityLink to={`acct/${r.id}`} muted title="دفتر أستاذ الحساب">{r.name}</EntityLink></td>
+                                    <td className="px-3 py-2.5"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${TYPE_COLORS[r.type]}`}>{TYPE_LABELS[r.type]}</span></td>
                                     <td className="px-3 py-2.5 text-left tabular-nums font-bold" dir="ltr">{Number(r.debit_balance) ? money(r.debit_balance) : ''}</td>
                                     <td className="px-3 py-2.5 text-left tabular-nums font-bold" dir="ltr">{Number(r.credit_balance) ? money(r.credit_balance) : ''}</td>
                                 </tr>
@@ -946,7 +957,7 @@ function TrialBalanceTab({ toast }) {
                         </tbody>
                         <tfoot>
                             <tr className="bg-slate-50 dark:bg-brand-800/60 font-black text-brand-800 dark:text-brand-100">
-                                <td className="px-3 py-3" colSpan={2}>الإجمالي
+                                <td className="px-3 py-3" colSpan={3}>الإجمالي
                                     {data?.totals && <span className={`mr-2 text-xs px-2 py-0.5 rounded-full ${data.totals.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                                         {data.totals.balanced ? '✓ متوازن' : '✗ غير متوازن'}</span>}</td>
                                 <td className="px-3 py-3 text-left tabular-nums" dir="ltr">{money(data?.totals?.debit)}</td>
