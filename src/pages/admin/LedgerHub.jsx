@@ -1670,6 +1670,9 @@ function InvoicesTab({ docType, parties, accounts, company = {}, toast }) {
     const [editing, setEditing] = useState(null);
     const [viewing, setViewing] = useState(null);
     const [statusFilter, setStatusFilter] = useState('');
+    const [filterFrom,   setFilterFrom]   = useState('');
+    const [filterTo,     setFilterTo]     = useState('');
+    const [filterParty,  setFilterParty]  = useState('');
 
     const partyOptions = useMemo(
         () => parties.filter(p => p.type === (isSales ? 'customer' : 'supplier')),
@@ -1681,10 +1684,15 @@ function InvoicesTab({ docType, parties, accounts, company = {}, toast }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const r = await api('inv_list', { params: { doc_type: docType, ...(statusFilter ? { status: statusFilter } : {}) } });
+            const params = { doc_type: docType };
+            if (statusFilter) params.status    = statusFilter;
+            if (filterFrom)  params.from       = filterFrom;
+            if (filterTo)    params.to         = filterTo;
+            if (filterParty) params.party_id   = filterParty;
+            const r = await api('inv_list', { params });
             setList(r.data || []);
         } catch (e) { toast(e.message, 'error'); } finally { setLoading(false); }
-    }, [docType, statusFilter, toast]);
+    }, [docType, statusFilter, filterFrom, filterTo, filterParty, toast]);
     useEffect(() => { load(); }, [load]);
 
     const blankItem = () => ({ description: '', qty: 1, unit_price: 0, discount: 0, tax_rate: 15 });
@@ -1797,16 +1805,36 @@ th{background:#f8fafc;color:#475569;font-weight:700}
     return (
         <div className="space-y-4">
             {/* الإجراءات + الفلتر */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                    <Btn color="navy" onClick={newInvoice}><Plus size={15} /> {isSales ? 'فاتورة بيع جديدة' : 'فاتورة شراء جديدة'}</Btn>
-                    <Btn color="gray" size="sm" onClick={load}><RefreshCw size={14} /> تحديث</Btn>
+            <div className="flex flex-wrap items-center gap-2">
+                <Btn color="navy" onClick={newInvoice}><Plus size={15} /> {isSales ? 'فاتورة بيع جديدة' : 'فاتورة شراء جديدة'}</Btn>
+                <Btn color="gray" size="sm" onClick={load}><RefreshCw size={14} /> تحديث</Btn>
+                <div className="w-px bg-slate-200 dark:bg-brand-700 h-7 mx-1" />
+                {/* فلتر الطرف */}
+                <div className="w-52">
+                    <PartyCombobox
+                        parties={partyOptions}
+                        value={filterParty}
+                        rawId
+                        onChange={setFilterParty}
+                        placeholder={isSales ? 'كل العملاء…' : 'كل الموردين…'}
+                        className="[&_input]:py-1.5 [&_input]:text-xs"
+                    />
                 </div>
+                {/* فلتر التاريخ */}
+                <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} title="من تاريخ"
+                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059] w-36" />
+                <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} title="إلى تاريخ"
+                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059] w-36" />
+                {/* فلتر الحالة */}
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059]">
                     <option value="">كل الحالات</option>
                     {Object.keys(INV_STATUS).map(k => <option key={k} value={k}>{INV_STATUS[k].label}</option>)}
                 </select>
+                {(filterFrom || filterTo || filterParty || statusFilter) && (
+                    <button onClick={() => { setFilterFrom(''); setFilterTo(''); setFilterParty(''); setStatusFilter(''); }}
+                        className="text-xs text-slate-400 dark:text-brand-500 hover:text-red-500 font-bold px-1" title="مسح الفلاتر">✕ مسح</button>
+                )}
             </div>
 
             {/* قائمة الفواتير */}
@@ -2027,13 +2055,23 @@ function PaymentsTab({ parties, toast }) {
     const [list, setList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [typeFilter, setTypeFilter] = useState('');
+    const [typeFilter,  setTypeFilter]  = useState('');
+    const [filterFrom,  setFilterFrom]  = useState('');
+    const [filterTo,    setFilterTo]    = useState('');
+    const [filterParty, setFilterParty] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
-        try { const r = await api('pay_list', { params: { ...(typeFilter ? { pay_type: typeFilter } : {}) } }); setList(r.data || []); }
-        catch (e) { toast(e.message, 'error'); } finally { setLoading(false); }
-    }, [typeFilter, toast]);
+        try {
+            const params = {};
+            if (typeFilter)  params.pay_type  = typeFilter;
+            if (filterFrom)  params.from      = filterFrom;
+            if (filterTo)    params.to        = filterTo;
+            if (filterParty) params.party_id  = filterParty;
+            const r = await api('pay_list', { params });
+            setList(r.data || []);
+        } catch (e) { toast(e.message, 'error'); } finally { setLoading(false); }
+    }, [typeFilter, filterFrom, filterTo, filterParty, toast]);
     useEffect(() => { load(); }, [load]);
 
     const newPay = (pay_type) => setEditing({ pay_type, party_id: '', invoice_id: '', date: todayISO(), amount: '', method: 'cash', notes: '' });
@@ -2059,18 +2097,35 @@ function PaymentsTab({ parties, toast }) {
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                    <Btn color="green" onClick={() => newPay('receipt')}><Plus size={15} /> سند قبض</Btn>
-                    <Btn color="navy" onClick={() => newPay('payment')}><Plus size={15} /> سند صرف</Btn>
-                    <Btn color="gray" size="sm" onClick={load}><RefreshCw size={14} /> تحديث</Btn>
+            <div className="flex flex-wrap items-center gap-2">
+                <Btn color="green" onClick={() => newPay('receipt')}><Plus size={15} /> سند قبض</Btn>
+                <Btn color="navy" onClick={() => newPay('payment')}><Plus size={15} /> سند صرف</Btn>
+                <Btn color="gray" size="sm" onClick={load}><RefreshCw size={14} /> تحديث</Btn>
+                <div className="w-px bg-slate-200 dark:bg-brand-700 h-7 mx-1" />
+                <div className="w-52">
+                    <PartyCombobox
+                        parties={parties}
+                        value={filterParty}
+                        rawId
+                        onChange={setFilterParty}
+                        placeholder="كل الأطراف…"
+                        className="[&_input]:py-1.5 [&_input]:text-xs"
+                    />
                 </div>
+                <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} title="من تاريخ"
+                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059] w-36" />
+                <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} title="إلى تاريخ"
+                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059] w-36" />
                 <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                    className="bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-1.5 rounded-xl text-sm outline-none focus:border-[#c5a059]">
                     <option value="">الكل</option>
                     <option value="receipt">سندات قبض</option>
                     <option value="payment">سندات صرف</option>
                 </select>
+                {(filterFrom || filterTo || filterParty || typeFilter) && (
+                    <button onClick={() => { setFilterFrom(''); setFilterTo(''); setFilterParty(''); setTypeFilter(''); }}
+                        className="text-xs text-slate-400 dark:text-brand-500 hover:text-red-500 font-bold px-1" title="مسح الفلاتر">✕ مسح</button>
+                )}
             </div>
 
             <Card>

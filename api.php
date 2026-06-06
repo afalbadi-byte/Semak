@@ -5399,10 +5399,16 @@ switch ($action) {
     case 'pay_list':
         $tid  = (int)($_GET['tenant'] ?? 1);
         $pt   = $conn->real_escape_string($_GET['pay_type'] ?? '');
+        $pfrom = $conn->real_escape_string($_GET['from'] ?? '');
+        $pto   = $conn->real_escape_string($_GET['to']   ?? '');
+        $ppid  = (int)($_GET['party_id'] ?? 0);
         $lim  = min(500, max(1, (int)($_GET['limit']  ?? 100)));
         $off  = max(0,           (int)($_GET['offset'] ?? 0));
         $w = "pm.tenant_id=$tid";
         if (in_array($pt, ['receipt','payment'])) $w .= " AND pm.pay_type='$pt'";
+        if ($pfrom) $w .= " AND pm.date>='$pfrom'";
+        if ($pto)   $w .= " AND pm.date<='$pto'";
+        if ($ppid)  $w .= " AND pm.party_id=$ppid";
         $tr = $conn->query("SELECT COUNT(*) c FROM acc_payments pm WHERE $w");
         $total = $tr ? (int)$tr->fetch_assoc()['c'] : 0;
         $res = $conn->query("SELECT pm.*, p.name party_label, i.invoice_no
