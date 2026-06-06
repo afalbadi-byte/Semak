@@ -3305,6 +3305,9 @@ function InvoicesTab({ docType, parties, accounts, products = [], company = {}, 
     const [filterFrom,   setFilterFrom]   = useState('');
     const [filterTo,     setFilterTo]     = useState('');
     const [filterParty,  setFilterParty]  = useState('');
+    const [quickPay,  setQuickPay]  = useState(null); // { id, invoice_no, party_id, party_label, balance_due }
+    const [qpBusy,    setQpBusy]    = useState(false);
+    const [qpForm,    setQpForm]    = useState({ amount: '', date: todayISO(), method: 'cash', notes: '' });
 
     const partyOptions = useMemo(
         () => parties.filter(p => p.type === (isSales ? 'customer' : 'supplier')),
@@ -3374,6 +3377,28 @@ function InvoicesTab({ docType, parties, accounts, products = [], company = {}, 
     const openView = async (id) => {
         try { const r = await api('inv_single', { params: { id } }); if (r.success) setViewing(r); else toast(r.message, 'error'); }
         catch (e) { toast(e.message, 'error'); }
+    };
+
+    const submitQuickPay = async () => {
+        if (!(Number(qpForm.amount) > 0)) return toast('أدخل مبلغًا صحيحًا', 'error');
+        setQpBusy(true);
+        try {
+            const r = await api('pay_save', { method: 'POST', body: {
+                pay_type: isSales ? 'receipt' : 'payment',
+                party_id: quickPay.party_id || '',
+                invoice_id: quickPay.id,
+                date: qpForm.date,
+                amount: Number(qpForm.amount),
+                method: qpForm.method,
+                notes: qpForm.notes || '',
+            }});
+            if (r.success) {
+                toast((r.message || 'تم تسجيل الدفعة') + (r.pay_no ? ` — ${r.pay_no}` : ''), 'success');
+                setQuickPay(null);
+                load();
+            } else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setQpBusy(false); }
     };
 
     // طباعة فاتورة احترافية (مع رمز QR للزكاة إن وُجد) في نافذة منفصلة
@@ -3511,6 +3536,16 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                                                 {inv.status === 'draft' && <button onClick={() => editDraft(inv.id)} title="تعديل" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><Edit2 size={15} /></button>}
                                                 {inv.status === 'draft' && <button onClick={() => act('inv_post', inv.id, `ترحيل ${inv.invoice_no} (${money(inv.total)} ﷼)؟\nبعد الترحيل لا يمكن التعديل — يلزم إلغاء وعكس القيد.`)} title="ترحيل" className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600"><CheckCircle2 size={15} /></button>}
                                                 {inv.status === 'draft' && <button onClick={() => act('inv_delete', inv.id, 'حذف المسودة؟')} title="حذف" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={15} /></button>}
+                                                {(inv.status === 'posted' || inv.status === 'partial') && Number(inv.total) - Number(inv.paid) > 0.01 && (
+                                                    <button onClick={() => {
+                                                        const bal = Number(inv.total) - Number(inv.paid);
+                                                        setQuickPay({ id: inv.id, invoice_no: inv.invoice_no, party_id: inv.party_id, party_label: inv.party_label || inv.party_name || '', balance_due: bal });
+                                                        setQpForm({ amount: bal.toFixed(2), date: todayISO(), method: 'cash', notes: '' });
+                                                    }} title={isSales ? 'تسجيل دفعة' : 'تسجيل سداد'}
+                                                        className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                                        <Wallet size={15} />
+                                                    </button>
+                                                )}
                                                 {(inv.status === 'posted') && <button onClick={() => act('inv_void', inv.id, 'إلغاء الفاتورة وعكس قيدها؟')} title="إلغاء" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><RotateCcw size={15} /></button>}
                                             </div>
                                         </td>
@@ -3641,6 +3676,62 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-brand-700 bg-slate-50/50 dark:bg-brand-800/30">
                             <Btn color="gray" onClick={() => setEditing(null)}><X size={15} /> إلغاء</Btn>
                             <Btn color="navy" onClick={saveDraft}><Save size={15} /> حفظ كمسودة</Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* نافذة تسجيل دفعة سريعة */}
+            {quickPay && (
+                <div className="fixed inset-0 z-[95] bg-black/50 flex items-center justify-center p-4" onClick={() => { if (!qpBusy) setQuickPay(null); }}>
+                    <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-brand-700">
+                            <div>
+                                <h3 className="text-base font-black text-brand-800 dark:text-brand-100">{isSales ? 'تسجيل دفعة مستلمة' : 'تسجيل سداد لمورد'}</h3>
+                                <p className="text-xs font-bold text-slate-400 dark:text-brand-500 mt-0.5" dir="ltr">{quickPay.invoice_no} — {quickPay.party_label}</p>
+                            </div>
+                            <button onClick={() => setQuickPay(null)} disabled={qpBusy} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-brand-800 text-slate-500 dark:text-brand-400 disabled:opacity-40"><X size={18} /></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-xl px-4 py-3 flex items-center justify-between">
+                                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{isSales ? 'الرصيد المستحق التحصيل' : 'الرصيد المستحق السداد'}</span>
+                                <span className="font-black text-emerald-700 dark:text-emerald-300 tabular-nums" dir="ltr">{money(quickPay.balance_due)} ﷼</span>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">المبلغ</label>
+                                <input type="number" step="0.01" min="0.01" value={qpForm.amount}
+                                    onChange={e => setQpForm(f => ({ ...f, amount: e.target.value }))}
+                                    autoFocus
+                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-800 dark:border-brand-700 dark:text-brand-50 px-3 py-2.5 rounded-xl text-sm outline-none focus:border-[#c5a059] tabular-nums" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">التاريخ</label>
+                                <input type="date" value={qpForm.date}
+                                    onChange={e => setQpForm(f => ({ ...f, date: e.target.value }))}
+                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-800 dark:border-brand-700 dark:text-brand-50 px-3 py-2.5 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">وسيلة السداد</label>
+                                <select value={qpForm.method} onChange={e => setQpForm(f => ({ ...f, method: e.target.value }))}
+                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-800 dark:border-brand-700 dark:text-brand-50 px-3 py-2.5 rounded-xl text-sm outline-none focus:border-[#c5a059]">
+                                    <option value="cash">نقداً — صندوق (1101)</option>
+                                    <option value="bank">تحويل بنكي — بنك (1102)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">ملاحظات (اختياري)</label>
+                                <input type="text" value={qpForm.notes}
+                                    onChange={e => setQpForm(f => ({ ...f, notes: e.target.value }))}
+                                    placeholder="تفاصيل إضافية…"
+                                    className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-800 dark:border-brand-700 dark:text-brand-50 px-3 py-2.5 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-brand-700 bg-slate-50/50 dark:bg-brand-800/30 rounded-b-2xl">
+                            <Btn color="gray" onClick={() => setQuickPay(null)} disabled={qpBusy}><X size={15} /> إلغاء</Btn>
+                            <Btn color="green" onClick={submitQuickPay} disabled={qpBusy || !(Number(qpForm.amount) > 0)}>
+                                {qpBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                                {isSales ? 'تأكيد الاستلام' : 'تأكيد السداد'}
+                            </Btn>
                         </div>
                     </div>
                 </div>
