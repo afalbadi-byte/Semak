@@ -5001,6 +5001,48 @@ switch ($action) {
         break;
     }
 
+    case 'gl_recurring_run_all': {
+        // ترحيل جميع القيود المتكررة المستحقة اليوم دفعةً واحدة
+        $tid   = (int)($input_data['tenant_id'] ?? 1);
+        $today = date('Y-m-d');
+        $res   = $conn->query("SELECT r.*,t.name AS tpl_name
+                               FROM acc_recurring_entries r
+                               LEFT JOIN acc_entry_templates t ON t.id=r.template_id
+                               WHERE r.tenant_id=$tid AND r.is_active=1 AND r.next_date<='$today'
+                                 AND (r.end_date IS NULL OR r.end_date>='$today')
+                               ORDER BY r.next_date ASC");
+        $posted = []; $errors = [];
+        while ($res && ($rec = $res->fetch_assoc())) {
+            if (!$rec['template_id']) { $errors[] = ['name'=>$rec['name'],'error'=>'لا يوجد قالب مرتبط']; continue; }
+            $lr = $conn->query("SELECT * FROM acc_entry_template_lines WHERE template_id={$rec['template_id']} AND tenant_id=$tid ORDER BY seq");
+            $lines = []; while ($lr && ($l=$lr->fetch_assoc())) $lines[] = ['account_id'=>(int)$l['account_id'],'debit'=>(float)$l['debit'],'credit'=>(float)$l['credit'],'description'=>$l['description'],'cost_center_id'=>$l['cost_center_id']?:null];
+            if (count($lines) < 2) { $errors[] = ['name'=>$rec['name'],'error'=>'القالب يحتاج بندين على الأقل']; continue; }
+            $conn->begin_transaction();
+            try {
+                $r = acc_post_entry($conn, $tid, $today, $rec['name'], 'recurring', (int)$rec['id'], null, $lines, 1);
+                $nd = new DateTime($rec['next_date']);
+                switch ($rec['frequency']) {
+                    case 'daily':     $nd->modify('+1 day');    break;
+                    case 'weekly':    $nd->modify('+7 days');   break;
+                    case 'monthly':   $nd->modify('+1 month');  break;
+                    case 'quarterly': $nd->modify('+3 months'); break;
+                    case 'annually':  $nd->modify('+1 year');   break;
+                }
+                $nextDate = $nd->format('Y-m-d');
+                $eno = $conn->real_escape_string($r['eno']);
+                $conn->query("UPDATE acc_recurring_entries SET next_date='$nextDate',last_run_at=NOW(),last_entry_no='$eno' WHERE id={$rec['id']} AND tenant_id=$tid");
+                $conn->commit();
+                $posted[] = ['name'=>$rec['name'],'entry_no'=>$r['eno'],'next_date'=>$nextDate];
+            } catch (Exception $e) {
+                $conn->rollback();
+                $errors[] = ['name'=>$rec['name'],'error'=>$e->getMessage()];
+            }
+        }
+        $msg = count($posted) > 0 ? 'تم ترحيل '.count($posted).' قيد' : 'لا توجد قيود مستحقة';
+        echo json_encode(['success'=>count($posted)>0||count($errors)===0,'posted'=>$posted,'errors'=>$errors,'message'=>$msg], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     //  قوالب القيود اليومية
     // ════════════════════════════════════════════════════════════════════
     case 'gl_templates': {

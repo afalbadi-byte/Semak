@@ -1019,10 +1019,20 @@ function RecurringManager({ templates, onBack, toast }) {
                 </div>
                 <div className="flex gap-2">
                     {dueItems.length > 0 && (
-                        <Btn color="green" size="sm" onClick={async () => {
-                            for (const it of dueItems) { await run(it.id); }
+                        <Btn color="green" size="sm" disabled={busy === 'all'} onClick={async () => {
+                            setBusy('all');
+                            try {
+                                const r = await api('gl_recurring_run_all', { method:'POST', body:{ tenant_id:1 }});
+                                if (r.success || r.posted?.length > 0) {
+                                    toast(`✓ ${r.message}`, 'success');
+                                    if (r.errors?.length) toast(`${r.errors.length} خطأ في بعض القيود`, 'error');
+                                } else toast(r.message || 'لا توجد قيود مستحقة', 'error');
+                                load();
+                            } catch (e) { toast(e.message,'error'); }
+                            finally { setBusy(null); }
                         }}>
-                            <CheckCircle2 size={13}/> ترحيل الكل المستحق ({dueItems.length})
+                            {busy === 'all' ? <Loader2 size={13} className="animate-spin"/> : <CheckCircle2 size={13}/>}
+                            ترحيل الكل المستحق ({dueItems.length})
                         </Btn>
                     )}
                     <Btn color="green" onClick={() => setEditing(blank())}><Plus size={15}/> قيد متكرر جديد</Btn>

@@ -1,10 +1,28 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Loader2, ArrowLeft, Search, Printer, RefreshCw, Phone, Mail, Hash,
-    Building2, Users, Truck, Handshake, FileText, Wallet, ShoppingCart, Receipt
+    Building2, Users, Truck, Handshake, FileText, Wallet, ShoppingCart, Receipt, Download
 } from 'lucide-react';
 import { apiGet, API_URL } from '../../lib/api/client';
 import { Money, StatusPill, EntityLink, Breadcrumbs } from '../../components/ui';
+
+// ─── تصدير CSV ─────────────────────────────────────────────────────────────────
+const exportPartyCSV = (party, rows, totals, opening, from, to) => {
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const num = v => (Number(v) || 0).toFixed(2);
+    const header = ['التاريخ','القيد','البيان','مدين','دائن','الرصيد'].map(esc).join(',');
+    const obRow  = [esc(''),esc(''),esc('رصيد افتتاحي'),'','',esc(num(opening))].join(',');
+    const dataRows = rows.map(r => [esc(r.date),esc(r.entry_no),esc(r.line_desc||r.ent_desc||''),esc(num(r.debit)),esc(num(r.credit)),esc(num(r.balance))].join(','));
+    const totRow = [esc(''),esc(''),esc('الإجماليات'),esc(num(totals.debit)),esc(num(totals.credit)),esc(num(totals.closing))].join(',');
+    const csv = '﻿' + [header, obRow, ...dataRows, totRow].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const suffix = (from||to) ? `_${from||''}_${to||''}` : '';
+    a.href = url; a.download = `statement_${party.name}${suffix}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+};
 
 // ─── تنسيق أرقام دفترة ────────────────────────────────────────────────────────
 const fmtD = n =>
@@ -209,6 +227,12 @@ function Statement({ partyId, setActiveTab, tenant }) {
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059] transition">
                         <ArrowLeft size={15} /> القائمة
                     </button>
+                    {party && rows.length > 0 && (
+                        <button onClick={() => exportPartyCSV(party, rows, totals, opening, from, to)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
+                            <Download size={15} /> CSV
+                        </button>
+                    )}
                     <button onClick={() => window.print()}
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold bg-brand-800 text-white hover:bg-brand-900 transition">
                         <Printer size={15} /> طباعة
