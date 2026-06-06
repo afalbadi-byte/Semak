@@ -1313,14 +1313,26 @@ function PartiesTab({ parties, reload, loading, toast }) {
                 </div>
                 {tab === 'list' && <Btn color="green" onClick={() => setEditing({ ...blank, type })}><Plus size={15} /> طرف جديد</Btn>}
                 {tab === 'aging' && aging && aging.data.length > 0 && (
-                    <Btn color="gray" size="sm" onClick={() => downloadCSV(`aging_${type}.csv`,
-                        ['الطرف', 'جارٍ', '1-30 يوم', '31-60 يوم', '61-90 يوم', '+90 يوم', 'الإجمالي'],
-                        [
-                            ...aging.data.map(r => [r.name, r.current, r.d30, r.d60, r.d90, r.d90p, r.total]),
-                            ['الإجمالي', aging.totals.current, aging.totals.d30, aging.totals.d60, aging.totals.d90, aging.totals.d90p, aging.totals.total],
-                        ])}>
-                        <Download size={14} /> تصدير
-                    </Btn>
+                    <div className="flex gap-2">
+                        <Btn color="gray" size="sm" onClick={() => {
+                            const label = type === 'customer' ? 'ذمم العملاء' : 'ذمم الموردين';
+                            const rows = aging.data.map(r =>
+                                `<tr><td>${r.name}</td><td class="amount">${r.current}</td><td class="amount">${r.d30}</td><td class="amount">${r.d60}</td><td class="amount" style="color:#b45309">${r.d90}</td><td class="amount" style="color:#e11d48;font-weight:700">${r.d90p}</td><td class="amount" style="font-weight:900">${r.total}</td></tr>`
+                            ).join('');
+                            const totRow = `<tr class="total-row"><td>الإجمالي</td><td class="amount">${money(aging.totals.current)}</td><td class="amount">${money(aging.totals.d30)}</td><td class="amount">${money(aging.totals.d60)}</td><td class="amount">${money(aging.totals.d90)}</td><td class="amount">${money(aging.totals.d90p)}</td><td class="amount">${money(aging.totals.total)}</td></tr>`;
+                            printHtml(label, `<h1>${label}</h1><h2>تاريخ التقرير: ${todayISO()}</h2><table><thead><tr><th>الطرف</th><th style="text-align:left">جارٍ</th><th style="text-align:left">1-30 يوم</th><th style="text-align:left">31-60</th><th style="text-align:left">61-90</th><th style="text-align:left">+90</th><th style="text-align:left">الإجمالي</th></tr></thead><tbody>${rows}${totRow}</tbody></table>`);
+                        }}>
+                            <Printer size={14} /> طباعة
+                        </Btn>
+                        <Btn color="gray" size="sm" onClick={() => downloadCSV(`aging_${type}.csv`,
+                            ['الطرف', 'جارٍ', '1-30 يوم', '31-60 يوم', '61-90 يوم', '+90 يوم', 'الإجمالي'],
+                            [
+                                ...aging.data.map(r => [r.name, r.current, r.d30, r.d60, r.d90, r.d90p, r.total]),
+                                ['الإجمالي', aging.totals.current, aging.totals.d30, aging.totals.d60, aging.totals.d90, aging.totals.d90p, aging.totals.total],
+                            ])}>
+                            <Download size={14} /> تصدير
+                        </Btn>
+                    </div>
                 )}
             </div>
 
@@ -1457,14 +1469,23 @@ function PartiesTab({ parties, reload, loading, toast }) {
                                     <p className="text-xs text-slate-500 dark:text-brand-400">رصيد افتتاحي: <span className="font-bold tabular-nums" dir="ltr">{money(ledger.opening)}</span></p>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                    {ledger.data.length > 0 && (
+                                    {ledger.data.length > 0 && (<>
+                                        <Btn color="gray" size="sm" onClick={() => {
+                                            const rows = ledger.data.map(r =>
+                                                `<tr><td dir="ltr">${r.entry_no}</td><td>${r.date}</td><td>${r.line_desc || r.ent_desc || '—'}</td><td class="amount">${r.debit ? money(r.debit) : ''}</td><td class="amount">${r.credit ? money(r.credit) : ''}</td><td class="amount" style="font-weight:800">${money(r.balance)}</td></tr>`
+                                            ).join('');
+                                            const totRow = `<tr class="total-row"><td colspan="5">الرصيد الختامي</td><td class="amount">${money(ledger.totals.closing)}</td></tr>`;
+                                            printHtml(`كشف حساب: ${ledger.party.name}`,`<h1>كشف حساب: ${ledger.party.name}</h1><h2>رصيد افتتاحي: ${money(ledger.opening)} ﷼</h2><table><thead><tr><th>القيد</th><th>التاريخ</th><th>البيان</th><th style="text-align:left">مدين</th><th style="text-align:left">دائن</th><th style="text-align:left">الرصيد</th></tr></thead><tbody>${rows}${totRow}</tbody></table>`);
+                                        }}>
+                                            <Printer size={13} /> طباعة
+                                        </Btn>
                                         <Btn color="gray" size="sm" onClick={() => downloadCSV(
                                             `party_${ledger.party.name}.csv`,
-                                            ['القيد', 'التاريخ', 'مدين', 'دائن', 'الرصيد'],
-                                            ledger.data.map(r => [r.entry_no, r.date, r.debit || '', r.credit || '', r.balance]))}>
+                                            ['القيد', 'التاريخ', 'البيان', 'مدين', 'دائن', 'الرصيد'],
+                                            ledger.data.map(r => [r.entry_no, r.date, r.line_desc || r.ent_desc || '', r.debit || '', r.credit || '', r.balance]))}>
                                             <Download size={13} /> تصدير
                                         </Btn>
-                                    )}
+                                    </>)}
                                     <button onClick={() => setLedger(null)} className="text-slate-400 dark:text-brand-500 hover:text-red-500"><X size={20} /></button>
                                 </div>
                             </div>
@@ -1488,6 +1509,7 @@ function PartiesTab({ parties, reload, loading, toast }) {
                             <table className="w-full text-right text-sm">
                                 <thead className="bg-slate-100 dark:bg-brand-800/60 text-slate-600 dark:text-brand-300 text-xs">
                                     <tr><th className="px-3 py-2 font-bold">القيد</th><th className="px-3 py-2 font-bold">التاريخ</th>
+                                        <th className="px-3 py-2 font-bold">البيان</th>
                                         <th className="px-3 py-2 font-bold text-left">مدين</th><th className="px-3 py-2 font-bold text-left">دائن</th>
                                         <th className="px-3 py-2 font-bold text-left">الرصيد</th></tr>
                                 </thead>
@@ -1495,7 +1517,8 @@ function PartiesTab({ parties, reload, loading, toast }) {
                                     {ledger.data.map((r, i) => (
                                         <tr key={i} className="border-b border-slate-100 dark:border-brand-700">
                                             <td className="px-3 py-2 font-mono text-xs"><EntityLink to={`entry/${r.entry_id}`} muted title="تفاصيل القيد">{r.entry_no}</EntityLink></td>
-                                            <td className="px-3 py-2 text-slate-600 dark:text-brand-300">{r.date}</td>
+                                            <td className="px-3 py-2 text-slate-600 dark:text-brand-300 whitespace-nowrap" dir="ltr">{r.date}</td>
+                                            <td className="px-3 py-2 text-slate-500 dark:text-brand-400 text-xs max-w-[180px] truncate">{r.line_desc || r.ent_desc || '—'}</td>
                                             <td className="px-3 py-2 text-left tabular-nums" dir="ltr">{Number(r.debit) ? money(r.debit) : ''}</td>
                                             <td className="px-3 py-2 text-left tabular-nums" dir="ltr">{Number(r.credit) ? money(r.credit) : ''}</td>
                                             <td className="px-3 py-2 text-left tabular-nums font-bold" dir="ltr">{money(r.balance)}</td>
@@ -1504,7 +1527,7 @@ function PartiesTab({ parties, reload, loading, toast }) {
                                 </tbody>
                                 <tfoot>
                                     <tr className="bg-slate-50 dark:bg-brand-800/60 font-black text-brand-800 dark:text-brand-100">
-                                        <td className="px-3 py-2" colSpan={4}>الرصيد الختامي</td>
+                                        <td className="px-3 py-2" colSpan={5}>الرصيد الختامي</td>
                                         <td className="px-3 py-2 text-left tabular-nums" dir="ltr">{money(ledger.totals.closing)}</td>
                                     </tr>
                                 </tfoot>
