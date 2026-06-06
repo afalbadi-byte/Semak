@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-06-v419
+// deploy: 2026-06-06-v420
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -987,7 +987,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v419','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v420','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -2592,9 +2592,11 @@ switch ($action) {
         $limit = (int)($_GET['limit'] ?? 50);
         $from = $_GET['from'] ?? '';
         $to   = $_GET['to']   ?? '';
+        $client_id_filter = (int)($_GET['client_id'] ?? 0);
         $qp   = "page=$page&limit=$limit";
         if ($from) $qp .= "&from_date=$from";
         if ($to)   $qp .= "&to_date=$to";
+        if ($client_id_filter) $qp .= "&client_id=$client_id_filter";
         $ch = curl_init("$base/invoices.json?$qp");
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hh, CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
         $res  = curl_exec($ch);
@@ -2913,10 +2915,13 @@ switch ($action) {
         set_time_limit(30);
         $dk   = "__DAFTRA_KEY__";
         $page = (int)($_GET['page'] ?? 1);
+        $lim_pur = (int)($_GET['limit'] ?? 50);
         $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $qp   = "page=$page&limit=50";
+        $supplier_id_filter = (int)($_GET['supplier_id'] ?? 0);
+        $qp   = "page=$page&limit=$lim_pur";
         if ($from) $qp .= "&from_date=$from";
         if ($to)   $qp .= "&to_date=$to";
+        if ($supplier_id_filter) $qp .= "&supplier_id=$supplier_id_filter";
         $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices.json?$qp");
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
         $res = curl_exec($ch); curl_close($ch);

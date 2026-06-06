@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Loader2, ArrowLeft, Search, Printer, RefreshCw, Phone, Mail, Hash,
-    Building2, Users, Truck, Handshake, FileText, Wallet
+    Building2, Users, Truck, Handshake, FileText, Wallet, ShoppingCart, Receipt
 } from 'lucide-react';
-import { apiGet } from '../../lib/api/client';
+import { apiGet, API_URL } from '../../lib/api/client';
 import { Money, StatusPill, EntityLink, Breadcrumbs } from '../../components/ui';
+
+// ─── تنسيق أرقام دفترة ────────────────────────────────────────────────────────
+const fmtD = n =>
+    new Intl.NumberFormat('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        .format(parseFloat(n) || 0) + ' ﷼';
 
 // ════════════════════════════════════════════════════════════════════════════
 //  صفحة الأطراف (المحرّك المستقل gl_parties / gl_party_ledger):
@@ -140,6 +145,10 @@ function Statement({ partyId, setActiveTab, tenant }) {
     const [invoices, setInvoices] = useState([]);
     const [invLoading, setInvLoading] = useState(true);
 
+    // ─── معاملات دفترة المرتبطة بهذا الطرف ──────────────────────────────────
+    const [daftraRows, setDaftraRows]     = useState([]);
+    const [daftraLoading, setDaftraLoad]  = useState(false);
+
     const load = useCallback(() => {
         setLoad(true); setErr('');
         apiGet('gl_party_ledger', { tenant, party_id: partyId, from, to })
@@ -157,6 +166,23 @@ function Statement({ partyId, setActiveTab, tenant }) {
             .catch(() => setInvoices([]))
             .finally(() => setInvLoading(false));
     }, [tenant, partyId]);
+
+    // ─── جلب معاملات دفترة عند معرفة daftra_id للطرف ───────────────────────
+    useEffect(() => {
+        if (!data?.party?.daftra_id) return;
+        const daftraId = data.party.daftra_id;
+        const ptype    = data.party.type;
+        setDaftraLoad(true);
+
+        const action  = ptype === 'supplier' ? 'daftra_purchases_list' : 'daftra_invoices_list';
+        const filter  = ptype === 'supplier' ? `supplier_id=${daftraId}` : `client_id=${daftraId}`;
+
+        fetch(`${API_URL}?action=${action}&limit=200&${filter}`)
+            .then(r => r.json())
+            .then(d => setDaftraRows(Array.isArray(d.data) ? d.data : []))
+            .catch(() => setDaftraRows([]))
+            .finally(() => setDaftraLoad(false));
+    }, [data?.party?.daftra_id, data?.party?.type]);
 
     const party   = data?.party;
     const rows    = data?.data || [];
@@ -298,42 +324,116 @@ function Statement({ partyId, setActiveTab, tenant }) {
                         </div>
                     </div>
 
-                    {/* فواتير الطرف */}
-                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden mt-5">
-                        <div className="px-5 md:px-6 py-4 border-b border-slate-100 dark:border-brand-700 flex items-center gap-2">
-                            <FileText size={16} className="text-indigo-600 dark:text-indigo-300" />
-                            <h3 className="text-sm font-black text-brand-800 dark:text-brand-100">فواتير الطرف</h3>
-                            {!invLoading && <span className="text-[11px] font-bold text-slate-400 dark:text-brand-500">({invoices.length})</span>}
-                        </div>
-                        {invLoading ? (
-                            <div className="text-center py-10 text-slate-400 dark:text-brand-500"><Loader2 className="animate-spin mx-auto" size={22} /></div>
-                        ) : invoices.length === 0 ? (
-                            <div className="text-center py-10 text-slate-300 dark:text-brand-600 font-bold text-sm">لا توجد فواتير لهذا الطرف</div>
-                        ) : (
-                            <div className="overflow-x-auto custom-scrollbar">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-slate-400 dark:text-brand-500 text-[12px] font-black border-b border-slate-100 dark:border-brand-700">
-                                            <th className="text-right py-3 px-3">رقم الفاتورة</th>
-                                            <th className="text-right py-3 px-3">التاريخ</th>
-                                            <th className="text-left py-3 px-3">الإجمالي</th>
-                                            <th className="text-center py-3 px-3">الحالة</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {invoices.map(inv => (
-                                            <tr key={inv.id} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
-                                                <td className="py-2.5 px-3"><EntityLink to={`inv/${inv.id}`} icon={Hash}>{inv.invoice_no || `#${inv.id}`}</EntityLink></td>
-                                                <td className="py-2.5 px-3 text-slate-500 dark:text-brand-400 font-bold whitespace-nowrap" dir="ltr">{inv.issue_date}</td>
-                                                <td className="py-2.5 px-3 text-left font-black"><Money value={inv.total} /></td>
-                                                <td className="py-2.5 px-3 text-center"><StatusPill status={inv.status} /></td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                    {/* فواتير الطرف (المحرّك المستقل) */}
+                    {(invoices.length > 0 || invLoading) && (
+                        <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden mt-5">
+                            <div className="px-5 md:px-6 py-4 border-b border-slate-100 dark:border-brand-700 flex items-center gap-2">
+                                <FileText size={16} className="text-indigo-600 dark:text-indigo-300" />
+                                <h3 className="text-sm font-black text-brand-800 dark:text-brand-100">فواتير الطرف</h3>
+                                {!invLoading && <span className="text-[11px] font-bold text-slate-400 dark:text-brand-500">({invoices.length})</span>}
                             </div>
-                        )}
-                    </div>
+                            {invLoading ? (
+                                <div className="text-center py-10 text-slate-400 dark:text-brand-500"><Loader2 className="animate-spin mx-auto" size={22} /></div>
+                            ) : (
+                                <div className="overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-slate-400 dark:text-brand-500 text-[12px] font-black border-b border-slate-100 dark:border-brand-700">
+                                                <th className="text-right py-3 px-3">رقم الفاتورة</th>
+                                                <th className="text-right py-3 px-3">التاريخ</th>
+                                                <th className="text-left py-3 px-3">الإجمالي</th>
+                                                <th className="text-center py-3 px-3">الحالة</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {invoices.map(inv => (
+                                                <tr key={inv.id} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                                    <td className="py-2.5 px-3"><EntityLink to={`inv/${inv.id}`} icon={Hash}>{inv.invoice_no || `#${inv.id}`}</EntityLink></td>
+                                                    <td className="py-2.5 px-3 text-slate-500 dark:text-brand-400 font-bold whitespace-nowrap" dir="ltr">{inv.issue_date}</td>
+                                                    <td className="py-2.5 px-3 text-left font-black"><Money value={inv.total} /></td>
+                                                    <td className="py-2.5 px-3 text-center"><StatusPill status={inv.status} /></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* معاملات دفترة — فواتير الشراء / فواتير المبيعات */}
+                    {(data?.party?.daftra_id) && (
+                        <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden mt-5">
+                            <div className="px-5 md:px-6 py-4 border-b border-slate-100 dark:border-brand-700 flex items-center gap-2">
+                                {data.party.type === 'supplier'
+                                    ? <ShoppingCart size={16} className="text-amber-600 dark:text-amber-400" />
+                                    : <Receipt       size={16} className="text-blue-600  dark:text-blue-400"  />}
+                                <h3 className="text-sm font-black text-brand-800 dark:text-brand-100">
+                                    {data.party.type === 'supplier' ? 'أوامر الشراء (دفترة)' : 'فواتير المبيعات (دفترة)'}
+                                </h3>
+                                {!daftraLoading && (
+                                    <span className="text-[11px] font-bold text-slate-400 dark:text-brand-500">({daftraRows.length})</span>
+                                )}
+                            </div>
+
+                            {daftraLoading ? (
+                                <div className="text-center py-10 text-slate-400 dark:text-brand-500">
+                                    <Loader2 className="animate-spin mx-auto" size={22} />
+                                </div>
+                            ) : daftraRows.length === 0 ? (
+                                <div className="text-center py-10 text-slate-300 dark:text-brand-600 font-bold text-sm">
+                                    لا توجد معاملات مسجّلة في دفترة لهذا الطرف
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-slate-400 dark:text-brand-500 text-[12px] font-black border-b border-slate-100 dark:border-brand-700">
+                                                <th className="text-right py-3 px-3">رقم</th>
+                                                <th className="text-right py-3 px-3">التاريخ</th>
+                                                <th className="text-left py-3 px-3">الإجمالي</th>
+                                                <th className="text-left py-3 px-3">المدفوع</th>
+                                                <th className="text-left py-3 px-3">المتبقي</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {daftraRows.map((r, i) => {
+                                                const total     = parseFloat(r.total) || 0;
+                                                const paid      = parseFloat(r.paid)  || 0;
+                                                const remaining = total - paid;
+                                                return (
+                                                    <tr key={r.id ?? i} className="border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                                        <td className="py-2.5 px-3">
+                                                            <span className="bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-lg text-[11px] font-black">
+                                                                #{r.no || r.id}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 text-slate-500 dark:text-brand-400 font-bold whitespace-nowrap" dir="ltr">{r.date || '—'}</td>
+                                                        <td className="py-2.5 px-3 text-left font-black text-slate-700 dark:text-brand-100 whitespace-nowrap">{fmtD(total)}</td>
+                                                        <td className="py-2.5 px-3 text-left font-bold text-green-600 dark:text-green-400 whitespace-nowrap">{fmtD(paid)}</td>
+                                                        <td className="py-2.5 px-3 text-left font-bold whitespace-nowrap">
+                                                            <span className={remaining > 0.005 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}>
+                                                                {fmtD(remaining)}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="bg-slate-50 dark:bg-brand-800/60 font-black text-brand-800 dark:text-brand-100 border-t-2 border-slate-200 dark:border-brand-700">
+                                                <td className="py-3 px-3" colSpan={2}>الإجمالي</td>
+                                                <td className="py-3 px-3 text-left">{fmtD(daftraRows.reduce((s, r) => s + (parseFloat(r.total) || 0), 0))}</td>
+                                                <td className="py-3 px-3 text-left text-green-600 dark:text-green-400">{fmtD(daftraRows.reduce((s, r) => s + (parseFloat(r.paid) || 0), 0))}</td>
+                                                <td className="py-3 px-3 text-left text-amber-600 dark:text-amber-400">{fmtD(daftraRows.reduce((s, r) => s + Math.max(0, (parseFloat(r.total) || 0) - (parseFloat(r.paid) || 0)), 0))}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                 </>
             )}
         </div>
