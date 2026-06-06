@@ -4080,6 +4080,91 @@ switch ($action) {
         echo json_encode(['success'=>true,'account'=>$accRow,'opening'=>round($opening,2),'data'=>$rows,'totals'=>['debit'=>round($sumD,2),'credit'=>round($sumC,2),'closing'=>round($run,2)]], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'gl_dashboard': {
+        // لوحة القيادة — مؤشرات مالية رئيسية + آخر القيود + فواتير متأخرة
+        $tid   = (int)($_GET['tenant'] ?? 1);
+        $today = date('Y-m-d');
+        $ytdFrom = date('Y').'-01-01';
+        $moFrom  = date('Y-m').'-01';
+
+        // ── صافي الدخل (سنوي + شهري) ─────────────────────
+        $incSQL = "SELECT
+            COALESCE(SUM(CASE WHEN a.type='revenue' THEN l.credit-l.debit ELSE 0 END),0) rev,
+            COALESCE(SUM(CASE WHEN a.type='expense' THEN l.debit-l.credit ELSE 0 END),0) exp
+          FROM acc_entries e
+          JOIN acc_lines l ON l.entry_id=e.id
+          JOIN acc_accounts a ON a.id=l.account_id AND a.tenant_id=e.tenant_id
+          WHERE e.tenant_id=$tid AND e.is_posted=1 AND a.is_group=0 AND a.type IN ('revenue','expense')";
+        $rYTD = $conn->query("$incSQL AND e.date>='$ytdFrom' AND e.date<='$today'")->fetch_assoc();
+        $rMo  = $conn->query("$incSQL AND e.date>='$moFrom' AND e.date<='$today'")->fetch_assoc();
+        $netYTD = round((float)$rYTD['rev'] - (float)$rYTD['exp'], 2);
+        $netMo  = round((float)$rMo['rev']  - (float)$rMo['exp'],  2);
+
+        // ── الأصول النقدية والبنكية ────────────────────────
+        // نجمع أرصدة حسابات الأصول التي تحتوي على كلمة نقد/صندوق/بنك
+        $cashSQL = "SELECT COALESCE(SUM(
+            (SELECT COALESCE(SUM(l2.debit-l2.credit),0) FROM acc_lines l2 JOIN acc_entries e2 ON e2.id=l2.entry_id AND e2.is_posted=1 AND e2.date<='$today' WHERE l2.account_id=a.id AND l2.tenant_id=a.tenant_id)
+        ),0) cash
+        FROM acc_accounts a
+        WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type='asset'
+          AND (a.name LIKE '%نقد%' OR a.name LIKE '%صندوق%' OR a.name LIKE '%بنك%' OR a.name LIKE '%bank%' OR a.name LIKE '%cash%')";
+        $rCash = $conn->query($cashSQL)->fetch_assoc();
+        $cashBalance = round((float)($rCash['cash']??0), 2);
+
+        // ── إجماليات العملاء والموردين ─────────────────────
+        $arSQL = "SELECT COALESCE(SUM(l.debit-l.credit),0) tot
+                  FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1 AND e.date<='$today'
+                  WHERE l.party_type='customer' AND l.tenant_id=$tid";
+        $rAR = $conn->query($arSQL)->fetch_assoc();
+        $totalAR = round((float)($rAR['tot']??0), 2);
+
+        $apSQL = "SELECT COALESCE(SUM(l.credit-l.debit),0) tot
+                  FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1 AND e.date<='$today'
+                  WHERE l.party_type='supplier' AND l.tenant_id=$tid";
+        $rAP = $conn->query($apSQL)->fetch_assoc();
+        $totalAP = round((float)($rAP['tot']??0), 2);
+
+        // ── آخر 8 قيود ──────────────────────────────────────
+        $recentSQL = "SELECT e.id,e.entry_no,e.date,e.description,e.is_posted,
+                        (SELECT COUNT(*) FROM acc_lines l2 WHERE l2.entry_id=e.id) lines_count,
+                        (SELECT SUM(l2.debit) FROM acc_lines l2 WHERE l2.entry_id=e.id) total_dr
+                      FROM acc_entries e
+                      WHERE e.tenant_id=$tid
+                      ORDER BY e.id DESC LIMIT 8";
+        $resRecent = $conn->query($recentSQL); $recent = [];
+        while ($resRecent && ($x = $resRecent->fetch_assoc())) {
+            $x['total_dr'] = round((float)$x['total_dr'],2);
+            $recent[] = $x;
+        }
+
+        // ── فواتير البيع المتأخرة ─────────────────────────
+        $overdueSQL = "SELECT COUNT(*) cnt, COALESCE(SUM(balance_due),0) tot
+                       FROM acc_invoices
+                       WHERE tenant_id=$tid AND doc_type='sales' AND status IN ('draft','partial')
+                         AND due_date IS NOT NULL AND due_date<'$today' AND balance_due>0.001";
+        $resOD = $conn->query($overdueSQL);
+        $overdue = ['count'=>0,'total'=>0];
+        if ($resOD && ($x=$resOD->fetch_assoc())) { $overdue=['count'=>(int)$x['cnt'],'total'=>round((float)$x['tot'],2)]; }
+
+        // ── عدد القيود غير المرحّلة ──────────────────────
+        $rdraft = $conn->query("SELECT COUNT(*) c FROM acc_entries WHERE tenant_id=$tid AND is_posted=0")->fetch_assoc();
+        $draftCount = (int)($rdraft['c']??0);
+
+        echo json_encode([
+            'success'     => true,
+            'as_of'       => $today,
+            'net_ytd'     => $netYTD,
+            'net_month'   => $netMo,
+            'cash'        => $cashBalance,
+            'receivables' => $totalAR,
+            'payables'    => $totalAP,
+            'recent'      => $recent,
+            'overdue'     => $overdue,
+            'draft_count' => $draftCount,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_income_statement':
         // قائمة الدخل — إيرادات ومصروفات للفترة (المُرحَّلة فقط)
         $tid  = (int)($_GET['tenant'] ?? 1);

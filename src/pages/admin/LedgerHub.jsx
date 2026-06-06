@@ -143,6 +143,159 @@ function Card({ children, className = '' }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  تبويب 0: لوحة القيادة — مؤشرات مالية رئيسية
+// ════════════════════════════════════════════════════════════════════════════
+function DashboardHomeTab({ setActiveTab, toast }) {
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try { const r = await api('gl_dashboard', {}); if (r.success) setData(r); }
+        catch (e) { toast(e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [toast]);
+
+    useEffect(() => { load(); }, []); // eslint-disable-line
+
+    const KPI = ({ label, value, sub, color, icon: Icon, onClick }) => (
+        <button onClick={onClick}
+            className={`bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm p-5 text-right w-full transition ${onClick ? 'hover:border-[#c5a059] cursor-pointer' : 'cursor-default'}`}>
+            <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1.5">{label}</div>
+                    <div className={`text-2xl font-black tabular-nums ${color}`} dir="ltr">{value}</div>
+                    {sub && <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mt-1">{sub}</div>}
+                </div>
+                {Icon && <div className={`p-2.5 rounded-xl mt-0.5 ${color.includes('emerald')?'bg-emerald-100 dark:bg-emerald-500/15':color.includes('rose')?'bg-rose-100 dark:bg-rose-500/15':color.includes('indigo')?'bg-indigo-100 dark:bg-indigo-500/15':'bg-slate-100 dark:bg-brand-800'}`}>
+                    <Icon size={20} className={color} />
+                </div>}
+            </div>
+        </button>
+    );
+
+    if (loading) return <div className="flex items-center justify-center py-24 text-slate-400"><Loader2 className="animate-spin" size={32} /></div>;
+    if (!data)   return null;
+
+    const net = data.net_ytd;
+
+    return (
+        <div className="space-y-5">
+            {/* تنبيه الفواتير المتأخرة */}
+            {data.overdue?.count > 0 && (
+                <button onClick={() => setActiveTab('sales')}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-right hover:border-rose-400 transition">
+                    <AlertCircle size={18} className="text-rose-600 dark:text-rose-400 shrink-0" />
+                    <span className="text-sm font-bold text-rose-700 dark:text-rose-400">
+                        {data.overdue.count} فاتورة متأخرة بإجمالي {money(data.overdue.total)} ﷼ — انقر للمراجعة
+                    </span>
+                </button>
+            )}
+            {data.draft_count > 0 && (
+                <button onClick={() => setActiveTab('journal')}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-right hover:border-amber-400 transition">
+                    <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span className="text-sm font-bold text-amber-700 dark:text-amber-400">
+                        {data.draft_count} قيد غير مرحَّل — انقر للمراجعة
+                    </span>
+                </button>
+            )}
+
+            {/* مؤشرات KPI */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KPI
+                    label="صافي الدخل (السنة)"
+                    value={money(net) + ' ﷼'}
+                    sub={`هذا الشهر: ${money(data.net_month)} ﷼`}
+                    color={net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}
+                    icon={TrendingUp}
+                    onClick={() => setActiveTab('income')}
+                />
+                <KPI
+                    label="النقدية والبنوك"
+                    value={money(data.cash) + ' ﷼'}
+                    sub="إجمالي الأرصدة النقدية"
+                    color="text-indigo-700 dark:text-indigo-300"
+                    icon={Wallet}
+                    onClick={() => setActiveTab('trial')}
+                />
+                <KPI
+                    label="ذمم العملاء"
+                    value={money(data.receivables) + ' ﷼'}
+                    sub="إجمالي المستحقات"
+                    color={data.receivables > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-brand-400'}
+                    icon={Users}
+                    onClick={() => setActiveTab('parties')}
+                />
+                <KPI
+                    label="ذمم الموردين"
+                    value={money(data.payables) + ' ﷼'}
+                    sub="إجمالي الالتزامات"
+                    color={data.payables > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-brand-400'}
+                    icon={Layers}
+                    onClick={() => setActiveTab('parties')}
+                />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* آخر القيود */}
+                <div className="md:col-span-2">
+                    <div className="flex items-center justify-between mb-2 px-1">
+                        <h4 className="text-sm font-black text-brand-800 dark:text-brand-100">آخر القيود</h4>
+                        <button onClick={() => setActiveTab('journal')} className="text-[12px] font-bold text-[#c5a059] hover:underline">عرض الكل</button>
+                    </div>
+                    <Card>
+                        {data.recent.length === 0 ? (
+                            <div className="py-8 text-center text-slate-400 dark:text-brand-500 font-bold">لا توجد قيود بعد</div>
+                        ) : (
+                            <table className="w-full text-sm">
+                                <tbody>
+                                    {data.recent.map(r => (
+                                        <tr key={r.id} className="border-b border-slate-50 dark:border-brand-700 last:border-0 hover:bg-slate-50/60 dark:hover:bg-brand-800 transition">
+                                            <td className="px-3 py-2.5">
+                                                <div className="font-bold text-brand-800 dark:text-brand-100 text-[13px] truncate max-w-[200px]">{r.description || '—'}</div>
+                                                <div className="text-[11px] font-mono text-slate-400 dark:text-brand-500">{r.entry_no}</div>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-slate-500 dark:text-brand-400 font-bold text-xs whitespace-nowrap" dir="ltr">{r.date}</td>
+                                            <td className="px-3 py-2.5 text-left tabular-nums font-bold text-sm" dir="ltr">{money(r.total_dr)} ﷼</td>
+                                            <td className="px-3 py-2.5">
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.is_posted ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'}`}>
+                                                    {r.is_posted ? 'مُرحَّل' : 'مسودة'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </Card>
+                </div>
+
+                {/* إجراءات سريعة */}
+                <div>
+                    <h4 className="text-sm font-black text-brand-800 dark:text-brand-100 mb-2 px-1">إجراءات سريعة</h4>
+                    <div className="space-y-2">
+                        {[
+                            { label: 'قيد محاسبي جديد',   icon: Plus,          tab: 'journal',    color: 'bg-brand-800 hover:bg-brand-900 text-white' },
+                            { label: 'فاتورة بيع جديدة',  icon: FileText,      tab: 'sales',      color: 'bg-emerald-600 hover:bg-emerald-700 text-white' },
+                            { label: 'ميزان المراجعة',    icon: Scale,         tab: 'trial',      color: 'bg-white dark:bg-brand-900 hover:bg-slate-50 dark:hover:bg-brand-800 text-brand-800 dark:text-brand-100 border border-slate-200 dark:border-brand-700' },
+                            { label: 'قائمة الدخل',       icon: TrendingUp,    tab: 'income',     color: 'bg-white dark:bg-brand-900 hover:bg-slate-50 dark:hover:bg-brand-800 text-brand-800 dark:text-brand-100 border border-slate-200 dark:border-brand-700' },
+                            { label: 'الميزانية العمومية', icon: PieChart,     tab: 'balance',    color: 'bg-white dark:bg-brand-900 hover:bg-slate-50 dark:hover:bg-brand-800 text-brand-800 dark:text-brand-100 border border-slate-200 dark:border-brand-700' },
+                            { label: 'التدفقات النقدية',  icon: Activity,      tab: 'cashflow',   color: 'bg-white dark:bg-brand-900 hover:bg-slate-50 dark:hover:bg-brand-800 text-brand-800 dark:text-brand-100 border border-slate-200 dark:border-brand-700' },
+                        ].map(({ label, icon: Icon, tab, color }) => (
+                            <button key={tab} onClick={() => setActiveTab(tab)}
+                                className={`w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition ${color}`}>
+                                <Icon size={15} /> {label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  تبويب 1: دليل الحسابات
 // ════════════════════════════════════════════════════════════════════════════
 function ChartTab({ accounts, reload, loading, toast }) {
@@ -5329,6 +5482,7 @@ function FixedAssetsTab({ accounts, toast }) {
 }
 
 const TABS = [
+    { id: 'home',  label: 'الرئيسية',       icon: Activity },
     { id: 'chart', label: 'دليل الحسابات', icon: BookOpen },
     { id: 'journal', label: 'القيود اليومية', icon: FileText },
     { id: 'sales', label: 'فواتير البيع', icon: FileText },
@@ -5352,7 +5506,7 @@ const TABS = [
 
 export default function LedgerHub() {
     const { show: toast } = useToast();
-    const [activeTab, setActiveTab] = useState('chart');
+    const [activeTab, setActiveTab] = useState('home');
 
     // بيانات مشتركة
     const [accounts, setAccounts] = useState([]);
@@ -5461,6 +5615,7 @@ export default function LedgerHub() {
                     })}
                 </div>
                 <div className="p-4 md:p-6">
+                    {activeTab === 'home'  && <DashboardHomeTab setActiveTab={setActiveTab} toast={toast} />}
                     {activeTab === 'chart' && <ChartTab accounts={accounts} reload={loadAccounts} loading={accLoading} toast={toast} />}
                     {activeTab === 'journal' && <JournalTab accounts={accounts} parties={parties} costCenters={costCenters} toast={toast} />}
                     {activeTab === 'sales' && <InvoicesTab docType="sales" parties={parties} accounts={accounts} products={products} company={company} toast={toast} />}
