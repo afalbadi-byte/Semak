@@ -3239,23 +3239,48 @@ function ProductsTab({ products, reload, loading, toast }) {
                     )}
                 </div>
 
-                {/* KPI */}
-                {plData && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {[
-                            { label: 'رصيد افتتاحي', val: opening, unit: plProduct.unit||'قطعة', cls: 'text-slate-600 dark:text-brand-300' },
-                            { label: 'إجمالي الوارد', val: totals.in??0, unit: plProduct.unit||'قطعة', cls: 'text-emerald-700 dark:text-emerald-400' },
-                            { label: 'إجمالي المنصرف', val: totals.out??0, unit: plProduct.unit||'قطعة', cls: 'text-rose-600 dark:text-rose-400' },
-                            { label: 'الرصيد الحالي', val: totals.closing??0, unit: plProduct.unit||'قطعة', cls: 'text-brand-800 dark:text-brand-100 font-black' },
-                        ].map(c => (
-                            <div key={c.label} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm px-4 py-3">
-                                <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
-                                <div className={`text-xl font-black tabular-nums ${c.cls}`} dir="ltr">{c.val}</div>
-                                <div className="text-[11px] text-slate-400 dark:text-brand-600 mt-0.5">{c.unit}</div>
+                {/* KPI حركة المخزون */}
+                {plData && (() => {
+                    const salesRev  = rows.filter(r => r.doc_type==='sales')   .reduce((s,r) => s+Number(r.line_total||0), 0);
+                    const costOfGds = rows.filter(r => r.doc_type==='purchase').reduce((s,r) => s+Number(r.line_total||0), 0);
+                    const margin    = salesRev - costOfGds;
+                    const marginPct = salesRev > 0 ? (margin / salesRev * 100).toFixed(1) : null;
+                    return (
+                        <>
+                            {/* صف المخزون */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                {[
+                                    { label: 'رصيد افتتاحي', val: opening, sub: plProduct.unit||'قطعة', cls: 'text-slate-600 dark:text-brand-300' },
+                                    { label: 'إجمالي الوارد', val: totals.in??0, sub: plProduct.unit||'قطعة', cls: 'text-emerald-700 dark:text-emerald-400' },
+                                    { label: 'إجمالي المنصرف', val: totals.out??0, sub: plProduct.unit||'قطعة', cls: 'text-rose-600 dark:text-rose-400' },
+                                    { label: 'الرصيد الحالي', val: totals.closing??0, sub: plProduct.unit||'قطعة', cls: 'text-brand-800 dark:text-brand-100' },
+                                ].map(c => (
+                                    <div key={c.label} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm px-4 py-3">
+                                        <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                        <div className={`text-xl font-black tabular-nums ${c.cls}`} dir="ltr">{c.val}</div>
+                                        <div className="text-[11px] text-slate-400 dark:text-brand-600 mt-0.5">{c.sub}</div>
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                )}
+                            {/* صف الربحية — يظهر فقط إذا وُجدت مبيعات */}
+                            {salesRev > 0 && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {[
+                                        { label: 'إجمالي المبيعات', val: salesRev,  cls: 'text-emerald-700 dark:text-emerald-400' },
+                                        { label: 'تكلفة المشتريات', val: costOfGds, cls: 'text-rose-600 dark:text-rose-400' },
+                                        { label: 'هامش الربح الإجمالي', val: margin, cls: margin >= 0 ? 'text-indigo-700 dark:text-indigo-300' : 'text-rose-600 dark:text-rose-400' },
+                                        { label: '% هامش الربح', val: marginPct !== null ? `${marginPct}%` : '—', cls: Number(marginPct) >= 0 ? 'text-indigo-700 dark:text-indigo-300' : 'text-rose-600 dark:text-rose-400' },
+                                    ].map((c, i) => (
+                                        <div key={c.label} className={`rounded-2xl border shadow-sm px-4 py-3 ${i === 2 || i === 3 ? 'bg-indigo-50/50 dark:bg-indigo-500/5 border-indigo-100 dark:border-indigo-500/20' : 'bg-white dark:bg-brand-900 border-slate-100 dark:border-brand-700'}`}>
+                                            <div className="text-[11px] font-bold text-slate-400 dark:text-brand-500 mb-1">{c.label}</div>
+                                            <div className={`text-xl font-black tabular-nums ${c.cls}`} dir="ltr">{typeof c.val === 'number' ? `${money(c.val)} ﷼` : c.val}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    );
+                })()}
 
                 {/* فلتر التاريخ */}
                 <div className="flex flex-wrap items-end gap-3">
