@@ -78,6 +78,7 @@ export default function PaymentsManage() {
   const [payFilters, setPayFilters] = useState({ from: '', to: '' });
   const [payForm, setPayForm]       = useState(false);
   const [paySaving, setPaySaving]   = useState(false);
+  const [openInvoices, setOpenInvoices] = useState([]);
 
   // ─── نماذج الإدخال ───────────────────────────────────────────
   const emptyCollForm = () => ({ invoice_id: '', amount: '', date: today(), treasury_id: '', method: 'cash', notes: '' });
@@ -101,6 +102,21 @@ export default function PaymentsManage() {
   useEffect(() => {
     loadDropdowns();
   }, [loadDropdowns]);
+
+  // ─── جلب الفواتير المفتوحة عند فتح نموذج التحصيل ─────────────
+  useEffect(() => {
+    if (!collForm) return;
+    fetch(`${API_URL}?action=daftra_invoices_list`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && Array.isArray(d.data)) {
+          setOpenInvoices(d.data.filter(inv =>
+            (parseFloat(inv.total) || 0) > (parseFloat(inv.paid) || 0)
+          ));
+        }
+      })
+      .catch(() => {});
+  }, [collForm]);
 
   // ─── تحميل دفعات العملاء ──────────────────────────────────────
   const loadCollection = useCallback(async (f = collFilters) => {
@@ -259,17 +275,27 @@ export default function PaymentsManage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* رقم الفاتورة */}
         <div>
-          <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">رقم الفاتورة <span className="text-red-500">*</span></label>
-          <div className="relative">
-            <FileText size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 dark:text-brand-500" />
-            <input
-              type="number"
-              placeholder="مثال: 1024"
-              value={collData.invoice_id}
-              onChange={e => setCollData(d => ({ ...d, invoice_id: e.target.value }))}
-              className={`${inputCls} pr-8`}
-            />
-          </div>
+          <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">الفاتورة <span className="text-red-500">*</span></label>
+          <select
+            value={collData.invoice_id}
+            onChange={e => {
+              const id = e.target.value;
+              const inv = openInvoices.find(i => String(i.id) === id);
+              const rem = inv ? Math.max(0, (parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0)).toFixed(2) : '';
+              setCollData(d => ({ ...d, invoice_id: id, ...(rem ? { amount: rem } : {}) }));
+            }}
+            className={inputCls}
+          >
+            <option value="">— اختر فاتورة —</option>
+            {openInvoices.map(inv => {
+              const rem = ((parseFloat(inv.total) || 0) - (parseFloat(inv.paid) || 0)).toFixed(2);
+              return (
+                <option key={inv.id} value={inv.id}>
+                  #{inv.no || inv.id} · {inv.client || '—'} · متبقي {rem} ر.س
+                </option>
+              );
+            })}
+          </select>
         </div>
 
         {/* المبلغ */}

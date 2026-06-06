@@ -14,7 +14,7 @@ import {
 
 import { API_URL } from '../../lib/api/client';
 import EntityLink from '../../components/ui/EntityLink';
-import { useToast } from '../../components/ui';
+import { useToast, formatMoney } from '../../components/ui';
 const TENANT = 1;
 
 const TYPE_LABELS = {
@@ -30,7 +30,7 @@ const TYPE_COLORS = {
 };
 
 // ─── أدوات مساعدة ────────────────────────────────────────────────────────────
-const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = formatMoney; // مشترك من Money.jsx — تنسيق موحّد
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => new Date().getFullYear() + '-01-01';
 
@@ -261,15 +261,24 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     const [loading, setLoading] = useState(false);
     const [form, setForm] = useState(null);  // null = list view
     const [viewing, setViewing] = useState(null);
+    const [page, setPage]   = useState(1);
+    const [total, setTotal] = useState(0);
+    const PAGE_SIZE = 30;
     const postable = useMemo(() => accounts.filter(a => Number(a.is_group) === 0), [accounts]);
 
-    const load = useCallback(async () => {
+    const loadPage = useCallback(async (pg) => {
         setLoading(true);
-        try { const r = await api('gl_entries'); setEntries(r.data || []); }
+        try {
+            const r = await api('gl_entries', { params: { limit: PAGE_SIZE, offset: (pg - 1) * PAGE_SIZE } });
+            setEntries(r.data || []);
+            setTotal(r.total || 0);
+        }
         catch (e) { toast(e.message, 'error'); }
         finally { setLoading(false); }
     }, [toast]);
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => { loadPage(page); }, [loadPage, page]);
+    // load: يعيد للصفحة الأولى ويحدّث — يُستدعى بعد كل تعديل/حذف/إنشاء
+    const load = useCallback(() => { setPage(1); loadPage(1); }, [loadPage]);
 
     const newEntry = () => setForm({ id: 0, date: todayISO(), description: '', lines: [emptyLine(), emptyLine()] });
 
@@ -450,14 +459,14 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
-                <span className="text-sm text-slate-500 dark:text-brand-400">{entries.length} قيد</span>
+                <span className="text-sm text-slate-500 dark:text-brand-400">{total > 0 ? total.toLocaleString() : entries.length} قيد</span>
                 <div className="flex items-center gap-2">
                     <Btn color="gray" size="sm" onClick={load}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> تحديث</Btn>
                     <Btn color="green" onClick={newEntry}><Plus size={15} /> قيد جديد</Btn>
                 </div>
             </div>
 
-            {loading ? <Spinner /> : entries.length === 0 ? <Empty msg="لا توجد قيود بعد" /> : (
+            {loading ? <Spinner /> : entries.length === 0 && page === 1 ? <Empty msg="لا توجد قيود بعد" /> : (
                 <Card>
                     <div className="overflow-x-auto">
                         <table className="w-full text-right text-sm">
@@ -498,6 +507,22 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                         </table>
                     </div>
                 </Card>
+            )}
+
+            {!loading && total > PAGE_SIZE && (
+                <div className="flex items-center justify-center gap-2 pt-2">
+                    <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
+                        className="px-3 py-1.5 rounded-lg text-sm font-bold border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 disabled:opacity-40 hover:border-[#c5a059] transition">
+                        ← السابق
+                    </button>
+                    <span className="text-sm font-bold text-slate-600 dark:text-brand-300">
+                        {page} / {Math.ceil(total / PAGE_SIZE)}
+                    </span>
+                    <button disabled={page >= Math.ceil(total / PAGE_SIZE)} onClick={() => setPage(p => p + 1)}
+                        className="px-3 py-1.5 rounded-lg text-sm font-bold border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 disabled:opacity-40 hover:border-[#c5a059] transition">
+                        التالي →
+                    </button>
+                </div>
             )}
 
             {viewing && (
