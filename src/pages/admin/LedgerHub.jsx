@@ -490,6 +490,157 @@ function ProductCombobox({ products, onSelect, placeholder = 'اختر منتج�
 // ════════════════════════════════════════════════════════════════════════════
 const emptyLine = () => ({ account_id: '', debit: '', credit: '', party_type: '', party_id: '', due_date: '', cost_center_id: '', description: '' });
 
+// ════════════════════════════════════════════════════════════════════════════
+//  إدارة قوالب القيود اليومية
+// ════════════════════════════════════════════════════════════════════════════
+function TemplatesManager({ templates, reload, accounts, costCenters, onBack, onUse, toast }) {
+    const [editing, setEditing] = useState(null);
+    const blank = () => ({ id: 0, name: '', description: '', lines: [emptyLine(), emptyLine()] });
+
+    const save = async () => {
+        if (!editing.name.trim()) { toast('اسم القالب مطلوب', 'error'); return; }
+        const lines = editing.lines
+            .filter(l => l.account_id)
+            .map((l, seq) => ({ account_id: Number(l.account_id), debit: parseFloat(l.debit)||0, credit: parseFloat(l.credit)||0, description: l.description||'', cost_center_id: l.cost_center_id||null, seq }));
+        try {
+            const r = await api('gl_template_save', { method: 'POST', body: { id: editing.id||0, name: editing.name.trim(), description: editing.description||'', lines } });
+            if (r.success) { toast(r.message); setEditing(null); reload(); } else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+    };
+
+    const del = async (id) => {
+        if (!window.confirm('حذف هذا القالب نهائياً؟')) return;
+        try { const r = await api('gl_template_delete', { method: 'POST', body: { id } }); if (r.success) { toast(r.message); reload(); } else toast(r.message, 'error'); }
+        catch (e) { toast(e.message, 'error'); }
+    };
+
+    const setLine = (i, patch) => setEditing(e => ({ ...e, lines: e.lines.map((l, j) => j === i ? { ...l, ...patch } : l) }));
+
+    if (editing) {
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">{editing.id ? 'تعديل قالب' : 'قالب جديد'}</h3>
+                    <Btn color="gray" onClick={() => setEditing(null)}><X size={15} /> رجوع</Btn>
+                </div>
+                <Card className="p-4 md:p-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="md:col-span-2">
+                            <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">اسم القالب <span className="text-red-500">*</span></label>
+                            <input value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))} placeholder="مثال: قيد الرواتب الشهرية"
+                                className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">ملاحظة</label>
+                            <input value={editing.description} onChange={e => setEditing(ed => ({ ...ed, description: e.target.value }))} placeholder="اختياري"
+                                className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]" />
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-right text-sm border-collapse">
+                            <thead className="bg-slate-100 dark:bg-brand-800/60 text-slate-600 dark:text-brand-300 text-xs">
+                                <tr>
+                                    <th className="px-2 py-2 font-bold min-w-[180px]">الحساب</th>
+                                    <th className="px-2 py-2 font-bold w-28">مدين</th>
+                                    <th className="px-2 py-2 font-bold w-28">دائن</th>
+                                    <th className="px-2 py-2 font-bold min-w-[140px]">بيان البند</th>
+                                    {costCenters.length > 0 && <th className="px-2 py-2 font-bold min-w-[120px]">مركز التكلفة</th>}
+                                    <th className="px-2 py-2 w-8"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {editing.lines.map((l, i) => (
+                                    <tr key={i} className="border-b border-slate-100 dark:border-brand-700">
+                                        <td className="px-2 py-1.5">
+                                            <AccountCombobox accounts={accounts} value={l.account_id} onChange={v => setLine(i, { account_id: v })} />
+                                        </td>
+                                        <td className="px-2 py-1.5">
+                                            <input type="number" step="0.01" value={l.debit} onChange={e => setLine(i, { debit: e.target.value, credit: '' })}
+                                                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm tabular-nums outline-none focus:border-emerald-400" dir="ltr" />
+                                        </td>
+                                        <td className="px-2 py-1.5">
+                                            <input type="number" step="0.01" value={l.credit} onChange={e => setLine(i, { credit: e.target.value, debit: '' })}
+                                                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm tabular-nums outline-none focus:border-rose-400" dir="ltr" />
+                                        </td>
+                                        <td className="px-2 py-1.5">
+                                            <input value={l.description} onChange={e => setLine(i, { description: e.target.value })}
+                                                className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1.5 rounded-lg text-sm outline-none focus:border-[#c5a059]" />
+                                        </td>
+                                        {costCenters.length > 0 && (
+                                            <td className="px-2 py-1.5">
+                                                <select value={l.cost_center_id} onChange={e => setLine(i, { cost_center_id: e.target.value })}
+                                                    className="w-full bg-white border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-2 py-1 rounded-lg text-xs outline-none focus:border-[#c5a059]">
+                                                    <option value="">— مركز —</option>
+                                                    {costCenters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                            </td>
+                                        )}
+                                        <td className="px-2 py-1.5 text-center">
+                                            {editing.lines.length > 2 && (
+                                                <button onClick={() => setEditing(ed => ({ ...ed, lines: ed.lines.filter((_, j) => j !== i) }))}
+                                                    className="text-slate-300 hover:text-red-500"><Trash2 size={15} /></button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <Btn color="gray" size="sm" onClick={() => setEditing(ed => ({ ...ed, lines: [...ed.lines, emptyLine()] }))}><Plus size={14} /> إضافة بند</Btn>
+                        <div className="flex-1" />
+                        <Btn color="green" onClick={save}><Save size={15} /> حفظ القالب</Btn>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                    <button onClick={onBack} className="text-slate-400 dark:text-brand-500 hover:text-brand-800 dark:hover:text-brand-100 transition">
+                        <X size={18} />
+                    </button>
+                    <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">قوالب القيود ({templates.length})</h3>
+                </div>
+                <Btn color="green" onClick={() => setEditing(blank())}><Plus size={15} /> قالب جديد</Btn>
+            </div>
+            {templates.length === 0 ? (
+                <Empty msg="لا توجد قوالب — أنشئ قالباً لتسريع إدخال القيود المتكررة" />
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {templates.map(t => (
+                        <div key={t.id} className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm p-4 flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
+                                <Copy size={16} className="text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold text-brand-800 dark:text-brand-100 truncate">{t.name}</div>
+                                {t.description && <div className="text-xs text-slate-400 dark:text-brand-500 mt-0.5 truncate">{t.description}</div>}
+                                <div className="text-[11px] text-slate-300 dark:text-brand-600 mt-1">{t.created_at?.slice(0,10)}</div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={() => onUse(t.id)} title="استخدام القالب"
+                                    className="text-xs font-bold px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition">
+                                    استخدام
+                                </button>
+                                <button onClick={() => {
+                                    api('gl_template_get', { params: { id: t.id } })
+                                        .then(r => { if (r.success) setEditing({ id: Number(t.id), name: r.template.name, description: r.template.description||'', lines: r.lines.map(l => ({ account_id: l.account_id||'', debit: Number(l.debit)||'', credit: Number(l.credit)||'', description: l.description||'', cost_center_id: l.cost_center_id||'' })) }); })
+                                        .catch(e => toast(e.message, 'error'));
+                                }} title="تعديل" className="text-slate-400 dark:text-brand-500 hover:text-[#c5a059]"><Edit2 size={15} /></button>
+                                <button onClick={() => del(t.id)} title="حذف" className="text-slate-400 dark:text-brand-500 hover:text-red-500"><Trash2 size={15} /></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function JournalTab({ accounts, parties, costCenters, toast }) {
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -502,6 +653,55 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
     const [filterTo,   setFilterTo]   = useState('');
     const PAGE_SIZE = 30;
     const postable = useMemo(() => accounts.filter(a => Number(a.is_group) === 0), [accounts]);
+
+    // ── القوالب ───────────────────────────────────────────────────────────
+    const [listSub,     setListSub]     = useState('entries'); // 'entries'|'templates'
+    const [templates,   setTemplates]   = useState([]);
+    const [tmplPicker,  setTmplPicker]  = useState(false); // modal: pick a template to fill form
+    const [tmplSaveDlg, setTmplSaveDlg] = useState(false); // modal: save form lines as template
+    const [tmplSaveName,setTmplSaveName]= useState('');
+    const [tmplEdit,    setTmplEdit]    = useState(null);   // template being edited in mgmt UI
+
+    const loadTemplates = useCallback(async () => {
+        try { const r = await api('gl_templates'); if (r.success) setTemplates(r.data || []); }
+        catch { /* صامت */ }
+    }, []);
+    useEffect(() => { loadTemplates(); }, [loadTemplates]);
+
+    const applyTemplate = async (tplId) => {
+        try {
+            const r = await api('gl_template_get', { params: { id: tplId } });
+            if (!r.success) { toast(r.message, 'error'); return; }
+            const lines = (r.lines || []).map(l => ({
+                account_id: l.account_id || '', debit: Number(l.debit) || '', credit: Number(l.credit) || '',
+                party_type: '', party_id: '', due_date: '', cost_center_id: l.cost_center_id || '',
+                description: l.description || '',
+            }));
+            if (lines.length < 2) lines.push(emptyLine());
+            setForm(f => ({ ...f, description: f?.description || r.template.name, lines }));
+            setTmplPicker(false);
+            toast(`تم تحميل قالب: ${r.template.name}`);
+        } catch (e) { toast(e.message, 'error'); }
+    };
+
+    const saveAsTemplate = async () => {
+        if (!tmplSaveName.trim()) { toast('أدخل اسم القالب', 'error'); return; }
+        if (!form) return;
+        const lines = form.lines
+            .filter(l => l.account_id)
+            .map((l, seq) => ({ account_id: Number(l.account_id), debit: parseFloat(l.debit)||0, credit: parseFloat(l.credit)||0, description: l.description||'', cost_center_id: l.cost_center_id||null, seq }));
+        try {
+            const r = await api('gl_template_save', { method: 'POST', body: { id: 0, name: tmplSaveName.trim(), description: '', lines } });
+            if (r.success) { toast('تم حفظ القالب'); setTmplSaveDlg(false); setTmplSaveName(''); loadTemplates(); }
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+    };
+
+    const deleteTpl = async (id) => {
+        if (!window.confirm('حذف هذا القالب؟')) return;
+        try { const r = await api('gl_template_delete', { method: 'POST', body: { id } }); if (r.success) { toast(r.message); loadTemplates(); } else toast(r.message, 'error'); }
+        catch (e) { toast(e.message, 'error'); }
+    };
 
     const loadPage = useCallback(async (pg, q, fr, to) => {
         setLoading(true);
@@ -624,10 +824,21 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
             );
         };
         return (
+            <>
             <div className="space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-3">
                     <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">{form.id ? 'تعديل قيد' : 'قيد يومية جديد'}</h3>
-                    <Btn color="gray" onClick={() => setForm(null)}><X size={15} /> رجوع للقائمة</Btn>
+                    <div className="flex items-center gap-2">
+                        {templates.length > 0 && (
+                            <Btn color="gray" size="sm" onClick={() => setTmplPicker(true)} title="تحميل قالب جاهز">
+                                <Copy size={13} /> من قالب
+                            </Btn>
+                        )}
+                        <Btn color="gray" size="sm" onClick={() => { setTmplSaveName(form.description || ''); setTmplSaveDlg(true); }} title="حفظ هذه البنود كقالب">
+                            <Save size={13} /> حفظ كقالب
+                        </Btn>
+                        <Btn color="gray" onClick={() => setForm(null)}><X size={15} /> رجوع للقائمة</Btn>
+                    </div>
                 </div>
                 <Card className="p-4 md:p-6 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -733,12 +944,103 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                     </div>
                 </Card>
             </div>
+
+            {/* مودال: اختر قالباً */}
+            {tmplPicker && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setTmplPicker(false)}>
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()} dir="rtl">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-black text-brand-800 dark:text-brand-100">تحميل قالب</h3>
+                            <button onClick={() => setTmplPicker(false)} className="text-slate-400 hover:text-red-500"><X size={18} /></button>
+                        </div>
+                        <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
+                            {templates.length === 0
+                                ? <p className="text-sm text-slate-400 text-center py-6">لا توجد قوالب محفوظة بعد</p>
+                                : templates.map(t => (
+                                    <button key={t.id} onClick={() => applyTemplate(t.id)}
+                                        className="w-full text-right px-4 py-3 rounded-xl border border-slate-200 dark:border-brand-700 hover:border-[#c5a059] hover:bg-amber-50/40 dark:hover:bg-brand-800 transition">
+                                        <div className="font-bold text-sm text-brand-800 dark:text-brand-100">{t.name}</div>
+                                        {t.description && <div className="text-xs text-slate-400 dark:text-brand-500 mt-0.5">{t.description}</div>}
+                                    </button>
+                                ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* مودال: حفظ كقالب */}
+            {tmplSaveDlg && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setTmplSaveDlg(false)}>
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-xs p-5" onClick={e => e.stopPropagation()} dir="rtl">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-black text-brand-800 dark:text-brand-100">حفظ كقالب</h3>
+                            <button onClick={() => setTmplSaveDlg(false)} className="text-slate-400 hover:text-red-500"><X size={18} /></button>
+                        </div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-brand-400 mb-1">اسم القالب</label>
+                        <input value={tmplSaveName} onChange={e => setTmplSaveName(e.target.value)}
+                            autoFocus onKeyDown={e => e.key === 'Enter' && saveAsTemplate()}
+                            placeholder="مثال: قيد الرواتب الشهرية"
+                            className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059] mb-4" />
+                        <div className="flex gap-2">
+                            <Btn color="green" onClick={saveAsTemplate}><Save size={14} /> حفظ</Btn>
+                            <Btn color="gray" onClick={() => setTmplSaveDlg(false)}>إلغاء</Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+            </>
         );
     }
 
-    // ── قائمة القيود ──
+    // ── قائمة القيود / القوالب ──
+    if (listSub === 'templates') {
+        return (
+            <TemplatesManager
+                templates={templates}
+                reload={loadTemplates}
+                accounts={postable}
+                costCenters={costCenters}
+                onBack={() => setListSub('entries')}
+                onUse={async (tplId) => {
+                    // أنشئ نموذج قيد جديد ثم حمّل بنود القالب عليه
+                    setForm({ id: 0, date: todayISO(), description: '', lines: [emptyLine(), emptyLine()] });
+                    setListSub('entries');
+                    // applyTemplate تحتاج form محدّداً — نُحمّل مباشرة
+                    try {
+                        const r = await api('gl_template_get', { params: { id: tplId } });
+                        if (!r.success) { toast(r.message, 'error'); return; }
+                        const lines = (r.lines || []).map(l => ({
+                            account_id: l.account_id||'', debit: Number(l.debit)||'', credit: Number(l.credit)||'',
+                            party_type: '', party_id: '', due_date: '', cost_center_id: l.cost_center_id||'',
+                            description: l.description||'',
+                        }));
+                        if (lines.length < 2) lines.push(emptyLine());
+                        setForm({ id: 0, date: todayISO(), description: r.template.name, lines });
+                        toast(`تم تحميل قالب: ${r.template.name}`);
+                    } catch (e) { toast(e.message, 'error'); }
+                }}
+                toast={toast}
+            />
+        );
+    }
+
     return (
         <div className="space-y-4">
+            {/* تبويبات فرعية */}
+            <div className="flex gap-1 border-b border-slate-200 dark:border-brand-700 pb-0">
+                {[
+                    { id: 'entries',   label: 'القيود اليومية', icon: <FileText size={14} /> },
+                    { id: 'templates', label: `القوالب${templates.length > 0 ? ` (${templates.length})` : ''}`, icon: <Copy size={14} /> },
+                ].map(s => (
+                    <button key={s.id} onClick={() => setListSub(s.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-t-xl border-b-2 transition
+                            ${listSub === s.id
+                                ? 'border-[#c5a059] text-[#c5a059]'
+                                : 'border-transparent text-slate-500 dark:text-brand-400 hover:text-[#c5a059]'}`}>
+                        {s.icon}{s.label}
+                    </button>
+                ))}
+            </div>
             <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
                     {/* بحث */}

@@ -4215,6 +4215,102 @@ switch ($action) {
         break;
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  قوالب القيود اليومية
+    // ════════════════════════════════════════════════════════════════════
+    case 'gl_templates': {
+        $tid = (int)($_GET['tenant'] ?? 1);
+        // تأكد من وجود الجداول
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_entry_templates (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tenant_id INT NOT NULL DEFAULT 1,
+            name VARCHAR(200) NOT NULL,
+            description VARCHAR(500) DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_tpl_tenant (tenant_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $conn->query("CREATE TABLE IF NOT EXISTS acc_entry_template_lines (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            template_id INT NOT NULL,
+            tenant_id INT NOT NULL DEFAULT 1,
+            seq INT NOT NULL DEFAULT 0,
+            account_id INT DEFAULT NULL,
+            debit DECIMAL(15,2) NOT NULL DEFAULT 0,
+            credit DECIMAL(15,2) NOT NULL DEFAULT 0,
+            description VARCHAR(500) DEFAULT '',
+            cost_center_id INT DEFAULT NULL,
+            KEY idx_tpl_lines_tid (template_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $rows = [];
+        $res = $conn->query("SELECT id,name,description,created_at FROM acc_entry_templates WHERE tenant_id=$tid ORDER BY name ASC");
+        while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_template_get': {
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $id  = (int)($_GET['id'] ?? 0);
+        $r   = $conn->query("SELECT * FROM acc_entry_templates WHERE id=$id AND tenant_id=$tid LIMIT 1");
+        $tpl = $r ? $r->fetch_assoc() : null;
+        if (!$tpl) { echo json_encode(['success'=>false,'message'=>'قالب غير موجود']); break; }
+        $lr   = $conn->query("SELECT tl.*,a.code AS account_code,a.name AS account_name
+                               FROM acc_entry_template_lines tl
+                               LEFT JOIN acc_accounts a ON a.id=tl.account_id
+                               WHERE tl.template_id=$id AND tl.tenant_id=$tid ORDER BY tl.seq");
+        $lines = [];
+        while ($lr && ($l = $lr->fetch_assoc())) $lines[] = $l;
+        echo json_encode(['success'=>true,'template'=>$tpl,'lines'=>$lines], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'gl_template_save': {
+        $tid   = (int)($input_data['tenant_id'] ?? 1);
+        $id    = (int)($input_data['id'] ?? 0);
+        $name  = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $desc  = $conn->real_escape_string(trim($input_data['description'] ?? ''));
+        $lines = $input_data['lines'] ?? [];
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'اسم القالب مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->begin_transaction();
+        try {
+            if ($id) {
+                $conn->query("UPDATE acc_entry_templates SET name='$name',description='$desc' WHERE id=$id AND tenant_id=$tid");
+                $conn->query("DELETE FROM acc_entry_template_lines WHERE template_id=$id AND tenant_id=$tid");
+            } else {
+                $conn->query("INSERT INTO acc_entry_templates (tenant_id,name,description) VALUES ($tid,'$name','$desc')");
+                $id = (int)$conn->insert_id;
+            }
+            $seq = 0;
+            foreach ($lines as $l) {
+                $aid  = (int)($l['account_id'] ?? 0);
+                $d    = round((float)($l['debit'] ?? 0), 2);
+                $c    = round((float)($l['credit'] ?? 0), 2);
+                $ld   = $conn->real_escape_string($l['description'] ?? '');
+                $ccid = (int)($l['cost_center_id'] ?? 0) ?: 'NULL';
+                if (!$aid) continue;
+                $conn->query("INSERT INTO acc_entry_template_lines (template_id,tenant_id,seq,account_id,debit,credit,description,cost_center_id)
+                              VALUES ($id,$tid,$seq,$aid,$d,$c,'$ld',$ccid)");
+                $seq++;
+            }
+            $conn->commit();
+            echo json_encode(['success'=>true,'id'=>$id,'message'=>'تم حفظ القالب'], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode(['success'=>false,'message'=>$e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
+    case 'gl_template_delete': {
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $id  = (int)($input_data['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف مطلوب']); break; }
+        $conn->query("DELETE FROM acc_entry_template_lines WHERE template_id=$id AND tenant_id=$tid");
+        $conn->query("DELETE FROM acc_entry_templates WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>true,'message'=>'تم حذف القالب'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_balance_sheet':
         // الميزانية العمومية حتى تاريخ — أصول/خصوم/حقوق ملكية + صافي الدخل (المُرحَّلة فقط)
         $tid = (int)($_GET['tenant'] ?? 1);
