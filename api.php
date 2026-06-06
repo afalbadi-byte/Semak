@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-06-v417
+// deploy: 2026-06-06-v418
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -164,6 +164,8 @@ $__pt = $conn->query("SELECT COLUMN_TYPE ct FROM information_schema.COLUMNS WHER
 if ($__pt && ($__ptr = $__pt->fetch_assoc()) && strpos($__ptr['ct'], "'partner'") === false) {
     $conn->query("ALTER TABLE acc_parties MODIFY COLUMN type ENUM('customer','supplier','partner') NOT NULL");
 }
+// إضافة حقل الملاحظات للأطراف (ترحيل تلقائي مرة واحدة)
+$conn->query("ALTER TABLE acc_parties ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL");
 
 // مراكز التكلفة
 $conn->query("CREATE TABLE IF NOT EXISTS acc_cost_centers (
@@ -985,7 +987,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v417','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v418','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
@@ -4053,12 +4055,13 @@ switch ($action) {
         $email= $conn->real_escape_string(trim($input_data['email'] ?? ''));
         $addr = $conn->real_escape_string(trim($input_data['address'] ?? ''));
         $daftra = $conn->real_escape_string(trim($input_data['daftra_id'] ?? ''));
+        $notes  = $conn->real_escape_string(trim($input_data['notes'] ?? ''));
         if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
         if ($id) {
-            $conn->query("UPDATE acc_parties SET type='$type',name='$name',vat_number='$vat',cr_number='$cr',phone='$phone',email='$email',address='$addr',daftra_id='$daftra' WHERE id=$id AND tenant_id=$tid");
-            echo json_encode(['success'=>true,'id'=>$id]);
+            $conn->query("UPDATE acc_parties SET type='$type',name='$name',vat_number='$vat',cr_number='$cr',phone='$phone',email='$email',address='$addr',notes='$notes',daftra_id='$daftra' WHERE id=$id AND tenant_id=$tid");
+            echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
         } else {
-            $ok = $conn->query("INSERT INTO acc_parties (tenant_id,type,name,vat_number,cr_number,phone,email,address,daftra_id) VALUES ($tid,'$type','$name','$vat','$cr','$phone','$email','$addr','$daftra')");
+            $ok = $conn->query("INSERT INTO acc_parties (tenant_id,type,name,vat_number,cr_number,phone,email,address,notes,daftra_id) VALUES ($tid,'$type','$name','$vat','$cr','$phone','$email','$addr','$notes','$daftra')");
             echo json_encode(['success'=>(bool)$ok,'id'=>$conn->insert_id,'message'=>$ok?'تم':$conn->error], JSON_UNESCAPED_UNICODE);
         }
         break;
@@ -7682,6 +7685,92 @@ KNOWLEDGE;
         curl_close($ch2);
 
         echo json_encode(["ok" => true, "sent" => json_decode($wa_result, true)]);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // قوائم المحرّك المستقل — عملاء / موردون / منتجات (acc_* tables)
+    // ══════════════════════════════════════════════════════════════════════
+
+    case 'acc_parties_list':
+        // قائمة أطراف من acc_parties مع رصيد محسوب من acc_lines
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $type = $conn->real_escape_string($_GET['type'] ?? '');
+        $q    = $conn->real_escape_string(trim($_GET['search'] ?? ''));
+        $pg   = max(1,(int)($_GET['page'] ?? 1));
+        $lim  = 50; $off = ($pg-1)*$lim;
+        $w    = "p.tenant_id=$tid AND p.status=1";
+        if (in_array($type, ['customer','supplier','partner'])) $w .= " AND p.type='$type'";
+        if ($q) $w .= " AND (p.name LIKE '%$q%' OR p.phone LIKE '%$q%' OR p.email LIKE '%$q%' OR p.vat_number LIKE '%$q%')";
+        $res = $conn->query("
+            SELECT p.id,p.type,p.name,p.phone,p.email,p.address,p.vat_number,p.cr_number,
+                   COALESCE(p.notes,'') notes, p.created_at,
+                   COALESCE(b.net,0) net
+            FROM acc_parties p
+            LEFT JOIN (SELECT party_id, SUM(debit-credit) net FROM acc_lines WHERE tenant_id=$tid GROUP BY party_id) b ON b.party_id=p.id
+            WHERE $w ORDER BY p.name LIMIT $lim OFFSET $off
+        ");
+        $rows = [];
+        while ($res && ($x = $res->fetch_assoc())) {
+            $net = (float)$x['net'];
+            $x['balance'] = round($x['type'] === 'supplier' ? -$net : $net, 2);
+            unset($x['net']);
+            $rows[] = $x;
+        }
+        $ct = $conn->query("SELECT COUNT(*) c FROM acc_parties p WHERE $w");
+        $total = $ct ? (int)$ct->fetch_assoc()['c'] : 0;
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$total,'has_next_page'=>($off+$lim)<$total], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'acc_products_list':
+        // قائمة منتجات من acc_products
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $q    = $conn->real_escape_string(trim($_GET['search'] ?? ''));
+        $pg   = max(1,(int)($_GET['page'] ?? 1));
+        $lim  = 50; $off = ($pg-1)*$lim;
+        $w    = "tenant_id=$tid AND status=1";
+        if ($q) $w .= " AND (name LIKE '%$q%' OR code LIKE '%$q%' OR description LIKE '%$q%')";
+        $res = $conn->query("SELECT * FROM acc_products WHERE $w ORDER BY name LIMIT $lim OFFSET $off");
+        $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
+        $ct = $conn->query("SELECT COUNT(*) c FROM acc_products WHERE $w");
+        $total = $ct ? (int)$ct->fetch_assoc()['c'] : 0;
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$total,'has_next_page'=>($off+$lim)<$total], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'acc_product_save':
+        // حفظ منتج (إنشاء أو تحديث)
+        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $id   = (int)($input_data['id'] ?? 0);
+        $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $code = $conn->real_escape_string(trim($input_data['code'] ?? ''));
+        $desc = $conn->real_escape_string(trim($input_data['description'] ?? ''));
+        $unit = $conn->real_escape_string(trim($input_data['unit'] ?? 'قطعة'));
+        $up   = round((float)($input_data['unit_price'] ?? 0), 2);
+        $bp   = round((float)($input_data['buy_price'] ?? 0), 2);
+        $tr   = round((float)($input_data['tax_rate'] ?? 15), 3);
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+        if ($id) {
+            $conn->query("UPDATE acc_products SET name='$name',code='$code',description='$desc',unit='$unit',unit_price=$up,buy_price=$bp,tax_rate=$tr WHERE id=$id AND tenant_id=$tid");
+            echo json_encode(['success'=>true,'id'=>$id,'message'=>'تم التحديث'], JSON_UNESCAPED_UNICODE);
+        } else {
+            $ok = $conn->query("INSERT INTO acc_products (tenant_id,name,code,description,unit,unit_price,buy_price,tax_rate) VALUES ($tid,'$name','$code','$desc','$unit',$up,$bp,$tr)");
+            echo json_encode(['success'=>(bool)$ok,'id'=>$conn->insert_id,'message'=>$ok?'تم الإنشاء':$conn->error], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
+    case 'acc_product_delete':
+        // حذف منتج — تعطيل إذا له حركات في الفواتير، وإلا حذف فعلي
+        $tid = (int)($_GET['tenant'] ?? $input_data['tenant_id'] ?? 1);
+        $id  = (int)($_GET['id'] ?? $input_data['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'المعرّف مطلوب']); break; }
+        $u = $conn->query("SELECT COUNT(*) c FROM acc_invoice_items WHERE product_id=$id AND tenant_id=$tid");
+        $used = $u ? (int)$u->fetch_assoc()['c'] : 0;
+        if ($used > 0) {
+            $conn->query("UPDATE acc_products SET status=0 WHERE id=$id AND tenant_id=$tid");
+            echo json_encode(['success'=>true,'message'=>'تم التعطيل (مرتبط بحركات فواتير)','deactivated'=>true], JSON_UNESCAPED_UNICODE);
+        } else {
+            $conn->query("DELETE FROM acc_products WHERE id=$id AND tenant_id=$tid");
+            echo json_encode(['success'=>true,'message'=>'تم الحذف'], JSON_UNESCAPED_UNICODE);
+        }
         break;
 
     // ────────────────────────────────────────────────────────────────────────
