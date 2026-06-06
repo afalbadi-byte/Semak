@@ -436,7 +436,18 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
 
     // ── نموذج القيد ──
     if (form) {
-        const setLine = (i, patch) => setForm({ ...form, lines: form.lines.map((l, j) => j === i ? { ...l, ...patch } : l) });
+        const setLine = (i, patch) => setForm(f => ({ ...f, lines: f.lines.map((l, j) => j === i ? { ...l, ...patch } : l) }));
+
+        // توازن تلقائي: يُكمل آخر بند لتوازن القيد
+        const autoBalance = () => {
+            const diff = Math.round((totals.d - totals.c) * 100) / 100;
+            if (Math.abs(diff) < 0.005) return;
+            const lastIdx = form.lines.length - 1;
+            setLine(lastIdx, diff > 0
+                ? { credit: Math.round((parseFloat(form.lines[lastIdx].credit) || 0) + diff, 2).toFixed(2), debit: '' }
+                : { debit:  Math.round((parseFloat(form.lines[lastIdx].debit)  || 0) - diff, 2).toFixed(2), credit: '' }
+            );
+        };
         return (
             <div className="space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-3">
@@ -535,7 +546,12 @@ function JournalTab({ accounts, parties, costCenters, toast }) {
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                        <Btn color="gray" size="sm" onClick={() => setForm({ ...form, lines: [...form.lines, emptyLine()] })}><Plus size={14} /> إضافة بند</Btn>
+                        <Btn color="gray" size="sm" onClick={() => setForm(f => ({ ...f, lines: [...f.lines, emptyLine()] }))}><Plus size={14} /> إضافة بند</Btn>
+                        {!balanced && Math.abs(totals.d - totals.c) > 0.005 && (
+                            <Btn color="gray" size="sm" onClick={autoBalance} title="أكمل آخر بند تلقائياً لتوازن القيد">
+                                ⚖ توازن تلقائي ({Math.abs(totals.d - totals.c).toFixed(2)})
+                            </Btn>
+                        )}
                         <div className="flex-1" />
                         <Btn color="green" onClick={submit} disabled={!balanced}><Save size={15} /> {form.id ? 'حفظ التعديل' : 'ترحيل القيد'}</Btn>
                     </div>
@@ -1469,11 +1485,13 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 dark:text-brand-400 block mb-1">{isSales ? 'حساب الإيراد' : 'حساب المصروف/المخزون'}</label>
-                                    <select value={editing.gl_account_id} onChange={e => setEditing(ed => ({ ...ed, gl_account_id: e.target.value }))}
-                                        className="w-full bg-slate-50 border border-slate-200 dark:bg-brand-900 dark:border-brand-700 dark:text-brand-50 px-3 py-2 rounded-xl text-sm outline-none focus:border-[#c5a059]">
-                                        <option value="">{isSales ? 'افتراضي (إيرادات المبيعات)' : 'افتراضي (مصروفات تشغيلية)'}</option>
-                                        {acctOptions.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-                                    </select>
+                                    <AccountCombobox
+                                        accounts={acctOptions}
+                                        value={editing.gl_account_id}
+                                        onChange={v => setEditing(ed => ({ ...ed, gl_account_id: v }))}
+                                        placeholder={isSales ? 'افتراضي (إيرادات المبيعات)' : 'افتراضي (مصروفات تشغيلية)'}
+                                        className="[&_input]:py-2 [&_input]:rounded-xl [&_input]:bg-slate-50"
+                                    />
                                 </div>
                                 {isSales && (
                                     <div>
