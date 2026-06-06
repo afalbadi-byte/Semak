@@ -4,7 +4,8 @@ import {
     BookOpen, FileText, Layers, Plus, Trash2, RefreshCw, Save, X, Search,
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
     AlertTriangle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
-    Settings, Printer, Building2, Loader2,
+    Settings, Printer, Building2, Loader2, Package, Calendar, Lock, Unlock,
+    ChevronRight,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2635,6 +2636,202 @@ const SETTINGS_FIELDS = [
     { k: 'phone', label: 'الهاتف', ph: '05xxxxxxxx', dir: 'ltr' },
     { k: 'email', label: 'البريد الإلكتروني', ph: 'info@...', dir: 'ltr' },
 ];
+// ════════════════════════════════════════════════════════════════════════════
+//  السنوات المالية — إقفال وإعادة فتح
+// ════════════════════════════════════════════════════════════════════════════
+function FiscalPeriodsTab({ toast }) {
+    const [years,   setYears]   = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [busy,    setBusy]    = useState(null);   // fy currently being processed
+    const [confirm, setConfirm] = useState(null);   // { fy, action: 'close'|'reopen' }
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const r = await api('gl_fiscal_years');
+            if (r.success) setYears(r.data || []);
+            else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const closeYear = async (fy) => {
+        setBusy(fy);
+        try {
+            const r = await api('gl_close_year', { method: 'POST', body: { fy, actor: 'admin' } });
+            if (r.success) {
+                toast(`✓ ${r.message}`);
+                load();
+            } else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setBusy(null); setConfirm(null); }
+    };
+
+    const reopenYear = async (fy) => {
+        setBusy(fy);
+        try {
+            const r = await api('gl_reopen_year', { method: 'POST', body: { fy, actor: 'admin' } });
+            if (r.success) {
+                toast(`✓ ${r.message}`);
+                load();
+            } else toast(r.message, 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setBusy(null); setConfirm(null); }
+    };
+
+    const curY = new Date().getFullYear();
+
+    return (
+        <div className="space-y-5">
+            {/* رأس */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+                        <Calendar size={20} className="text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">السنوات المالية</h3>
+                        <p className="text-xs text-slate-500 dark:text-brand-400">إقفال السنة يُولّد قيد إقفال ويُصفّر الإيرادات والمصروفات · الفتح يحذف قيد الإقفال</p>
+                    </div>
+                </div>
+                <Btn color="gray" size="sm" onClick={load}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> تحديث</Btn>
+            </div>
+
+            {/* تحذير إقفال */}
+            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-2xl px-4 py-3 flex items-start gap-3">
+                <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                    إقفال السنة المالية لا رجعة فيه إلا بإعادة الفتح الصريحة. تأكّد من اكتمال جميع القيود قبل الإقفال.
+                    يمكن إعادة الفتح في أي وقت لتصحيح الأخطاء.
+                </p>
+            </div>
+
+            {/* قائمة السنوات */}
+            {loading ? <Spinner /> : years.length === 0 ? <Empty msg="لا توجد سنوات مالية" /> : (
+                <div className="space-y-3">
+                    {years.map(y => {
+                        const fy       = Number(y.fy);
+                        const closed   = Number(y.is_closed) === 1;
+                        const isCur    = fy === curY;
+                        const isBusy   = busy === fy;
+                        return (
+                            <div key={fy}
+                                className={`bg-white dark:bg-brand-900 rounded-2xl border shadow-sm p-4 flex flex-wrap items-center gap-4 transition
+                                    ${closed
+                                        ? 'border-slate-200 dark:border-brand-700 opacity-80'
+                                        : isCur
+                                            ? 'border-emerald-300 dark:border-emerald-500/40 ring-1 ring-emerald-200 dark:ring-emerald-500/20'
+                                            : 'border-slate-200 dark:border-brand-700'}`}>
+
+                                {/* أيقونة الحالة */}
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0
+                                    ${closed ? 'bg-slate-100 dark:bg-brand-800 text-slate-400 dark:text-brand-500'
+                                             : 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'}`}>
+                                    {closed ? <Lock size={18} /> : <Unlock size={18} />}
+                                </div>
+
+                                {/* معلومات السنة */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-lg font-black text-brand-800 dark:text-brand-100">{fy}</span>
+                                        {isCur && (
+                                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                                السنة الحالية
+                                            </span>
+                                        )}
+                                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border
+                                            ${closed
+                                                ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-brand-800 dark:text-brand-400 dark:border-brand-700'
+                                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30'}`}>
+                                            {closed ? '🔒 مقفلة' : '🟢 مفتوحة'}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-slate-400 dark:text-brand-500 mt-0.5 flex items-center gap-3 flex-wrap">
+                                        <span dir="ltr">{y.start_date || `${fy}-01-01`} → {y.end_date || `${fy}-12-31`}</span>
+                                        {y.entry_count > 0 && (
+                                            <span className="flex items-center gap-1">
+                                                <ChevronRight size={11} />
+                                                {y.entry_count.toLocaleString()} قيد مرحَّل
+                                            </span>
+                                        )}
+                                        {closed && y.closed_at && (
+                                            <span>أُقفلت {y.closed_at.slice(0, 10)}{y.closed_by ? ` · ${y.closed_by}` : ''}</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* أزرار الإجراء */}
+                                <div className="shrink-0">
+                                    {closed ? (
+                                        <Btn color="gray" size="sm" disabled={isBusy}
+                                            onClick={() => setConfirm({ fy, action: 'reopen' })}>
+                                            {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Unlock size={13} />}
+                                            إعادة الفتح
+                                        </Btn>
+                                    ) : (
+                                        <Btn color="red" size="sm" disabled={isBusy}
+                                            onClick={() => setConfirm({ fy, action: 'close' })}>
+                                            {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
+                                            إقفال {fy}
+                                        </Btn>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* مودال التأكيد */}
+            {confirm && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setConfirm(null)}>
+                    <div className="bg-white dark:bg-brand-900 rounded-3xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()} dir="rtl">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center
+                                ${confirm.action === 'close'
+                                    ? 'bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                                    : 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'}`}>
+                                {confirm.action === 'close' ? <Lock size={22} /> : <Unlock size={22} />}
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-brand-800 dark:text-brand-100">
+                                    {confirm.action === 'close' ? `إقفال ${confirm.fy}` : `إعادة فتح ${confirm.fy}`}
+                                </h3>
+                                <p className="text-xs text-slate-500 dark:text-brand-400">هذا الإجراء يؤثر على جميع التقارير</p>
+                            </div>
+                        </div>
+
+                        {confirm.action === 'close' ? (
+                            <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl p-3 mb-5 text-xs font-bold text-rose-700 dark:text-rose-300">
+                                سيُنشئ النظام قيد إقفال بتاريخ 31/12/{confirm.fy} يُصفّر حسابات الإيرادات والمصروفات ويرحّل الصافي إلى حساب الأرباح المحتجزة.
+                            </div>
+                        ) : (
+                            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3 mb-5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                                سيُحذف قيد الإقفال لسنة {confirm.fy} وستُعاد الفترة مفتوحة. القيود الأخرى لن تتأثر.
+                            </div>
+                        )}
+
+                        <div className="flex gap-2">
+                            {confirm.action === 'close'
+                                ? <Btn color="red" onClick={() => closeYear(confirm.fy)} disabled={busy === confirm.fy}>
+                                    {busy === confirm.fy ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                                    تأكيد الإقفال
+                                  </Btn>
+                                : <Btn color="green" onClick={() => reopenYear(confirm.fy)} disabled={busy === confirm.fy}>
+                                    {busy === confirm.fy ? <Loader2 size={14} className="animate-spin" /> : <Unlock size={14} />}
+                                    تأكيد الفتح
+                                  </Btn>}
+                            <Btn color="gray" onClick={() => setConfirm(null)}>إلغاء</Btn>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function SettingsTab({ company, reload, toast }) {
     const [form, setForm] = useState(company || {});
     const [saving, setSaving] = useState(false);
@@ -2692,6 +2889,7 @@ const TABS = [
     { id: 'vat', label: 'إقرار الضريبة', icon: Banknote },
     { id: 'parties', label: 'العملاء والموردون', icon: Users },
     { id: 'costcenters', label: 'مراكز التكلفة', icon: Layers },
+    { id: 'periods', label: 'السنوات المالية', icon: Calendar },
     { id: 'settings', label: 'ملف المنشأة', icon: Settings },
 ];
 
@@ -2819,6 +3017,7 @@ export default function LedgerHub() {
                     {activeTab === 'vat' && <VatTab toast={toast} />}
                     {activeTab === 'parties' && <PartiesTab parties={parties} reload={loadParties} loading={partyLoading} toast={toast} />}
                     {activeTab === 'costcenters' && <CostCentersTab costCenters={costCenters} reload={loadCostCenters} loading={ccLoading} toast={toast} />}
+                    {activeTab === 'periods' && <FiscalPeriodsTab toast={toast} />}
                     {activeTab === 'settings' && <SettingsTab company={company} reload={loadCompany} toast={toast} />}
                 </div>
             </div>

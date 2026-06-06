@@ -4057,6 +4057,29 @@ switch ($action) {
         echo json_encode(['success'=>true,'period'=>['from'=>$from,'to'=>$to],'revenue'=>$rev,'expenses'=>$exp,'totals'=>['revenue'=>round($totRev,2),'expenses'=>round($totExp,2),'net'=>round($totRev-$totExp,2)]], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'gl_fiscal_years': {
+        // قائمة السنوات المالية (من acc_periods) + السنة الحالية إن لم تُسجَّل
+        $tid  = (int)($_GET['tenant'] ?? 1);
+        $curY = (int)date('Y');
+        $rows = [];
+        $fySet = [];
+        $res  = $conn->query("SELECT fy,is_closed,closed_at,closed_by,start_date,end_date FROM acc_periods WHERE tenant_id=$tid ORDER BY fy DESC");
+        while ($res && ($x = $res->fetch_assoc())) { $fySet[(int)$x['fy']] = true; $rows[] = $x; }
+        // أضف السنة الحالية إن لم تكن مسجّلة
+        if (!isset($fySet[$curY])) {
+            array_unshift($rows, ['fy'=>$curY,'is_closed'=>0,'closed_at'=>null,'closed_by'=>null,'start_date'=>"$curY-01-01",'end_date'=>"$curY-12-31"]);
+        }
+        // إحصاء الحركات لكل سنة
+        foreach ($rows as &$row) {
+            $fy2 = (int)$row['fy'];
+            $cnt = $conn->query("SELECT COUNT(*) c FROM acc_entries e WHERE e.tenant_id=$tid AND e.is_posted=1 AND YEAR(e.date)=$fy2 AND (e.ref_type IS NULL OR e.ref_type NOT IN('year_close'))");
+            $row['entry_count'] = $cnt ? (int)$cnt->fetch_assoc()['c'] : 0;
+        }
+        unset($row);
+        echo json_encode(['success'=>true,'data'=>$rows,'current_fy'=>$curY], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_periods_status': {
         // حالة الفترة المالية لسنة معينة
         $tid = (int)($_GET['tenant'] ?? 1);
