@@ -660,13 +660,13 @@ function NotificationBell({ userId, onNavigate }) {
 }
 
 // ─── شريط حالة الاشتراك ─────────────────────────────────────────────────────
-function TrialBanner({ plan, daysLeft, status }) {
+function TrialBanner({ plan, daysLeft, status, companyName = 'سماك العقارية' }) {
     const [dismissed, setDismissed] = useState(false);
     if (plan !== 'trial' || status !== 'active' || dismissed) return null;
 
     const expired = daysLeft <= 0;
     const urgent  = !expired && daysLeft <= 7;
-    const upgradeUrl = 'https://wa.me/966920032842?text=' + encodeURIComponent('أود ترقية اشتراكي في نظام سماك العقارية');
+    const upgradeUrl = 'https://wa.me/966920032842?text=' + encodeURIComponent(`أود ترقية اشتراكي في نظام ${companyName}`);
 
     return (
         <div className={`flex items-center justify-between px-4 md:px-6 py-2.5 text-sm font-bold shrink-0 ${
@@ -710,6 +710,49 @@ function TrialBanner({ plan, daysLeft, status }) {
     );
 }
 
+// ─── إشعار حدود الاستخدام ───────────────────────────────────────────────────
+function UsageLimitBanner({ usage, onNavigate }) {
+    if (!usage) return null;
+    const userPct = usage.max_users > 0 ? Math.round((usage.users / usage.max_users) * 100) : 0;
+    const invPct  = usage.max_invoices_month > 0 ? Math.round((usage.invoices_month / usage.max_invoices_month) * 100) : 0;
+    const warnings = [];
+    if (userPct >= 80 && usage.max_users > 0)
+        warnings.push({ label: `المستخدمون: ${usage.users}/${usage.max_users}`, pct: userPct });
+    if (invPct >= 80 && usage.max_invoices_month > 0)
+        warnings.push({ label: `الفواتير: ${usage.invoices_month}/${usage.max_invoices_month}`, pct: invPct });
+    if (warnings.length === 0) return null;
+    const maxPct = Math.max(userPct, invPct);
+    const isOver = maxPct >= 100;
+    const isCrit = maxPct >= 90;
+    return (
+        <div className={`flex items-center justify-between gap-3 flex-wrap px-4 md:px-6 py-2.5 text-sm font-bold shrink-0 ${
+            isOver ? 'bg-red-50 border-b border-red-200 dark:bg-red-900/10 dark:border-red-800' :
+            isCrit ? 'bg-amber-50 border-b border-amber-200 dark:bg-amber-900/10 dark:border-amber-800' :
+                     'bg-sky-50 border-b border-sky-200 dark:bg-sky-900/10 dark:border-sky-800'
+        }`}>
+            <div className="flex items-center gap-2 flex-wrap">
+                <AlertTriangle size={14} className={isOver ? 'text-red-500' : isCrit ? 'text-amber-500' : 'text-sky-500'} />
+                <span className={isOver ? 'text-red-700 dark:text-red-300' : isCrit ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300'}>
+                    {isOver ? 'تجاوزت حدود الباقة —' : 'اقتربت من حدود الباقة —'}
+                </span>
+                {warnings.map((w, i) => (
+                    <span key={i} className={`text-xs font-black px-2 py-0.5 rounded-lg ${
+                        w.pct >= 100 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
+                        w.pct >= 90  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
+                                       'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+                    }`}>{w.label}</span>
+                ))}
+            </div>
+            <button
+                onClick={() => onNavigate('subscription')}
+                className="flex items-center gap-1.5 bg-[#c5a059] hover:bg-[#b8913f] text-slate-950 text-xs font-black px-3 py-1.5 rounded-xl transition shrink-0"
+            >
+                <Zap size={12} /> ترقية الباقة
+            </button>
+        </div>
+    );
+}
+
 // ─── الداشبورد الرئيسي ───────────────────────────────────────────────────────
 function DashboardInner({ onLogout }) {
     const { branding } = useContext(AppContext);
@@ -748,6 +791,7 @@ function DashboardInner({ onLogout }) {
     const [glKpisLoading, setGlKpisLoading] = useState(false);
     const [nativeStats,   setNativeStats]   = useState(null);
     const [nativeLoading, setNativeLoading] = useState(false);
+    const [usage,         setUsage]         = useState(null);
 
     const loadDashboardCounts = async () => {
         try {
@@ -792,6 +836,13 @@ function DashboardInner({ onLogout }) {
         finally { setNativeLoading(false); }
     };
 
+    const loadUsage = async () => {
+        try {
+            const data = await apiGet('tenant_usage');
+            if (data.success) setUsage(data);
+        } catch {}
+    };
+
     useEffect(() => {
         document.title = companyName;
     }, [companyName]);
@@ -801,6 +852,7 @@ function DashboardInner({ onLogout }) {
             loadDashboardCounts();
             loadNativeStats();
             loadGlKpis();
+            loadUsage();
             // Daftra stats — فقط للمستأجر 1 (سماك) الذي يملك مفتاح دفترة
             if (branding?.plan === 'enterprise' || !branding?.plan) {
                 loadDeptStats();
@@ -1055,7 +1107,9 @@ function DashboardInner({ onLogout }) {
                 plan={branding?.plan}
                 daysLeft={branding?.days_left}
                 status={branding?.status}
+                companyName={companyName}
             />
+            <UsageLimitBanner usage={usage} onNavigate={setActiveTab} />
 
             <main className="flex-1 overflow-y-auto bg-transparent custom-scrollbar">
 

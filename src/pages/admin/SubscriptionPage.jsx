@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { AppContext } from '../../context/AppContext';
-import { API_URL, getAdminToken } from '../../lib/api/client';
+import { apiGet } from '../../lib/api/client';
 import {
   CheckCircle2, XCircle, Zap, Clock, AlertTriangle, Crown,
   Users, FileText, Shield, RefreshCw, ExternalLink, MessageCircle
@@ -82,9 +82,6 @@ const PLAN_COLOR = {
   purple:{ badge: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300', card: 'border-purple-300 dark:border-purple-700', btn: 'bg-purple-600 text-white' },
 };
 
-const upgradeUrl = (plan) =>
-  `https://wa.me/966920032842?text=${encodeURIComponent(`أود الترقية إلى باقة ${plan} في نظام سماك العقارية`)}`;
-
 /* ─── إحصائيات الاستخدام ─── */
 function UsageCard({ label, used, limit, icon: Icon, color }) {
   const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -123,18 +120,16 @@ export default function SubscriptionPage() {
   const trialEnds  = branding?.trial_ends;
   const expired    = plan === 'trial' && daysLeft !== null && daysLeft <= 0;
   const urgent     = plan === 'trial' && !expired && daysLeft !== null && daysLeft <= 7;
+  const companyName = branding?.company_name || 'سماك العقارية';
+  const upgradeUrl  = (planName) =>
+    `https://wa.me/966920032842?text=${encodeURIComponent(`أود الترقية إلى باقة ${planName} في نظام ${companyName}`)}`;
 
   const [usage, setUsage] = useState(null);
   const [loadingUsage, setLoadingUsage] = useState(false);
 
   useEffect(() => {
-    const jwt = getAdminToken();
-    if (!jwt) return;
     setLoadingUsage(true);
-    fetch(`${API_URL}?action=tenant_usage`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-    })
-      .then(r => r.json())
+    apiGet('tenant_usage')
       .then(d => { if (d.success) setUsage(d); })
       .catch(() => {})
       .finally(() => setLoadingUsage(false));
@@ -352,7 +347,7 @@ export default function SubscriptionPage() {
             <p className="text-slate-300 text-sm">فريق المبيعات جاهز للإجابة على أسئلتك ومساعدتك في اختيار الباقة الأنسب.</p>
           </div>
           <a
-            href="https://wa.me/966920032842?text=أود الاستفسار عن باقات نظام سماك العقارية"
+            href={`https://wa.me/966920032842?text=${encodeURIComponent(`أود الاستفسار عن باقات نظام ${companyName}`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1fa855] text-white font-black px-6 py-3 rounded-xl transition shrink-0 shadow-lg"

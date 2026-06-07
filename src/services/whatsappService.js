@@ -64,10 +64,10 @@ async function sendTemplate(to, templateName, lang, bodyVars = []) {
 // إشعار الإدارة بعميل جديد
 // يعمل فقط إذا راسل المدير الحساب التجاري خلال آخر 24 ساعة (نافذة WhatsApp)
 // الحل الدائم: إنشاء قالب إداري معتمد وضع معرفه في VITE_WA_ADMIN_TEMPLATE_ID
-export async function notifyAdmin({ id, name, phone, interest }) {
+export async function notifyAdmin({ id, name, phone, interest, company = 'سماك العقارية' }) {
   if (!API_KEY || !ADMIN_PHONE) return { ok: false };
   const msg =
-    `🔔 *عميل جديد - سماك العقارية*\n\n` +
+    `🔔 *عميل جديد - ${company}*\n\n` +
     `👤 الاسم: ${name}\n` +
     `📞 الجوال: ${phone}\n` +
     `🏠 الاهتمام: ${interest}\n\n` +
@@ -95,7 +95,7 @@ export async function replyToClient(clientPhone, clientName) {
 // ─── صفحة الصيانة ───────────────────────────────────────────
 
 // تأكيد استلام الطلب للعميل فور إرسال طلبه
-export async function notifyClientTicketReceived({ id, name, unit, type, date, time, phone }) {
+export async function notifyClientTicketReceived({ id, name, unit, type, date, time, phone, company = 'سماك العقارية' }) {
   if (!API_KEY || !phone) return { ok: false };
 
   const res = await sendTemplate(normalizePhone(phone), T_MAINT_RECEIVED, TEMPLATE_LANG, [
@@ -107,7 +107,7 @@ export async function notifyClientTicketReceived({ id, name, unit, type, date, t
 
   // fallback: نص
   const body =
-    `✅ *تم استلام طلب الصيانة - سماك العقارية*\n\n` +
+    `✅ *تم استلام طلب الصيانة - ${company}*\n\n` +
     `مرحباً ${name}،\n` +
     `تم استلام طلبك رقم *#${id}* بنجاح.\n\n` +
     `🏠 الوحدة: *${unit}*\n` +
@@ -122,9 +122,9 @@ export async function notifyClientTicketReceived({ id, name, unit, type, date, t
 }
 
 // إشعار الإدارة بطلب صيانة جديد + تسجيل الحالة
-export async function notifyMaintenanceAdmin({ id, name, phone, unit, type, date, time }) {
+export async function notifyMaintenanceAdmin({ id, name, phone, unit, type, date, time, company = 'سماك' }) {
   const body =
-    `🔧 *طلب صيانة جديد #${id || "جديد"} - سماك*\n\n` +
+    `🔧 *طلب صيانة جديد #${id || "جديد"} - ${company}*\n\n` +
     `👤 المالك: ${name}\n` +
     `📞 الجوال: ${phone}\n` +
     `🏠 الوحدة: ${unit}\n` +
@@ -150,8 +150,9 @@ export async function notifyClientTechAssigned(ticket) {
   if (res?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
 
   // fallback: نص
+  const company = ticket.company || 'سماك العقارية';
   const body =
-    `🔧 *تحديث طلب الصيانة - سماك العقارية*\n\n` +
+    `🔧 *تحديث طلب الصيانة - ${company}*\n\n` +
     `مرحباً، تم تعيين الفني *${tech}* لطلبك رقم #${ticket.id}.\n` +
     `سيصل إليك قريباً. للاستفسار ردّ على هذه الرسالة 💬`;
   const res2 = await sendText(normalizePhone(ticket.phone), body);
@@ -178,6 +179,7 @@ export async function notifyClientStatusUpdate(ticket) {
     if (res?.ok) { logWaSent(ticket.id, "maintenance"); return { ok: true }; }
 
     // fallback: نص
+    const company2 = ticket.company || 'سماك العقارية';
     const techLine = ticket.technician && ticket.technician !== "لم يتم التعيين"
       ? `👨‍🔧 الفني: ${ticket.technician}\n` : "";
     const dateLine = ticket.scheduleDate
@@ -186,7 +188,7 @@ export async function notifyClientStatusUpdate(ticket) {
       ? `\n🔑 رمز الإغلاق (أعطه للفني عند الانتهاء): *${ticket.otp}*\n` : "";
 
     const body =
-      `🔧 *تحديث طلب الصيانة - سماك العقارية*\n\n` +
+      `🔧 *تحديث طلب الصيانة - ${company2}*\n\n` +
       `طلب رقم: #${ticket.id} | وحدة: ${ticket.unit}\n` +
       `نوع العطل: ${ticket.type}\n\n` +
       `الحالة الآن: *${ticket.status}*\n` +
