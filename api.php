@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v426
+// deploy: 2026-06-07-v427
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -10495,6 +10495,27 @@ KNOWLEDGE;
         break;
 
     // ────────────────────────────────────────────────────────────────────────
+
+    // ══ EMERGENCY — مؤقت — يُحذف فور الدخول ════════════════════════════════
+    case 'emergency_otp': {
+        $ekey = trim((string)($_GET['k'] ?? $input_data['k'] ?? ''));
+        if ($ekey !== 'SemakDev2026!') { echo json_encode(['success'=>false,'message'=>'غير مصرح']); break; }
+        $email = $conn->real_escape_string(trim((string)($_GET['email'] ?? '')));
+        if (!$email) { echo json_encode(['success'=>false,'message'=>'email مطلوب']); break; }
+        $ur = $conn->query("SELECT id FROM users WHERE (email='$email' OR username='$email') LIMIT 1");
+        $urow = $ur ? $ur->fetch_assoc() : null;
+        if (!$urow) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود']); break; }
+        $uid = (int)$urow['id'];
+        $or = $conn->query("SELECT code,expires_at,channel FROM login_otp WHERE user_id=$uid ORDER BY id DESC LIMIT 1");
+        $otp = $or ? $or->fetch_assoc() : null;
+        if (!$otp) { echo json_encode(['success'=>false,'message'=>'لا رمز محفوظ — اطلب رمزاً جديداً من صفحة الدخول']); break; }
+        $expired = strtotime($otp['expires_at']) < time();
+        echo json_encode(['success'=>true,'code'=>$otp['code'],'channel'=>$otp['channel'],
+            'expires_at'=>$otp['expires_at'],'expired'=>$expired,
+            'note'=>$expired?'منتهي — اطلب رمزاً جديداً':'صالح — أدخله الآن'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    // ══ END EMERGENCY ════════════════════════════════════════════════════════
 
     default:
         http_response_code(400);
