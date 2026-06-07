@@ -8,7 +8,7 @@ import {
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
     Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2,
-    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap
+    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock
 } from 'lucide-react';
 
 // ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
@@ -120,7 +120,7 @@ function QrSection() {
 }
 
 // ─── بطاقة أداة ─────────────────────────────────────────────────────────────
-function ToolCard({ icon: Icon, label, badge, badgeLabel, color = 'slate', onClick, disabled }) {
+function ToolCard({ icon: Icon, label, badge, badgeLabel, color = 'slate', onClick, disabled, locked, lockedPlan }) {
     const palette = {
         teal:    { bg:'bg-teal-50',    text:'text-teal-700',    hbg:'hover:bg-teal-600',    bdg:'bg-teal-600' },
         purple:  { bg:'bg-purple-50',  text:'text-purple-700',  hbg:'hover:bg-purple-600',  bdg:'bg-purple-600' },
@@ -137,21 +137,34 @@ function ToolCard({ icon: Icon, label, badge, badgeLabel, color = 'slate', onCli
     };
     const c = palette[color] || palette.slate;
     const hasBadge = Number(badge) > 0;
+    const LOCK_LABEL = { starter: 'مبتدئ', pro: 'احترافي', enterprise: 'مؤسسي' };
     return (
         <button
             onClick={disabled ? undefined : onClick}
             disabled={disabled}
-            className={`group bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-brand-100/70 dark:border-brand-700 hover:shadow-md hover:-translate-y-0.5 hover:border-gold-300 dark:hover:border-gold-500/50 transition-all p-3 md:p-4 flex flex-col items-center justify-center text-center min-h-[100px] md:min-h-[120px] relative ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+            className={`group bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-brand-100/70 dark:border-brand-700 hover:shadow-md hover:-translate-y-0.5 transition-all p-3 md:p-4 flex flex-col items-center justify-center text-center min-h-[100px] md:min-h-[120px] relative ${
+                disabled ? 'opacity-40 cursor-not-allowed' :
+                locked   ? 'cursor-pointer hover:border-slate-300 dark:hover:border-brand-600' :
+                           'cursor-pointer hover:border-gold-300 dark:hover:border-gold-500/50'
+            }`}
         >
-            {hasBadge && (
+            {locked && (
+                <div className="absolute inset-0 rounded-2xl bg-white/80 dark:bg-brand-950/70 backdrop-blur-[1px] flex flex-col items-center justify-center z-10 gap-1">
+                    <Lock size={13} className="text-slate-400 dark:text-brand-500"/>
+                    <span className="text-[8px] font-black text-slate-400 dark:text-brand-500 bg-slate-100 dark:bg-brand-800 px-1.5 py-0.5 rounded leading-tight">
+                        {LOCK_LABEL[lockedPlan] || 'مدفوع'}
+                    </span>
+                </div>
+            )}
+            {hasBadge && !locked && (
                 <span className={`absolute -top-1.5 -right-1.5 ${c.bdg} text-white text-[10px] font-black rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-brand-900`}>
                     {badge}
                 </span>
             )}
-            {badgeLabel && (
+            {badgeLabel && !locked && (
                 <span className="absolute top-1 left-1 text-[9px] font-bold text-slate-400 dark:text-brand-400">{badgeLabel}</span>
             )}
-            <div className={`w-11 h-11 md:w-13 md:h-13 ${c.bg} ${c.text} ${disabled ? '' : c.hbg} group-hover:text-white rounded-2xl flex items-center justify-center mb-2 transition-colors`}>
+            <div className={`w-11 h-11 md:w-13 md:h-13 ${c.bg} ${c.text} ${(!disabled && !locked) ? c.hbg : ''} group-hover:text-white rounded-2xl flex items-center justify-center mb-2 transition-colors`}>
                 <Icon size={20}/>
             </div>
             <div className="text-[11px] md:text-xs font-black text-brand-800 dark:text-brand-100 leading-tight">{label}</div>
@@ -317,11 +330,53 @@ function TrendChart({ data, loading }) {
     );
 }
 
+// ─── ترتيب مستوى الخطط ───────────────────────────────────────────────────────
+const PLAN_RANK = { trial: 0, starter: 1, pro: 2, enterprise: 3 };
+const PLAN_NAME = { trial: 'تجربة مجانية', starter: 'المبتدئ', pro: 'الاحترافي', enterprise: 'المؤسسي' };
+const PLAN_PRICE = { starter: 299, pro: 599, enterprise: 1499 };
+
+// ─── حارس الخطة (يُستخدم لحجب محتوى التبويبات) ──────────────────────────────
+function PlanGate({ plan = 'trial', required, featureName, onUpgrade, children }) {
+    if ((PLAN_RANK[plan] ?? 0) >= (PLAN_RANK[required] ?? 0)) return children;
+    const upgradeUrl = `https://wa.me/966920032842?text=${encodeURIComponent(`أود الترقية إلى باقة ${PLAN_NAME[required] || required}`)}`;
+    return (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center animate-fadeIn" dir="rtl">
+            <div className="w-20 h-20 rounded-3xl bg-[#c5a059]/10 flex items-center justify-center mb-5">
+                <Lock size={34} className="text-[#c5a059]" />
+            </div>
+            <h3 className="text-xl font-black text-brand-800 dark:text-brand-50 mb-2">
+                {featureName || 'هذه الميزة'} — باقة {PLAN_NAME[required] || required}
+            </h3>
+            <p className="text-slate-500 dark:text-brand-400 text-sm max-w-sm mb-1">
+                هذه الميزة متاحة في باقة <strong>{PLAN_NAME[required]}</strong> وما فوق.
+                {PLAN_PRICE[required] && ` (${PLAN_PRICE[required].toLocaleString('ar-SA')} ريال/شهر)`}
+            </p>
+            <p className="text-slate-400 dark:text-brand-500 text-xs mb-6">
+                باقتك الحالية: {PLAN_NAME[plan] || 'تجربة مجانية'}
+            </p>
+            <div className="flex gap-3 flex-wrap justify-center">
+                <a href={upgradeUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-[#c5a059] hover:bg-[#b8913f] text-slate-950 font-black px-6 py-3 rounded-xl transition shadow-lg shadow-[#c5a059]/20">
+                    <Zap size={15} /> ترقية إلى {PLAN_NAME[required]}
+                </a>
+                {onUpgrade && (
+                    <button onClick={onUpgrade}
+                        className="flex items-center gap-2 bg-brand-50 dark:bg-brand-800 text-brand-700 dark:text-brand-200 border border-brand-100 dark:border-brand-700 font-bold px-5 py-3 rounded-xl transition hover:border-[#c5a059]/40">
+                        عرض الباقات
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── عنوان قسم + شبكة أدوات موحّدة (تصميم مسطّح نظيف) ────────────────────────
-function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads }) {
+function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads, plan }) {
     const p = DEPT_PALETTE[dept.color] || DEPT_PALETTE.indigo;
     const tools = dept.tools.filter(t => hasPermission(t.permKey));
     if (tools.length === 0) return null;
+    const isLocked = (tool) =>
+        tool.planRequired && (PLAN_RANK[plan] ?? 0) < (PLAN_RANK[tool.planRequired] ?? 0);
     return (
         <section>
             <div className="flex items-center gap-2.5 mb-3 px-1">
@@ -333,21 +388,29 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
                 <span className="text-[11px] font-bold text-slate-400 dark:text-brand-400">{tools.length} أدوات</span>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5 md:gap-3">
-                {tools.map(tool => (
-                    <ToolCard
-                        key={tool.id}
-                        icon={tool.icon}
-                        label={tool.label}
-                        badge={tool.badge ? dashCounts[tool.badge] : undefined}
-                        badgeLabel={tool.badgeLabel}
-                        color={tool.color}
-                        onClick={() => {
-                            if (tool.isExternal) window.open(tool.path, '_blank');
-                            else if (tool.isLink) window.location.href = tool.path;
-                            else { setActiveTab(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
-                        }}
-                    />
-                ))}
+                {tools.map(tool => {
+                    const locked = isLocked(tool);
+                    return (
+                        <ToolCard
+                            key={tool.id}
+                            icon={tool.icon}
+                            label={tool.label}
+                            badge={locked ? undefined : (tool.badge ? dashCounts[tool.badge] : undefined)}
+                            badgeLabel={locked ? undefined : tool.badgeLabel}
+                            color={tool.color}
+                            locked={locked}
+                            lockedPlan={locked ? tool.planRequired : undefined}
+                            onClick={locked
+                                ? () => setActiveTab('subscription')
+                                : () => {
+                                    if (tool.isExternal) window.open(tool.path, '_blank');
+                                    else if (tool.isLink) window.location.href = tool.path;
+                                    else { setActiveTab(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
+                                }
+                            }
+                        />
+                    );
+                })}
             </div>
         </section>
     );
@@ -908,8 +971,8 @@ function DashboardInner({ onLogout }) {
             desc:'العملاء المحتملون · التواصل المباشر · تحليل الجدوى والتسعير',
             tools:[
                 { id:'leads',       tabId:'leads',       label:'العملاء المحتملون',   icon:Users,         permKey:'leads',       badge:'leads_new',           color:'teal'   },
-                { id:'whatsapp',    tabId:'whatsapp',    label:'صندوق الرسائل',        icon:MessageCircle, permKey:'whatsapp',                                 color:'green'  },
-                { id:'bot',         tabId:'bot',         label:'خدمة العملاء الذكية', icon:Bot,           permKey:'bot',         badge:'bot_customers_today', color:'amber', badgeLabel:'اليوم' },
+                { id:'whatsapp',    tabId:'whatsapp',    label:'صندوق الرسائل',        icon:MessageCircle, permKey:'whatsapp',    planRequired:'starter',                      color:'green'  },
+                { id:'bot',         tabId:'bot',         label:'خدمة العملاء الذكية', icon:Bot,           permKey:'bot',         badge:'bot_customers_today', color:'amber', badgeLabel:'اليوم', planRequired:'pro' },
                 { id:'feasibility', tabId:'feasibility', label:'الجدوى والتسعير',      icon:BarChart3,     permKey:'feasibility',                              color:'emerald'},
             ],
             statsChips: (s, fmt) => [
@@ -1001,7 +1064,7 @@ function DashboardInner({ onLogout }) {
             label:'تقنية المعلومات',
             desc:'الأنظمة الرقمية · الذكاء الاصطناعي · البنية التقنية · سجل النشاط',
             tools:[
-                { id:'daftra_link',  tabId:'daftra_link',  label:'ربط دفترة',   icon:Link2,      permKey:'finance',       color:'indigo' },
+                { id:'daftra_link',  tabId:'daftra_link',  label:'ربط دفترة',   icon:Link2,      permKey:'finance',       color:'indigo', planRequired:'enterprise' },
                 { id:'activity_log', tabId:'activity_log', label:'سجل النشاط', icon:ScrollText, permKey:'activity_log',  color:'slate'  },
                 { id:'security',     tabId:'security',     label:'الأمان والبريد', icon:ShieldCheck, permKey:'all',       color:'emerald'},
                 { id:'subscription', tabId:'subscription', label:'الاشتراك والباقة', icon:Zap,    permKey:'all',           color:'amber' },
@@ -1410,6 +1473,7 @@ function DashboardInner({ onLogout }) {
                                     dashCounts={dashCounts}
                                     setActiveTab={setActiveTab}
                                     loadLeads={loadLeads}
+                                    plan={branding?.plan || 'trial'}
                                 />
                             ))}
                         </div>
@@ -1433,9 +1497,9 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}
                 {activeTab === 'users'       && hasPermission('users_manage')&& <div className="animate-fadeIn p-6 md:p-8"><UsersManage showToast={showToast} /></div>}
                 {activeTab === 'qr'          && hasPermission('qr')          && <QrSection />}
-                {activeTab === 'bot'         && hasPermission('bot')         && <div className="animate-fadeIn"><BotSettings /></div>}
+                {activeTab === 'bot'         && hasPermission('bot')         && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="pro" featureName="خدمة العملاء الذكية" onUpgrade={() => setActiveTab('subscription')}><BotSettings /></PlanGate></div>}
                 {activeTab === 'finance'     && hasPermission('finance')     && <div className="animate-fadeIn"><Finance /></div>}
-                {activeTab === 'daftra_explorer' && hasPermission('finance') && <div className="animate-fadeIn"><DaftraExplorer /></div>}
+                {activeTab === 'daftra_explorer' && hasPermission('finance') && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="enterprise" featureName="مستكشف دفترة" onUpgrade={() => setActiveTab('subscription')}><DaftraExplorer /></PlanGate></div>}
                 {activeTab === 'work_cycles' && hasPermission('finance')     && <div className="animate-fadeIn"><WorkCycles /></div>}
                 {activeTab === 'invoices'    && hasPermission('finance')     && <div className="animate-fadeIn"><InvoicesManage /></div>}
                 {activeTab === 'quotations'  && hasPermission('finance')     && <div className="animate-fadeIn"><QuotationsManage /></div>}
@@ -1450,7 +1514,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'ledger'      && hasPermission('finance')     && <div className="animate-fadeIn"><LedgerHub /></div>}
                 {activeTab === 'accounting'  && hasPermission('finance')     && <div className="animate-fadeIn"><AccountingHub /></div>}
                 {activeTab === 'notes'       && hasPermission('finance')     && <div className="animate-fadeIn"><NotesReturns /></div>}
-                {activeTab === 'daftra_link' && hasPermission('finance')     && <div className="animate-fadeIn"><DaftraLink /></div>}
+                {activeTab === 'daftra_link' && hasPermission('finance')     && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="enterprise" featureName="ربط دفترة" onUpgrade={() => setActiveTab('subscription')}><DaftraLink /></PlanGate></div>}
                 {activeTab === 'cheques'     && hasPermission('finance')     && <div className="animate-fadeIn"><ChequesManage /></div>}
                 {activeTab === 'treasury'    && hasPermission('finance')     && <div className="animate-fadeIn"><TreasuryManage /></div>}
                 {activeTab === 'reports'     && hasPermission('finance')     && <div className="animate-fadeIn"><ReportsHub /></div>}
@@ -1459,7 +1523,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'products'    && hasPermission('finance')     && <div className="animate-fadeIn"><ProductsManage /></div>}
                 {activeTab === 'rentals'     && hasPermission('finance')     && <div className="animate-fadeIn"><RentalsManage /></div>}
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
-                {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppInbox /></div>}
+                {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="starter" featureName="صندوق الرسائل" onUpgrade={() => setActiveTab('subscription')}><WhatsAppInbox /></PlanGate></div>}
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
                 {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
                 {activeTab === 'subscription'&& hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SubscriptionPage /></div>}
