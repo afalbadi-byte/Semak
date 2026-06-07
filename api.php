@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v430
+// deploy: 2026-06-07-v431
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -10500,11 +10500,21 @@ KNOWLEDGE;
     case 'emergency_otp': {
         $ekey = trim((string)($_GET['k'] ?? $input_data['k'] ?? ''));
         if ($ekey !== 'SemakDev2026!') { echo json_encode(['success'=>false,'message'=>'غير مصرح']); break; }
-        // list=1 → أظهر كل المستخدمين (بدون email)
+        // list=1 → أظهر كل المستخدمين + تشخيص قاعدة البيانات
         if (!empty($_GET['list'])) {
-            $lr = $conn->query("SELECT id,username,email,role,twofa FROM users ORDER BY id LIMIT 20");
+            $dbr = $conn->query("SELECT DATABASE() db, USER() usr");
+            $dbi = $dbr ? $dbr->fetch_assoc() : [];
+            $lr  = $conn->query("SELECT id,username,email,role,twofa FROM users ORDER BY id LIMIT 20");
             $users = []; while($lr && $x=$lr->fetch_assoc()) $users[]=$x;
-            echo json_encode(['success'=>true,'users'=>$users], JSON_UNESCAPED_UNICODE); break;
+            $tr  = $conn->query("SHOW TABLES");
+            $tables = []; while($tr && $x=$tr->fetch_row()) $tables[]=$x[0];
+            // عدد سجلات في أهم الجداول
+            $counts = [];
+            foreach(['users','tenants','owners','leads','maintenance'] as $t) {
+                $cr = $conn->query("SELECT COUNT(*) c FROM `$t`");
+                $counts[$t] = $cr ? (int)$cr->fetch_assoc()['c'] : 'N/A';
+            }
+            echo json_encode(['success'=>true,'db'=>$dbi,'users'=>$users,'tables'=>$tables,'counts'=>$counts], JSON_UNESCAPED_UNICODE); break;
         }
         $email = $conn->real_escape_string(trim((string)($_GET['email'] ?? '')));
         if (!$email) { echo json_encode(['success'=>false,'message'=>'email مطلوب']); break; }
