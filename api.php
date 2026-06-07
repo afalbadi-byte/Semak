@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v433
+// deploy: 2026-06-07-v434
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -768,25 +768,46 @@ function wa_send_text($to, $body) {
     curl_close($ch);
     return $status === 200 || $status === 201;
 }
-// إرسال رمز الدخول عبر القناة المختارة (email | whatsapp)
+// إرسال رمز الدخول عبر القناة المختارة مع احتياطي تلقائي للقناة الأخرى
+// الترتيب: القناة المفضّلة أولاً → إذا فشلت أو لا توجد بيانات → القناة الاحتياطية
 function send_login_otp($user, $channel, $code) {
-    $cname   = $GLOBALS['_tenantName']  ?? 'سماك العقارية';
+    $cname   = $GLOBALS['_tenantName'] ?? 'سماك العقارية';
     $channel = ($channel === 'whatsapp') ? 'whatsapp' : 'email';
-    if ($channel === 'email' && !empty($user['email'])) {
-        $html = email_template('رمز تسجيل الدخول',
-            'رمز الدخول لمرّة واحدة الخاص بك في لوحة ' . htmlspecialchars($cname) . ':'
-            . '<div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#1a365d;text-align:center;margin:22px 0;direction:ltr">' . $code . '</div>'
-            . 'الرمز صالح لمدة 10 دقائق. إذا لم تطلب هذا الرمز فتجاهل هذه الرسالة.');
-        $r = send_email($user['email'], 'رمز الدخول · ' . $cname, $html);
-        return !empty($r['ok']);
+
+    // محتوى البريد الإلكتروني
+    $html = email_template('رمز تسجيل الدخول',
+        'رمز الدخول لمرّة واحدة الخاص بك في لوحة ' . htmlspecialchars($cname) . ':'
+        . '<div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#1a365d;text-align:center;margin:22px 0;direction:ltr">' . $code . '</div>'
+        . 'الرمز صالح لمدة 10 دقائق. إذا لم تطلب هذا الرمز فتجاهل هذه الرسالة.');
+
+    // تطبيع رقم الجوال مرة واحدة
+    $waPhone = '';
+    if (!empty($user['phone'])) {
+        $p = preg_replace('/\D/', '', $user['phone']);
+        $p = ltrim($p, '0');
+        if (substr($p, 0, 3) !== '966') $p = '966' . $p;
+        if (strlen($p) >= 12) $waPhone = $p; // 966 + 9 أرقام على الأقل
     }
-    if ($channel === 'whatsapp' && !empty($user['phone'])) {
-        $phone = preg_replace('/\D/', '', $user['phone']);
-        $phone = ltrim($phone, '0');
-        if (substr($phone, 0, 3) !== '966') $phone = '966' . $phone;
-        return wa_send_text($phone, "🔐 {$cname}\nرمز تسجيل الدخول: $code\nصالح 10 دقائق.");
+    $waMsg = "🔐 {$cname}\nرمز تسجيل الدخول: $code\nصالح 10 دقائق.";
+
+    if ($channel === 'email') {
+        // المحاولة الأولى: إيميل
+        if (!empty($user['email'])) {
+            $r = send_email($user['email'], 'رمز الدخول · ' . $cname, $html);
+            if (!empty($r['ok'])) return true;
+        }
+        // احتياطي: واتساب (يفيد إذا لم يُضبط SMTP)
+        if ($waPhone) return wa_send_text($waPhone, $waMsg);
+    } else {
+        // المحاولة الأولى: واتساب
+        if ($waPhone && wa_send_text($waPhone, $waMsg)) return true;
+        // احتياطي: إيميل (يفيد إذا لم يكن للمستخدم رقم جوال)
+        if (!empty($user['email'])) {
+            $r = send_email($user['email'], 'رمز الدخول · ' . $cname, $html);
+            if (!empty($r['ok'])) return true;
+        }
     }
-    return false;
+    return false; // كلتا القناتين فشلتا أو بيانات الاتصال مفقودة
 }
 
 // ─── دخول موحّد بالـ OTP: أدوات مساعدة ────────────────────────────────────────
@@ -10493,78 +10514,6 @@ KNOWLEDGE;
             echo json_encode(['success'=>true,'message'=>'تم الحذف'], JSON_UNESCAPED_UNICODE);
         }
         break;
-
-    // ────────────────────────────────────────────────────────────────────────
-
-    // ══ EMERGENCY — مؤقت — يُحذف فور الدخول ════════════════════════════════
-    case 'emergency_otp': {
-        $ekey = trim((string)($_GET['k'] ?? $input_data['k'] ?? ''));
-        if ($ekey !== 'SemakDev2026!') { echo json_encode(['success'=>false,'message'=>'غير مصرح']); break; }
-        // disable_all=1 → عطّل 2FA لكل المستخدمين فوراً
-        if (!empty($_GET['disable_all'])) {
-            $conn->query("UPDATE users SET twofa=0");
-            $conn->query("DELETE FROM login_otp");
-            $conn->query("DELETE FROM auth_otp");
-            $affected = $conn->affected_rows;
-            echo json_encode(['success'=>true,'message'=>'تم تعطيل التحقق بخطوتين لجميع المستخدمين — ادخل الآن بكلمة المرور فقط'], JSON_UNESCAPED_UNICODE);
-            break;
-        }
-        // list=1 → أظهر كل المستخدمين + تشخيص قاعدة البيانات
-        if (!empty($_GET['list'])) {
-            $dbr = $conn->query("SELECT DATABASE() db, USER() usr");
-            $dbi = $dbr ? $dbr->fetch_assoc() : [];
-            $lr  = $conn->query("SELECT id,name,email,role,twofa FROM users ORDER BY id LIMIT 20");
-            $users = []; while($lr && $x=$lr->fetch_assoc()) $users[]=$x;
-            // fallback إذا فشل (عمود غير موجود)
-            if (!$lr) { $lr2=$conn->query("SELECT * FROM users ORDER BY id LIMIT 20"); while($lr2&&$x=$lr2->fetch_assoc()) $users[]=$x; }
-            $tr  = $conn->query("SHOW TABLES");
-            $tables = []; while($tr && $x=$tr->fetch_row()) $tables[]=$x[0];
-            // عدد سجلات في أهم الجداول
-            $counts = [];
-            foreach(['users','tenants','owners','leads','maintenance'] as $t) {
-                $cr = $conn->query("SELECT COUNT(*) c FROM `$t`");
-                $counts[$t] = $cr ? (int)$cr->fetch_assoc()['c'] : 'N/A';
-            }
-            echo json_encode(['success'=>true,'db'=>$dbi,'users'=>$users,'tables'=>$tables,'counts'=>$counts], JSON_UNESCAPED_UNICODE); break;
-        }
-        $email = $conn->real_escape_string(trim((string)($_GET['email'] ?? '')));
-        if (!$email) { echo json_encode(['success'=>false,'message'=>'email مطلوب']); break; }
-
-        $ur = $conn->query("SELECT id FROM users WHERE (email='$email' OR username='$email') LIMIT 1");
-        $urow = $ur ? $ur->fetch_assoc() : null;
-        if (!$urow) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود']); break; }
-        $uid = (int)$urow['id'];
-
-        // disable=1 → عطّل 2FA للمستخدم فوراً (يدخل بكلمة المرور فقط)
-        if (!empty($_GET['disable'])) {
-            $conn->query("UPDATE users SET twofa=0 WHERE id=$uid");
-            $conn->query("DELETE FROM login_otp WHERE user_id=$uid");
-            $conn->query("DELETE FROM trusted_devices WHERE user_id=$uid");
-            echo json_encode(['success'=>true,'message'=>'تم تعطيل التحقق بخطوتين — ادخل الآن بكلمة المرور فقط'], JSON_UNESCAPED_UNICODE);
-            break;
-        }
-
-        // reset=1 → امسح المحاولات السابقة + أنشئ رمزاً جديداً وأرجعه
-        if (!empty($_GET['reset'])) {
-            $conn->query("DELETE FROM login_otp WHERE user_id=$uid");
-            $newCode = str_pad(random_int(0,999999),6,'0',STR_PAD_LEFT);
-            $newTk   = bin2hex(random_bytes(16));
-            $newExp  = date('Y-m-d H:i:s', time()+600);
-            $conn->query("INSERT INTO login_otp (user_id,ticket,code,channel,expires_at) VALUES ($uid,'$newTk','$newCode','email','$newExp')");
-            echo json_encode(['success'=>true,'code'=>$newCode,'ticket'=>$newTk,'expires_at'=>$newExp,'note'=>'رمز جديد — أدخله الآن'], JSON_UNESCAPED_UNICODE);
-            break;
-        }
-
-        $or = $conn->query("SELECT code,expires_at,channel,attempts FROM login_otp WHERE user_id=$uid ORDER BY id DESC LIMIT 1");
-        $otp = $or ? $or->fetch_assoc() : null;
-        if (!$otp) { echo json_encode(['success'=>false,'message'=>'لا رمز محفوظ — استخدم reset=1']); break; }
-        $expired = strtotime($otp['expires_at']) < time();
-        echo json_encode(['success'=>true,'code'=>$otp['code'],'channel'=>$otp['channel'],
-            'expires_at'=>$otp['expires_at'],'expired'=>$expired,'attempts'=>(int)$otp['attempts'],
-            'note'=>$expired?'منتهي — استخدم ?reset=1':'صالح — أدخله الآن'], JSON_UNESCAPED_UNICODE);
-        break;
-    }
-    // ══ END EMERGENCY ════════════════════════════════════════════════════════
 
     default:
         http_response_code(400);
