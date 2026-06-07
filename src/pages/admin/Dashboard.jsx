@@ -8,7 +8,7 @@ import {
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
     Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2,
-    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText
+    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap
 } from 'lucide-react';
 
 // ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
@@ -658,6 +658,57 @@ function NotificationBell({ userId, onNavigate }) {
     );
 }
 
+// ─── شريط حالة الاشتراك ─────────────────────────────────────────────────────
+function TrialBanner({ plan, daysLeft, status }) {
+    const [dismissed, setDismissed] = useState(false);
+    if (plan !== 'trial' || status !== 'active' || dismissed) return null;
+
+    const expired = daysLeft <= 0;
+    const urgent  = !expired && daysLeft <= 7;
+    const upgradeUrl = 'https://wa.me/966920032842?text=' + encodeURIComponent('أود ترقية اشتراكي في نظام سماك العقارية');
+
+    return (
+        <div className={`flex items-center justify-between px-4 md:px-6 py-2.5 text-sm font-bold shrink-0 ${
+            expired ? 'bg-red-600 text-white' :
+            urgent  ? 'bg-amber-500 text-slate-950' :
+                      'bg-[#c5a059]/15 border-b border-[#c5a059]/20 text-[#c5a059]'
+        }`}>
+            <div className="flex items-center gap-2">
+                {expired || urgent ? <AlertTriangle size={15} /> : <Clock size={15} />}
+                {expired
+                    ? 'انتهت فترة التجربة المجانية — يرجى ترقية الاشتراك للاستمرار'
+                    : urgent
+                    ? `تجربتك المجانية تنتهي خلال ${daysLeft} ${daysLeft === 1 ? 'يوم' : 'أيام'} — بادر بالترقية`
+                    : `تجربة مجانية — متبقي ${daysLeft} يوماً`
+                }
+            </div>
+            <div className="flex items-center gap-3">
+                <a
+                    href={upgradeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black transition ${
+                        expired ? 'bg-white text-red-600 hover:bg-red-50' :
+                        urgent  ? 'bg-slate-950 text-amber-400 hover:bg-slate-800' :
+                                  'bg-[#c5a059] text-slate-950 hover:bg-[#b8913f]'
+                    }`}
+                >
+                    <Zap size={12} /> ترقية الآن
+                </a>
+                {!expired && (
+                    <button
+                        onClick={() => setDismissed(true)}
+                        className="opacity-60 hover:opacity-100 transition"
+                        aria-label="إغلاق"
+                    >
+                        <X size={14} />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── الداشبورد الرئيسي ───────────────────────────────────────────────────────
 function DashboardInner({ onLogout }) {
     const { branding } = useContext(AppContext);
@@ -984,6 +1035,13 @@ function DashboardInner({ onLogout }) {
                     </button>
                 </div>
             </header>
+
+            {/* ─── شريط حالة الاشتراك ──────────────────────────────────── */}
+            <TrialBanner
+                plan={branding?.plan}
+                daysLeft={branding?.days_left}
+                status={branding?.status}
+            />
 
             <main className="flex-1 overflow-y-auto bg-transparent custom-scrollbar">
 

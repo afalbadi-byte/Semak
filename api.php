@@ -1539,11 +1539,9 @@ switch ($action) {
 
     // ─── هوية المنشأة (للفرونت-إند: ألوان + شعار + اسم) ────────────────────────
     case 'tenant_branding': {
-        // endpoint عام — يُرجع إعدادات الهوية البصرية للمستأجر الحالي
-        // tenant_id من JWT إن وُجد، وإلا 1
+        // endpoint عام — يُرجع إعدادات الهوية البصرية + بيانات الاشتراك
         $btid = $_jwt_tid ?? 1;
-        // تحقق من وجود المستأجر وأنه active
-        $tq = $conn->query("SELECT name,status,primary_color,logo_url,slug FROM tenants WHERE id=$btid LIMIT 1");
+        $tq = $conn->query("SELECT name,status,primary_color,logo_url,slug,plan,trial_ends FROM tenants WHERE id=$btid LIMIT 1");
         $tenant = $tq ? $tq->fetch_assoc() : null;
         if (!$tenant || $tenant['status'] === 'cancelled') {
             echo json_encode(['success'=>false,'message'=>'المستأجر غير موجود أو ملغى'], JSON_UNESCAPED_UNICODE);
@@ -1552,6 +1550,11 @@ switch ($action) {
         $sq = $conn->query("SELECT skey,sval FROM acc_settings WHERE tenant_id=$btid AND skey IN ('company_name','company_logo','primary_color','company_phone','company_email','company_address','cr_number','vat_number')");
         $s = [];
         while ($sr = $sq->fetch_assoc()) $s[$sr['skey']] = $sr['sval'];
+        // احسب الأيام المتبقية للتجربة
+        $daysLeft = null;
+        if ($tenant['plan'] === 'trial' && $tenant['trial_ends']) {
+            $daysLeft = (int)ceil((strtotime($tenant['trial_ends']) - time()) / 86400);
+        }
         echo json_encode([
             'success'        => true,
             'tenant_id'      => $btid,
@@ -1564,6 +1567,10 @@ switch ($action) {
             'company_address'=> $s['company_address'] ?? '',
             'cr_number'      => $s['cr_number']      ?? '',
             'vat_number'     => $s['vat_number']     ?? '',
+            'plan'           => $tenant['plan']       ?? 'trial',
+            'status'         => $tenant['status']     ?? 'active',
+            'trial_ends'     => $tenant['trial_ends'] ?? null,
+            'days_left'      => $daysLeft,
         ], JSON_UNESCAPED_UNICODE);
         break;
     }
