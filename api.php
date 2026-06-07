@@ -33,6 +33,17 @@ $_clientIp = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTT
 $_clientUa = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 250);
 define('MOTTASL_TOKEN', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo');
 
+// ─── إعدادات الشركة (تُحمَّل مرة واحدة لكل طلب — متاحة عالمياً) ────────────
+// tenant_id يُحدَّد من JWT إن وُجد، وإلا يبقى 1 (الإنتاج الافتراضي).
+// نُحمّل مبكرًا كي تستخدمها الدوال (email_template / send_login_otp …).
+$_tenantId_early = 1; // placeholder — سيُحدَّث بعد حل JWT
+$_tenantSettings = [];
+$_sq = $conn->query("SELECT skey,sval FROM acc_settings WHERE tenant_id=1");
+if ($_sq) { while ($_sr = $_sq->fetch_assoc()) $_tenantSettings[$_sr['skey']] = $_sr['sval']; }
+$_tenantName  = $_tenantSettings['company_name']  ?? 'سماك العقارية';
+$_tenantPhone = $_tenantSettings['company_phone'] ?? '';
+$_tenantColor = $_tenantSettings['primary_color'] ?? '#c5a059';
+
 // ─── JWT — مصادقة موحّدة (HS256 بدون مكتبة خارجية) ─────────────────────────
 // TOKEN_SECRET  : لإصدار/التحقق من رموز الموظفين والمستأجرين
 // PLATFORM_SECRET: لإصدار/التحقق من رموز مدير المنصة فقط
@@ -617,22 +628,25 @@ function smtp_ready($c) {
     }
     return true;
 }
-// قالب بريد مُنسَّق بهوية سماك (أزرق/ذهبي، RTL)
+// قالب بريد مُنسَّق بهوية المنشأة (RTL) — يستخدم اسم الشركة الديناميكي
 function email_template($title, $bodyHtml, $cta = null) {
+    global $_tenantName, $_tenantColor;
+    $cname = $GLOBALS['_tenantName'] ?? 'سماك العقارية';
+    $color = $GLOBALS['_tenantColor'] ?? '#c5a059';
     $year = date('Y');
     $btn  = '';
     if ($cta && !empty($cta['url'])) {
-        $btn = '<div style="text-align:center;margin-top:24px"><a href="' . htmlspecialchars($cta['url']) . '" style="display:inline-block;background:#c5a059;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 30px;border-radius:10px">' . htmlspecialchars($cta['label'] ?? 'فتح') . '</a></div>';
+        $btn = '<div style="text-align:center;margin-top:24px"><a href="' . htmlspecialchars($cta['url']) . '" style="display:inline-block;background:' . $color . ';color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 30px;border-radius:10px">' . htmlspecialchars($cta['label'] ?? 'فتح') . '</a></div>';
     }
     return '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
         . '<body style="margin:0;background:#f1f5f9;font-family:Tahoma,Arial,sans-serif">'
         . '<div style="max-width:560px;margin:0 auto;padding:24px">'
         . '<div style="background:#1a365d;border-radius:20px 20px 0 0;padding:26px;text-align:center">'
-        . '<div style="color:#c5a059;font-size:24px;font-weight:bold;letter-spacing:1px">سماك العقارية</div></div>'
+        . '<div style="color:' . $color . ';font-size:24px;font-weight:bold;letter-spacing:1px">' . htmlspecialchars($cname) . '</div></div>'
         . '<div style="background:#ffffff;padding:32px;border-radius:0 0 20px 20px;box-shadow:0 10px 30px rgba(0,0,0,.06)">'
         . '<h1 style="color:#1a365d;font-size:20px;margin:0 0 16px">' . htmlspecialchars($title) . '</h1>'
         . '<div style="color:#475569;font-size:15px;line-height:1.9">' . $bodyHtml . '</div>' . $btn . '</div>'
-        . '<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:16px">© ' . $year . ' سماك العقارية · رسالة آلية، يُرجى عدم الرد</p>'
+        . '<p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:16px">© ' . $year . ' ' . htmlspecialchars($cname) . ' · رسالة آلية، يُرجى عدم الرد</p>'
         . '</div></body></html>';
 }
 // إرسال بريد عبر SMTP (fsockopen) — يدعم SSL/465 و STARTTLS/587 و AUTH LOGIN
@@ -743,20 +757,21 @@ function wa_send_text($to, $body) {
 }
 // إرسال رمز الدخول عبر القناة المختارة (email | whatsapp)
 function send_login_otp($user, $channel, $code) {
+    $cname   = $GLOBALS['_tenantName']  ?? 'سماك العقارية';
     $channel = ($channel === 'whatsapp') ? 'whatsapp' : 'email';
     if ($channel === 'email' && !empty($user['email'])) {
         $html = email_template('رمز تسجيل الدخول',
-            'رمز الدخول لمرّة واحدة الخاص بك في لوحة سماك:'
+            'رمز الدخول لمرّة واحدة الخاص بك في لوحة ' . htmlspecialchars($cname) . ':'
             . '<div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#1a365d;text-align:center;margin:22px 0;direction:ltr">' . $code . '</div>'
             . 'الرمز صالح لمدة 10 دقائق. إذا لم تطلب هذا الرمز فتجاهل هذه الرسالة.');
-        $r = send_email($user['email'], 'رمز الدخول · سماك العقارية', $html);
+        $r = send_email($user['email'], 'رمز الدخول · ' . $cname, $html);
         return !empty($r['ok']);
     }
     if ($channel === 'whatsapp' && !empty($user['phone'])) {
         $phone = preg_replace('/\D/', '', $user['phone']);
         $phone = ltrim($phone, '0');
         if (substr($phone, 0, 3) !== '966') $phone = '966' . $phone;
-        return wa_send_text($phone, "🔐 سماك العقارية\nرمز تسجيل الدخول: $code\nصالح 10 دقائق.");
+        return wa_send_text($phone, "🔐 {$cname}\nرمز تسجيل الدخول: $code\nصالح 10 دقائق.");
     }
     return false;
 }
@@ -1285,6 +1300,37 @@ switch ($action) {
         $invs    = (int)$conn->query("SELECT COUNT(*) c FROM acc_invoices")->fetch_assoc()['c'];
         $revenue = 0; // placeholder: يُستبدل بجدول اشتراكات لاحقًا
         echo json_encode(['success'=>true,'stats'=>compact('total','active','trial','newMonth','users','invs','revenue')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // ─── هوية المنشأة (للفرونت-إند: ألوان + شعار + اسم) ────────────────────────
+    case 'tenant_branding': {
+        // endpoint عام — يُرجع إعدادات الهوية البصرية للمستأجر الحالي
+        // tenant_id من JWT إن وُجد، وإلا 1
+        $btid = $_jwt_tid ?? 1;
+        // تحقق من وجود المستأجر وأنه active
+        $tq = $conn->query("SELECT name,status,primary_color,logo_url,slug FROM tenants WHERE id=$btid LIMIT 1");
+        $tenant = $tq ? $tq->fetch_assoc() : null;
+        if (!$tenant || $tenant['status'] === 'cancelled') {
+            echo json_encode(['success'=>false,'message'=>'المستأجر غير موجود أو ملغى'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        $sq = $conn->query("SELECT skey,sval FROM acc_settings WHERE tenant_id=$btid AND skey IN ('company_name','company_logo','primary_color','company_phone','company_email','company_address','cr_number','vat_number')");
+        $s = [];
+        while ($sr = $sq->fetch_assoc()) $s[$sr['skey']] = $sr['sval'];
+        echo json_encode([
+            'success'        => true,
+            'tenant_id'      => $btid,
+            'slug'           => $tenant['slug'],
+            'company_name'   => $s['company_name']   ?? $tenant['name'],
+            'primary_color'  => $s['primary_color']  ?? $tenant['primary_color'] ?? '#c5a059',
+            'logo_url'       => $s['company_logo']   ?? $tenant['logo_url'] ?? null,
+            'company_phone'  => $s['company_phone']  ?? '',
+            'company_email'  => $s['company_email']  ?? '',
+            'company_address'=> $s['company_address'] ?? '',
+            'cr_number'      => $s['cr_number']      ?? '',
+            'vat_number'     => $s['vat_number']     ?? '',
+        ], JSON_UNESCAPED_UNICODE);
         break;
     }
 
