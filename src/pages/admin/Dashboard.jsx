@@ -418,6 +418,7 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
 
 // ─── القائمة الجانبية الثابتة (تنقّل موحّد بنفس هوية سماك) ────────────────────
 function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLeads, dbUser, onLogout, isOpen, onClose, companyName }) {
+    const { branding } = useContext(AppContext);
     const [openGroups, setOpenGroups] = useState({});
     const go = (tool) => {
         if (tool.isExternal)  window.open(tool.path, '_blank');
@@ -494,6 +495,40 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
                             <p className="text-[10px] font-bold text-brand-300">{dbUser?.role === 'admin' ? 'مدير النظام' : (dbUser?.job || 'موظف')}</p>
                         </div>
                     </div>
+                    {/* بطاقة الباقة */}
+                    {branding?.plan && (
+                        <button
+                            onClick={() => { setActiveTab('subscription'); onClose?.(); }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[11px] font-bold transition-all ${
+                                branding.status === 'suspended'
+                                    ? 'bg-red-500/10 text-red-300 hover:bg-red-500/20' :
+                                branding.plan === 'trial' && (branding.days_left ?? 14) <= 7
+                                    ? 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20' :
+                                    'bg-white/5 text-brand-300 hover:bg-white/10'
+                            }`}
+                        >
+                            <div className="flex items-center gap-1.5">
+                                <Zap size={11} className="shrink-0" />
+                                <span>
+                                    {branding.plan === 'trial' ? 'تجربة مجانية' :
+                                     branding.plan === 'starter' ? 'المبتدئ' :
+                                     branding.plan === 'pro' ? 'الاحترافي' : 'المؤسسي'}
+                                </span>
+                            </div>
+                            {branding.plan === 'trial' && (branding.days_left ?? null) !== null && (
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                    (branding.days_left ?? 14) <= 3 ? 'bg-red-500/20 text-red-300' :
+                                    (branding.days_left ?? 14) <= 7 ? 'bg-amber-500/20 text-amber-300' :
+                                    'bg-white/10 text-brand-400'
+                                }`}>
+                                    {branding.days_left} يوم
+                                </span>
+                            )}
+                            {branding.plan !== 'trial' && (
+                                <ChevronRight size={11} className="opacity-40" />
+                            )}
+                        </button>
+                    )}
                     <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white rounded-xl font-bold transition-all text-sm">
                         <LogOut size={16} /> تسجيل الخروج
                     </button>

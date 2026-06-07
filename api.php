@@ -1375,11 +1375,12 @@ switch ($action) {
         }
 
         $nameEsc   = $conn->real_escape_string($company);
+        $anameEsc  = $conn->real_escape_string($adminName);   // اسم المدير (مختلف عن اسم الشركة)
         $phoneEsc  = $conn->real_escape_string($phone);
         $trialEnd  = date('Y-m-d', strtotime('+14 days'));
         $slugEsc   = $conn->real_escape_string($rawSlug);
         $conn->query("INSERT INTO tenants (slug,name,plan,owner_email,owner_name,phone,trial_ends,status)
-                      VALUES ('$slugEsc','$nameEsc','trial','$emailEsc','$nameEsc','$phoneEsc','$trialEnd','active')");
+                      VALUES ('$slugEsc','$nameEsc','trial','$emailEsc','$anameEsc','$phoneEsc','$trialEnd','active')");
         $newTid = (int)$conn->insert_id;
         if (!$newTid) {
             echo json_encode(['success'=>false,'message'=>'خطأ في إنشاء الحساب، يرجى المحاولة مرة أخرى: ' . $conn->error], JSON_UNESCAPED_UNICODE); break;
@@ -1408,7 +1409,6 @@ switch ($action) {
         // إنشاء المستخدم الأول — كلمة مروره يختارها بنفسه (must_change_password=0)
         $hash     = password_hash($password, PASSWORD_BCRYPT);
         $hashEsc  = $conn->real_escape_string($hash);
-        $anameEsc = $conn->real_escape_string($adminName);
         $conn->query("INSERT INTO users (name,email,password,role,job,phone,department,permissions,tenant_id,must_change_password)
                       VALUES ('$anameEsc','$emailEsc','$hashEsc','admin','مدير','$phoneEsc','الإدارة','[]',$newTid,0)");
         $newUid = (int)$conn->insert_id;
