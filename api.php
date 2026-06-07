@@ -1264,8 +1264,47 @@ switch ($action) {
             ($newTid,'company_phone','$phone')
             ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
 
-        acc_audit($conn, $newTid, 'tenant', $newTid, 'create', "slug=$slug", 'platform', $_clientIp, $_clientUa);
-        echo json_encode(['success'=>true,'tenant_id'=>$newTid,'slug'=>$slug,'message'=>'تم إنشاء المستأجر بنجاح'], JSON_UNESCAPED_UNICODE);
+        // ─ إنشاء المستخدم الأول (مدير المنشأة) ─────────────────────────────
+        $tempPass   = substr(str_shuffle('ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#'), 0, 12);
+        $tempHash   = password_hash($tempPass, PASSWORD_BCRYPT);
+        $nameEsc    = $conn->real_escape_string($oName);
+        $emailEsc   = $conn->real_escape_string($oEmail);
+        $hashEsc    = $conn->real_escape_string($tempHash);
+        $conn->query("INSERT INTO users (name,email,password,role,job,phone,department,permissions,tenant_id)
+                      VALUES ('$nameEsc','$emailEsc','$hashEsc','admin','مدير','$phone','الإدارة','[]',$newTid)");
+        $newUserId = $conn->insert_id;
+
+        // ─ إرسال بيانات الدخول (إيميل + واتساب إن أمكن) ─────────────────────
+        $portalUrl  = 'https://semak.sa/login';
+        $inviteHtml = email_template(
+            'مرحباً بك في نظام ' . htmlspecialchars($name) . ' 🎉',
+            'تمّ تفعيل حسابك في منصة سماك للمحاسبة العقارية.'
+            . '<br><br><b>بيانات الدخول الأولي:</b><br>'
+            . '<table style="margin:12px 0;border-collapse:collapse"><tr><td style="padding:4px 12px 4px 0;color:#64748b">البريد:</td><td><b>' . htmlspecialchars($oEmail) . '</b></td></tr>'
+            . '<tr><td style="padding:4px 12px 4px 0;color:#64748b">كلمة المرور المؤقتة:</td><td style="font-size:22px;font-weight:bold;letter-spacing:4px;direction:ltr">' . htmlspecialchars($tempPass) . '</td></tr></table>'
+            . 'يُرجى تغيير كلمة المرور بعد أول دخول.',
+            ['url' => $portalUrl, 'label' => 'دخول لوحة التحكم']
+        );
+        $emailSent = send_email($oEmail, 'مرحباً بك · نظام ' . $name, $inviteHtml);
+        $waSent    = false;
+        if ($phone) {
+            $normPhone = preg_replace('/\D/', '', $phone);
+            $normPhone = ltrim($normPhone, '0');
+            if (substr($normPhone, 0, 3) !== '966') $normPhone = '966' . $normPhone;
+            $waSent = wa_send_text($normPhone,
+                "🎉 مرحباً {$oName}!\nتمّ تفعيل حسابك في نظام {$name}.\n\n📧 البريد: {$oEmail}\n🔑 كلمة المرور: {$tempPass}\n\nيُرجى الدخول وتغييرها:\n{$portalUrl}");
+        }
+
+        acc_audit($conn, $newTid, 'tenant', $newTid, 'create', "slug=$slug | user#$newUserId", 'platform', $_clientIp, $_clientUa);
+        echo json_encode([
+            'success'    => true,
+            'tenant_id'  => $newTid,
+            'user_id'    => $newUserId,
+            'slug'       => $slug,
+            'email_sent' => !empty($emailSent['ok']),
+            'wa_sent'    => $waSent,
+            'message'    => 'تم إنشاء المستأجر والمستخدم الأول بنجاح',
+        ], JSON_UNESCAPED_UNICODE);
         break;
     }
 

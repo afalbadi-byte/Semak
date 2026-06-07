@@ -127,8 +127,9 @@ const TenantRow = ({ t, onClick }) => (
 // ─── Create Tenant Modal ──────────────────────────────────────────────────
 function CreateTenantModal({ onClose, onCreated }) {
   const [form, setForm]     = useState({ name: '', slug: '', owner_name: '', owner_email: '', phone: '', plan: 'trial', notes: '' });
-  const [saving, setSaving] = useState(false);
-  const [err,    setErr]    = useState('');
+  const [saving,  setSaving]  = useState(false);
+  const [err,     setErr]     = useState('');
+  const [success, setSuccess] = useState(null); // result after creation
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -145,11 +146,36 @@ function CreateTenantModal({ onClose, onCreated }) {
     setSaving(true);
     try {
       const r = await platApi('platform_tenant_create', form);
-      if (r.success) { onCreated(r); }
+      if (r.success) { setSuccess(r); }
       else setErr(r.message || 'Error');
     } catch { setErr('Network error'); }
     finally { setSaving(false); }
   };
+
+  // show success screen
+  if (success) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl p-8 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+            <Check size={28} className="text-emerald-400" />
+          </div>
+          <h3 className="font-black text-white text-lg mb-1">Tenant Created!</h3>
+          <p className="text-slate-400 text-sm mb-4">{success.message}</p>
+          <div className="bg-slate-950 rounded-xl p-4 text-left space-y-1.5 mb-6">
+            <div className="flex justify-between text-sm"><span className="text-slate-500">Tenant ID</span><span className="text-white font-bold">#{success.tenant_id}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-500">Slug</span><code className="text-[#c5a059]">{success.slug}</code></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-500">Email sent</span><span className={success.email_sent ? 'text-emerald-400' : 'text-slate-500'}>{success.email_sent ? '✓ Sent' : '— (SMTP not configured)'}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-500">WhatsApp</span><span className={success.wa_sent ? 'text-emerald-400' : 'text-slate-500'}>{success.wa_sent ? '✓ Sent' : '— (no phone / WA error)'}</span></div>
+          </div>
+          <button onClick={() => { onCreated(success); }}
+            className="w-full py-3 bg-[#c5a059] hover:bg-[#b8913f] text-slate-950 font-black rounded-xl transition">
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
