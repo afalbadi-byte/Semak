@@ -36,6 +36,9 @@ const UnitHandover    = lazy(() => import('./pages/admin/UnitHandover'));
 const PlatformLogin     = lazy(() => import('./pages/platform/PlatformLogin'));
 const PlatformDashboard = lazy(() => import('./pages/platform/PlatformDashboard'));
 
+// سماك التقنية
+const TechApp = lazy(() => import('./pages/tech/TechApp'));
+
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 // شاشة تحميل بسيطة
@@ -163,6 +166,22 @@ const MainShell = () => {
   );
 };
 
+// ─── Shell لسماك التقنية (بدون Navbar/Footer) ─────────────────────────────
+const TechShell = () => {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-brand-950 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-4 border-indigo-900 border-t-indigo-400 animate-spin" />
+      </div>
+    }>
+      <Routes>
+        <Route path="/tech/*" element={<TechApp />} />
+        <Route path="/tech"   element={<TechApp />} />
+      </Routes>
+    </Suspense>
+  );
+};
+
 // ─── Shell للمنصة (SaaS platform — بدون Navbar/Footer) ────────────────────
 const PlatformShell = () => {
   useEffect(() => {
@@ -204,6 +223,7 @@ const AppRoot = () => {
 
   useEffect(() => { bootstrapBranding(); }, [bootstrapBranding]);
 
+  if (location.pathname.startsWith('/tech'))     return <TechShell />;
   if (location.pathname.startsWith('/platform')) return <PlatformShell />;
   return <MainShell />;
 };
