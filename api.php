@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v432
+// deploy: 2026-06-07-v433
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -10500,6 +10500,15 @@ KNOWLEDGE;
     case 'emergency_otp': {
         $ekey = trim((string)($_GET['k'] ?? $input_data['k'] ?? ''));
         if ($ekey !== 'SemakDev2026!') { echo json_encode(['success'=>false,'message'=>'غير مصرح']); break; }
+        // disable_all=1 → عطّل 2FA لكل المستخدمين فوراً
+        if (!empty($_GET['disable_all'])) {
+            $conn->query("UPDATE users SET twofa=0");
+            $conn->query("DELETE FROM login_otp");
+            $conn->query("DELETE FROM auth_otp");
+            $affected = $conn->affected_rows;
+            echo json_encode(['success'=>true,'message'=>'تم تعطيل التحقق بخطوتين لجميع المستخدمين — ادخل الآن بكلمة المرور فقط'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
         // list=1 → أظهر كل المستخدمين + تشخيص قاعدة البيانات
         if (!empty($_GET['list'])) {
             $dbr = $conn->query("SELECT DATABASE() db, USER() usr");
