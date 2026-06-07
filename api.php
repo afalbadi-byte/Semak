@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v434
+// deploy: 2026-06-07-v435
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -540,6 +540,78 @@ $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL 
 $conn->query("ALTER TABLE users ADD INDEX    IF NOT EXISTS idx_user_tenant (tenant_id)");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (3)");
 } // end DDL v3
+
+if ($__sv < 4) {
+// ─── v4: بوابة التقنية — جداول sw_* ──────────────────────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS sw_clients (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(255) NOT NULL,
+    company    VARCHAR(255),
+    email      VARCHAR(255),
+    phone      VARCHAR(30),
+    notes      TEXT,
+    status     VARCHAR(20) DEFAULT 'prospect',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("CREATE TABLE IF NOT EXISTS sw_tickets (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    client_id   INT,
+    client_name VARCHAR(255),
+    subject     VARCHAR(500) NOT NULL,
+    body        TEXT,
+    status      VARCHAR(30) DEFAULT 'open',
+    priority    VARCHAR(20) DEFAULT 'medium',
+    assigned_to INT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_st_client (client_id),
+    INDEX idx_st_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("CREATE TABLE IF NOT EXISTS sw_ticket_replies (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    ticket_id   INT NOT NULL,
+    user_id     INT,
+    user_name   VARCHAR(255),
+    body        TEXT NOT NULL,
+    is_internal TINYINT(1) DEFAULT 0,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_str_ticket (ticket_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("CREATE TABLE IF NOT EXISTS sw_products (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    name          VARCHAR(255) NOT NULL,
+    type          VARCHAR(50) DEFAULT 'subscription',
+    price         DECIMAL(15,2) DEFAULT 0,
+    billing_cycle VARCHAR(30) DEFAULT 'yearly',
+    description   TEXT,
+    active        TINYINT(1) DEFAULT 1,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("CREATE TABLE IF NOT EXISTS sw_invoices (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    client_id   INT,
+    client_name VARCHAR(255),
+    product_id  INT,
+    product_name VARCHAR(255),
+    invoice_no  VARCHAR(50),
+    amount      DECIMAL(15,2) DEFAULT 0,
+    status      VARCHAR(20) DEFAULT 'draft',
+    issue_date  DATE,
+    due_date    DATE,
+    paid_date   DATE,
+    notes       TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_si_client (client_id),
+    INDEX idx_si_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (4)");
+} // end DDL v4
 
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
@@ -10514,6 +10586,189 @@ KNOWLEDGE;
             echo json_encode(['success'=>true,'message'=>'تم الحذف'], JSON_UNESCAPED_UNICODE);
         }
         break;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // بوابة التقنية — sw_* endpoints
+    // ═══════════════════════════════════════════════════════════════════════
+
+    case 'sw_overview': {
+        $clients_total  = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_clients")) ? $r->fetch_assoc()['c'] : 0);
+        $clients_active = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_clients WHERE status='active'")) ? $r->fetch_assoc()['c'] : 0);
+        $tickets_open   = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_tickets WHERE status IN ('open','in_progress')")) ? $r->fetch_assoc()['c'] : 0);
+        $tickets_crit   = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_tickets WHERE status='open' AND priority='critical'")) ? $r->fetch_assoc()['c'] : 0);
+        $now = date('Y-m');
+        $rev_mtd = 0;
+        $rr = $conn->query("SELECT SUM(amount) s FROM sw_invoices WHERE status='paid' AND DATE_FORMAT(paid_date,'%Y-%m')='$now'");
+        if ($rr && $row = $rr->fetch_assoc()) $rev_mtd = (float)($row['s'] ?? 0);
+        $inv_ov = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_invoices WHERE status='overdue'")) ? $r->fetch_assoc()['c'] : 0);
+        $ov_amt = 0;
+        $ra = $conn->query("SELECT SUM(amount) s FROM sw_invoices WHERE status='overdue'");
+        if ($ra && $row = $ra->fetch_assoc()) $ov_amt = (float)($row['s'] ?? 0);
+
+        $recent_t = []; $rt = $conn->query("SELECT t.*,c.name client_name FROM sw_tickets t LEFT JOIN sw_clients c ON c.id=t.client_id ORDER BY t.id DESC LIMIT 5");
+        while ($rt && $x = $rt->fetch_assoc()) $recent_t[] = $x;
+
+        $recent_c = []; $rc = $conn->query("SELECT id,name,company,email,status,created_at FROM sw_clients ORDER BY id DESC LIMIT 5");
+        while ($rc && $x = $rc->fetch_assoc()) $recent_c[] = $x;
+
+        echo json_encode(['success'=>true,'clients_total'=>$clients_total,'clients_active'=>$clients_active,
+            'tickets_open'=>$tickets_open,'tickets_critical'=>$tickets_crit,
+            'revenue_mtd'=>$rev_mtd,'invoices_overdue'=>$inv_ov,'overdue_amount'=>$ov_amt,
+            'recent_tickets'=>$recent_t,'recent_clients'=>$recent_c], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_clients_list': {
+        $rows = []; $r = $conn->query("SELECT * FROM sw_clients ORDER BY id DESC");
+        while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'clients'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_client_save': {
+        $id      = (int)($input_data['id'] ?? 0);
+        $name    = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $company = $conn->real_escape_string(trim($input_data['company'] ?? ''));
+        $email   = $conn->real_escape_string(trim($input_data['email'] ?? ''));
+        $phone   = $conn->real_escape_string(trim($input_data['phone'] ?? ''));
+        $notes   = $conn->real_escape_string(trim($input_data['notes'] ?? ''));
+        $status  = $conn->real_escape_string($input_data['status'] ?? 'prospect');
+        if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+        if ($id > 0) {
+            $conn->query("UPDATE sw_clients SET name='$name',company='$company',email='$email',phone='$phone',notes='$notes',status='$status' WHERE id=$id");
+        } else {
+            $conn->query("INSERT INTO sw_clients (name,company,email,phone,notes,status) VALUES ('$name','$company','$email','$phone','$notes','$status')");
+            $id = $conn->insert_id;
+        }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_client_del': {
+        $id = (int)($input_data['id'] ?? 0);
+        if ($id > 0) $conn->query("DELETE FROM sw_clients WHERE id=$id");
+        echo json_encode(['success'=>true]);
+        break;
+    }
+
+    case 'sw_tickets_list': {
+        $rows = []; $r = $conn->query("SELECT t.*,c.name client_name FROM sw_tickets t LEFT JOIN sw_clients c ON c.id=t.client_id ORDER BY t.id DESC");
+        while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'tickets'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_ticket_save': {
+        $id       = (int)($input_data['id'] ?? 0);
+        $cid      = (int)($input_data['client_id'] ?? 0);
+        $subject  = $conn->real_escape_string(trim($input_data['subject'] ?? ''));
+        $body     = $conn->real_escape_string(trim($input_data['body'] ?? ''));
+        $status   = $conn->real_escape_string($input_data['status'] ?? 'open');
+        $priority = $conn->real_escape_string($input_data['priority'] ?? 'medium');
+        if (!$subject) { echo json_encode(['success'=>false,'message'=>'العنوان مطلوب']); break; }
+        // جلب اسم العميل
+        $cname = '';
+        if ($cid > 0) { $cr=$conn->query("SELECT name FROM sw_clients WHERE id=$cid LIMIT 1"); if($cr&&$cx=$cr->fetch_assoc()) $cname=$conn->real_escape_string($cx['name']); }
+        if ($id > 0) {
+            $conn->query("UPDATE sw_tickets SET client_id=$cid,client_name='$cname',subject='$subject',body='$body',status='$status',priority='$priority' WHERE id=$id");
+        } else {
+            $conn->query("INSERT INTO sw_tickets (client_id,client_name,subject,body,status,priority) VALUES ($cid,'$cname','$subject','$body','$status','$priority')");
+            $id = $conn->insert_id;
+        }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_ticket_update': {
+        $id     = (int)($input_data['id'] ?? 0);
+        $status = $conn->real_escape_string($input_data['status'] ?? '');
+        if ($id > 0 && $status) $conn->query("UPDATE sw_tickets SET status='$status',updated_at=NOW() WHERE id=$id");
+        echo json_encode(['success'=>true]);
+        break;
+    }
+
+    case 'sw_ticket_replies': {
+        $tid = (int)($_GET['ticket_id'] ?? $input_data['ticket_id'] ?? 0);
+        $rows = []; $r = $conn->query("SELECT * FROM sw_ticket_replies WHERE ticket_id=$tid ORDER BY id ASC");
+        while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'replies'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_ticket_reply': {
+        $tid  = (int)($input_data['ticket_id'] ?? 0);
+        $body = $conn->real_escape_string(trim($input_data['body'] ?? ''));
+        $uid  = (int)($_jwt_claims['uid'] ?? 0);
+        $uname = ''; if ($uid) { $ur=$conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1"); if($ur&&$ux=$ur->fetch_assoc()) $uname=$conn->real_escape_string($ux['name']); }
+        if (!$tid || !$body) { echo json_encode(['success'=>false,'message'=>'بيانات ناقصة']); break; }
+        $conn->query("INSERT INTO sw_ticket_replies (ticket_id,user_id,user_name,body) VALUES ($tid,$uid,'$uname','$body')");
+        $rid = $conn->insert_id;
+        $conn->query("UPDATE sw_tickets SET updated_at=NOW() WHERE id=$tid");
+        $reply = ['id'=>$rid,'ticket_id'=>$tid,'user_id'=>$uid,'user_name'=>$uname,'body'=>$input_data['body'],'created_at'=>date('Y-m-d H:i:s')];
+        echo json_encode(['success'=>true,'reply'=>$reply], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_products_list': {
+        $rows = []; $r = $conn->query("SELECT * FROM sw_products ORDER BY active DESC, id DESC");
+        while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'products'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_product_save': {
+        $id    = (int)($input_data['id'] ?? 0);
+        $name  = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $type  = $conn->real_escape_string($input_data['type'] ?? 'subscription');
+        $price = (float)($input_data['price'] ?? 0);
+        $cycle = $conn->real_escape_string($input_data['billing_cycle'] ?? 'yearly');
+        $desc  = $conn->real_escape_string(trim($input_data['description'] ?? ''));
+        $active= isset($input_data['active']) ? (int)$input_data['active'] : 1;
+        if ($id > 0) {
+            $conn->query("UPDATE sw_products SET name='$name',type='$type',price=$price,billing_cycle='$cycle',description='$desc',active=$active WHERE id=$id");
+        } else {
+            if (!$name) { echo json_encode(['success'=>false,'message'=>'الاسم مطلوب']); break; }
+            $conn->query("INSERT INTO sw_products (name,type,price,billing_cycle,description,active) VALUES ('$name','$type',$price,'$cycle','$desc',$active)");
+            $id = $conn->insert_id;
+        }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_invoices_list': {
+        $rows = []; $r = $conn->query("SELECT i.*,c.name client_name,p.name product_name FROM sw_invoices i LEFT JOIN sw_clients c ON c.id=i.client_id LEFT JOIN sw_products p ON p.id=i.product_id ORDER BY i.id DESC");
+        while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'invoices'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sw_invoice_save': {
+        $id     = (int)($input_data['id'] ?? 0);
+        $cid    = (int)($input_data['client_id'] ?? 0);
+        $pid    = (int)($input_data['product_id'] ?? 0);
+        $amount = (float)($input_data['amount'] ?? 0);
+        $status = $conn->real_escape_string($input_data['status'] ?? 'draft');
+        $notes  = $conn->real_escape_string(trim($input_data['notes'] ?? ''));
+        $issue  = $conn->real_escape_string($input_data['issue_date'] ?? date('Y-m-d'));
+        $due    = $conn->real_escape_string($input_data['due_date'] ?? '');
+        $paid   = $conn->real_escape_string($input_data['paid_date'] ?? '');
+        // جلب اسم العميل والمنتج
+        $cname = ''; if ($cid) { $cr=$conn->query("SELECT name FROM sw_clients WHERE id=$cid LIMIT 1"); if($cr&&$cx=$cr->fetch_assoc()) $cname=$conn->real_escape_string($cx['name']); }
+        $pname = ''; if ($pid) { $pr=$conn->query("SELECT name FROM sw_products WHERE id=$pid LIMIT 1"); if($pr&&$px=$pr->fetch_assoc()) $pname=$conn->real_escape_string($px['name']); }
+        $dueV  = $due  ? "'$due'"  : 'NULL';
+        $paidV = $paid ? "'$paid'" : 'NULL';
+        if ($id > 0) {
+            $conn->query("UPDATE sw_invoices SET client_id=$cid,client_name='$cname',product_id=$pid,product_name='$pname',amount=$amount,status='$status',issue_date='$issue',due_date=$dueV,paid_date=$paidV,notes='$notes' WHERE id=$id");
+        } else {
+            $no = 'INV-' . str_pad($conn->insert_id + 1, 4, '0', STR_PAD_LEFT);
+            $conn->query("INSERT INTO sw_invoices (client_id,client_name,product_id,product_name,amount,status,issue_date,due_date,paid_date,notes) VALUES ($cid,'$cname',$pid,'$pname',$amount,'$status','$issue',$dueV,$paidV,'$notes')");
+            $id = $conn->insert_id;
+            $no = 'INV-' . str_pad($id, 4, '0', STR_PAD_LEFT);
+            $conn->query("UPDATE sw_invoices SET invoice_no='$no' WHERE id=$id");
+        }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     default:
         http_response_code(400);

@@ -50,6 +50,12 @@ const ProductMovement   = React.lazy(() => import('./ProductMovement'));
 const ActivityLog       = React.lazy(() => import('./ActivityLog'));
 const SecuritySettings  = React.lazy(() => import('./SecuritySettings'));
 const SubscriptionPage  = React.lazy(() => import('./SubscriptionPage'));
+// ── بوابة التقنية ──────────────────────────────────────────────────────────
+const SwOverview  = React.lazy(() => import('./SwOverview'));
+const SwClients   = React.lazy(() => import('./SwClients'));
+const SwTickets   = React.lazy(() => import('./SwTickets'));
+const SwProducts  = React.lazy(() => import('./SwProducts'));
+const SwInvoices  = React.lazy(() => import('./SwInvoices'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
@@ -417,72 +423,159 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
 }
 
 // ─── القائمة الجانبية الثابتة (تنقّل موحّد بنفس هوية سماك) ────────────────────
+// ── تعريف تبويبات بوابة التقنية ──────────────────────────────────────────────
+const SW_NAV = [
+    { tabId:'sw_overview', icon:LayoutDashboard, label:'لوحة التحكم' },
+    { tabId:'sw_clients',  icon:Users,            label:'العملاء' },
+    { tabId:'sw_tickets',  icon:ClipboardCheck,   label:'تذاكر الدعم' },
+    { tabId:'sw_products', icon:Package,          label:'المنتجات' },
+    { tabId:'sw_invoices', icon:Receipt,          label:'الفواتير' },
+];
+
 function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLeads, dbUser, onLogout, isOpen, onClose, companyName }) {
     const { branding } = useContext(AppContext);
     const [openGroups, setOpenGroups] = useState({});
-    const go = (tool) => {
-        if (tool.isExternal)  window.open(tool.path, '_blank');
-        else if (tool.isLink) window.location.href = tool.path;
-        else { setActiveTab(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
+    const [switcherOpen, setSwitcherOpen] = useState(false);
+
+    const isSoftware = activeTab?.startsWith('sw_');
+
+    const go = (tabId) => {
+        setActiveTab(tabId);
         onClose && onClose();
+        setSwitcherOpen(false);
     };
+    const goTool = (tool) => {
+        if (tool.isExternal)  { window.open(tool.path, '_blank'); onClose && onClose(); }
+        else if (tool.isLink) { window.location.href = tool.path; }
+        else { go(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
+    };
+    const switchBusiness = (sw) => {
+        setSwitcherOpen(false);
+        if (sw === 'software' && !isSoftware) go('sw_overview');
+        if (sw === 'realestate' && isSoftware) go('overview');
+    };
+
     return (
         <>
             {isOpen && (
                 <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} aria-hidden="true" />
             )}
             <aside className={`fixed lg:static inset-y-0 right-0 z-50 w-72 shrink-0 bg-brand-800 dark:bg-brand-950 text-brand-50 flex flex-col shadow-2xl border-l border-white/5 dark:border-brand-800 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
+
                 {/* الشعار */}
                 <div className="h-20 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
-                    <img src="/images/logo-light.png" alt={companyName || 'سماك العقارية'} className="h-11 w-auto object-contain" />
+                    <img src="/images/logo-light.png" alt={companyName || 'سماك'} className="h-11 w-auto object-contain" />
                     <button onClick={onClose} className="lg:hidden text-brand-200 hover:text-white p-1" aria-label="إغلاق"><X size={22} /></button>
                 </div>
-                {/* التنقّل */}
-                <nav className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-1">
+
+                {/* ── مبدّل الأعمال ──────────────────────────────────────── */}
+                <div className="px-3 pt-3 pb-2 border-b border-white/10 shrink-0 relative">
                     <button
-                        onClick={() => { setActiveTab('overview'); onClose && onClose(); }}
-                        className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-gold-500 text-white shadow-lg shadow-gold-500/20' : 'text-brand-100 hover:bg-white/5 hover:text-white'}`}
+                        onClick={() => setSwitcherOpen(o => !o)}
+                        className="w-full flex items-center gap-2.5 bg-white/10 hover:bg-white/15 px-3.5 py-2.5 rounded-xl transition-all group"
                     >
-                        <LayoutDashboard size={18} /> الرئيسية
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black shrink-0 ${isSoftware ? 'bg-indigo-500' : 'bg-gold-500'}`}>
+                            {isSoftware ? '💻' : '🏗️'}
+                        </div>
+                        <span className="flex-1 text-right text-sm font-black text-white truncate">
+                            {isSoftware ? 'سماك التقنية' : 'سماك العقارية'}
+                        </span>
+                        <ChevronDown size={14} className={`text-brand-300 group-hover:text-white transition-transform ${switcherOpen ? '' : '-rotate-90'}`} />
                     </button>
-                    {departments.map(dept => {
-                        const tools = dept.tools.filter(t => hasPermission(t.permKey));
-                        if (tools.length === 0) return null;
-                        const groupActive = tools.some(t => t.tabId === activeTab);
-                        const open = dept.id in openGroups ? openGroups[dept.id] : groupActive;
-                        const DeptIcon = dept.icon;
-                        return (
-                            <div key={dept.id} className="pt-1.5">
+
+                    {switcherOpen && (
+                        <div className="absolute right-3 left-3 top-full mt-1 bg-brand-900 dark:bg-brand-950 rounded-xl border border-white/10 overflow-hidden shadow-2xl z-10">
+                            {[
+                                { id:'realestate', emoji:'🏗️', label:'سماك العقارية', color:'bg-gold-500' },
+                                { id:'software',   emoji:'💻', label:'سماك التقنية',  color:'bg-indigo-500' },
+                            ].map(b => {
+                                const isActive = b.id === (isSoftware ? 'software' : 'realestate');
+                                return (
+                                    <button
+                                        key={b.id}
+                                        onClick={() => switchBusiness(b.id)}
+                                        className={`w-full flex items-center gap-2.5 px-3.5 py-3 text-sm font-bold transition-all ${isActive ? 'bg-white/10 text-white' : 'text-brand-200 hover:bg-white/5 hover:text-white'}`}
+                                    >
+                                        <div className={`w-7 h-7 rounded-lg ${b.color} flex items-center justify-center text-sm shrink-0`}>{b.emoji}</div>
+                                        <span className="flex-1 text-right">{b.label}</span>
+                                        {isActive && <CheckCircle2 size={14} className={b.id === 'software' ? 'text-indigo-400' : 'text-gold-400'} />}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── التنقّل ──────────────────────────────────────────────── */}
+                <nav className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-1">
+
+                {isSoftware ? (
+                    // ── قائمة بوابة التقنية ──────────────────────────────
+                    <>
+                        <p className="px-3 py-1 text-[10px] font-black tracking-widest text-brand-400 uppercase mb-1">بوابة التقنية</p>
+                        {SW_NAV.map(item => {
+                            const Icon = item.icon;
+                            const isActive = activeTab === item.tabId;
+                            return (
                                 <button
-                                    onClick={() => setOpenGroups(g => ({ ...g, [dept.id]: !open }))}
-                                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-black tracking-wide transition-colors ${groupActive ? 'text-gold-300' : 'text-brand-300 hover:text-brand-100'}`}
+                                    key={item.tabId}
+                                    onClick={() => go(item.tabId)}
+                                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-bold text-sm transition-all ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-brand-100 hover:bg-white/5 hover:text-white'}`}
                                 >
-                                    <DeptIcon size={15} className="shrink-0" />
-                                    <span className="flex-1 text-right truncate">{dept.label}</span>
-                                    <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                                    <Icon size={18} className="shrink-0" /> {item.label}
                                 </button>
-                                {open && (
-                                    <div className="mt-0.5 space-y-0.5 pr-2.5">
-                                        {tools.map(tool => {
-                                            const ToolIcon = tool.icon;
-                                            const isActive = tool.tabId === activeTab;
-                                            return (
-                                                <button
-                                                    key={tool.id}
-                                                    onClick={() => go(tool)}
-                                                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-bold transition-all ${isActive ? 'bg-gold-500 text-white shadow-md shadow-gold-500/20' : 'text-brand-200 hover:bg-white/5 hover:text-white'}`}
-                                                >
-                                                    <ToolIcon size={16} className="shrink-0 opacity-90" />
-                                                    <span className="flex-1 text-right truncate">{tool.label}</span>
-                                                    {(tool.isExternal || tool.isLink) && <ExternalLink size={12} className="opacity-50 shrink-0" />}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
+                    </>
+                ) : (
+                    // ── قائمة العقارية ───────────────────────────────────
+                    <>
+                        <button
+                            onClick={() => go('overview')}
+                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-gold-500 text-white shadow-lg shadow-gold-500/20' : 'text-brand-100 hover:bg-white/5 hover:text-white'}`}
+                        >
+                            <LayoutDashboard size={18} /> الرئيسية
+                        </button>
+                        {departments.map(dept => {
+                            const tools = dept.tools.filter(t => hasPermission(t.permKey));
+                            if (tools.length === 0) return null;
+                            const groupActive = tools.some(t => t.tabId === activeTab);
+                            const open = dept.id in openGroups ? openGroups[dept.id] : groupActive;
+                            const DeptIcon = dept.icon;
+                            return (
+                                <div key={dept.id} className="pt-1.5">
+                                    <button
+                                        onClick={() => setOpenGroups(g => ({ ...g, [dept.id]: !open }))}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-black tracking-wide transition-colors ${groupActive ? 'text-gold-300' : 'text-brand-300 hover:text-brand-100'}`}
+                                    >
+                                        <DeptIcon size={15} className="shrink-0" />
+                                        <span className="flex-1 text-right truncate">{dept.label}</span>
+                                        <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                                    </button>
+                                    {open && (
+                                        <div className="mt-0.5 space-y-0.5 pr-2.5">
+                                            {tools.map(tool => {
+                                                const ToolIcon = tool.icon;
+                                                const isActive = tool.tabId === activeTab;
+                                                return (
+                                                    <button
+                                                        key={tool.id}
+                                                        onClick={() => goTool(tool)}
+                                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-bold transition-all ${isActive ? 'bg-gold-500 text-white shadow-md shadow-gold-500/20' : 'text-brand-200 hover:bg-white/5 hover:text-white'}`}
+                                                    >
+                                                        <ToolIcon size={16} className="shrink-0 opacity-90" />
+                                                        <span className="flex-1 text-right truncate">{tool.label}</span>
+                                                        {(tool.isExternal || tool.isLink) && <ExternalLink size={12} className="opacity-50 shrink-0" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </>
+                )}
                 </nav>
                 {/* المستخدم + خروج */}
                 <div className="p-3 border-t border-white/10 shrink-0 space-y-2">
@@ -1125,6 +1218,9 @@ function DashboardInner({ onLogout }) {
         work_cycles:'أوامر ومراحل العمل', users:'إدارة الفريق',
         invoices:'الفواتير', purchases:'فواتير الشراء', treasury:'الخزاين', reports:'التقارير المالية',
         quotations:'عروض الأسعار', expenses:'المصروفات', cheques:'الشيكات',
+        // بوابة التقنية
+        sw_overview:'لوحة التقنية', sw_clients:'عملاء التقنية', sw_tickets:'تذاكر الدعم',
+        sw_products:'المنتجات', sw_invoices:'فواتير التقنية',
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
         rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
         ledger:'الدفترة المستقلة', accounting:'دفتر المحاسبة (دفترة)', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
@@ -1212,14 +1308,14 @@ function DashboardInner({ onLogout }) {
             <main className="flex-1 overflow-y-auto bg-transparent custom-scrollbar">
 
                 {/* ─── شريط التنقل ───────────────────────────────────────── */}
-                {activeTab !== 'overview' && (
+                {activeTab !== 'overview' && activeTab !== 'sw_overview' && (
                     <div className="sticky top-0 z-20 bg-white/95 dark:bg-brand-900/95 backdrop-blur px-4 md:px-8 py-3 border-b border-brand-100/70 dark:border-brand-700 flex items-center justify-between gap-3">
                         <button
-                            onClick={() => setActiveTab('overview')}
-                            className="flex items-center gap-2 text-sm font-bold text-brand-800 dark:text-brand-100 hover:text-gold-600 dark:hover:text-gold-400 transition bg-brand-50 dark:bg-brand-800 hover:bg-gold-50 dark:hover:bg-brand-700 border border-brand-100 dark:border-brand-700 hover:border-gold-400 px-3 md:px-4 py-2 rounded-xl"
+                            onClick={() => setActiveTab(activeTab?.startsWith('sw_') ? 'sw_overview' : 'overview')}
+                            className={`flex items-center gap-2 text-sm font-bold transition border px-3 md:px-4 py-2 rounded-xl ${activeTab?.startsWith('sw_') ? 'text-indigo-700 dark:text-indigo-300 hover:text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 border-indigo-100 dark:border-indigo-500/20 hover:border-indigo-400' : 'text-brand-800 dark:text-brand-100 hover:text-gold-600 dark:hover:text-gold-400 bg-brand-50 dark:bg-brand-800 hover:bg-gold-50 dark:hover:bg-brand-700 border-brand-100 dark:border-brand-700 hover:border-gold-400'}`}
                         >
                             <ArrowLeft size={16}/>
-                            <span className="hidden sm:inline">الرئيسية</span>
+                            <span className="hidden sm:inline">{activeTab?.startsWith('sw_') ? 'لوحة التقنية' : 'الرئيسية'}</span>
                             <span className="sm:hidden">رجوع</span>
                         </button>
                         <h2 className="text-sm md:text-base font-black text-brand-800 dark:text-brand-50 truncate">{TAB_LABELS[activeTab]}</h2>
@@ -1562,6 +1658,12 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
                 {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
                 {activeTab === 'subscription'&& hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SubscriptionPage /></div>}
+                {/* ── بوابة التقنية ─────────────────────────────────────── */}
+                {activeTab === 'sw_overview'  && <SwOverview  onNavigate={setActiveTab} />}
+                {activeTab === 'sw_clients'   && <SwClients   showToast={showToast} />}
+                {activeTab === 'sw_tickets'   && <SwTickets   showToast={showToast} />}
+                {activeTab === 'sw_products'  && <SwProducts  showToast={showToast} />}
+                {activeTab === 'sw_invoices'  && <SwInvoices  showToast={showToast} />}
                 </Suspense>
                 </ErrorBoundary>
 
