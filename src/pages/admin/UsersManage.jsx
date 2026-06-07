@@ -5,7 +5,7 @@ import {
     Building, Building2, Edit2, TrendingUp, Bot, MessageCircle, FileWarning
 } from 'lucide-react';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
 
 // قائمة كل أدوات النظام للصلاحيات
 const APP_MODULES = [
@@ -31,7 +31,7 @@ export default function UsersManage({ showToast }) {
     const [loading, setLoading] = useState(false);
     
     const [showModal, setShowModal] = useState(false);
-    const [modalMode, setModalMode] = useState('add'); 
+    const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'invite'
     const [saving, setSaving] = useState(false);
     
     // 🔥 حالة التحكم بفتح نافذة الصلاحيات
@@ -49,10 +49,15 @@ export default function UsersManage({ showToast }) {
         fetchUsers();
     }, []);
 
+    const authHeaders = () => {
+        const t = getAdminToken();
+        return { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) };
+    };
+
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}?action=get_users`);
+            const res = await fetch(`${API_URL}?action=get_users`, { headers: authHeaders() });
             const data = await res.json();
             if (data.success) { setUsersList(data.data); }
         } catch (e) {
@@ -62,7 +67,12 @@ export default function UsersManage({ showToast }) {
 
     const openAddModal = () => {
         setModalMode('add');
-        setFormData({ id: null, name: '', email: '', password: '', role: 'employee' });
+        setFormData({ id: null, name: '', email: '', password: '', role: 'employee', job: '', phone: '' });
+        setShowModal(true);
+    };
+    const openInviteModal = () => {
+        setModalMode('invite');
+        setFormData({ id: null, name: '', email: '', password: '', role: 'employee', job: '', phone: '' });
         setShowModal(true);
     };
 
@@ -81,25 +91,29 @@ export default function UsersManage({ showToast }) {
     const handleSaveUser = async (e) => {
         e.preventDefault();
         setSaving(true);
-        const action = modalMode === 'add' ? 'add_user' : 'update_user';
-        
+        const isInvite = modalMode === 'invite';
+        const action = isInvite ? 'invite_user' : modalMode === 'add' ? 'add_user' : 'update_user';
+
         try {
             const res = await fetch(`${API_URL}?action=${action}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                headers: authHeaders(),
+                body: JSON.stringify(formData),
             });
             const data = await res.json();
-            
+
             if (data.success) {
-                if(showToast) showToast("تم بنجاح", modalMode === 'add' ? "تم إضافة الموظف الجديد ✅" : "تم تحديث بيانات الموظف بنجاح ✅");
+                const msg = isInvite
+                    ? `تمّت الدعوة — ${data.email_sent ? 'أُرسل بريد الدعوة ✅' : 'لم يُرسل البريد — تحقق من إعدادات SMTP'}`
+                    : modalMode === 'add' ? 'تم إضافة الموظف ✅' : 'تم التحديث ✅';
+                if(showToast) showToast('تم بنجاح', msg);
                 setShowModal(false);
-                fetchUsers(); 
+                fetchUsers();
             } else {
-                if(showToast) showToast("خطأ", data.message || "فشل العملية", "error");
+                if(showToast) showToast('خطأ', data.message || 'فشل العملية', 'error');
             }
-        } catch (e) {
-            if(showToast) showToast("خطأ", "مشكلة في الاتصال بالسيرفر", "error");
+        } catch {
+            if(showToast) showToast('خطأ', 'مشكلة في الاتصال بالسيرفر', 'error');
         } finally { setSaving(false); }
     };
 
@@ -108,15 +122,15 @@ export default function UsersManage({ showToast }) {
         try {
             const res = await fetch(`${API_URL}?action=delete_user`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id })
+                headers: authHeaders(),
+                body: JSON.stringify({ id }),
             });
             const data = await res.json();
             if(data.success) {
-                if(showToast) showToast("تم الحذف", `تم حذف ${name} من النظام`);
+                if(showToast) showToast('تم الحذف', `تم حذف ${name} من النظام`);
                 fetchUsers();
             }
-        } catch (e) {}
+        } catch {}
     };
 
     // 🔥 دالة حفظ الصلاحيات للموظف
@@ -125,8 +139,8 @@ export default function UsersManage({ showToast }) {
         try {
             const res = await fetch(`${API_URL}?action=update_permissions`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: userId, permissions: newPerms })
+                headers: authHeaders(),
+                body: JSON.stringify({ user_id: userId, permissions: newPerms }),
             });
             const data = await res.json();
             if (data.success) {
@@ -150,15 +164,21 @@ export default function UsersManage({ showToast }) {
                         <button onClick={() => setShowModal(false)} className="absolute top-6 left-6 text-slate-400 dark:text-brand-400 hover:text-red-500 transition"><X size={24} /></button>
 
                         <div className="flex items-center gap-4 mb-8">
-                            <div className={`w-14 h-14 rounded-full flex items-center justify-center ${modalMode === 'add' ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' : 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'}`}>
-                                {modalMode === 'add' ? <UserPlus size={28} /> : <Edit size={28} />}
+                            <div className={`w-14 h-14 rounded-full flex items-center justify-center ${
+                                modalMode === 'invite' ? 'bg-green-50 dark:bg-green-500/15 text-green-600 dark:text-green-300' :
+                                modalMode === 'add'    ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' :
+                                                         'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'
+                            }`}>
+                                {modalMode === 'invite' ? <Mail size={28} /> : modalMode === 'add' ? <UserPlus size={28} /> : <Edit size={28} />}
                             </div>
                             <div>
                                 <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100">
-                                    {modalMode === 'add' ? 'إضافة موظف جديد' : 'تعديل بيانات الموظف'}
+                                    {modalMode === 'invite' ? 'دعوة موظف بالبريد' : modalMode === 'add' ? 'إضافة موظف جديد' : 'تعديل بيانات الموظف'}
                                 </h3>
                                 <p className="text-sm font-bold text-slate-500 dark:text-brand-400">
-                                    {modalMode === 'add' ? 'إنشاء حساب للموظف' : 'تحديث الصلاحيات وكلمة المرور'}
+                                    {modalMode === 'invite' ? 'يُنشئ حساباً ويُرسل بريد دعوة بكلمة مرور مؤقتة' :
+                                     modalMode === 'add'    ? 'إنشاء حساب مع تعيين كلمة المرور مباشرة' :
+                                                              'تحديث الصلاحيات وكلمة المرور'}
                                 </p>
                             </div>
                         </div>
@@ -178,13 +198,21 @@ export default function UsersManage({ showToast }) {
                                     <Mail className="absolute right-4 top-3.5 text-slate-400 dark:text-brand-500" size={20} />
                                 </div>
                             </div>
+                            {modalMode !== 'invite' && (
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 dark:text-brand-300 mb-2">كلمة المرور</label>
                                 <div className="relative">
-                                    <input type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required={modalMode === 'add'} placeholder={modalMode === 'add' ? "كلمة مرور قوية..." : "اكتب باسوورد جديد، أو اتركه فارغاً"} className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 text-brand-800 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl pr-12 pl-4 py-3 outline-none focus:border-indigo-500 font-bold transition" />
+                                    <input type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required={modalMode === 'add'} placeholder={modalMode === 'add' ? "كلمة مرور قوية (6+ أحرف)" : "اكتب باسوورد جديد، أو اتركه فارغاً"} className="w-full bg-slate-50 dark:bg-brand-900 border border-slate-200 dark:border-brand-700 text-brand-800 dark:text-brand-50 dark:placeholder-brand-500 rounded-xl pr-12 pl-4 py-3 outline-none focus:border-indigo-500 font-bold transition" />
                                     <Key className="absolute right-4 top-3.5 text-slate-400 dark:text-brand-500" size={20} />
                                 </div>
                             </div>
+                            )}
+                            {modalMode === 'invite' && (
+                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-3 text-xs text-green-700 dark:text-green-400 font-bold flex items-start gap-2">
+                                <Mail size={14} className="shrink-0 mt-0.5" />
+                                <span>سيتم إنشاء كلمة مرور مؤقتة تلقائياً وإرسالها بالبريد الإلكتروني. يُطلب من الموظف تغييرها عند أول دخول.</span>
+                            </div>
+                            )}
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 dark:text-brand-300 mb-2">الصلاحية والدور</label>
                                 <div className="grid grid-cols-2 gap-4">
@@ -200,8 +228,12 @@ export default function UsersManage({ showToast }) {
                                     </label>
                                 </div>
                             </div>
-                            <button type="submit" disabled={saving} className="w-full bg-brand-800 text-white py-4 rounded-xl font-black text-lg hover:bg-blue-900 transition mt-4 flex justify-center gap-2 shadow-lg">
-                                {saving ? <RefreshCw className="animate-spin" size={24} /> : (modalMode === 'add' ? 'اعتماد وإضافة الموظف' : 'حفظ التعديلات')}
+                            <button type="submit" disabled={saving} className={`w-full py-4 rounded-xl font-black text-lg transition mt-4 flex justify-center gap-2 shadow-lg ${
+                                modalMode === 'invite' ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-brand-800 text-white hover:bg-blue-900'
+                            }`}>
+                                {saving ? <RefreshCw className="animate-spin" size={24} /> :
+                                 modalMode === 'invite' ? <><Mail size={20} /> إرسال الدعوة</> :
+                                 modalMode === 'add'    ? 'اعتماد وإضافة الموظف' : 'حفظ التعديلات'}
                             </button>
                         </form>
                     </div>
@@ -213,9 +245,14 @@ export default function UsersManage({ showToast }) {
                     <h1 className="text-2xl font-black text-brand-800 dark:text-brand-100 flex items-center gap-3"><Users className="text-indigo-500" size={28} /> إدارة الموظفين والصلاحيات</h1>
                     <p className="text-slate-500 dark:text-brand-400 font-bold text-sm mt-1">إضافة موظفين، تعيين كلمات المرور، وإدارة الوصول للنظام</p>
                 </div>
-                <button onClick={openAddModal} className="w-full md:w-auto bg-gold-500 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-yellow-600 transition shadow-lg">
-                    <UserPlus size={20} /> إضافة موظف جديد
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                    <button onClick={openInviteModal} className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition shadow">
+                        <Mail size={18} /> دعوة بالبريد
+                    </button>
+                    <button onClick={openAddModal} className="bg-gold-500 hover:bg-yellow-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition shadow-lg">
+                        <UserPlus size={18} /> إضافة مباشرة
+                    </button>
+                </div>
             </div>
 
             {loading ? (
@@ -241,7 +278,12 @@ export default function UsersManage({ showToast }) {
                                         <span className={`px-3 py-1 text-xs font-black rounded-lg ${usr.role === 'admin' ? 'bg-orange-100 dark:bg-amber-500/15 text-orange-800 dark:text-amber-300' : 'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-800 dark:text-indigo-300'}`}>
                                             {usr.role === 'admin' ? 'إدارة عليا' : 'موظف / مهندس'}
                                         </span>
-                                        <p className="text-xs font-bold text-slate-400 dark:text-brand-400 mt-3 truncate" title={usr.email}>{usr.email}</p>
+                                        <p className="text-xs font-bold text-slate-400 dark:text-brand-400 mt-1.5 truncate" title={usr.email}>{usr.email}</p>
+                                        {parseInt(usr.must_change_password, 10) === 1 && (
+                                            <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full">
+                                                <Key size={9} /> في انتظار تغيير كلمة المرور
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 

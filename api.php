@@ -2695,52 +2695,116 @@ switch ($action) {
     }
 
     case 'get_users':
-        $res   = $conn->query("SELECT id, name, email, role, job, phone, department, permissions FROM users ORDER BY id DESC");
+        // ─ عزل المستأجرين: كل مستأجر يرى موظفيه فقط ─────────────────────
+        $tid  = $_jwt_tid ?? 1;
+        $res  = $conn->query("SELECT id, name, email, role, job, phone, department, permissions, must_change_password FROM users WHERE tenant_id=$tid ORDER BY id DESC");
         $users = [];
-        if ($res) { while ($row = $res->fetch_assoc()) { $users[] = $row; } }
+        if ($res) { while ($row = $res->fetch_assoc()) { $row['id']=(int)$row['id']; $users[] = $row; } }
         echo json_encode(["success" => true, "data" => $users]);
         break;
 
-    case 'add_user':
-        $name  = $conn->real_escape_string($input_data['name'] ?? '');
-        $email = $conn->real_escape_string($input_data['email'] ?? '');
-        $role  = $conn->real_escape_string($input_data['role'] ?? 'employee');
-        // تشفير كلمة المرور — لا تُخزَّن أبدًا كنص صريح
-        $rawPw  = (string)($input_data['password'] ?? '');
+    case 'add_user': {
+        $tid   = $_jwt_tid ?? 1;
+        $name  = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $email = strtolower(trim($conn->real_escape_string($input_data['email'] ?? '')));
+        $role  = in_array($input_data['role']??'employee',['admin','employee','tech']) ? $input_data['role'] : 'employee';
+        $job   = $conn->real_escape_string(trim($input_data['job'] ?? ''));
+        $phone = $conn->real_escape_string(trim($input_data['phone'] ?? ''));
+        $rawPw = (string)($input_data['password'] ?? '');
+        if (!$name || !$email || strlen($rawPw) < 6) {
+            echo json_encode(['success'=>false,'message'=>'الاسم والبريد وكلمة المرور (6+ أحرف) مطلوبة'], JSON_UNESCAPED_UNICODE); break;
+        }
+        $check = $conn->query("SELECT id FROM users WHERE email='$email' LIMIT 1");
+        if ($check && $check->num_rows > 0) { echo json_encode(['success'=>false,'message'=>'هذا البريد موجود مسبقاً'], JSON_UNESCAPED_UNICODE); break; }
         $pwHash = $conn->real_escape_string(password_hash($rawPw, PASSWORD_BCRYPT));
-        $check  = $conn->query("SELECT id FROM users WHERE email='$email'");
-        if ($check && $check->num_rows > 0) { echo json_encode(["success" => false, "message" => "هذا البريد موجود مسبقاً"]); break; }
-        $sql = "INSERT INTO users (name, email, password, role, job, phone, department, permissions) VALUES ('$name', '$email', '$pwHash', '$role', '', '', '', '[]')";
+        $sql = "INSERT INTO users (name,email,password,role,job,phone,department,permissions,tenant_id,must_change_password)
+                VALUES ('$name','$email','$pwHash','$role','$job','$phone','الإدارة','[]',$tid,0)";
         if ($conn->query($sql)) {
-            echo json_encode(["success" => true]);
+            acc_audit($conn, $tid, 'user', $conn->insert_id, 'create', "email=$email|role=$role", 'admin', $_clientIp, $_clientUa);
+            echo json_encode(['success'=>true,'id'=>(int)$conn->insert_id], JSON_UNESCAPED_UNICODE);
         } else {
-            echo json_encode(["success" => false, "message" => $conn->error]);
+            echo json_encode(['success'=>false,'message'=>$conn->error], JSON_UNESCAPED_UNICODE);
         }
         break;
+    }
 
-    case 'update_user':
+    case 'invite_user': {
+        // دعوة موظف جديد — يُنشئ الحساب ويُرسل بيانات الدخول بالبريد
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يجب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid   = $_jwt_tid ?? 1;
+        $name  = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $email = strtolower(trim($conn->real_escape_string($input_data['email'] ?? '')));
+        $role  = in_array($input_data['role']??'employee',['admin','employee','tech']) ? $input_data['role'] : 'employee';
+        $job   = $conn->real_escape_string(trim($input_data['job'] ?? ''));
+        $phone = $conn->real_escape_string(trim($input_data['phone'] ?? ''));
+        if (!$name || !$email) { echo json_encode(['success'=>false,'message'=>'الاسم والبريد مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $check = $conn->query("SELECT id FROM users WHERE email='$email' LIMIT 1");
+        if ($check && $check->num_rows > 0) { echo json_encode(['success'=>false,'message'=>'هذا البريد مستخدم مسبقاً'], JSON_UNESCAPED_UNICODE); break; }
+        $tempPass = substr(str_shuffle('ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#'), 0, 10);
+        $tempHash = $conn->real_escape_string(password_hash($tempPass, PASSWORD_BCRYPT));
+        $conn->query("INSERT INTO users (name,email,password,role,job,phone,department,permissions,tenant_id,must_change_password)
+                      VALUES ('$name','$email','$tempHash','$role','$job','$phone','الإدارة','[]',$tid,1)");
+        $newUid = (int)$conn->insert_id;
+        if (!$newUid) { echo json_encode(['success'=>false,'message'=>$conn->error], JSON_UNESCAPED_UNICODE); break; }
+        // جلب اسم الشركة
+        $cq = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=$tid AND skey='company_name' LIMIT 1");
+        $cName = $cq ? ($cq->fetch_assoc()['sval'] ?? $_tenantName) : $_tenantName;
+        // إرسال الدعوة
+        $portalUrl = 'https://semak.sa/login';
+        $html = email_template(
+            "دعوة للانضمام إلى فريق " . htmlspecialchars($cName),
+            "تمّت إضافتك كعضو في فريق <b>" . htmlspecialchars($cName) . "</b>."
+            . "<br><br><b>بيانات دخولك الأولية:</b><br>"
+            . "<table style='margin:12px 0;border-collapse:collapse'>"
+            . "<tr><td style='padding:4px 12px 4px 0;color:#64748b'>البريد:</td><td><b>" . htmlspecialchars($email) . "</b></td></tr>"
+            . "<tr><td style='padding:4px 12px 4px 0;color:#64748b'>كلمة المرور المؤقتة:</td><td style='font-size:22px;font-weight:bold;letter-spacing:4px;direction:ltr'>" . htmlspecialchars($tempPass) . "</td></tr></table>"
+            . "يُرجى تغيير كلمة المرور بعد أول دخول.",
+            ['url' => $portalUrl, 'label' => 'الدخول للوحة التحكم']
+        );
+        $emailSent = send_email($email, "دعوة للانضمام إلى " . $cName, $html);
+        $waSent = false;
+        if ($phone) {
+            $np = preg_replace('/\D/','', $phone); $np = ltrim($np,'0');
+            if (substr($np,0,3)!=='966') $np='966'.$np;
+            $waSent = wa_send_text($np, "🎉 مرحباً {$name}!\nتمّت دعوتك للانضمام إلى فريق {$cName}.\n\n📧 البريد: {$email}\n🔑 كلمة المرور المؤقتة: {$tempPass}\n\nيُرجى الدخول وتغيير كلمة المرور:\n{$portalUrl}");
+        }
+        acc_audit($conn, $tid, 'user', $newUid, 'invite', "email=$email|role=$role", 'admin', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true,'id'=>$newUid,'email_sent'=>!empty($emailSent['ok']),'wa_sent'=>$waSent,'message'=>'تمّت الدعوة بنجاح — تحقق من بريدك'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'update_user': {
+        $tid   = $_jwt_tid ?? 1;
         $id    = (int)$input_data['id'];
-        $name  = $conn->real_escape_string($input_data['name']);
-        $email = $conn->real_escape_string($input_data['email']);
-        $role  = $conn->real_escape_string($input_data['role']);
-        $sql   = "UPDATE users SET name='$name', email='$email', role='$role'";
+        $name  = $conn->real_escape_string($input_data['name'] ?? '');
+        $email = strtolower(trim($conn->real_escape_string($input_data['email'] ?? '')));
+        $role  = in_array($input_data['role']??'employee',['admin','employee','tech']) ? $input_data['role'] : 'employee';
+        $job   = $conn->real_escape_string($input_data['job'] ?? '');
+        $phone = $conn->real_escape_string($input_data['phone'] ?? '');
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $sql = "UPDATE users SET name='$name', email='$email', role='$role', job='$job', phone='$phone'";
         if (!empty($input_data['password'])) {
             $pwH = $conn->real_escape_string(password_hash((string)$input_data['password'], PASSWORD_BCRYPT));
             $sql .= ", password='$pwH'";
         }
-        $sql .= " WHERE id=$id";
+        $sql .= " WHERE id=$id AND tenant_id=$tid";  // ← حماية المستأجر
         if ($conn->query($sql)) {
-            echo json_encode(["success" => true]);
+            echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
         } else {
-            echo json_encode(["success" => false, "message" => $conn->error]);
+            echo json_encode(['success'=>false,'message'=>$conn->error], JSON_UNESCAPED_UNICODE);
         }
         break;
+    }
 
-    case 'delete_user':
-        $id = (int)$input_data['id'];
-        $conn->query("DELETE FROM users WHERE id=$id");
-        echo json_encode(["success" => true]);
+    case 'delete_user': {
+        $tid = $_jwt_tid ?? 1;
+        $id  = (int)$input_data['id'];
+        // لا نحذف — نُعطّل فقط (soft delete via role change أو flag)
+        // الحذف الفعلي مسموح لكن فقط ضمن نفس المستأجر
+        $conn->query("DELETE FROM users WHERE id=$id AND tenant_id=$tid");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     case 'change_password': {
         // تغيير كلمة المرور — يتطلب JWT، وكلمة المرور الحالية للتحقق
