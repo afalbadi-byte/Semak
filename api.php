@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v427
+// deploy: 2026-06-07-v428
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -10506,13 +10506,34 @@ KNOWLEDGE;
         $urow = $ur ? $ur->fetch_assoc() : null;
         if (!$urow) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود']); break; }
         $uid = (int)$urow['id'];
-        $or = $conn->query("SELECT code,expires_at,channel FROM login_otp WHERE user_id=$uid ORDER BY id DESC LIMIT 1");
+
+        // disable=1 → عطّل 2FA للمستخدم فوراً (يدخل بكلمة المرور فقط)
+        if (!empty($_GET['disable'])) {
+            $conn->query("UPDATE users SET twofa=0 WHERE id=$uid");
+            $conn->query("DELETE FROM login_otp WHERE user_id=$uid");
+            $conn->query("DELETE FROM trusted_devices WHERE user_id=$uid");
+            echo json_encode(['success'=>true,'message'=>'تم تعطيل التحقق بخطوتين — ادخل الآن بكلمة المرور فقط'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        // reset=1 → امسح المحاولات السابقة + أنشئ رمزاً جديداً وأرجعه
+        if (!empty($_GET['reset'])) {
+            $conn->query("DELETE FROM login_otp WHERE user_id=$uid");
+            $newCode = str_pad(random_int(0,999999),6,'0',STR_PAD_LEFT);
+            $newTk   = bin2hex(random_bytes(16));
+            $newExp  = date('Y-m-d H:i:s', time()+600);
+            $conn->query("INSERT INTO login_otp (user_id,ticket,code,channel,expires_at) VALUES ($uid,'$newTk','$newCode','email','$newExp')");
+            echo json_encode(['success'=>true,'code'=>$newCode,'ticket'=>$newTk,'expires_at'=>$newExp,'note'=>'رمز جديد — أدخله الآن'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        $or = $conn->query("SELECT code,expires_at,channel,attempts FROM login_otp WHERE user_id=$uid ORDER BY id DESC LIMIT 1");
         $otp = $or ? $or->fetch_assoc() : null;
-        if (!$otp) { echo json_encode(['success'=>false,'message'=>'لا رمز محفوظ — اطلب رمزاً جديداً من صفحة الدخول']); break; }
+        if (!$otp) { echo json_encode(['success'=>false,'message'=>'لا رمز محفوظ — استخدم reset=1']); break; }
         $expired = strtotime($otp['expires_at']) < time();
         echo json_encode(['success'=>true,'code'=>$otp['code'],'channel'=>$otp['channel'],
-            'expires_at'=>$otp['expires_at'],'expired'=>$expired,
-            'note'=>$expired?'منتهي — اطلب رمزاً جديداً':'صالح — أدخله الآن'], JSON_UNESCAPED_UNICODE);
+            'expires_at'=>$otp['expires_at'],'expired'=>$expired,'attempts'=>(int)$otp['attempts'],
+            'note'=>$expired?'منتهي — استخدم ?reset=1':'صالح — أدخله الآن'], JSON_UNESCAPED_UNICODE);
         break;
     }
     // ══ END EMERGENCY ════════════════════════════════════════════════════════
