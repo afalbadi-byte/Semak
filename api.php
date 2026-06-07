@@ -1155,6 +1155,21 @@ if ($_plat_claims) $_jwt_claims = null;
 // tenant_id: من JWT أولاً، ثم من الطلب (backward compatible)
 $_jwt_tid = isset($_jwt_claims['tid']) ? (int)$_jwt_claims['tid'] : null;
 
+// ─── إعادة تحميل إعدادات المنشأة بعد حل JWT ────────────────────────────────
+// إذا كان الـ JWT يحمل tenant_id مختلف عن 1، نُعيد تحميل الاسم واللون
+// حتى تستخدمهما email_template() و send_login_otp() بشكل صحيح.
+if ($_jwt_tid && $_jwt_tid !== 1) {
+    $__ts = $conn->query("SELECT skey,sval FROM acc_settings WHERE tenant_id=$_jwt_tid");
+    if ($__ts) {
+        $_tenantSettings = [];
+        while ($__tr = $__ts->fetch_assoc()) $_tenantSettings[$__tr['skey']] = $__tr['sval'];
+        $_tenantName  = $_tenantSettings['company_name']  ?? $_tenantName;
+        $_tenantPhone = $_tenantSettings['company_phone'] ?? $_tenantPhone;
+        $_tenantColor = $_tenantSettings['primary_color'] ?? $_tenantColor;
+    }
+    unset($__ts, $__tr);
+}
+
 switch ($action) {
 
     case 'ver':
@@ -1886,7 +1901,7 @@ switch ($action) {
         $phone = preg_replace('/\D/', '', (string)($_GET['phone'] ?? ''));
         $phone = ltrim($phone, '0');
         $pid   = (int)($_GET['party_id'] ?? 0);
-        $tid   = 1;
+        $tid   = $_jwt_tid ?? 1;
         // إيجاد الطرف
         $party = null;
         if ($pid > 0) {
@@ -1984,7 +1999,7 @@ switch ($action) {
 
     case 'activity_log': {
         $gv  = function ($k) use ($input_data) { return isset($input_data[$k]) ? trim((string)$input_data[$k]) : ''; };
-        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
 
         // ── وضع الإحصاءات ────────────────────────────────────────────────
         if (!empty($input_data['stats'])) {
@@ -2042,7 +2057,7 @@ switch ($action) {
 
     case 'audit_stats': {
         // اختصار مباشر للإحصاءات (GET مريح للـ dashboard)
-        $tid   = (int)($_GET['tenant'] ?? 1);
+        $tid   = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $today = date('Y-m-d');
         $week  = date('Y-m-d', strtotime('-7 days'));
         $month = date('Y-m-d', strtotime('-30 days'));
@@ -2062,7 +2077,7 @@ switch ($action) {
     }
 
     case 'notifications_list': {
-        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $uid = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : 0;
         $lim = min(100, max(1, (int)($input_data['limit'] ?? 30)));
         $cond = "tenant_id = $tid AND (user_id IS NULL" . ($uid ? " OR user_id = $uid" : "") . ")";
@@ -2079,7 +2094,7 @@ switch ($action) {
     }
 
     case 'notifications_unread': {
-        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $uid = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : 0;
         $cond = "tenant_id = $tid AND (user_id IS NULL" . ($uid ? " OR user_id = $uid" : "") . ") AND is_read = 0";
         $uc = $conn->query("SELECT COUNT(*) AS c FROM notifications WHERE $cond");
@@ -2089,7 +2104,7 @@ switch ($action) {
     }
 
     case 'notifications_mark_read': {
-        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $uid = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : 0;
         $cond = "tenant_id = $tid AND (user_id IS NULL" . ($uid ? " OR user_id = $uid" : "") . ")";
         if (!empty($input_data['all'])) {
@@ -2103,7 +2118,7 @@ switch ($action) {
     }
 
     case 'notify_create': {
-        $tid   = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $tid   = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $uid   = isset($input_data['user_id']) && $input_data['user_id'] !== '' ? (int)$input_data['user_id'] : null;
         $type  = $input_data['type']  ?? 'info';
         $title = $input_data['title'] ?? '';
@@ -4260,7 +4275,7 @@ switch ($action) {
 
     case 'gl_seed':
         // زرع دليل حسابات سعودي أساسي إن كان فارغًا
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $cnt = 0; $r = $conn->query("SELECT COUNT(*) c FROM acc_accounts WHERE tenant_id=$tid");
         if ($r) $cnt = (int)$r->fetch_assoc()['c'];
         if ($cnt > 0) { echo json_encode(['success'=>true,'message'=>'دليل الحسابات موجود مسبقًا','count'=>$cnt]); break; }
@@ -4300,7 +4315,7 @@ switch ($action) {
 
     case 'gl_accounts':
         // دليل الحسابات + الرصيد المحسوب من البنود (كودنا يحسب)
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $sql = "SELECT a.*,
                    COALESCE(SUM(CASE WHEN e.is_posted=1 THEN l.debit  ELSE 0 END),0) AS sum_debit,
                    COALESCE(SUM(CASE WHEN e.is_posted=1 THEN l.credit ELSE 0 END),0) AS sum_credit
@@ -4322,7 +4337,7 @@ switch ($action) {
         break;
 
     case 'gl_account_save':
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $code = $conn->real_escape_string(trim($input_data['code'] ?? ''));
         $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
@@ -4344,7 +4359,7 @@ switch ($action) {
 
     case 'gl_opening_balance_get': {
         // جلب بنود قيود الأرصدة الافتتاحية المرحّلة
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $rows = [];
         $r = $conn->query("SELECT e.id,e.entry_no,e.date,l.account_id,l.debit,l.credit,
                                   a.code AS acct_code,a.name AS acct_name,a.type AS acct_type
@@ -4458,7 +4473,7 @@ switch ($action) {
         break;
 
     case 'gl_entries':
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? '');
         $to   = $conn->real_escape_string($_GET['to'] ?? '');
         $srch = $conn->real_escape_string(trim($_GET['search'] ?? ''));
@@ -4476,7 +4491,7 @@ switch ($action) {
         break;
 
     case 'gl_entry_single':
-        $tid = (int)($_GET['tenant'] ?? 1); $eid = (int)($_GET['id'] ?? 0);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1); $eid = (int)($_GET['id'] ?? 0);
         $h = $conn->query("SELECT * FROM acc_entries WHERE id=$eid AND tenant_id=$tid LIMIT 1");
         $head = $h ? $h->fetch_assoc() : null;
         if (!$head) { echo json_encode(['success'=>false,'message'=>'القيد غير موجود']); break; }
@@ -4488,7 +4503,7 @@ switch ($action) {
 
     case 'gl_trial_balance':
         // ميزان المراجعة — يحسبه كودنا من البنود المُرحَّلة فقط (is_posted=1)
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $to  = $conn->real_escape_string($_GET['to'] ?? '');
         $dateCond = $to ? "AND e.date<='$to'" : '';
         // INNER JOIN بدل LEFT JOIN لضمان أن SUM يشمل فقط بنود القيود المُرحَّلة ضمن الفترة
@@ -4517,14 +4532,14 @@ switch ($action) {
 
     case 'gl_fix_hierarchy':
         // إعادة ربط الحسابات بآبائها عبر بادئة الكود (للحسابات القديمة)
-        $tid = (int)($_GET['tenant'] ?? $input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? $input_data['tenant_id'] ?? 1);
         $n = acc_fix_hierarchy($conn, $tid);
         echo json_encode(['success'=>true,'updated'=>$n], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'gl_entry_delete':
         // حذف قيد يدوي غير مقفل وغير مرتبط بمستند (المستندات تُعكس لا تُحذف)
-        $tid = (int)($input_data['tenant_id'] ?? $_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? $_GET['tenant'] ?? 1);
         $eid = (int)($input_data['id'] ?? $_GET['id'] ?? 0);
         if (!$eid) { echo json_encode(['success'=>false,'message'=>'معرّف القيد مطلوب']); break; }
         $h = $conn->query("SELECT * FROM acc_entries WHERE id=$eid AND tenant_id=$tid LIMIT 1");
@@ -4546,7 +4561,7 @@ switch ($action) {
 
     case 'gl_entry_reverse':
         // إنشاء قيد عكسي (يقلب المدين/الدائن) بدل حذف قيد مُرحَّل
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $eid  = (int)($input_data['id'] ?? 0);
         $date = $conn->real_escape_string($input_data['date'] ?? date('Y-m-d'));
         if (!$eid) { echo json_encode(['success'=>false,'message'=>'معرّف القيد مطلوب']); break; }
@@ -4584,7 +4599,7 @@ switch ($action) {
 
     case 'gl_ledger':
         // كشف حساب: رصيد افتتاحي قبل الفترة + حركات + رصيد جارٍ (كودنا يحسب)
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $acc  = (int)($_GET['account_id'] ?? 0);
         $from = $conn->real_escape_string($_GET['from'] ?? '');
         $to   = $conn->real_escape_string($_GET['to'] ?? '');
@@ -4616,7 +4631,7 @@ switch ($action) {
 
     case 'gl_dashboard': {
         // لوحة القيادة — مؤشرات مالية رئيسية + آخر القيود + فواتير متأخرة
-        $tid   = (int)($_GET['tenant'] ?? 1);
+        $tid   = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $today = date('Y-m-d');
         $ytdFrom = date('Y').'-01-01';
         $moFrom  = date('Y-m').'-01';
@@ -4701,7 +4716,7 @@ switch ($action) {
 
     case 'gl_income_statement':
         // قائمة الدخل — إيرادات ومصروفات للفترة (المُرحَّلة فقط)
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
         // CASE داخل SUM لضمان تصفية صحيحة حتى مع LEFT JOIN — لا تُجمع إلا الحركات المُرحَّلة ضمن الفترة
@@ -4724,7 +4739,7 @@ switch ($action) {
 
     case 'gl_income_monthly': {
         // تحليل الدخل الشهري — إيرادات ومصروفات لكل شهر في السنة
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $year = $conn->real_escape_string($_GET['year'] ?? date('Y'));
         $sql  = "SELECT DATE_FORMAT(e.date,'%Y-%m') AS mo,
                     COALESCE(SUM(CASE WHEN a.type='revenue' THEN ROUND(l.credit-l.debit,2) ELSE 0 END),0) AS revenue,
@@ -4759,7 +4774,7 @@ switch ($action) {
     //  الأصول الثابتة
     // ════════════════════════════════════════════════════════════════════
     case 'gl_assets': {
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $conn->query("CREATE TABLE IF NOT EXISTS acc_fixed_assets (
             id INT AUTO_INCREMENT PRIMARY KEY,
             tenant_id INT NOT NULL DEFAULT 1,
@@ -4808,7 +4823,7 @@ switch ($action) {
     }
 
     case 'gl_asset_save': {
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
         $code = $conn->real_escape_string(trim($input_data['code'] ?? ''));
@@ -4835,7 +4850,7 @@ switch ($action) {
 
     case 'gl_asset_schedule': {
         // جدول الإهلاك للأصل (straight-line افتراضياً)
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $id   = (int)($_GET['id'] ?? 0);
         $r    = $conn->query("SELECT * FROM acc_fixed_assets WHERE id=$id AND tenant_id=$tid LIMIT 1");
         $a    = $r ? $r->fetch_assoc() : null;
@@ -4997,7 +5012,7 @@ switch ($action) {
     //  بيان التدفقات النقدية (الطريقة غير المباشرة)
     // ════════════════════════════════════════════════════════════════════
     case 'gl_cash_flow': {
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-12-31'));
 
@@ -5072,7 +5087,7 @@ switch ($action) {
 
     case 'gl_cf_section_save': {
         // تحديث تصنيف CF للحساب (one at a time, or bulk via array)
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $updates = $input_data['updates'] ?? [];   // [{id, cf_section}]
         if (!is_array($updates) || empty($updates)) {
             // single update fallback
@@ -5095,7 +5110,7 @@ switch ($action) {
     //  المطابقة البنكية
     // ════════════════════════════════════════════════════════════════════
     case 'gl_bank_accounts': {
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $conn->query("CREATE TABLE IF NOT EXISTS acc_bank_accounts (
             id INT AUTO_INCREMENT PRIMARY KEY,
             tenant_id INT NOT NULL DEFAULT 1,
@@ -5134,7 +5149,7 @@ switch ($action) {
     }
 
     case 'gl_bank_account_save': {
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
         $gaid = (int)($input_data['gl_account_id'] ?? 0) ?: 'NULL';
@@ -5155,7 +5170,7 @@ switch ($action) {
 
     case 'gl_bank_stmt_list': {
         // قائمة بنود كشف الحساب البنكي لحساب + فترة
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $baid = (int)($_GET['bank_account_id'] ?? 0);
         $from = $conn->real_escape_string($_GET['from'] ?? date('Y').'-01-01');
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
@@ -5179,7 +5194,7 @@ switch ($action) {
 
     case 'gl_bank_stmt_add': {
         // إضافة بنود كشف الحساب (دفعة واحدة)
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $baid = (int)($input_data['bank_account_id'] ?? 0);
         $lines= $input_data['lines'] ?? [];
         if (!$baid || empty($lines)) { echo json_encode(['success'=>false,'message'=>'بيانات ناقصة']); break; }
@@ -5207,7 +5222,7 @@ switch ($action) {
     }
 
     case 'gl_bank_stmt_delete': {
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف مطلوب']); break; }
         $conn->query("DELETE FROM acc_bank_stmt_lines WHERE id=$id AND tenant_id=$tid");
@@ -5217,7 +5232,7 @@ switch ($action) {
 
     case 'gl_bank_reconcile_mark': {
         // مطابقة / إلغاء مطابقة بند
-        $tid       = (int)($input_data['tenant_id'] ?? 1);
+        $tid       = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id        = (int)($input_data['id'] ?? 0);
         $reconciled= (int)($input_data['reconciled'] ?? 0) ? 1 : 0;
         $entryId   = (int)($input_data['gl_entry_id'] ?? 0) ?: 'NULL';
@@ -5229,7 +5244,7 @@ switch ($action) {
 
     case 'gl_bank_recon_report': {
         // تقرير المطابقة: رصيد دفتر الأستاذ vs رصيد كشف البنك + البنود غير المطابقة
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $baid = (int)($_GET['bank_account_id'] ?? 0);
         $to   = $conn->real_escape_string($_GET['to'] ?? date('Y-m-d'));
 
@@ -5267,7 +5282,7 @@ switch ($action) {
 
     case 'gl_fiscal_years': {
         // قائمة السنوات المالية (من acc_periods) + السنة الحالية إن لم تُسجَّل
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $curY = (int)date('Y');
         $rows = [];
         $fySet = [];
@@ -5290,7 +5305,7 @@ switch ($action) {
 
     case 'gl_periods_status': {
         // حالة الفترة المالية لسنة معينة
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $fy  = (int)($_GET['fy'] ?? date('Y'));
         $r   = $conn->query("SELECT fy,is_closed,closed_at,closed_by FROM acc_periods WHERE tenant_id=$tid AND fy=$fy LIMIT 1");
         $row = $r ? $r->fetch_assoc() : null;
@@ -5302,7 +5317,7 @@ switch ($action) {
         // ═══ إقفال السنة المالية ═══════════════════════════════════════════════
         // 1) يُولّد قيد إقفال يُصفّر الإيرادات والمصروفات ويرحّل الصافي للأرباح المحتجزة
         // 2) يُقفل سجل acc_periods للسنة (is_closed=1)
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $fy  = (int)($input_data['fy'] ?? date('Y'));
         $by  = $input_data['actor'] ?? null;
 
@@ -5394,7 +5409,7 @@ switch ($action) {
 
     case 'gl_reopen_year': {
         // إعادة فتح سنة مالية — لتصحيح الأخطاء (يحذف قيد الإقفال ويفتح الفترة)
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $fy  = (int)($input_data['fy'] ?? date('Y'));
         $by  = $input_data['actor'] ?? null;
 
@@ -5428,7 +5443,7 @@ switch ($action) {
     //  القيود المتكررة / المجدولة
     // ════════════════════════════════════════════════════════════════════
     case 'gl_recurring_list': {
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $conn->query("CREATE TABLE IF NOT EXISTS acc_recurring_entries (
             id INT AUTO_INCREMENT PRIMARY KEY,
             tenant_id INT NOT NULL DEFAULT 1,
@@ -5479,7 +5494,7 @@ switch ($action) {
     }
 
     case 'gl_recurring_toggle': {
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $conn->query("UPDATE acc_recurring_entries SET is_active = 1-is_active WHERE id=$id AND tenant_id=$tid");
         echo json_encode(['success'=>true,'message'=>'تم التحديث'], JSON_UNESCAPED_UNICODE);
@@ -5487,7 +5502,7 @@ switch ($action) {
     }
 
     case 'gl_recurring_delete': {
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $conn->query("DELETE FROM acc_recurring_entries WHERE id=$id AND tenant_id=$tid");
         echo json_encode(['success'=>true,'message'=>'تم الحذف'], JSON_UNESCAPED_UNICODE);
@@ -5496,7 +5511,7 @@ switch ($action) {
 
     case 'gl_recurring_run': {
         // ترحيل قيد متكرر مستحق: يُنشئ قيداً من القالب ويُحدّث next_date
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $rr  = $conn->query("SELECT r.*,t.name AS tpl_name FROM acc_recurring_entries r LEFT JOIN acc_entry_templates t ON t.id=r.template_id WHERE r.id=$id AND r.tenant_id=$tid LIMIT 1");
         $rec = $rr ? $rr->fetch_assoc() : null;
@@ -5580,7 +5595,7 @@ switch ($action) {
     //  قوالب القيود اليومية
     // ════════════════════════════════════════════════════════════════════
     case 'gl_templates': {
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         // تأكد من وجود الجداول
         $conn->query("CREATE TABLE IF NOT EXISTS acc_entry_templates (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -5610,7 +5625,7 @@ switch ($action) {
     }
 
     case 'gl_template_get': {
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $id  = (int)($_GET['id'] ?? 0);
         $r   = $conn->query("SELECT * FROM acc_entry_templates WHERE id=$id AND tenant_id=$tid LIMIT 1");
         $tpl = $r ? $r->fetch_assoc() : null;
@@ -5663,7 +5678,7 @@ switch ($action) {
     }
 
     case 'gl_template_delete': {
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف مطلوب']); break; }
         $conn->query("DELETE FROM acc_entry_template_lines WHERE template_id=$id AND tenant_id=$tid");
@@ -5676,7 +5691,7 @@ switch ($action) {
     //  الميزانية التقديرية (Budget)
     // ════════════════════════════════════════════════════════════════════
     case 'gl_budget_get': {
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $fy  = (int)($_GET['fy'] ?? date('Y'));
         $conn->query("CREATE TABLE IF NOT EXISTS acc_budget (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -5698,7 +5713,7 @@ switch ($action) {
     }
 
     case 'gl_budget_save': {
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $fy   = (int)($input_data['fy'] ?? date('Y'));
         $rows = $input_data['rows'] ?? [];
         if ($fy < 2000 || $fy > 2100) { echo json_encode(['success'=>false,'message'=>'سنة غير صالحة']); break; }
@@ -5724,7 +5739,7 @@ switch ($action) {
 
     case 'gl_budget_vs_actual': {
         // مقارنة الميزانية التقديرية بالفعلي لسنة مالية
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $fy   = (int)($_GET['fy'] ?? date('Y'));
         $from = "$fy-01-01"; $to = "$fy-12-31";
 
@@ -5790,7 +5805,7 @@ switch ($action) {
 
     case 'gl_balance_sheet':
         // الميزانية العمومية حتى تاريخ — أصول/خصوم/حقوق ملكية + صافي الدخل (المُرحَّلة فقط)
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $to  = $conn->real_escape_string($_GET['to'] ?? date('Y-m-d'));
         // CASE داخل SUM لضمان تصفية صحيحة حتى مع LEFT JOIN
         $sql = "SELECT a.id,a.code,a.name,a.type,
@@ -5817,7 +5832,7 @@ switch ($action) {
 
     case 'gl_vat_report':
         // إقرار ضريبة القيمة المضافة — مخرجات (2102) ومدخلات (1401) بشكل منفصل — المُرحَّلة فقط
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? date('Y-01-01'));
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
         // ضريبة المخرجات: الدائن صافي في حساب 2102 (ضريبة مبيعات مستحقة)
@@ -5847,7 +5862,7 @@ switch ($action) {
 
     case 'gl_parties':
         // دفتر الأطراف (عملاء/موردون) — يشمل الذمم المفتوحة من الفواتير المُرحّلة
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $type = $conn->real_escape_string($_GET['type'] ?? '');
         $w = "p.tenant_id=$tid";
         if (in_array($type, ['customer','supplier','partner'])) $w .= " AND p.type='$type'";
@@ -5862,7 +5877,7 @@ switch ($action) {
         break;
 
     case 'gl_party_save':
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $type = $conn->real_escape_string($input_data['type'] ?? 'customer');
         if (!in_array($type, ['customer','supplier','partner'])) $type = 'customer';
@@ -5914,7 +5929,7 @@ switch ($action) {
 
     case 'gl_party_delete':
         // حذف طرف غير مرتبط بحركات، وإلا تعطيله
-        $tid = (int)($input_data['tenant_id'] ?? $_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? $_GET['tenant'] ?? 1);
         $id  = (int)($input_data['id'] ?? $_GET['id'] ?? 0);
         if (!$id) { echo json_encode(['success'=>false,'message'=>'المعرّف مطلوب']); break; }
         $u = $conn->query("SELECT COUNT(*) c FROM acc_lines WHERE tenant_id=$tid AND party_id=$id");
@@ -5926,7 +5941,7 @@ switch ($action) {
 
     case 'gl_party_ledger':
         // كشف حساب طرف (ذمم مدينة/دائنة) — رصيد افتتاحي + حركات + رصيد جارٍ
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $pid  = (int)($_GET['party_id'] ?? 0);
         $from = $conn->real_escape_string($_GET['from'] ?? '');
         $to   = $conn->real_escape_string($_GET['to'] ?? '');
@@ -5955,7 +5970,7 @@ switch ($action) {
 
     case 'gl_dashboard_kpis':
         // مؤشرات لوحة القيادة من محرّك المحاسبة المستقل
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $yr   = (int)date('Y');
         $from = "$yr-01-01";
         $to   = date('Y-m-d');
@@ -6016,7 +6031,7 @@ switch ($action) {
 
     case 'gl_aging':
         // أعمار الذمم 30/60/90 حسب تاريخ الاستحقاق (أو تاريخ القيد)
-        $tid   = (int)($_GET['tenant'] ?? 1);
+        $tid   = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $ptype = $conn->real_escape_string($_GET['party_type'] ?? 'customer');
         if (!in_array($ptype, ['customer','supplier'])) $ptype = 'customer';
         $asof  = $conn->real_escape_string($_GET['as_of'] ?? date('Y-m-d'));
@@ -6054,7 +6069,7 @@ switch ($action) {
         break;
 
     case 'gl_cost_centers':
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $res = $conn->query("SELECT * FROM acc_cost_centers WHERE tenant_id=$tid ORDER BY code,name");
         $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -6062,7 +6077,7 @@ switch ($action) {
 
     case 'gl_cc_report':
         // تقرير الأرباح والخسائر حسب مراكز التكلفة
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $from = $conn->real_escape_string($_GET['from'] ?? date('Y').'-01-01');
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-m-d'));
         $sql = "SELECT cc.id, cc.code, cc.name,
@@ -6089,7 +6104,7 @@ switch ($action) {
         break;
 
     case 'gl_cost_center_save':
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $code = $conn->real_escape_string(trim($input_data['code'] ?? ''));
         $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
@@ -6106,7 +6121,7 @@ switch ($action) {
 
     case 'gl_settings_get':
         // ملف الشركة (يُستخدم في QR والطباعة) — يعيد المفاتيح المعروفة مع قيم افتراضية فارغة
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $keys = ['company_name','vat_number','cr_number','address','city','district','postal_code','building_no','phone','email','logo_url'];
         $out = [];
         foreach ($keys as $k) $out[$k] = acc_setting($conn, $tid, $k, '');
@@ -6115,7 +6130,7 @@ switch ($action) {
 
     case 'gl_settings_save':
         // حفظ/تحديث ملف الشركة — يقبل كائن settings بمفاتيح مسموح بها فقط
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $by  = $input_data['actor'] ?? null;
         $allowed = ['company_name','vat_number','cr_number','address','city','district','postal_code','building_no','phone','email','logo_url'];
         $set = is_array($input_data['settings'] ?? null) ? $input_data['settings'] : [];
@@ -6135,7 +6150,7 @@ switch ($action) {
     // ─── نظام الوسوم (Tags) — قابلة للإنشاء/التلوين/الربط/الفلترة (نمط دفترة) ───────────
     case 'acc_tags_list':
         // كل الوسوم مع عدد مرّات الاستخدام (اختياري: فلترة بنوع كيان معيّن usage_entity)
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $ue  = isset($_GET['usage_entity']) ? $conn->real_escape_string(trim($_GET['usage_entity'])) : '';
         $cntJoin = "LEFT JOIN acc_tag_links l ON l.tag_id=t.id AND l.tenant_id=t.tenant_id";
         if ($ue !== '') $cntJoin .= " AND l.entity='$ue'";
@@ -6150,7 +6165,7 @@ switch ($action) {
 
     case 'acc_tag_save':
         // إنشاء/تعديل وسم (upsert على الاسم) — يعيد المعرّف
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
         $color= $conn->real_escape_string(trim($input_data['color'] ?? 'slate'));
         $id   = (int)($input_data['id'] ?? 0);
@@ -6168,7 +6183,7 @@ switch ($action) {
 
     case 'acc_tag_delete':
         // حذف وسم وكل روابطه
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف غير صالح']); break; }
         $conn->query("DELETE FROM acc_tag_links WHERE tag_id=$id AND tenant_id=$tid");
@@ -6178,7 +6193,7 @@ switch ($action) {
 
     case 'acc_tag_set':
         // استبدال مجموعة الوسوم كاملةً لكيان واحد {entity, entity_id, tag_ids[]}
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $ent = $conn->real_escape_string(trim($input_data['entity'] ?? ''));
         $eid = (int)($input_data['entity_id'] ?? 0);
         $ids = is_array($input_data['tag_ids'] ?? null) ? $input_data['tag_ids'] : [];
@@ -6195,7 +6210,7 @@ switch ($action) {
 
     case 'acc_tags_for':
         // وسوم كيان واحد (entity+entity_id) أو خريطة جماعية لنوع كيان (entity فقط → {entity_id:[tags]})
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $ent = isset($_GET['entity']) ? $conn->real_escape_string(trim($_GET['entity'])) : '';
         $eid = (int)($_GET['entity_id'] ?? 0);
         if ($ent === '') { echo json_encode(['success'=>false,'message'=>'الكيان مطلوب']); break; }
@@ -6252,7 +6267,7 @@ switch ($action) {
 
     case 'zatca_status':
         // حالة اعتماد الزكاة للمنشأة (بدون أي أسرار) — للواجهة
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $row = acc_zatca_get($conn, $tid);
         echo json_encode(['success' => true, 'status' => [
             'environment'         => $row['environment'] ?? 'simulation',
@@ -6268,7 +6283,7 @@ switch ($action) {
 
     case 'zatca_keygen':
         // توليد مفتاح secp256k1 + CSR للمنشأة (خطوة تحضيرية للربط) — لا يُعيد المفتاح الخاص أبدًا
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $by  = $input_data['actor'] ?? null;
         $company = [];
         foreach (['company_name','cr_number','vat_number'] as $k) $company[$k] = acc_setting($conn, $tid, $k, '');
@@ -6287,7 +6302,7 @@ switch ($action) {
     case 'zatca_stamp':
         // ختم فاتورة بيع وفق المرحلة الثانية (وضع المحاكاة): UBL → هاش → توقيع ECDSA →
         // رمز QR بتسعة وسوم + سلسلة ICV/PIH. خاص بالمقاولات (بيع/شراء بضريبة) فقط.
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $by  = $input_data['actor'] ?? null;
         $h = $conn->query("SELECT * FROM acc_invoices WHERE id=$id AND tenant_id=$tid LIMIT 1");
@@ -6773,7 +6788,7 @@ switch ($action) {
     // ═══════════════════════════════════════════════════════════════════════
 
     case 'inv_list':
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $dt   = $conn->real_escape_string($_GET['doc_type'] ?? '');
         $st   = $conn->real_escape_string($_GET['status'] ?? '');
         $from = $conn->real_escape_string($_GET['from'] ?? '');
@@ -6793,7 +6808,7 @@ switch ($action) {
         break;
 
     case 'inv_single':
-        $tid = (int)($_GET['tenant'] ?? 1); $id = (int)($_GET['id'] ?? 0);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1); $id = (int)($_GET['id'] ?? 0);
         $h = $conn->query("SELECT i.*, COALESCE(p.name,i.party_name) party_label, p.vat_number party_vat, p.address party_address
                            FROM acc_invoices i LEFT JOIN acc_parties p ON p.id=i.party_id
                            WHERE i.id=$id AND i.tenant_id=$tid LIMIT 1");
@@ -6809,7 +6824,7 @@ switch ($action) {
 
     case 'inv_whatsapp': {
         // إرسال إشعار واتساب للعميل بتفاصيل الفاتورة
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $by  = $conn->real_escape_string($input_data['actor'] ?? '');
         if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف الفاتورة مطلوب']); break; }
@@ -6858,7 +6873,7 @@ switch ($action) {
 
     case 'gl_ratios': {
         // النسب المالية المحسوبة من دفتر الأستاذ والفواتير
-        $tid = (int)($_GET['tenant'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $ys  = date('Y') . '-01-01';
         // إيرادات ومصروفات السنة
         $rr = $conn->query("SELECT
@@ -6913,7 +6928,7 @@ switch ($action) {
     case 'gl_product_ledger':
         // حركة صنف: مشتريات = وارد (+) ، مبيعات = منصرف (-) — من بنود الفواتير المُرحّلة.
         // المسودات والفواتير الملغاة تُستثنى. يُرجع رصيدًا جاريًا للكمية + لقطة المخزون المسجّل.
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $pid  = (int)($_GET['product_id'] ?? 0);
         $from = $conn->real_escape_string($_GET['from'] ?? '');
         $to   = $conn->real_escape_string($_GET['to'] ?? '');
@@ -7027,7 +7042,7 @@ switch ($action) {
 
     case 'inv_post':
         // ترحيل فاتورة (مسودة) إلى قيد محاسبي متوازن
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $by  = $input_data['actor'] ?? null;
         $h = $conn->query("SELECT * FROM acc_invoices WHERE id=$id AND tenant_id=$tid LIMIT 1");
@@ -7091,7 +7106,7 @@ switch ($action) {
 
     case 'inv_void':
         // إلغاء فاتورة مُرحّلة بعكس قيدها (لا حذف — حفاظًا على التدقيق)
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $date= $conn->real_escape_string($input_data['date'] ?? date('Y-m-d'));
         $by  = $input_data['actor'] ?? null;
@@ -7115,7 +7130,7 @@ switch ($action) {
 
     case 'inv_delete':
         // حذف مسودة فقط
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $cs = $conn->query("SELECT status FROM acc_invoices WHERE id=$id AND tenant_id=$tid LIMIT 1");
         $crow = $cs ? $cs->fetch_assoc() : null;
@@ -7132,7 +7147,7 @@ switch ($action) {
         break;
 
     case 'pay_list':
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $pt   = $conn->real_escape_string($_GET['pay_type'] ?? '');
         $pfrom = $conn->real_escape_string($_GET['from'] ?? '');
         $pto   = $conn->real_escape_string($_GET['to']   ?? '');
@@ -7222,7 +7237,7 @@ switch ($action) {
 
     case 'pay_void':
         // إلغاء سند بعكس قيده وإرجاع رصيد الفاتورة
-        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id  = (int)($input_data['id'] ?? 0);
         $date= $conn->real_escape_string($input_data['date'] ?? date('Y-m-d'));
         $by  = $input_data['actor'] ?? null;
@@ -9725,7 +9740,7 @@ KNOWLEDGE;
 
     case 'acc_parties_list':
         // قائمة أطراف من acc_parties مع رصيد محسوب من acc_lines
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $type = $conn->real_escape_string($_GET['type'] ?? '');
         $q    = $conn->real_escape_string(trim($_GET['search'] ?? ''));
         $pg   = max(1,(int)($_GET['page'] ?? 1));
@@ -9755,7 +9770,7 @@ KNOWLEDGE;
 
     case 'acc_products_list':
         // قائمة منتجات من acc_products
-        $tid  = (int)($_GET['tenant'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
         $q    = $conn->real_escape_string(trim($_GET['search'] ?? ''));
         $pg   = max(1,(int)($_GET['page'] ?? 1));
         $lim  = 50; $off = ($pg-1)*$lim;
@@ -9770,7 +9785,7 @@ KNOWLEDGE;
 
     case 'acc_product_save':
         // حفظ منتج (إنشاء أو تحديث)
-        $tid  = (int)($input_data['tenant_id'] ?? 1);
+        $tid  = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $id   = (int)($input_data['id'] ?? 0);
         $name = $conn->real_escape_string(trim($input_data['name'] ?? ''));
         $code = $conn->real_escape_string(trim($input_data['code'] ?? ''));
@@ -9791,7 +9806,7 @@ KNOWLEDGE;
 
     case 'acc_product_delete':
         // حذف منتج — تعطيل إذا له حركات في الفواتير، وإلا حذف فعلي
-        $tid = (int)($_GET['tenant'] ?? $input_data['tenant_id'] ?? 1);
+        $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? $input_data['tenant_id'] ?? 1);
         $id  = (int)($_GET['id'] ?? $input_data['id'] ?? 0);
         if (!$id) { echo json_encode(['success'=>false,'message'=>'المعرّف مطلوب']); break; }
         $u = $conn->query("SELECT COUNT(*) c FROM acc_invoice_items WHERE product_id=$id AND tenant_id=$tid");
