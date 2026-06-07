@@ -737,20 +737,21 @@ function DashboardInner({ onLogout }) {
     const [dbUser, setDbUser]       = useState(null);
     const [authLoading, setAuthLoading] = useState(true);
     const [leads, setLeads]         = useState([]);
-    const [dataLoading, setDataLoading] = useState(false);
-    const [dashCounts,  setDashCounts]  = useState({});
-    const [dashTasks,   setDashTasks]   = useState([]);
-    const [deptStats,   setDeptStats]   = useState(null);
-    const [statsLoading,setStatsLoading]= useState(false);
-    const [trend,       setTrend]       = useState(null);
-    const [trendLoading,setTrendLoading]= useState(false);
-    const [glKpis,      setGlKpis]      = useState(null);
-    const [glKpisLoading,setGlKpisLoading]= useState(false);
+    const [dataLoading,   setDataLoading]   = useState(false);
+    const [dashCounts,    setDashCounts]    = useState({});
+    const [dashTasks,     setDashTasks]     = useState([]);
+    const [deptStats,     setDeptStats]     = useState(null);
+    const [statsLoading,  setStatsLoading]  = useState(false);
+    const [trend,         setTrend]         = useState(null);
+    const [trendLoading,  setTrendLoading]  = useState(false);
+    const [glKpis,        setGlKpis]        = useState(null);
+    const [glKpisLoading, setGlKpisLoading] = useState(false);
+    const [nativeStats,   setNativeStats]   = useState(null);
+    const [nativeLoading, setNativeLoading] = useState(false);
 
     const loadDashboardCounts = async () => {
         try {
-            const res  = await fetch(`${API_URL}?action=dashboard_counts`);
-            const data = await res.json();
+            const data = await apiGet('dashboard_counts');
             if (data.success) { setDashCounts(data.counts || {}); setDashTasks(data.tasks || []); }
         } catch {}
     };
@@ -758,8 +759,7 @@ function DashboardInner({ onLogout }) {
     const loadDeptStats = async () => {
         setStatsLoading(true);
         try {
-            const res  = await fetch(`${API_URL}?action=dept_stats`);
-            const data = await res.json();
+            const data = await apiGet('dept_stats');
             if (data.success) setDeptStats(data);
         } catch {}
         finally { setStatsLoading(false); }
@@ -768,8 +768,7 @@ function DashboardInner({ onLogout }) {
     const loadTrend = async () => {
         setTrendLoading(true);
         try {
-            const res  = await fetch(`${API_URL}?action=dashboard_trend`);
-            const data = await res.json();
+            const data = await apiGet('dashboard_trend');
             if (data.success) setTrend(data.trend || []);
         } catch {}
         finally { setTrendLoading(false); }
@@ -778,11 +777,19 @@ function DashboardInner({ onLogout }) {
     const loadGlKpis = async () => {
         setGlKpisLoading(true);
         try {
-            const res  = await fetch(`${API_URL}?action=gl_dashboard_kpis`);
-            const data = await res.json();
+            const data = await apiGet('gl_dashboard_kpis');
             if (data.success) setGlKpis(data);
         } catch {}
         finally { setGlKpisLoading(false); }
+    };
+
+    const loadNativeStats = async () => {
+        setNativeLoading(true);
+        try {
+            const data = await apiGet('native_dashboard_stats');
+            if (data.success) setNativeStats(data);
+        } catch {}
+        finally { setNativeLoading(false); }
     };
 
     useEffect(() => {
@@ -792,9 +799,13 @@ function DashboardInner({ onLogout }) {
     useEffect(() => {
         if (activeTab === 'overview') {
             loadDashboardCounts();
-            loadDeptStats();
-            loadTrend();
+            loadNativeStats();
             loadGlKpis();
+            // Daftra stats — فقط للمستأجر 1 (سماك) الذي يملك مفتاح دفترة
+            if (branding?.plan === 'enterprise' || !branding?.plan) {
+                loadDeptStats();
+                loadTrend();
+            }
         }
     }, [activeTab]);
 
@@ -1067,9 +1078,23 @@ function DashboardInner({ onLogout }) {
                     الصفحة الرئيسية — تصميم موحّد نظيف
                 ════════════════════════════════════════════════════════════ */}
                 {activeTab === 'overview' && (() => {
+                    // إحصائيات محلية (Native GL) — تعمل لكل المستأجرين
+                    const ns  = nativeStats || {};
+                    // إحصائيات دفترة (Daftra) — للمستأجر 1 فقط كمرجع إضافي
                     const fin = deptStats?.finance || {};
                     const fmtSAR = (n) => (n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—') + ' ﷼';
-                    const net = fin.net ?? 0;
+                    // صافي GL من glKpis أو نحسبه من native
+                    const netYtd  = glKpis?.net_income_ytd ?? 0;
+                    const revYtd  = glKpis?.revenue_ytd    ?? 0;
+                    // إيرادات ومصروفات الشهر — native > daftra fallback
+                    const revMonth = ns.rev_month  ?? fin.revenue_month  ?? 0;
+                    const expMonth = ns.exp_month  ?? fin.expenses_month ?? 0;
+                    const invMonth = ns.inv_month  ?? deptStats?.sales?.invoices_month ?? 0;
+                    const clients  = ns.clients    ?? deptStats?.sales?.clients ?? 0;
+                    // اتجاه الرسم البياني — native > daftra fallback
+                    const chartTrend = (nativeStats?.trend?.length ? nativeStats.trend : null)
+                                    ?? trend ?? [];
+                    const anyLoading = nativeLoading || glKpisLoading;
                     return (
                     <div className="p-4 md:p-8 animate-fadeIn max-w-7xl mx-auto space-y-8">
 
@@ -1079,22 +1104,22 @@ function DashboardInner({ onLogout }) {
                                 <h2 className="text-2xl md:text-3xl font-black text-brand-800 dark:text-brand-50">مرحباً، {dbUser.name.split(' ')[0]}</h2>
                                 <p className="text-slate-500 dark:text-brand-300 text-sm mt-1">نظرة شاملة على أداء المنشأة</p>
                             </div>
-                            <button onClick={() => { loadDashboardCounts(); loadDeptStats(); loadTrend(); }}
+                            <button onClick={() => { loadDashboardCounts(); loadNativeStats(); loadGlKpis(); if (branding?.plan === 'enterprise' || !branding?.plan) { loadDeptStats(); loadTrend(); } }}
                                 className="bg-white dark:bg-brand-800 border border-brand-100 dark:border-brand-700 hover:border-gold-400 text-slate-600 dark:text-brand-200 hover:text-gold-600 dark:hover:text-gold-400 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
-                                <RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''}/> تحديث
+                                <RefreshCw size={14} className={anyLoading ? 'animate-spin' : ''}/> تحديث
                             </button>
                         </div>
 
-                        {/* ─── المؤشرات المالية الكبيرة ───────────────────── */}
+                        {/* ─── المؤشرات المالية الكبيرة (Native GL) ──────────── */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <KpiCard icon={TrendingUp} tone="emerald" label="إيرادات الشهر"
-                                value={fmtSAR(fin.revenue_month)} sub="إجمالي فواتير هذا الشهر" loading={statsLoading}/>
+                                value={fmtSAR(revMonth)} sub="من محرّك المحاسبة" loading={anyLoading}/>
                             <KpiCard icon={DollarSign} tone="red" label="مصروفات الشهر"
-                                value={fmtSAR(fin.expenses_month)} sub="إجمالي مصروفات هذا الشهر" loading={statsLoading}/>
-                            <KpiCard icon={BarChart3} tone={net >= 0 ? 'navy' : 'red'} label="صافي الربح الكلي"
-                                value={fmtSAR(net)} sub={`إيرادات ${fmtSAR(fin.revenue_all)}`} loading={statsLoading}/>
+                                value={fmtSAR(expMonth)} sub="إجمالي مصروفات هذا الشهر" loading={anyLoading}/>
+                            <KpiCard icon={BarChart3} tone={netYtd >= 0 ? 'navy' : 'red'} label="صافي الدخل السنوي"
+                                value={fmtSAR(netYtd)} sub={`إيرادات ${fmtSAR(revYtd)} · ${new Date().getFullYear()}`} loading={glKpisLoading}/>
                             <KpiCard icon={Receipt} tone="gold" label="فواتير الشهر"
-                                value={String(deptStats?.sales?.invoices_month ?? '—')} sub={`${deptStats?.sales?.clients ?? 0} عميل مسجّل`} loading={statsLoading}/>
+                                value={String(invMonth || '—')} sub={`${clients} عميل مسجّل`} loading={anyLoading}/>
                         </div>
 
                         {/* ─── مؤشرات المحاسبة من المحرّك المستقل ──────── */}
@@ -1149,7 +1174,50 @@ function DashboardInner({ onLogout }) {
                         </div>
                         )}
 
-                        {/* ─── الرسم البياني + المهام ───────────────────── */}
+                        {/* ─── الرسم البياني + بطاقات السرعة + المهام ───── */}
+                        {/* بطاقات: مشاريع، وحدات، ملاك */}
+                        {nativeStats && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-9 h-9 rounded-xl bg-[#c5a059]/10 flex items-center justify-center shrink-0">
+                                    <Building2 size={16} className="text-[#c5a059]"/>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-brand-400 uppercase tracking-wide">مشاريع</p>
+                                    <p className="text-xl font-black text-brand-800 dark:text-brand-50 tabular-nums">{ns.projects ?? 0}</p>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center shrink-0">
+                                    <Home size={16} className="text-blue-600 dark:text-blue-400"/>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-brand-400 uppercase tracking-wide">وحدات</p>
+                                    <p className="text-xl font-black text-brand-800 dark:text-brand-50 tabular-nums">{ns.units ?? 0}</p>
+                                    {(ns.units_sold ?? 0) > 0 && <p className="text-[10px] text-emerald-600">{ns.units_sold} مباع</p>}
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center shrink-0">
+                                    <Key size={16} className="text-purple-600 dark:text-purple-400"/>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-brand-400 uppercase tracking-wide">ملاك</p>
+                                    <p className="text-xl font-black text-brand-800 dark:text-brand-50 tabular-nums">{ns.owners ?? 0}</p>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-500/10 flex items-center justify-center shrink-0">
+                                    <Users size={16} className="text-teal-600 dark:text-teal-400"/>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-brand-400 uppercase tracking-wide">عملاء</p>
+                                    <p className="text-xl font-black text-brand-800 dark:text-brand-50 tabular-nums">{ns.clients ?? 0}</p>
+                                </div>
+                            </div>
+                        </div>
+                        )}
+
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                             {/* الرسم البياني */}
                             <div className="lg:col-span-2 bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6">
@@ -1158,7 +1226,7 @@ function DashboardInner({ onLogout }) {
                                         <BarChart3 size={18} className="text-gold-500"/> الإيرادات والمصروفات — آخر 6 أشهر
                                     </h3>
                                 </div>
-                                <TrendChart data={trend} loading={trendLoading}/>
+                                <TrendChart data={chartTrend} loading={nativeLoading && !chartTrend.length}/>
                             </div>
 
                             {/* المهام المعلّقة */}

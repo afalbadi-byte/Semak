@@ -6392,6 +6392,118 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    // ─── إحصائيات الداشبورد من المحرّك المحلي (لكل المستأجرين بدون Daftra) ────
+    case 'native_dashboard_stats': {
+        $tid  = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
+        $yr   = (int)date('Y');
+        $mo   = date('m');
+        $monthStart = "$yr-$mo-01";
+        $today      = date('Y-m-d');
+
+        // ── إيرادات ومصروفات الشهر الحالي من قائمة الدخل ────────────────────
+        $glMonthR = $conn->query("SELECT a.type,
+            COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$monthStart' AND e.date<='$today'
+                              THEN l.debit ELSE 0 END),0) d,
+            COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$monthStart' AND e.date<='$today'
+                              THEN l.credit ELSE 0 END),0) c
+            FROM acc_accounts a
+            JOIN acc_lines l ON l.account_id=a.id
+            JOIN acc_entries e ON e.id=l.entry_id
+            WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('revenue','expense')
+            GROUP BY a.type");
+        $rev_month = 0; $exp_month = 0;
+        while ($glMonthR && ($gx = $glMonthR->fetch_assoc())) {
+            if ($gx['type']==='revenue') $rev_month = round((float)$gx['c']-(float)$gx['d'], 2);
+            if ($gx['type']==='expense') $exp_month = round((float)$gx['d']-(float)$gx['c'], 2);
+        }
+
+        // ── فواتير هذا الشهر (من acc_invoices) ────────────────────────────────
+        $invR = $conn->query("SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) v
+                              FROM acc_invoices
+                              WHERE tenant_id=$tid AND status='posted'
+                              AND issue_date>='$monthStart' AND issue_date<='$today'");
+        $invRow    = $invR ? $invR->fetch_assoc() : [];
+        $inv_month = (int)($invRow['c'] ?? 0);
+        $inv_rev   = (float)($invRow['v'] ?? 0);
+
+        // ── عدد العملاء والموردين ──────────────────────────────────────────────
+        $partyR = $conn->query("SELECT type, COUNT(*) c FROM acc_parties
+                                WHERE tenant_id=$tid AND status!='archived'
+                                GROUP BY type");
+        $clients=0; $suppliers=0;
+        while ($partyR && ($px=$partyR->fetch_assoc())) {
+            if ($px['type']==='customer') $clients   = (int)$px['c'];
+            if ($px['type']==='supplier') $suppliers = (int)$px['c'];
+        }
+
+        // ── المشاريع والوحدات والملاك ─────────────────────────────────────────
+        $projR  = $conn->query("SELECT COUNT(*) c FROM projects WHERE tenant_id=$tid");
+        $projects = (int)($projR ? $projR->fetch_assoc()['c'] : 0);
+
+        $unitR   = $conn->query("SELECT COUNT(*) c,
+                                 SUM(CASE WHEN status='مباع' OR status='sold' THEN 1 ELSE 0 END) sold
+                                 FROM units WHERE tenant_id=$tid");
+        $unitRow    = $unitR ? $unitR->fetch_assoc() : [];
+        $units      = (int)($unitRow['c'] ?? 0);
+        $units_sold = (int)($unitRow['sold'] ?? 0);
+
+        $ownersR  = $conn->query("SELECT COUNT(*) c FROM owners WHERE tenant_id=$tid");
+        $owners   = (int)($ownersR ? $ownersR->fetch_assoc()['c'] : 0);
+
+        // ── اتجاه آخر 6 أشهر (إيرادات + مصروفات من GL) ──────────────────────
+        $AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+        $trend = [];
+        for ($i=5; $i>=0; $i--) {
+            $ts  = strtotime("first day of -$i month");
+            $ms  = date('Y-m-01', $ts);
+            $me  = date('Y-m-t',  $ts);
+            $mon = $AR_MONTHS[(int)date('n',$ts)-1];
+            $key = date('Y-m', $ts);
+            $gTrend = $conn->query("SELECT a.type,
+                COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$ms' AND e.date<='$me'
+                                  THEN l.debit ELSE 0 END),0) d,
+                COALESCE(SUM(CASE WHEN e.is_posted=1 AND e.date>='$ms' AND e.date<='$me'
+                                  THEN l.credit ELSE 0 END),0) c
+                FROM acc_accounts a
+                JOIN acc_lines l ON l.account_id=a.id
+                JOIN acc_entries e ON e.id=l.entry_id
+                WHERE a.tenant_id=$tid AND a.is_group=0 AND a.type IN ('revenue','expense')
+                GROUP BY a.type");
+            $mr=0; $me2=0;
+            while ($gTrend && ($gt=$gTrend->fetch_assoc())) {
+                if ($gt['type']==='revenue') $mr  = round((float)$gt['c']-(float)$gt['d'],2);
+                if ($gt['type']==='expense') $me2 = round((float)$gt['d']-(float)$gt['c'],2);
+            }
+            $trend[] = ['key'=>$key,'label'=>$mon,'revenue'=>$mr,'expenses'=>$me2];
+        }
+
+        // ── آخر 5 فواتير ─────────────────────────────────────────────────────
+        $recentR = $conn->query("SELECT i.id,i.invoice_number,i.issue_date,i.total_amount,i.status,
+                                        p.name party_name
+                                 FROM acc_invoices i
+                                 LEFT JOIN acc_parties p ON p.id=i.party_id
+                                 WHERE i.tenant_id=$tid AND i.status='posted'
+                                 ORDER BY i.id DESC LIMIT 5");
+        $recent = [];
+        while ($recentR && ($rr=$recentR->fetch_assoc())) { $recent[] = $rr; }
+
+        echo json_encode([
+            'success'    => true,
+            'rev_month'  => $rev_month  ?: $inv_rev,   // GL أو فواتير إن لم يكن GL
+            'exp_month'  => $exp_month,
+            'inv_month'  => $inv_month,
+            'clients'    => $clients,
+            'suppliers'  => $suppliers,
+            'projects'   => $projects,
+            'units'      => $units,
+            'units_sold' => $units_sold,
+            'owners'     => $owners,
+            'trend'      => $trend,
+            'recent_inv' => $recent,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_aging':
         // أعمار الذمم 30/60/90 حسب تاريخ الاستحقاق (أو تاريخ القيد)
         $tid   = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
