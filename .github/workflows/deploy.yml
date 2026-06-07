@@ -77,6 +77,17 @@ jobs:
           sed -i "s|__SMTP_FROM_NAME__|${{ secrets.SMTP_FROM_NAME }}|g" dist/api.php
           sed -i "s|__SMTP_SECURE__|${{ secrets.SMTP_SECURE }}|g" dist/api.php
 
+      # SaaS platform secrets — JWT signing keys + platform admin credentials.
+      # If unset: JWT falls back to dev keys (works but insecure on prod — set these!).
+      # PLATFORM_HASH must be the bcrypt hash of the platform admin password
+      # generated with: php -r "echo password_hash('YOUR_PASS', PASSWORD_BCRYPT);"
+      - name: Inject SaaS JWT & platform admin secrets
+        run: |
+          sed -i "s|__TOKEN_SECRET__|${{ secrets.TOKEN_SECRET }}|g"       dist/api.php
+          sed -i "s|__PLATFORM_SECRET__|${{ secrets.PLATFORM_SECRET }}|g" dist/api.php
+          sed -i "s|__PLATFORM_EMAIL__|${{ secrets.PLATFORM_EMAIL }}|g"   dist/api.php
+          sed -i "s|__PLATFORM_HASH__|${{ secrets.PLATFORM_HASH }}|g"     dist/api.php
+
       # Hostinger FTP suffers outage windows that can exceed 30 min. We space
       # attempts out with escalating backoff sleeps to ride out a long outage —
       # 8 attempts spanning ~35 min. Each gate checks only the IMMEDIATELY
