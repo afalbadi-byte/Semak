@@ -439,6 +439,91 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
     );
 }
 
+// ─── نافذة تغيير كلمة المرور الإجباري (المستخدمون الجدد بكلمة مرور مؤقتة) ──────
+function ForcePasswordChangeModal({ userId, jwt, onDone }) {
+    const [oldPw, setOldPw]   = useState('');
+    const [newPw, setNewPw]   = useState('');
+    const [cfPw, setCfPw]     = useState('');
+    const [loading, setLoading] = useState(false);
+    const [err, setErr]       = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setErr('');
+        if (newPw.length < 8) { setErr('كلمة المرور يجب أن تكون 8 أحرف على الأقل'); return; }
+        if (newPw !== cfPw)    { setErr('كلمتا المرور غير متطابقتين'); return; }
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_URL}?action=change_password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
+                body: JSON.stringify({ old_password: oldPw, new_password: newPw }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                // تحديث localStorage لإزالة علامة الإجبار
+                try {
+                    const u = JSON.parse(localStorage.getItem('semak_current_user') || '{}');
+                    u.must_change_password = 0;
+                    localStorage.setItem('semak_current_user', JSON.stringify(u));
+                } catch {}
+                onDone();
+            } else {
+                setErr(data.message || 'حدث خطأ، حاول مرة أخرى');
+            }
+        } catch {
+            setErr('تعذّر الاتصال بالخادم');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-950/80 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-white dark:bg-brand-900 rounded-3xl shadow-2xl border border-brand-100/70 dark:border-brand-700 overflow-hidden mx-4">
+                <div className="p-6 border-b border-brand-100/70 dark:border-brand-700 bg-amber-50 dark:bg-amber-500/10">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                            <ShieldCheck size={22} />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-black text-brand-900 dark:text-white">تغيير كلمة المرور</h2>
+                            <p className="text-sm text-amber-700 dark:text-amber-400">كلمة المرور المؤقتة تتطلب التغيير قبل المتابعة</p>
+                        </div>
+                    </div>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    {err && (
+                        <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-xl px-4 py-3 text-sm font-bold">
+                            {err}
+                        </div>
+                    )}
+                    <div>
+                        <label className="block text-sm font-bold text-brand-700 dark:text-brand-300 mb-1.5">كلمة المرور الحالية (المؤقتة)</label>
+                        <input type="password" value={oldPw} onChange={e => setOldPw(e.target.value)} required autoFocus
+                            className="w-full border border-brand-200 dark:border-brand-600 rounded-xl px-4 py-3 bg-brand-50 dark:bg-brand-800 text-brand-900 dark:text-white placeholder-brand-400 focus:outline-none focus:ring-2 focus:ring-gold-400 text-sm" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-brand-700 dark:text-brand-300 mb-1.5">كلمة المرور الجديدة</label>
+                        <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} required minLength={8}
+                            className="w-full border border-brand-200 dark:border-brand-600 rounded-xl px-4 py-3 bg-brand-50 dark:bg-brand-800 text-brand-900 dark:text-white placeholder-brand-400 focus:outline-none focus:ring-2 focus:ring-gold-400 text-sm" />
+                        <p className="text-xs text-brand-400 mt-1">8 أحرف على الأقل</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-brand-700 dark:text-brand-300 mb-1.5">تأكيد كلمة المرور</label>
+                        <input type="password" value={cfPw} onChange={e => setCfPw(e.target.value)} required
+                            className="w-full border border-brand-200 dark:border-brand-600 rounded-xl px-4 py-3 bg-brand-50 dark:bg-brand-800 text-brand-900 dark:text-white placeholder-brand-400 focus:outline-none focus:ring-2 focus:ring-gold-400 text-sm" />
+                    </div>
+                    <button type="submit" disabled={loading}
+                        className="w-full flex items-center justify-center gap-2 bg-gold-500 hover:bg-gold-600 text-white font-black rounded-xl py-3 transition-all disabled:opacity-60 mt-2">
+                        {loading ? <RefreshCw size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                        {loading ? 'جارٍ التغيير…' : 'تغيير كلمة المرور'}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 // ─── جرس التنبيهات ───────────────────────────────────────────────────────────
 function NotificationBell({ userId, onNavigate }) {
     const [open, setOpen]       = useState(false);
@@ -840,8 +925,18 @@ function DashboardInner({ onLogout }) {
     );
     if (!dbUser) return null;
 
+    const mustChangePw = parseInt(dbUser.must_change_password ?? 0, 10) === 1;
+    const adminJwt = (() => { try { return localStorage.getItem('semak_admin_jwt'); } catch { return null; } })();
+
     return (
         <div className="flex h-screen bg-brand-50/40 dark:bg-brand-950 font-cairo overflow-hidden" dir="rtl">
+        {mustChangePw && (
+            <ForcePasswordChangeModal
+                userId={dbUser.id}
+                jwt={adminJwt}
+                onDone={() => setDbUser(u => ({ ...u, must_change_password: 0 }))}
+            />
+        )}
 
             <Sidebar
                 departments={DEPARTMENTS}

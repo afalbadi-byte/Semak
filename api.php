@@ -294,6 +294,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS notifications (
 // twofa = 0 افتراضيًا ⇒ لا يتغيّر سلوك الدخول لأحد حتى يُفعّله المستخدم بنفسه.
 $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa TINYINT(1) DEFAULT 0");
 $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa_channel VARCHAR(10) DEFAULT 'email'");
+$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password TINYINT(1) NOT NULL DEFAULT 0");
 $conn->query("CREATE TABLE IF NOT EXISTS login_otp (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     user_id     INT NOT NULL,
@@ -1285,8 +1286,8 @@ switch ($action) {
         $nameEsc    = $conn->real_escape_string($oName);
         $emailEsc   = $conn->real_escape_string($oEmail);
         $hashEsc    = $conn->real_escape_string($tempHash);
-        $conn->query("INSERT INTO users (name,email,password,role,job,phone,department,permissions,tenant_id)
-                      VALUES ('$nameEsc','$emailEsc','$hashEsc','admin','مدير','$phone','الإدارة','[]',$newTid)");
+        $conn->query("INSERT INTO users (name,email,password,role,job,phone,department,permissions,tenant_id,must_change_password)
+                      VALUES ('$nameEsc','$emailEsc','$hashEsc','admin','مدير','$phone','الإدارة','[]',$newTid,1)");
         $newUserId = $conn->insert_id;
 
         // ─ إرسال بيانات الدخول (إيميل + واتساب إن أمكن) ─────────────────────
@@ -1428,7 +1429,7 @@ switch ($action) {
                         unset($row['password']);
                         acc_audit($conn, 1, 'auth', $uid, 'login', 'جهاز موثوق', $row['email'] ?? $email, $_clientIp, $_clientUa);
                         $_jwt = jwt_sign(['sub'=>$uid,'tid'=>(int)($row['tenant_id']??1),'role'=>$row['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
-                        echo json_encode(["success" => true, "data" => $row, "jwt" => $_jwt]);
+                        echo json_encode(["success" => true, "data" => $row, "jwt" => $_jwt, "must_change_password" => (int)($row['must_change_password'] ?? 0)]);
                         break;
                     }
                 }
@@ -1463,7 +1464,7 @@ switch ($action) {
             unset($row['password']);
             acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح', $row['email'] ?? $email, $_clientIp, $_clientUa);
             $_jwt = jwt_sign(['sub'=>$uid,'tid'=>(int)($row['tenant_id']??1),'role'=>$row['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
-            echo json_encode(["success" => true, "data" => $row, "jwt" => $_jwt]);
+            echo json_encode(["success" => true, "data" => $row, "jwt" => $_jwt, "must_change_password" => (int)($row['must_change_password'] ?? 0)]);
         } else {
             acc_audit($conn, 1, 'auth', null, 'login_fail', 'محاولة فاشلة', $input_data['email'] ?? '', $_clientIp, $_clientUa);
             echo json_encode(["success" => false, "message" => "البريد الإلكتروني أو كلمة المرور غير صحيحة"]);
@@ -1534,7 +1535,7 @@ switch ($action) {
         }
         acc_audit($conn, 1, 'auth', $uid, 'login', 'دخول بتحقق خطوتين', $user['email'] ?? '', $_clientIp, $_clientUa);
         $_jwt = jwt_sign(['sub'=>$uid,'tid'=>(int)($user['tenant_id']??1),'role'=>$user['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
-        echo json_encode(['success' => true, 'data' => $user, 'jwt' => $_jwt, 'device_token' => $device_token]);
+        echo json_encode(['success' => true, 'data' => $user, 'jwt' => $_jwt, 'device_token' => $device_token, 'must_change_password' => (int)($user['must_change_password'] ?? 0)]);
         break;
     }
 
@@ -1876,7 +1877,7 @@ switch ($action) {
             }
             acc_audit($conn, 1, 'auth', $rid, 'login', 'دخول موحّد ناجح · IP ' . $ip, $user['email'] ?? '');
             $_jwt = jwt_sign(['sub'=>$rid,'tid'=>(int)($user['tenant_id']??1),'role'=>$user['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
-            echo json_encode(['success' => true, 'scope' => 'staff', 'data' => $user, 'jwt' => $_jwt, 'device_token' => $device_token]);
+            echo json_encode(['success' => true, 'scope' => 'staff', 'data' => $user, 'jwt' => $_jwt, 'device_token' => $device_token, 'must_change_password' => (int)($user['must_change_password'] ?? 0)]);
         } else {
             $or = $conn->query("SELECT owner_name as name, owner_phone as phone, owner_email as email, unit_code as unit, national_id, party_id, project_label FROM owners WHERE id=$rid LIMIT 1");
             $owner = $or ? $or->fetch_assoc() : null;
@@ -2514,6 +2515,34 @@ switch ($action) {
         $conn->query("DELETE FROM users WHERE id=$id");
         echo json_encode(["success" => true]);
         break;
+
+    case 'change_password': {
+        // تغيير كلمة المرور — يتطلب JWT، وكلمة المرور الحالية للتحقق
+        if (!$_jwt_claims) {
+            echo json_encode(['success'=>false,'message'=>'يجب تسجيل الدخول أولاً'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        $uid     = (int)($_jwt_claims['sub'] ?? 0);
+        $oldPass = (string)($input_data['old_password'] ?? '');
+        $newPass = (string)($input_data['new_password'] ?? '');
+        if (!$uid || $oldPass === '' || strlen($newPass) < 8) {
+            echo json_encode(['success'=>false,'message'=>'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        $ur = $conn->query("SELECT password,must_change_password FROM users WHERE id=$uid LIMIT 1");
+        if (!$ur || !($ud = $ur->fetch_assoc())) {
+            echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        if (!password_verify($oldPass, $ud['password'])) {
+            echo json_encode(['success'=>false,'message'=>'كلمة المرور الحالية غير صحيحة'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        $newHash = $conn->real_escape_string(password_hash($newPass, PASSWORD_BCRYPT));
+        $conn->query("UPDATE users SET password='$newHash', must_change_password=0 WHERE id=$uid");
+        echo json_encode(['success'=>true,'message'=>'تم تغيير كلمة المرور بنجاح'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     case 'update_permissions':
         $user_id = (int)($input_data['user_id'] ?? 0);
