@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Lock, RefreshCw, ArrowRight, ShieldCheck, Mail, MessageCircle, KeyRound, Smartphone } from 'lucide-react';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, LS_ADMIN_JWT } from '../../lib/api/client';
 
 const DEVICE_KEY = 'semak_device_token';
 
@@ -39,10 +39,11 @@ export default function AdminLogin({ setUser, showToast }) {
   const toast = (t, m, k) => { if (showToast) showToast(t, m, k); else if (k === 'error') alert(m); };
 
   // ── إنهاء الدخول وتخزين الجلسة والتحويل ──
-  const finalizeLogin = (userData) => {
+  const finalizeLogin = (userData, jwt = null) => {
     if (rememberMe && email) localStorage.setItem("semak_admin_email", email);
     else if (!rememberMe) localStorage.removeItem("semak_admin_email");
 
+    if (jwt) localStorage.setItem(LS_ADMIN_JWT, jwt);
     localStorage.setItem("semak_current_user", JSON.stringify(userData));
     if (setUser) setUser(userData);
     toast("تم تسجيل الدخول", `مرحباً بك، ${userData.name}`);
@@ -84,7 +85,7 @@ export default function AdminLogin({ setUser, showToast }) {
         enterOtpStep(data, 'password');
         toast("رمز التحقق", data.sent ? "أرسلنا لك رمز الدخول" : "تعذّر إرسال الرمز، جرّب قناة أخرى", data.sent ? undefined : "error");
       } else if (data.success) {
-        finalizeLogin(data.data);
+        finalizeLogin(data.data, data.jwt);
       } else {
         toast("خطأ", data.message, "error");
       }
@@ -111,7 +112,7 @@ export default function AdminLogin({ setUser, showToast }) {
 
       if (data.success && data.data) {
         // جهاز موثوق — دخول مباشر بدون رمز
-        finalizeLogin(data.data);
+        finalizeLogin(data.data, data.jwt);
       } else if (data.otp_required) {
         enterOtpStep(data, 'identifier');
         if (!data.choose) {
@@ -143,7 +144,7 @@ export default function AdminLogin({ setUser, showToast }) {
       const data = await res.json();
       if (data.success) {
         if (data.device_token) localStorage.setItem(DEVICE_KEY, data.device_token);
-        finalizeLogin(data.data);
+        finalizeLogin(data.data, data.jwt);
       } else {
         toast("خطأ", data.message || "الرمز غير صحيح", "error");
         setCode("");

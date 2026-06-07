@@ -1327,7 +1327,8 @@ switch ($action) {
                     if ($tr && $tr->num_rows > 0) {
                         unset($row['password']);
                         acc_audit($conn, 1, 'auth', $uid, 'login', 'جهاز موثوق', $row['email'] ?? $email, $_clientIp, $_clientUa);
-                        echo json_encode(["success" => true, "data" => $row]);
+                        $_jwt = jwt_sign(['sub'=>$uid,'tid'=>(int)($row['tenant_id']??1),'role'=>$row['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
+                        echo json_encode(["success" => true, "data" => $row, "jwt" => $_jwt]);
                         break;
                     }
                 }
@@ -1361,7 +1362,8 @@ switch ($action) {
             // ── الوضع الاعتيادي (بدون تحقق بخطوتين) ──
             unset($row['password']);
             acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح', $row['email'] ?? $email, $_clientIp, $_clientUa);
-            echo json_encode(["success" => true, "data" => $row]);
+            $_jwt = jwt_sign(['sub'=>$uid,'tid'=>(int)($row['tenant_id']??1),'role'=>$row['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
+            echo json_encode(["success" => true, "data" => $row, "jwt" => $_jwt]);
         } else {
             acc_audit($conn, 1, 'auth', null, 'login_fail', 'محاولة فاشلة', $input_data['email'] ?? '', $_clientIp, $_clientUa);
             echo json_encode(["success" => false, "message" => "البريد الإلكتروني أو كلمة المرور غير صحيحة"]);
@@ -1431,7 +1433,8 @@ switch ($action) {
             $conn->query("INSERT INTO trusted_devices (user_id,token_hash,label,expires_at) VALUES ($uid,'$dh','$label','$exp')");
         }
         acc_audit($conn, 1, 'auth', $uid, 'login', 'دخول بتحقق خطوتين', $user['email'] ?? '', $_clientIp, $_clientUa);
-        echo json_encode(['success' => true, 'data' => $user, 'device_token' => $device_token]);
+        $_jwt = jwt_sign(['sub'=>$uid,'tid'=>(int)($user['tenant_id']??1),'role'=>$user['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
+        echo json_encode(['success' => true, 'data' => $user, 'jwt' => $_jwt, 'device_token' => $device_token]);
         break;
     }
 
@@ -1772,7 +1775,8 @@ switch ($action) {
                 $conn->query("INSERT INTO trusted_devices (user_id,token_hash,label,expires_at) VALUES ($rid,'$dh','$label','$exp')");
             }
             acc_audit($conn, 1, 'auth', $rid, 'login', 'دخول موحّد ناجح · IP ' . $ip, $user['email'] ?? '');
-            echo json_encode(['success' => true, 'scope' => 'staff', 'data' => $user, 'device_token' => $device_token]);
+            $_jwt = jwt_sign(['sub'=>$rid,'tid'=>(int)($user['tenant_id']??1),'role'=>$user['role']??'admin','iat'=>time(),'exp'=>time()+28800]);
+            echo json_encode(['success' => true, 'scope' => 'staff', 'data' => $user, 'jwt' => $_jwt, 'device_token' => $device_token]);
         } else {
             $or = $conn->query("SELECT owner_name as name, owner_phone as phone, owner_email as email, unit_code as unit, national_id, party_id, project_label FROM owners WHERE id=$rid LIMIT 1");
             $owner = $or ? $or->fetch_assoc() : null;
