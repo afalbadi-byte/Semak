@@ -374,7 +374,13 @@ export default function AdminLogin({ setUser, showToast }) {
           </>
         )}
 
-        <div className="mt-8 text-center pt-6 border-t border-slate-100 dark:border-brand-700">
+        <div className="mt-8 text-center pt-6 border-t border-slate-100 dark:border-brand-700 space-y-3">
+          <a
+            href="/register"
+            className="block text-sm font-bold text-[#c5a059] hover:text-[#b8913f] transition"
+          >
+            ليس لديك حساب؟ ابدأ تجربتك المجانية لـ 14 يوماً
+          </a>
           <button onClick={() => window.location.href = "/"} className="text-slate-400 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-100 text-sm flex items-center justify-center gap-2 mx-auto transition">
             <ArrowRight size={14} /> العودة للموقع الرئيسي
           </button>

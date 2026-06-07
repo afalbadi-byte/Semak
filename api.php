@@ -1324,6 +1324,126 @@ switch ($action) {
         break;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // التسجيل الذاتي للمستأجر — لا يحتاج مصادقة
+    // ─────────────────────────────────────────────────────────────────────────
+    case 'platform_register': {
+        $company  = trim((string)($input_data['company_name'] ?? ''));
+        $email    = strtolower(trim((string)($input_data['email'] ?? '')));
+        $phone    = trim((string)($input_data['phone'] ?? ''));
+        $password = (string)($input_data['password'] ?? '');
+        $adminName = trim((string)($input_data['admin_name'] ?? 'مدير النظام'));
+
+        if (!$company || !$email || !$password) {
+            echo json_encode(['success'=>false,'message'=>'الاسم والبريد وكلمة المرور مطلوبة'], JSON_UNESCAPED_UNICODE); break;
+        }
+        if (strlen($password) < 8) {
+            echo json_encode(['success'=>false,'message'=>'كلمة المرور يجب أن تكون 8 أحرف على الأقل'], JSON_UNESCAPED_UNICODE); break;
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['success'=>false,'message'=>'البريد الإلكتروني غير صحيح'], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $emailEsc   = $conn->real_escape_string($email);
+        $alreadyUsr = $conn->query("SELECT id FROM users WHERE email='$emailEsc' LIMIT 1");
+        if ($alreadyUsr && $alreadyUsr->num_rows > 0) {
+            echo json_encode(['success'=>false,'message'=>'هذا البريد الإلكتروني مسجّل مسبقاً'], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        // توليد slug من اسم الشركة
+        $rawSlug  = strtolower(preg_replace('/[^a-z0-9\-]/', '', str_replace(' ', '-', iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $company))));
+        if (!$rawSlug) $rawSlug = 'tenant-' . time();
+        $baseSlug = $rawSlug;
+        $slugIdx  = 1;
+        while (true) {
+            $trySlug = $conn->real_escape_string($rawSlug);
+            $sc = $conn->query("SELECT id FROM tenants WHERE slug='$trySlug' LIMIT 1");
+            if (!$sc || $sc->num_rows === 0) break;
+            $rawSlug = $baseSlug . '-' . (++$slugIdx);
+        }
+
+        $nameEsc   = $conn->real_escape_string($company);
+        $phoneEsc  = $conn->real_escape_string($phone);
+        $trialEnd  = date('Y-m-d', strtotime('+14 days'));
+        $slugEsc   = $conn->real_escape_string($rawSlug);
+        $conn->query("INSERT INTO tenants (slug,name,plan,owner_email,owner_name,phone,trial_ends,status)
+                      VALUES ('$slugEsc','$nameEsc','trial','$emailEsc','$nameEsc','$phoneEsc','$trialEnd','active')");
+        $newTid = (int)$conn->insert_id;
+        if (!$newTid) {
+            echo json_encode(['success'=>false,'message'=>'خطأ في إنشاء الحساب، يرجى المحاولة مرة أخرى: ' . $conn->error], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        // نسخ دليل الحسابات الافتراضي من tenant 1
+        $accsQ = $conn->query("SELECT code,name,type,parent_id,is_group FROM acc_accounts WHERE tenant_id=1 ORDER BY id");
+        $idMap = [];
+        while ($ac = $accsQ->fetch_assoc()) {
+            $parentSql = ($ac['parent_id'] && isset($idMap[$ac['parent_id']])) ? $idMap[$ac['parent_id']] : 'NULL';
+            $code2 = $conn->real_escape_string($ac['code']);
+            $name2 = $conn->real_escape_string($ac['name']);
+            $type2 = $conn->real_escape_string($ac['type']);
+            $conn->query("INSERT INTO acc_accounts (tenant_id,code,name,type,parent_id,is_group)
+                          VALUES ($newTid,'$code2','$name2','$type2',$parentSql,{$ac['is_group']})");
+            if ($conn->insert_id) $idMap[$ac['id']] = $conn->insert_id;
+        }
+
+        // الإعدادات الأساسية
+        $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES
+            ($newTid,'company_name','$nameEsc'),
+            ($newTid,'company_email','$emailEsc'),
+            ($newTid,'company_phone','$phoneEsc')
+            ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+
+        // إنشاء المستخدم الأول — كلمة مروره يختارها بنفسه (must_change_password=0)
+        $hash     = password_hash($password, PASSWORD_BCRYPT);
+        $hashEsc  = $conn->real_escape_string($hash);
+        $anameEsc = $conn->real_escape_string($adminName);
+        $conn->query("INSERT INTO users (name,email,password,role,job,phone,department,permissions,tenant_id,must_change_password)
+                      VALUES ('$anameEsc','$emailEsc','$hashEsc','admin','مدير','$phoneEsc','الإدارة','[]',$newTid,0)");
+        $newUid = (int)$conn->insert_id;
+
+        // إصدار JWT (Admin JWT — يُسجّل دخوله مباشرة)
+        $payload = ['sub'=>$newUid,'role'=>'admin','tid'=>$newTid,'iat'=>time(),'exp'=>time()+86400*30];
+        $_newJwt = jwt_sign($payload, TOKEN_SECRET);
+
+        // إيميل ترحيب
+        $portalUrl  = 'https://semak.sa/admin/dashboard';
+        $welcomeHtml = email_template(
+            'أهلاً بك في ' . htmlspecialchars($company) . '! 🎉',
+            'تمّ إنشاء حسابك بنجاح. يمكنك الآن الدخول إلى لوحة التحكم.'
+            . '<br><br><b>تفاصيل حسابك:</b><br>'
+            . '<table style="margin:12px 0;border-collapse:collapse">'
+            . '<tr><td style="padding:4px 12px 4px 0;color:#64748b">الشركة:</td><td><b>' . htmlspecialchars($company) . '</b></td></tr>'
+            . '<tr><td style="padding:4px 12px 4px 0;color:#64748b">البريد:</td><td><b>' . htmlspecialchars($email) . '</b></td></tr>'
+            . '<tr><td style="padding:4px 12px 4px 0;color:#64748b">انتهاء التجربة:</td><td><b>' . $trialEnd . '</b></td></tr>'
+            . '</table>',
+            ['url' => $portalUrl, 'label' => 'الدخول للوحة التحكم']
+        );
+        send_email($email, 'أهلاً بك في ' . $company, $welcomeHtml);
+        if ($phone) {
+            $normPhone = preg_replace('/\D/', '', $phone);
+            $normPhone = ltrim($normPhone, '0');
+            if (substr($normPhone, 0, 3) !== '966') $normPhone = '966' . $normPhone;
+            wa_send_text($normPhone, "🎉 أهلاً بك في {$company}!\nتمّت التجربة المجانية لمدة 14 يوماً تنتهي في {$trialEnd}.\n\nادخل لوحة التحكم:\n{$portalUrl}");
+        }
+
+        acc_audit($conn, $newTid, 'tenant', $newTid, 'self_register', "email=$email|tid=$newTid", 'public', $_clientIp, $_clientUa);
+        echo json_encode([
+            'success'    => true,
+            'message'    => 'تمّ إنشاء حسابك بنجاح 🎉',
+            'jwt'        => $_newJwt,
+            'trial_ends' => $trialEnd,
+            'data'       => [
+                'id'                  => $newUid,
+                'name'                => $adminName,
+                'email'               => $email,
+                'role'                => 'admin',
+                'tenant_id'           => $newTid,
+                'must_change_password'=> 0,
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'platform_tenant_update': {
         if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
         $tid2   = (int)($input_data['id'] ?? 0);

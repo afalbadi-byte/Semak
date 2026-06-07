@@ -25,6 +25,7 @@ const Portal        = lazy(() => import('./pages/customer/Portal'));
 
 // لوحات الموظفين
 const AdminLogin      = lazy(() => import('./pages/admin/AdminLogin'));
+const AdminRegister   = lazy(() => import('./pages/admin/AdminRegister'));
 const Dashboard       = lazy(() => import('./pages/admin/Dashboard'));
 const TechDashboard   = lazy(() => import('./pages/admin/TechDashboard'));
 const LetterGenerator = lazy(() => import('./pages/admin/LetterGenerator'));
@@ -145,6 +146,7 @@ const MainShell = () => {
 
             {/* لوحات الموظفين */}
             <Route path="/login"                    element={<AdminLogin />} />
+            <Route path="/register"                 element={<AdminRegister />} />
             <Route path="/admin/dashboard/*"        element={<Dashboard />} />
             <Route path="/admin/tech-dashboard"     element={<TechDashboard />} />
             <Route path="/admin/letter-generator"   element={<LetterGenerator />} />
