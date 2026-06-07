@@ -7,7 +7,8 @@ import {
   Plus, Search, ChevronRight, Building2, CheckCircle2,
   XCircle, Clock, TrendingUp, Package, FileText,
   ShieldCheck, AlertTriangle, Pencil, X, Check,
-  Globe, Palette, Phone, Mail, Hash
+  Globe, Palette, Phone, Mail, Hash, Send, DollarSign,
+  PauseCircle, Ban
 } from 'lucide-react';
 
 // ─── API helper (platform-scoped) ───────────────────────────────────────────
@@ -83,46 +84,82 @@ function OverviewTab() {
     </div>
   );
 
+  const mrr = stats?.mrr ?? 0;
+  const mrrFmt = mrr >= 1000 ? `${(mrr/1000).toFixed(1)}k` : String(mrr);
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-black text-white">Platform Overview</h2>
+
+      {/* Row 1 — tenant counts */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat icon={<Building2 size={18} />}  label="Total Tenants"  value={stats?.total ?? 0}    sub={`${stats?.active ?? 0} active`} />
-        <Stat icon={<Clock size={18} />}       label="On Trial"       value={stats?.trial ?? 0}    sub="active trials" />
-        <Stat icon={<TrendingUp size={18} />}  label="New This Month" value={stats?.newMonth ?? 0} sub="signups" />
-        <Stat icon={<Users size={18} />}       label="Total Users"    value={stats?.users ?? 0}    sub="across all tenants" />
+        <Stat icon={<Building2 size={18} />}    label="Total Tenants"  value={stats?.total ?? 0}     sub={`${stats?.active ?? 0} active`} />
+        <Stat icon={<Clock size={18} />}         label="On Trial"       value={stats?.trial ?? 0}     sub={stats?.expiredTrials ? `${stats.expiredTrials} expired` : 'active trials'} />
+        <Stat icon={<TrendingUp size={18} />}    label="New This Month" value={stats?.newMonth ?? 0}  sub="signups" />
+        <Stat icon={<Users size={18} />}         label="Total Users"    value={stats?.users ?? 0}     sub="across all tenants" />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <Stat icon={<FileText size={18} />}  label="Total Invoices" value={(stats?.invs ?? 0).toLocaleString()} sub="all tenants" />
-        <Stat icon={<Package size={18} />}   label="MRR"           value="—"                                  sub="billing not yet wired" />
+
+      {/* Row 2 — revenue + health */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Stat icon={<DollarSign size={18} />}   label="MRR (SAR)"      value={`${mrrFmt} ﷼`}         sub={`${stats?.paid ?? 0} paid tenants`} />
+        <Stat icon={<FileText size={18} />}     label="Total Invoices" value={(stats?.invs ?? 0).toLocaleString()} sub="all tenants" />
+        <Stat icon={<PauseCircle size={18} />}  label="Suspended"      value={stats?.suspended ?? 0} sub="need attention" />
+        <Stat icon={<Ban size={18} />}           label="Cancelled"      value={stats?.cancelled ?? 0} sub="churned" />
       </div>
+
+      {/* Expired trials alert */}
+      {(stats?.expiredTrials ?? 0) > 0 && (
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-400 text-sm font-bold">
+          <AlertTriangle size={16} className="shrink-0" />
+          {stats.expiredTrials} trial tenant{stats.expiredTrials > 1 ? 's' : ''} expired — they will be auto-suspended on next login.
+        </div>
+      )}
     </div>
   );
 }
 
+// ─── Trial days remaining helper ──────────────────────────────────────────
+function trialDaysLeft(trial_ends) {
+  if (!trial_ends) return null;
+  const diff = Math.ceil((new Date(trial_ends) - new Date()) / 86400000);
+  return diff;
+}
+
 // ─── Tenant Row (in list) ─────────────────────────────────────────────────
-const TenantRow = ({ t, onClick }) => (
-  <tr
-    onClick={onClick}
-    className="border-b border-slate-800/60 hover:bg-slate-800/40 cursor-pointer transition group"
-  >
-    <td className="px-4 py-3">
-      <div className="font-bold text-white text-sm">{t.name}</div>
-      <div className="text-[11px] text-slate-500 font-mono">{t.slug}</div>
-    </td>
-    <td className="px-4 py-3"><PlanBadge plan={t.plan} /></td>
-    <td className="px-4 py-3"><StatusBadge status={t.status} /></td>
-    <td className="px-4 py-3 text-slate-400 text-sm">{t.owner_email}</td>
-    <td className="px-4 py-3 text-slate-500 text-xs">
-      {t.trial_ends ? new Date(t.trial_ends).toLocaleDateString('en-SA') : '—'}
-    </td>
-    <td className="px-4 py-3 text-slate-400 text-sm text-right">{t.user_count ?? 0}</td>
-    <td className="px-4 py-3 text-slate-400 text-sm text-right">{t.invoice_count ?? 0}</td>
-    <td className="px-4 py-3 text-right">
-      <ChevronRight size={14} className="text-slate-600 group-hover:text-[#c5a059] transition inline-block" />
-    </td>
-  </tr>
-);
+const TenantRow = ({ t, onClick }) => {
+  const days = t.plan === 'trial' ? trialDaysLeft(t.trial_ends) : null;
+  return (
+    <tr
+      onClick={onClick}
+      className="border-b border-slate-800/60 hover:bg-slate-800/40 cursor-pointer transition group"
+    >
+      <td className="px-4 py-3">
+        <div className="font-bold text-white text-sm">{t.name}</div>
+        <div className="text-[11px] text-slate-500 font-mono">{t.slug}</div>
+      </td>
+      <td className="px-4 py-3"><PlanBadge plan={t.plan} /></td>
+      <td className="px-4 py-3"><StatusBadge status={t.status} /></td>
+      <td className="px-4 py-3 text-slate-400 text-sm">{t.owner_email}</td>
+      <td className="px-4 py-3 text-slate-500 text-xs">
+        {t.trial_ends ? (
+          <span className={days !== null && days <= 3 ? (days <= 0 ? 'text-red-400 font-bold' : 'text-amber-400 font-bold') : ''}>
+            {new Date(t.trial_ends).toLocaleDateString('en-SA')}
+            {days !== null && days <= 7 && (
+              <span className="ml-1">
+                ({days <= 0 ? 'expired' : `${days}d left`})
+              </span>
+            )}
+          </span>
+        ) : '—'}
+      </td>
+      <td className="px-4 py-3 text-slate-400 text-sm text-right">{t.user_count ?? 0}</td>
+      <td className="px-4 py-3 text-slate-400 text-sm text-right">{t.invoice_count ?? 0}</td>
+      <td className="px-4 py-3 text-right">
+        <ChevronRight size={14} className="text-slate-600 group-hover:text-[#c5a059] transition inline-block" />
+      </td>
+    </tr>
+  );
+};
 
 // ─── Create Tenant Modal ──────────────────────────────────────────────────
 function CreateTenantModal({ onClose, onCreated }) {
@@ -262,11 +299,13 @@ function CreateTenantModal({ onClose, onCreated }) {
 
 // ─── Tenant Detail Panel ───────────────────────────────────────────────────
 function TenantDetail({ tenantId, onBack, onUpdated }) {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [form,    setForm]    = useState({});
-  const [saving,  setSaving]  = useState(false);
+  const [data,      setData]      = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [editing,   setEditing]   = useState(false);
+  const [form,      setForm]      = useState({});
+  const [saving,    setSaving]    = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -282,6 +321,17 @@ function TenantDetail({ tenantId, onBack, onUpdated }) {
     const r = await platApi('platform_tenant_update', { id: tenantId, ...form });
     setSaving(false);
     if (r.success) { setEditing(false); load(); onUpdated?.(); }
+  };
+
+  const resendInvite = async () => {
+    setResending(true); setResendMsg(null);
+    try {
+      const r = await platApi('platform_resend_invite', { id: tenantId });
+      setResendMsg(r.success
+        ? `✓ Sent — Email: ${r.email_sent ? 'ok' : 'failed'}, WhatsApp: ${r.wa_sent ? 'ok' : '—'}`
+        : `✗ ${r.message}`);
+    } catch { setResendMsg('✗ Network error'); }
+    finally { setResending(false); }
   };
 
   if (loading) return (
@@ -341,7 +391,20 @@ function TenantDetail({ tenantId, onBack, onUpdated }) {
               <PlanBadge plan={tenant.plan} />
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* Resend invite button — always visible */}
+            <div className="flex flex-col items-end gap-1">
+              <button onClick={resendInvite} disabled={resending}
+                className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:border-blue-500/50 hover:text-blue-400 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50">
+                {resending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                Resend Invite
+              </button>
+              {resendMsg && (
+                <span className={`text-[10px] font-bold ${resendMsg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {resendMsg}
+                </span>
+              )}
+            </div>
             {editing ? (
               <>
                 <button onClick={() => { setEditing(false); setForm(tenant); }}

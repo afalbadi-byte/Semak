@@ -1347,14 +1347,73 @@ switch ($action) {
 
     case 'platform_stats': {
         if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
-        $total   = (int)$conn->query("SELECT COUNT(*) c FROM tenants")->fetch_assoc()['c'];
-        $active  = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE status='active'")->fetch_assoc()['c'];
-        $trial   = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE plan='trial' AND status='active'")->fetch_assoc()['c'];
-        $newMonth= (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE created_at>=DATE_FORMAT(NOW(),'%Y-%m-01')")->fetch_assoc()['c'];
-        $users   = (int)$conn->query("SELECT COUNT(*) c FROM users")->fetch_assoc()['c'];
-        $invs    = (int)$conn->query("SELECT COUNT(*) c FROM acc_invoices")->fetch_assoc()['c'];
-        $revenue = 0; // placeholder: يُستبدل بجدول اشتراكات لاحقًا
-        echo json_encode(['success'=>true,'stats'=>compact('total','active','trial','newMonth','users','invs','revenue')], JSON_UNESCAPED_UNICODE);
+        // أسعار الخطط الشهرية (SAR) — يمكن نقلها لجدول billing لاحقاً
+        $planPrices = ['trial'=>0,'starter'=>299,'pro'=>599,'enterprise'=>1499];
+
+        $total      = (int)$conn->query("SELECT COUNT(*) c FROM tenants")->fetch_assoc()['c'];
+        $active     = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE status='active'")->fetch_assoc()['c'];
+        $suspended  = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE status='suspended'")->fetch_assoc()['c'];
+        $cancelled  = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE status='cancelled'")->fetch_assoc()['c'];
+        $trial      = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE plan='trial' AND status='active'")->fetch_assoc()['c'];
+        $paid       = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE plan!='trial' AND status='active'")->fetch_assoc()['c'];
+        $newMonth   = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE created_at>=DATE_FORMAT(NOW(),'%Y-%m-01')")->fetch_assoc()['c'];
+        $users      = (int)$conn->query("SELECT COUNT(*) c FROM users")->fetch_assoc()['c'];
+        $invs       = (int)$conn->query("SELECT COUNT(*) c FROM acc_invoices")->fetch_assoc()['c'];
+        // MRR: sum pricing per paid active tenant
+        $mrr = 0;
+        $planR = $conn->query("SELECT plan, COUNT(*) n FROM tenants WHERE status='active' AND plan!='trial' GROUP BY plan");
+        if ($planR) { while ($pr = $planR->fetch_assoc()) { $mrr += ($planPrices[$pr['plan']] ?? 0) * (int)$pr['n']; } }
+        // تجربة منتهية (trial_ends < today, status still active — مرشحون للإيقاف)
+        $expiredTrials = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE plan='trial' AND status='active' AND trial_ends < CURDATE()")->fetch_assoc()['c'];
+        echo json_encode(['success'=>true,'stats'=>compact(
+            'total','active','suspended','cancelled','trial','paid',
+            'newMonth','users','invs','mrr','expiredTrials'
+        )], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_resend_invite': {
+        // إعادة إرسال بيانات الدخول لمدير المستأجر
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = (int)($input_data['id'] ?? 0);
+        if (!$tid) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $tRes = $conn->query("SELECT * FROM tenants WHERE id=$tid LIMIT 1");
+        $ten  = $tRes ? $tRes->fetch_assoc() : null;
+        if (!$ten) { echo json_encode(['success'=>false,'message'=>'المستأجر غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        // أول مدير للمستأجر
+        $uRes = $conn->query("SELECT id,name,email,phone FROM users WHERE tenant_id=$tid AND role='admin' ORDER BY id ASC LIMIT 1");
+        $usr  = $uRes ? $uRes->fetch_assoc() : null;
+        if (!$usr) { echo json_encode(['success'=>false,'message'=>'لا يوجد مستخدم مدير لهذا المستأجر'], JSON_UNESCAPED_UNICODE); break; }
+        // توليد كلمة مرور مؤقتة جديدة
+        $chars    = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#';
+        $tempPass = substr(str_shuffle($chars), 0, 12);
+        $tempHash = password_hash($tempPass, PASSWORD_BCRYPT);
+        $hashEsc  = $conn->real_escape_string($tempHash);
+        $conn->query("UPDATE users SET password='$hashEsc', must_change_password=1 WHERE id={$usr['id']}");
+        // إرسال دعوة جديدة
+        $portalUrl  = 'https://semak.sa/login';
+        $oName = $ten['owner_name']; $oEmail = $ten['owner_email']; $phone = $ten['phone'];
+        $name  = $ten['name'];
+        $inviteHtml = email_template(
+            'بيانات دخول جديدة — ' . htmlspecialchars($name),
+            'تم تجديد بيانات دخولك إلى النظام.'
+            . '<br><br><b>بيانات الدخول المحدّثة:</b><br>'
+            . '<table style="margin:12px 0;border-collapse:collapse">'
+            . '<tr><td style="padding:4px 12px 4px 0;color:#64748b">البريد:</td><td><b>' . htmlspecialchars($usr['email']) . '</b></td></tr>'
+            . '<tr><td style="padding:4px 12px 4px 0;color:#64748b">كلمة المرور المؤقتة:</td><td><b>' . htmlspecialchars($tempPass) . '</b></td></tr>'
+            . '</table>'
+            . '<p style="color:#ef4444;font-size:13px">⚠️ ستُطلب منك تغيير كلمة المرور عند أول دخول.</p>',
+            ['label'=>'الدخول للنظام','url'=>$portalUrl]
+        );
+        $emailSent = send_email($usr['email'], $oName, 'بيانات دخول جديدة — ' . $name, $inviteHtml);
+        $waSent = false;
+        if ($phone) {
+            $waText  = "مرحباً {$oName}،\n\nتم تجديد بيانات دخولك لنظام *{$name}*:\n\n";
+            $waText .= "📧 البريد: {$usr['email']}\n🔑 كلمة المرور: {$tempPass}\n\n";
+            $waText .= "⚠️ ستُطلب منك تغييرها عند أول دخول.\n\n🔗 الدخول: {$portalUrl}";
+            $waSent = send_whatsapp($phone, $waText);
+        }
+        echo json_encode(['success'=>true,'email_sent'=>$emailSent,'wa_sent'=>$waSent,'message'=>'تم إرسال بيانات الدخول الجديدة'], JSON_UNESCAPED_UNICODE);
         break;
     }
 
