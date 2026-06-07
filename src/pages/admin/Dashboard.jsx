@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, ClipboardCheck, Wrench, Users, LogOut, Building,
@@ -51,6 +51,7 @@ const ActivityLog       = React.lazy(() => import('./ActivityLog'));
 const SecuritySettings  = React.lazy(() => import('./SecuritySettings'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
+import { AppContext } from '../../context/AppContext';
 import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
 import ErrorBoundary from '../../components/ErrorBoundary';
 
@@ -352,7 +353,7 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
 }
 
 // ─── القائمة الجانبية الثابتة (تنقّل موحّد بنفس هوية سماك) ────────────────────
-function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLeads, dbUser, onLogout, isOpen, onClose }) {
+function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLeads, dbUser, onLogout, isOpen, onClose, companyName }) {
     const [openGroups, setOpenGroups] = useState({});
     const go = (tool) => {
         if (tool.isExternal)  window.open(tool.path, '_blank');
@@ -368,7 +369,7 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
             <aside className={`fixed lg:static inset-y-0 right-0 z-50 w-72 shrink-0 bg-brand-800 dark:bg-brand-950 text-brand-50 flex flex-col shadow-2xl border-l border-white/5 dark:border-brand-800 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
                 {/* الشعار */}
                 <div className="h-20 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
-                    <img src="/images/logo-light.png" alt="سماك العقارية" className="h-11 w-auto object-contain" />
+                    <img src="/images/logo-light.png" alt={companyName || 'سماك العقارية'} className="h-11 w-auto object-contain" />
                     <button onClick={onClose} className="lg:hidden text-brand-200 hover:text-white p-1" aria-label="إغلاق"><X size={22} /></button>
                 </div>
                 {/* التنقّل */}
@@ -574,6 +575,9 @@ function NotificationBell({ userId, onNavigate }) {
 
 // ─── الداشبورد الرئيسي ───────────────────────────────────────────────────────
 function DashboardInner({ onLogout }) {
+    const { branding } = useContext(AppContext);
+    const companyName  = branding?.company_name || 'سماك العقارية';
+
     // ─── التنقّل عبر الـ URL (كل قسم له رابط مستقل قابل للمشاركة، وزر الرجوع يتنقّل داخل اللوحة) ───
     const navigate = useNavigate();
     const params   = useParams();
@@ -643,6 +647,10 @@ function DashboardInner({ onLogout }) {
         } catch {}
         finally { setGlKpisLoading(false); }
     };
+
+    useEffect(() => {
+        document.title = companyName;
+    }, [companyName]);
 
     useEffect(() => {
         if (activeTab === 'overview') {
@@ -845,6 +853,7 @@ function DashboardInner({ onLogout }) {
                 onLogout={handleForceLogout}
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}
+                companyName={companyName}
             />
 
             <div className="flex flex-col flex-1 min-w-0 overflow-hidden">

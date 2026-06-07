@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { User, Lock, RefreshCw, ArrowRight, ShieldCheck, Mail, MessageCircle, KeyRound, Smartphone } from 'lucide-react';
 
 import { API_URL, LS_ADMIN_JWT } from '../../lib/api/client';
+import { AppContext } from '../../context/AppContext';
 
 const DEVICE_KEY = 'semak_device_token';
 
 export default function AdminLogin({ setUser, showToast }) {
+  const { setBranding } = useContext(AppContext);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -46,6 +48,12 @@ export default function AdminLogin({ setUser, showToast }) {
     if (jwt) localStorage.setItem(LS_ADMIN_JWT, jwt);
     localStorage.setItem("semak_current_user", JSON.stringify(userData));
     if (setUser) setUser(userData);
+
+    // جلب هوية المنشأة (اسم الشركة + الألوان) في الخلفية بعد الدخول
+    fetch(`${API_URL}?action=tenant_branding`, {
+      headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+    }).then(r => r.json()).then(b => { if (b.success) setBranding(b); }).catch(() => {});
+
     toast("تم تسجيل الدخول", `مرحباً بك، ${userData.name}`);
 
     if (userData.role === "technician") window.location.href = "/tech-dashboard";

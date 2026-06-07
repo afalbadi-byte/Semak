@@ -3,6 +3,14 @@ import React, { createContext, useState, useEffect, useCallback } from 'react';
 // ─── مفاتيح localStorage ─────────────────────────────────────────────────────
 const LS_PLATFORM_JWT = 'semak_platform_token';
 const LS_ADMIN_JWT    = 'semak_admin_jwt';
+const LS_BRANDING     = 'semak_branding';
+
+// ─── قراءة إعدادات الهوية المخزونة ──────────────────────────────────────────
+const DEFAULT_BRANDING = { company_name: 'سماك العقارية', primary_color: '#c5a059', logo_url: null };
+const getStoredBranding = () => {
+  try { const b = localStorage.getItem(LS_BRANDING); return b ? JSON.parse(b) : DEFAULT_BRANDING; }
+  catch { return DEFAULT_BRANDING; }
+};
 
 // إنشاء الخزنة (السياق)
 export const AppContext = createContext();
@@ -43,6 +51,19 @@ export const AppProvider = ({ children }) => {
     }
   }, []);
   const logoutPlatform = useCallback(() => setPlatformUser(null), [setPlatformUser]);
+
+  // ── هوية المنشأة (اسم الشركة + ألوان) — تُجلب بعد دخول الموظف ─────────────
+  const [branding, setBrandingState] = useState(getStoredBranding);
+  const setBranding = useCallback((data) => {
+    if (!data) return;
+    const b = { ...DEFAULT_BRANDING, ...data };
+    setBrandingState(b);
+    try { localStorage.setItem(LS_BRANDING, JSON.stringify(b)); } catch {}
+    // حقن CSS custom properties
+    if (b.primary_color) {
+      document.documentElement.style.setProperty('--brand-primary', b.primary_color);
+    }
+  }, []);
 
   const [customer, setCustomerState] = useState(() => {
     try { const s = localStorage.getItem('semak_customer'); return s ? JSON.parse(s) : null; }
@@ -100,6 +121,7 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem("semak_current_user");
     localStorage.removeItem("semak_customer");
     localStorage.removeItem(LS_ADMIN_JWT);
+    // لا نمسح branding عند تسجيل الخروج — يُرجع لقيمة محفوظة عند الدخول التالي
   };
 
   return (
@@ -107,6 +129,7 @@ export const AppProvider = ({ children }) => {
       adminUser, setAdminUser,
       customer, setCustomer,
       platformUser, setPlatformUser, logoutPlatform,
+      branding, setBranding,
       toast, showToast,
       theme, setTheme, cycleTheme,
       logout
