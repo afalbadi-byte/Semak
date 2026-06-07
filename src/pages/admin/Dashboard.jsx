@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 
 // ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
+const ContractsManage   = React.lazy(() => import('./ContractsManage'));
+const PurchaseOrders    = React.lazy(() => import('./PurchaseOrders'));
 const UnitInspection    = React.lazy(() => import('./UnitInspection'));
 const SnagList          = React.lazy(() => import('./SnagList'));
 const UsersManage       = React.lazy(() => import('./UsersManage'));
@@ -995,9 +997,11 @@ function DashboardInner({ onLogout }) {
         {
             id:'procurement', color:'amber', icon:Briefcase,
             label:'المشتريات والتعاقدات',
-            desc:'أوامر العمل · متابعة مراحل التنفيذ',
+            desc:'عقود المقاولين · طلبات الشراء · أوامر ومراحل العمل',
             tools:[
-                { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل', icon:ClipboardCheck, permKey:'finance', color:'amber' },
+                { id:'contracts',   tabId:'contracts',   label:'التعاقدات',           icon:FileText,      permKey:'projects', color:'amber'  },
+                { id:'purchases',   tabId:'purchases',   label:'طلبات الشراء',         icon:ShoppingCart,  permKey:'projects', color:'orange' },
+                { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance',  color:'teal'  },
             ],
         },
         {
@@ -1038,6 +1042,7 @@ function DashboardInner({ onLogout }) {
         leads:'العملاء المحتملون',      bot:'خدمة العملاء الذكية',
         whatsapp:'صندوق الرسائل',       qr:'رموز الوحدات',
         letters:'الوثائق الرسمية',      work_cycles:'أوامر ومراحل العمل',
+        contracts:'التعاقدات مع المقاولين', purchases:'طلبات الشراء والمواد',
         rentals:'الإيجارات والعقود',    users:'إدارة الفريق',
         activity_log:'سجل النشاط',      security:'الأمان والبريد',
         subscription:'الاشتراك والباقة',
@@ -1307,7 +1312,9 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="starter" featureName="صندوق الرسائل" onUpgrade={() => setActiveTab('subscription')}><WhatsAppInbox /></PlanGate></div>}
                 {activeTab === 'bot'         && hasPermission('bot')         && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="pro" featureName="خدمة العملاء الذكية" onUpgrade={() => setActiveTab('subscription')}><BotSettings /></PlanGate></div>}
-                {/* ── عمليات ─────────────────────────────────────────────── */}
+                {/* ── عمليات ومشتريات ────────────────────────────────────── */}
+                {activeTab === 'contracts'   && hasPermission('projects')    && <div className="animate-fadeIn"><ContractsManage showToast={showToast} /></div>}
+                {activeTab === 'purchases'   && hasPermission('projects')    && <div className="animate-fadeIn"><PurchaseOrders showToast={showToast} /></div>}
                 {activeTab === 'work_cycles' && hasPermission('finance')     && <div className="animate-fadeIn"><WorkCycles /></div>}
                 {activeTab === 'rentals'     && hasPermission('finance')     && <div className="animate-fadeIn"><RentalsManage /></div>}
                 {/* ── فريق + إعدادات ─────────────────────────────────────── */}

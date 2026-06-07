@@ -676,6 +676,52 @@ $conn->query("INSERT IGNORE INTO subscriptions (tenant_id,plan_id,billing_cycle,
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (5)");
 } // end DDL v5
 
+if ($__sv < 6) {
+// ─── DDL v6: real-estate procurement (contracts + purchase orders) ──────────
+$conn->query("CREATE TABLE IF NOT EXISTS re_contracts (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id        INT NOT NULL DEFAULT 1,
+    project_id       INT DEFAULT NULL,
+    contract_no      VARCHAR(50) DEFAULT NULL,
+    contractor_name  VARCHAR(200) NOT NULL,
+    contractor_phone VARCHAR(30)  DEFAULT NULL,
+    work_type        VARCHAR(100) DEFAULT NULL,
+    contract_value   DECIMAL(15,2) DEFAULT 0,
+    advance_amount   DECIMAL(15,2) DEFAULT 0,
+    start_date       DATE DEFAULT NULL,
+    end_date         DATE DEFAULT NULL,
+    status           ENUM('draft','active','on_hold','completed','cancelled') DEFAULT 'draft',
+    notes            TEXT DEFAULT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_rc_tenant  (tenant_id),
+    INDEX idx_rc_project (project_id),
+    INDEX idx_rc_status  (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("CREATE TABLE IF NOT EXISTS re_purchase_orders (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id        INT NOT NULL DEFAULT 1,
+    project_id       INT DEFAULT NULL,
+    po_no            VARCHAR(50) DEFAULT NULL,
+    supplier_name    VARCHAR(200) NOT NULL,
+    supplier_phone   VARCHAR(30)  DEFAULT NULL,
+    order_date       DATE NOT NULL,
+    delivery_date    DATE DEFAULT NULL,
+    total_amount     DECIMAL(15,2) DEFAULT 0,
+    status           ENUM('draft','ordered','partial','received','cancelled') DEFAULT 'draft',
+    items            JSON DEFAULT NULL,
+    notes            TEXT DEFAULT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_rpo_tenant  (tenant_id),
+    INDEX idx_rpo_project (project_id),
+    INDEX idx_rpo_status  (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (6)");
+} // end DDL v6
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -10950,6 +10996,113 @@ KNOWLEDGE;
             $conn->query("UPDATE sw_invoices SET invoice_no='$no' WHERE id=$id AND tenant_id=$stid");
         }
         echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // مشتريات وتعاقدات العقارية — re_contracts + re_purchase_orders
+    // ══════════════════════════════════════════════════════════════════════════
+
+    case 're_contracts_list': {
+        $tid  = (int)($jwt_payload['tenant_id'] ?? 1);
+        $rows = [];
+        $res  = $conn->query("
+            SELECT c.*, p.name AS project_name
+            FROM re_contracts c
+            LEFT JOIN projects p ON p.id = c.project_id
+            WHERE c.tenant_id = $tid
+            ORDER BY c.created_at DESC
+        ");
+        while ($r = $res->fetch_assoc()) $rows[] = $r;
+        echo json_encode(['success'=>true, 'contracts'=>$rows]);
+        break;
+    }
+
+    case 're_contract_save': {
+        $tid = (int)($jwt_payload['tenant_id'] ?? 1);
+        $id  = (int)($body['id'] ?? 0);
+        $pj  = (int)($body['project_id'] ?? 0) ?: 'NULL';
+        $cn  = $conn->real_escape_string($body['contractor_name'] ?? '');
+        $cp  = $conn->real_escape_string($body['contractor_phone'] ?? '');
+        $wt  = $conn->real_escape_string($body['work_type'] ?? '');
+        $cv  = (float)($body['contract_value'] ?? 0);
+        $aa  = (float)($body['advance_amount'] ?? 0);
+        $sd  = $conn->real_escape_string($body['start_date'] ?? '');
+        $ed  = $conn->real_escape_string($body['end_date'] ?? '');
+        $st  = in_array($body['status']??'', ['draft','active','on_hold','completed','cancelled']) ? $body['status'] : 'draft';
+        $nt  = $conn->real_escape_string($body['notes'] ?? '');
+        $sd_q = $sd ? "'$sd'" : 'NULL';
+        $ed_q = $ed ? "'$ed'" : 'NULL';
+        if ($id) {
+            $conn->query("UPDATE re_contracts SET
+                project_id=$pj, contractor_name='$cn', contractor_phone='$cp',
+                work_type='$wt', contract_value=$cv, advance_amount=$aa,
+                start_date=$sd_q, end_date=$ed_q, status='$st', notes='$nt'
+                WHERE id=$id AND tenant_id=$tid");
+        } else {
+            $yr  = date('Ym');
+            $seq_r = $conn->query("SELECT COUNT(*)+1 AS n FROM re_contracts WHERE tenant_id=$tid AND contract_no LIKE 'RC-$yr-%'");
+            $seq = str_pad((int)($seq_r->fetch_assoc()['n'] ?? 1), 4, '0', STR_PAD_LEFT);
+            $cno = "RC-$yr-$seq";
+            $conn->query("INSERT INTO re_contracts
+                (tenant_id,project_id,contract_no,contractor_name,contractor_phone,
+                 work_type,contract_value,advance_amount,start_date,end_date,status,notes)
+                VALUES ($tid,$pj,'$cno','$cn','$cp','$wt',$cv,$aa,$sd_q,$ed_q,'$st','$nt')");
+            $id = $conn->insert_id;
+        }
+        echo json_encode(['success'=>true, 'id'=>$id]);
+        break;
+    }
+
+    case 're_purchases_list': {
+        $tid  = (int)($jwt_payload['tenant_id'] ?? 1);
+        $rows = [];
+        $res  = $conn->query("
+            SELECT po.*, p.name AS project_name
+            FROM re_purchase_orders po
+            LEFT JOIN projects p ON p.id = po.project_id
+            WHERE po.tenant_id = $tid
+            ORDER BY po.created_at DESC
+        ");
+        while ($r = $res->fetch_assoc()) {
+            $r['items'] = json_decode($r['items'] ?? '[]', true) ?: [];
+            $rows[] = $r;
+        }
+        echo json_encode(['success'=>true, 'orders'=>$rows]);
+        break;
+    }
+
+    case 're_purchase_save': {
+        $tid = (int)($jwt_payload['tenant_id'] ?? 1);
+        $id  = (int)($body['id'] ?? 0);
+        $pj  = (int)($body['project_id'] ?? 0) ?: 'NULL';
+        $sn  = $conn->real_escape_string($body['supplier_name'] ?? '');
+        $sp  = $conn->real_escape_string($body['supplier_phone'] ?? '');
+        $od  = $conn->real_escape_string($body['order_date'] ?? date('Y-m-d'));
+        $dd  = $conn->real_escape_string($body['delivery_date'] ?? '');
+        $ta  = (float)($body['total_amount'] ?? 0);
+        $st  = in_array($body['status']??'', ['draft','ordered','partial','received','cancelled']) ? $body['status'] : 'draft';
+        $it  = $conn->real_escape_string(json_encode($body['items'] ?? []));
+        $nt  = $conn->real_escape_string($body['notes'] ?? '');
+        $dd_q = $dd ? "'$dd'" : 'NULL';
+        if ($id) {
+            $conn->query("UPDATE re_purchase_orders SET
+                project_id=$pj, supplier_name='$sn', supplier_phone='$sp',
+                order_date='$od', delivery_date=$dd_q, total_amount=$ta,
+                status='$st', items='$it', notes='$nt'
+                WHERE id=$id AND tenant_id=$tid");
+        } else {
+            $yr  = date('Ym');
+            $seq_r = $conn->query("SELECT COUNT(*)+1 AS n FROM re_purchase_orders WHERE tenant_id=$tid AND po_no LIKE 'PO-$yr-%'");
+            $seq = str_pad((int)($seq_r->fetch_assoc()['n'] ?? 1), 4, '0', STR_PAD_LEFT);
+            $pono = "PO-$yr-$seq";
+            $conn->query("INSERT INTO re_purchase_orders
+                (tenant_id,project_id,po_no,supplier_name,supplier_phone,
+                 order_date,delivery_date,total_amount,status,items,notes)
+                VALUES ($tid,$pj,'$pono','$sn','$sp','$od',$dd_q,$ta,'$st','$it','$nt')");
+            $id = $conn->insert_id;
+        }
+        echo json_encode(['success'=>true, 'id'=>$id]);
         break;
     }
 
