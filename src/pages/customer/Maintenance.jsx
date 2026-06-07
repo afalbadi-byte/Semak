@@ -27,7 +27,8 @@ const getWarrantyYears = (type, handoverDate) => {
 };
 
 export default function Maintenance() {
-  const { customer, setCustomer, showToast } = useContext(AppContext);
+  const { customer, setCustomer, showToast, branding } = useContext(AppContext);
+  const companyName = branding?.company_name || 'سماك العقارية';
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -246,7 +247,7 @@ export default function Maintenance() {
 
   return (
     <>
-    <PageMeta title="طلب صيانة" description="ارفع طلب صيانة لوحدتك في سماك العقارية — خدمة سريعة وفنيون متخصصون." />
+    <PageMeta title="طلب صيانة" description={`ارفع طلب صيانة لوحدتك في ${companyName} — خدمة سريعة وفنيون متخصصون.`} />
     <div className="pt-32 pb-20 bg-slate-50 min-h-screen relative flex items-center justify-center bg-cover bg-center font-cairo" style={{ backgroundImage: "url('/images/maintenance-bg.jpg')" }}>
       <div className="absolute inset-0 bg-brand-800/90 backdrop-blur-sm" />
       <div className="w-full max-w-3xl px-6 relative z-10">

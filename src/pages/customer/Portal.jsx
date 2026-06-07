@@ -349,7 +349,8 @@ function AvailableUnitsTab({ customer }) {
    البوابة الرئيسية
 ──────────────────────────────────────────────────────────── */
 export default function Portal() {
-  const { customer, logout, showToast } = useContext(AppContext);
+  const { customer, logout, showToast, branding } = useContext(AppContext);
+  const companyName = branding?.company_name || 'سماك العقارية';
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('unit'); // 'unit' | 'account' | 'units'
   const [tickets, setTickets]       = useState([]);
@@ -398,7 +399,7 @@ export default function Portal() {
 
   return (
     <>
-    <PageMeta title="بوابة الملاك" description="بوابة ملاك سماك العقارية — تابع وحدتك وحسابك المالي والوحدات المتاحة." />
+    <PageMeta title="بوابة الملاك" description={`بوابة ملاك ${companyName} — تابع وحدتك وحسابك المالي والوحدات المتاحة.`} />
     <div className="min-h-screen bg-gradient-to-b from-[#0f2044] to-[#1a365d] -mt-24 pt-10 pb-24 font-cairo" dir="rtl">
       <div className="max-w-2xl mx-auto px-4 space-y-4">
 
@@ -420,7 +421,7 @@ export default function Portal() {
               <Building2 size={20} className="text-gold-500" />
             </div>
             <div>
-              <p className="text-slate-400 text-xs font-bold">{hasUnit ? 'وحدتك العقارية' : 'عميل سماك العقارية'}</p>
+              <p className="text-slate-400 text-xs font-bold">{hasUnit ? 'وحدتك العقارية' : `عميل ${companyName}`}</p>
               {hasUnit
                 ? <p className="text-white font-black text-xl tracking-widest">{customer.unit}</p>
                 : <p className="text-white font-black text-base">{customer.name}</p>}
@@ -491,7 +492,7 @@ export default function Portal() {
               <div className="bg-gradient-to-l from-green-600 to-emerald-500 rounded-2xl p-5 shadow-xl shadow-green-500/20">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0"><Key size={22} className="text-white" /></div>
-                  <div><p className="text-white font-black text-base">تم تسليم وحدتك 🎉</p><p className="text-white/80 text-xs mt-0.5">أنت الآن مالك رسمي — مرحباً بك في عائلة سماك العقارية</p></div>
+                  <div><p className="text-white font-black text-base">تم تسليم وحدتك 🎉</p><p className="text-white/80 text-xs mt-0.5">{`أنت الآن مالك رسمي — مرحباً بك في عائلة ${companyName}`}</p></div>
                 </div>
               </div>
             )}

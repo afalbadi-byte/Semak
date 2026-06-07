@@ -12,7 +12,8 @@ const WaIcon = () => (
 );
 
 export default function CustomerLogin() {
-  const { setCustomer, showToast } = useContext(AppContext);
+  const { setCustomer, showToast, branding } = useContext(AppContext);
+  const companyName = branding?.company_name || 'سماك العقارية';
   const navigate = useNavigate();
 
   const [step, setStep]       = useState('input'); // 'input' | 'choose' | 'otp'
@@ -160,7 +161,7 @@ export default function CustomerLogin() {
 
   return (
     <>
-    <PageMeta title="بوابة الملاك" description="سجّل دخولك لبوابة ملاك سماك العقارية لمتابعة وحدتك وطلبات الصيانة." />
+    <PageMeta title="بوابة الملاك" description={`سجّل دخولك لبوابة ملاك ${companyName} لمتابعة وحدتك وطلبات الصيانة.`} />
     <div
       className="min-h-screen flex items-center justify-center bg-cover bg-center relative -mt-24"
       style={{ backgroundImage: "url('/images/customer-login-bg.jpg')" }}

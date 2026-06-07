@@ -1,6 +1,7 @@
-import React, { useContext, useEffect, Suspense, lazy } from 'react';
+import React, { useContext, useEffect, Suspense, lazy, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
+import { API_URL, LS_ADMIN_JWT } from './lib/api/client';
 import { CircleCheckBig } from 'lucide-react';
 
 // المكونات المشتركة — تُحمَّل فوراً لأنها موجودة في كل الصفحات
@@ -183,7 +184,24 @@ const PlatformShell = () => {
 
 // ─── جذر التطبيق — يختار الشل بناءً على المسار ───────────────────────────
 const AppRoot = () => {
-  const location = useLocation();
+  const location  = useLocation();
+  const { setBranding } = useContext(AppContext);
+
+  // تحميل العلامة التجارية مرة واحدة عند إقلاع التطبيق
+  // يعمل لجميع المستخدمين (موظف / عميل / زائر) — لا يتطلب JWT
+  const bootstrapBranding = useCallback(() => {
+    let token = null;
+    try { token = localStorage.getItem(LS_ADMIN_JWT); } catch {}
+    fetch(`${API_URL}?action=tenant_branding`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(b => { if (b.success) setBranding(b); })
+      .catch(() => {}); // صامت — يُبقي الإعدادات المؤقتة
+  }, [setBranding]);
+
+  useEffect(() => { bootstrapBranding(); }, [bootstrapBranding]);
+
   if (location.pathname.startsWith('/platform')) return <PlatformShell />;
   return <MainShell />;
 };
