@@ -1424,6 +1424,23 @@ switch ($action) {
     // تتطلب JWT موقّع بـ PLATFORM_SECRET
     // ═══════════════════════════════════════════════════════════════════════
 
+    case 'platform_via_jwt': {
+        // SSO: إذا كان المستخدم admin ← يحصل على platform token مباشرة
+        if (!$jwt_payload || ($jwt_payload['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'يتطلب صلاحية مدير'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        $token = jwt_sign([
+            'sub'   => 'platform_admin',
+            'role'  => 'platform_admin',
+            'email' => $jwt_payload['email'] ?? ($jwt_payload['name'] ?? 'admin'),
+            'iat'   => time(),
+            'exp'   => time() + 86400 * 7,
+        ], PLATFORM_SECRET);
+        echo json_encode(['success'=>true,'token'=>$token,'role'=>'platform_admin'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'platform_login': {
         // مصادقة مدير المنصة — لا تعتمد على قاعدة البيانات
         $email = trim($input_data['email'] ?? '');

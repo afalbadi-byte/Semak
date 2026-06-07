@@ -174,10 +174,36 @@ function TenantEditModal({ tenant, plans, tok, onClose, onSave, showToast }) {
 // اللوحة الرئيسية
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function PlatformAdmin({ showToast }) {
-    const [tok, setTok] = useState(() => sessionStorage.getItem(SESS_KEY) || '');
+    const [tok,        setTok]        = useState(() => sessionStorage.getItem(SESS_KEY) || '');
+    const [ssoLoading, setSsoLoading] = useState(!sessionStorage.getItem(SESS_KEY)); // محاولة SSO فقط إذا لا يوجد token مخزّن
+
+    const saveTok = (t) => { setTok(t); sessionStorage.setItem(SESS_KEY, t); };
+
+    useEffect(() => {
+        if (tok) { setSsoLoading(false); return; }
+        // محاولة SSO عبر JWT المدير الحالي
+        const jwt = (() => { try { return localStorage.getItem('semak_admin_jwt'); } catch { return null; } })();
+        if (!jwt) { setSsoLoading(false); return; }
+        fetch(`${API_URL}?action=platform_via_jwt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+            body: JSON.stringify({}),
+        })
+            .then(r => r.json())
+            .then(d => { if (d.success && d.token) saveTok(d.token); })
+            .catch(() => {})
+            .finally(() => setSsoLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    if (ssoLoading) return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <Loader2 size={32} className="animate-spin text-violet-500" />
+        </div>
+    );
 
     if (!tok) {
-        return <PlatformLogin showToast={showToast} onLogin={t => { setTok(t); sessionStorage.setItem(SESS_KEY, t); }} />;
+        return <PlatformLogin showToast={showToast} onLogin={saveTok} />;
     }
 
     return <PlatformDashboard tok={tok} showToast={showToast} onLogout={() => { sessionStorage.removeItem(SESS_KEY); setTok(''); }} />;
