@@ -1218,6 +1218,52 @@ function DashboardInner({ onLogout }) {
                         </div>
                         )}
 
+                        {/* ─── بطاقة الإعداد الأولي (تظهر للمستأجرين الجدد) ── */}
+                        {nativeStats?.onboarding && (() => {
+                            const ob = nativeStats.onboarding;
+                            const steps = [
+                                { done: ob.logo,    label: 'رفع شعار الشركة',           tab: 'settings', icon: '🖼️' },
+                                { done: ob.vat,     label: 'إدخال الرقم الضريبي',         tab: 'settings', icon: '🏛️' },
+                                { done: ob.project, label: 'إنشاء أول مشروع',            tab: 'projects', icon: '🏗️' },
+                                { done: ob.team,    label: 'دعوة أحد أعضاء الفريق',      tab: 'users',    icon: '👥' },
+                            ];
+                            const doneCount = steps.filter(s => s.done).length;
+                            if (doneCount === steps.length) return null; // مكتمل — تختفي
+                            const pct = Math.round((doneCount / steps.length) * 100);
+                            return (
+                            <div className="bg-white dark:bg-brand-900 border border-[#c5a059]/30 rounded-3xl shadow-card p-5 md:p-6">
+                                <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-[#c5a059]/10 flex items-center justify-center">
+                                            <CheckCircle2 size={20} className="text-[#c5a059]"/>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-black text-brand-800 dark:text-brand-50 text-sm">إعداد منشأتك</h3>
+                                            <p className="text-[11px] text-slate-500 dark:text-brand-400">{doneCount} من {steps.length} خطوات مكتملة</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-2xl font-black text-[#c5a059]">{pct}%</div>
+                                </div>
+                                {/* شريط التقدم */}
+                                <div className="w-full h-2 rounded-full bg-brand-100 dark:bg-brand-800 mb-4 overflow-hidden">
+                                    <div className="h-full rounded-full bg-[#c5a059] transition-all duration-700" style={{width: `${pct}%`}}/>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    {steps.map((s, i) => (
+                                        <button key={i} onClick={() => setActiveTab(s.tab)}
+                                            className={`flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold transition border
+                                                ${s.done
+                                                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                                                    : 'bg-brand-50 dark:bg-brand-800 border-brand-100 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059]/40'}`}>
+                                            <span>{s.done ? '✅' : s.icon}</span>
+                                            <span className="text-right leading-tight">{s.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            );
+                        })()}
+
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                             {/* الرسم البياني */}
                             <div className="lg:col-span-2 bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6">

@@ -3129,7 +3129,7 @@ switch ($action) {
         $counts['bot_customers_today'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
 
         // تقارير ملاحظات (snaglist) معلقة
-        $r = $conn->query("SELECT COUNT(*) c FROM inspections WHERE status IS NULL OR status = ''");
+        $r = $conn->query("SELECT COUNT(*) c FROM inspections WHERE tenant_id=$tid AND (status IS NULL OR status = '')");
         $counts['inspections_pending'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
         if ($counts['inspections_pending'] > 0) {
             $tasks[] = ["icon" => "ClipboardCheck", "color" => "indigo", "tab" => "inspection",
@@ -6450,6 +6450,25 @@ switch ($action) {
         $ownersR  = $conn->query("SELECT COUNT(*) c FROM owners WHERE tenant_id=$tid");
         $owners   = (int)($ownersR ? $ownersR->fetch_assoc()['c'] : 0);
 
+        // عدد المستخدمين (للخطوات الإعدادية)
+        $usersR  = $conn->query("SELECT COUNT(*) c FROM users WHERE tenant_id=$tid AND status=1");
+        $ucount  = (int)($usersR ? $usersR->fetch_assoc()['c'] : 0);
+
+        // هل الإعدادات مكتملة؟ (اسم الشركة، شعار، رقم ضريبي)
+        $settR = $conn->query("SELECT skey,sval FROM acc_settings WHERE tenant_id=$tid AND skey IN ('company_name','vat_number','company_logo','cr_number')");
+        $settings = [];
+        while ($settR && ($sr=$settR->fetch_assoc())) { $settings[$sr['skey']] = $sr['sval']; }
+        $has_logo    = !empty($settings['company_logo']);
+        $has_vat     = !empty($settings['vat_number']);
+        $has_cr      = !empty($settings['cr_number']);
+        $onboarding  = [
+            'logo'    => $has_logo,
+            'vat'     => $has_vat,
+            'cr'      => $has_cr,
+            'project' => $projects > 0,
+            'team'    => $ucount > 1,
+        ];
+
         // ── اتجاه آخر 6 أشهر (إيرادات + مصروفات من GL) ──────────────────────
         $AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
         $trend = [];
@@ -6498,6 +6517,8 @@ switch ($action) {
             'units'      => $units,
             'units_sold' => $units_sold,
             'owners'     => $owners,
+            'user_count' => $ucount,
+            'onboarding' => $onboarding,
             'trend'      => $trend,
             'recent_inv' => $recent,
         ], JSON_UNESCAPED_UNICODE);
