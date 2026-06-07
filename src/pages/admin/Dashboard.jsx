@@ -1222,10 +1222,10 @@ function DashboardInner({ onLogout }) {
                         {nativeStats?.onboarding && (() => {
                             const ob = nativeStats.onboarding;
                             const steps = [
-                                { done: ob.logo,    label: 'رفع شعار الشركة',           tab: 'settings', icon: '🖼️' },
-                                { done: ob.vat,     label: 'إدخال الرقم الضريبي',         tab: 'settings', icon: '🏛️' },
-                                { done: ob.project, label: 'إنشاء أول مشروع',            tab: 'projects', icon: '🏗️' },
-                                { done: ob.team,    label: 'دعوة أحد أعضاء الفريق',      tab: 'users',    icon: '👥' },
+                                { done: ob.logo,    label: 'رفع شعار الشركة',        tab: 'ledger',   icon: '🖼️' },
+                                { done: ob.vat,     label: 'إدخال الرقم الضريبي',     tab: 'ledger',   icon: '🏛️' },
+                                { done: ob.project, label: 'إنشاء أول مشروع',         tab: 'projects', icon: '🏗️' },
+                                { done: ob.team,    label: 'دعوة أحد أعضاء الفريق',   tab: 'users',    icon: '👥' },
                             ];
                             const doneCount = steps.filter(s => s.done).length;
                             if (doneCount === steps.length) return null; // مكتمل — تختفي
