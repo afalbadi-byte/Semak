@@ -1417,6 +1417,28 @@ switch ($action) {
             $uid   = (int)$row['id'];
             $twofa = (int)($row['twofa'] ?? 0);
 
+            // ── التحقق من حالة المستأجر قبل إتمام الدخول ──────────────────
+            $loginTid = (int)($row['tenant_id'] ?? 1);
+            $tCheck   = $conn->query("SELECT status, plan, trial_ends FROM tenants WHERE id=$loginTid LIMIT 1");
+            if ($tCheck && ($tRow = $tCheck->fetch_assoc())) {
+                // تجريبي منتهي؟ أوقّفه تلقائياً
+                if ($tRow['plan'] === 'trial' && $tRow['status'] === 'active'
+                    && $tRow['trial_ends'] && $tRow['trial_ends'] < date('Y-m-d')) {
+                    $conn->query("UPDATE tenants SET status='suspended' WHERE id=$loginTid");
+                    $tRow['status'] = 'suspended';
+                }
+                if ($tRow['status'] === 'suspended') {
+                    acc_audit($conn, 1, 'auth', $uid, 'login_fail', 'حساب موقوف', $row['email'] ?? $email, $_clientIp, $_clientUa);
+                    echo json_encode(['success'=>false,'message'=>'حساب شركتك موقوف مؤقتاً — تواصل مع الدعم لإعادة التفعيل','code'=>'tenant_suspended'], JSON_UNESCAPED_UNICODE);
+                    break;
+                }
+                if ($tRow['status'] === 'cancelled') {
+                    acc_audit($conn, 1, 'auth', $uid, 'login_fail', 'حساب ملغى', $row['email'] ?? $email, $_clientIp, $_clientUa);
+                    echo json_encode(['success'=>false,'message'=>'هذا الحساب غير نشط — تواصل مع الدعم','code'=>'tenant_cancelled'], JSON_UNESCAPED_UNICODE);
+                    break;
+                }
+            }
+
             // ── التحقق بخطوتين مُفعّل لهذا المستخدم؟ ──
             if ($twofa === 1) {
                 // جهاز موثوق سابقًا؟ تخطَّ الرمز
@@ -1866,6 +1888,24 @@ switch ($action) {
             $ur = $conn->query("SELECT * FROM users WHERE id=$rid LIMIT 1");
             $user = $ur ? $ur->fetch_assoc() : null;
             if (!$user) { echo json_encode(['success' => false, 'message' => 'المستخدم غير موجود']); break; }
+            // تحقق من حالة المستأجر
+            $uTid   = (int)($user['tenant_id'] ?? 1);
+            $utChk  = $conn->query("SELECT status,plan,trial_ends FROM tenants WHERE id=$uTid LIMIT 1");
+            if ($utChk && ($utRow = $utChk->fetch_assoc())) {
+                if ($utRow['plan'] === 'trial' && $utRow['status'] === 'active'
+                    && $utRow['trial_ends'] && $utRow['trial_ends'] < date('Y-m-d')) {
+                    $conn->query("UPDATE tenants SET status='suspended' WHERE id=$uTid");
+                    $utRow['status'] = 'suspended';
+                }
+                if (in_array($utRow['status'], ['suspended','cancelled'], true)) {
+                    $lbl = $utRow['status'] === 'suspended' ? 'حساب موقوف' : 'حساب ملغى';
+                    $msg = $utRow['status'] === 'suspended'
+                        ? 'حساب شركتك موقوف مؤقتاً — تواصل مع الدعم'
+                        : 'هذا الحساب غير نشط — تواصل مع الدعم';
+                    echo json_encode(['success'=>false,'message'=>$msg,'code'=>'tenant_'.$utRow['status']], JSON_UNESCAPED_UNICODE);
+                    break;
+                }
+            }
             unset($user['password']);
             $device_token = null;
             if ($remember) {
