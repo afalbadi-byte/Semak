@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v431
+// deploy: 2026-06-07-v432
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -10504,8 +10504,10 @@ KNOWLEDGE;
         if (!empty($_GET['list'])) {
             $dbr = $conn->query("SELECT DATABASE() db, USER() usr");
             $dbi = $dbr ? $dbr->fetch_assoc() : [];
-            $lr  = $conn->query("SELECT id,username,email,role,twofa FROM users ORDER BY id LIMIT 20");
+            $lr  = $conn->query("SELECT id,name,email,role,twofa FROM users ORDER BY id LIMIT 20");
             $users = []; while($lr && $x=$lr->fetch_assoc()) $users[]=$x;
+            // fallback إذا فشل (عمود غير موجود)
+            if (!$lr) { $lr2=$conn->query("SELECT * FROM users ORDER BY id LIMIT 20"); while($lr2&&$x=$lr2->fetch_assoc()) $users[]=$x; }
             $tr  = $conn->query("SHOW TABLES");
             $tables = []; while($tr && $x=$tr->fetch_row()) $tables[]=$x[0];
             // عدد سجلات في أهم الجداول
