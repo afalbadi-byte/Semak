@@ -1175,7 +1175,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v425-saas','deployed'=>'2026-06-07'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v426-saas','deployed'=>'2026-06-07'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -6250,7 +6250,7 @@ switch ($action) {
     case 'gl_settings_get':
         // ملف الشركة (يُستخدم في QR والطباعة) — يعيد المفاتيح المعروفة مع قيم افتراضية فارغة
         $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
-        $keys = ['company_name','vat_number','cr_number','address','city','district','postal_code','building_no','phone','email','logo_url'];
+        $keys = ['company_name','vat_number','cr_number','address','city','district','postal_code','building_no','phone','email','logo_url','primary_color','company_phone','company_email','company_address','company_logo'];
         $out = [];
         foreach ($keys as $k) $out[$k] = acc_setting($conn, $tid, $k, '');
         echo json_encode(['success'=>true,'settings'=>$out], JSON_UNESCAPED_UNICODE);
@@ -6260,7 +6260,9 @@ switch ($action) {
         // حفظ/تحديث ملف الشركة — يقبل كائن settings بمفاتيح مسموح بها فقط
         $tid = $_jwt_tid ?? (int)($input_data['tenant_id'] ?? 1);
         $by  = $input_data['actor'] ?? null;
-        $allowed = ['company_name','vat_number','cr_number','address','city','district','postal_code','building_no','phone','email','logo_url'];
+        $allowed = ['company_name','vat_number','cr_number','address','city','district','postal_code',
+                    'building_no','phone','email','logo_url','primary_color','company_phone','company_email',
+                    'company_address','company_logo'];
         $set = is_array($input_data['settings'] ?? null) ? $input_data['settings'] : [];
         $n = 0;
         foreach ($set as $k => $v) {
@@ -6270,6 +6272,16 @@ switch ($action) {
             if (!$conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'$kk','$vv')
                                ON DUPLICATE KEY UPDATE sval=VALUES(sval)")) { echo json_encode(['success'=>false,'message'=>$conn->error]); break 2; }
             $n++;
+        }
+        // مزامنة primary_color مع جدول tenants أيضاً (لاستخدامه في tenant_branding)
+        if (isset($set['primary_color']) && $set['primary_color']) {
+            $pc = $conn->real_escape_string($set['primary_color']);
+            $conn->query("UPDATE tenants SET primary_color='$pc' WHERE id=$tid");
+        }
+        // مزامنة company_name مع جدول tenants أيضاً
+        if (isset($set['company_name']) && $set['company_name']) {
+            $cn = $conn->real_escape_string($set['company_name']);
+            $conn->query("UPDATE tenants SET name='$cn' WHERE id=$tid");
         }
         acc_audit($conn, $tid, 'settings', null, 'save', "saved $n keys", $by);
         echo json_encode(['success'=>true,'saved'=>$n,'message'=>'تم حفظ إعدادات المنشأة'], JSON_UNESCAPED_UNICODE);

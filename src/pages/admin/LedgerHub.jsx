@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
 import QRCode from 'react-qr-code';
 import {
     BookOpen, FileText, Layers, Plus, Trash2, RefreshCw, Save, X, Search,
@@ -13,7 +13,8 @@ import {
 //  كل البيانات من قاعدتنا عبر إجراءات gl_* في api.php
 // ════════════════════════════════════════════════════════════════════════════
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
+import { AppContext } from '../../context/AppContext';
 import EntityLink from '../../components/ui/EntityLink';
 import { useToast, formatMoney } from '../../components/ui';
 const TENANT = 1;
@@ -4406,6 +4407,7 @@ const SETTINGS_FIELDS = [
     { k: 'building_no', label: 'رقم المبنى', ph: '0000', dir: 'ltr' },
     { k: 'phone', label: 'الهاتف', ph: '05xxxxxxxx', dir: 'ltr' },
     { k: 'email', label: 'البريد الإلكتروني', ph: 'info@...', dir: 'ltr' },
+    { k: 'primary_color', label: 'لون العلامة التجارية (HEX)', ph: '#c5a059', dir: 'ltr', type: 'color' },
 ];
 // ════════════════════════════════════════════════════════════════════════════
 //  السنوات المالية — إقفال وإعادة فتح
@@ -4604,6 +4606,7 @@ function FiscalPeriodsTab({ toast }) {
 }
 
 function SettingsTab({ company, reload, toast }) {
+    const { setBranding } = useContext(AppContext);
     const [form, setForm] = useState(company || {});
     const [saving, setSaving] = useState(false);
     useEffect(() => { setForm(company || {}); }, [company]);
@@ -4617,8 +4620,15 @@ function SettingsTab({ company, reload, toast }) {
             const settings = {};
             SETTINGS_FIELDS.forEach(f => { settings[f.k] = form[f.k] || ''; });
             const r = await api('gl_settings_save', { method: 'POST', body: { settings } });
-            if (r.success) { toast(r.message || 'تم الحفظ'); reload && reload(); }
-            else toast(r.message, 'error');
+            if (r.success) {
+                toast(r.message || 'تم الحفظ');
+                reload && reload();
+                // تحديث سياق العلامة التجارية فوراً بعد الحفظ
+                const jwt = getAdminToken();
+                fetch(`${API_URL}?action=tenant_branding`, {
+                    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+                }).then(res => res.json()).then(b => { if (b.success) setBranding(b); }).catch(() => {});
+            } else toast(r.message, 'error');
         } catch (e) { toast(e.message, 'error'); } finally { setSaving(false); }
     };
     return (
@@ -4634,8 +4644,19 @@ function SettingsTab({ company, reload, toast }) {
                 {SETTINGS_FIELDS.map(f => (
                     <div key={f.k} className={f.col === 2 ? 'md:col-span-2' : ''}>
                         <label className="block text-xs font-bold text-slate-600 dark:text-brand-300 mb-1">{f.label}{f.req && <span className="text-red-500"> *</span>}</label>
-                        <input value={form[f.k] || ''} onChange={e => set(f.k, e.target.value)} placeholder={f.ph} dir={f.dir || 'rtl'}
-                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-brand-700 text-sm focus:border-[#c5a059] focus:ring-2 focus:ring-amber-100 outline-none dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500" />
+                        {f.type === 'color' ? (
+                            <div className="flex items-center gap-2">
+                                <input type="color" value={form[f.k] || '#c5a059'}
+                                    onChange={e => set(f.k, e.target.value)}
+                                    className="w-10 h-10 rounded-lg cursor-pointer border border-slate-200 dark:border-brand-700 bg-transparent" />
+                                <input type="text" value={form[f.k] || ''} onChange={e => set(f.k, e.target.value)}
+                                    placeholder={f.ph} dir="ltr"
+                                    className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-brand-700 text-sm focus:border-[#c5a059] focus:ring-2 focus:ring-amber-100 outline-none dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500 font-mono" />
+                            </div>
+                        ) : (
+                            <input value={form[f.k] || ''} onChange={e => set(f.k, e.target.value)} placeholder={f.ph} dir={f.dir || 'rtl'}
+                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-brand-700 text-sm focus:border-[#c5a059] focus:ring-2 focus:ring-amber-100 outline-none dark:bg-brand-900 dark:text-brand-50 dark:placeholder-brand-500" />
+                        )}
                     </div>
                 ))}
             </div>
