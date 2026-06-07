@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { CircleCheckBig } from 'lucide-react';
 
@@ -9,7 +9,7 @@ import Navbar from './components/Navbar';
 import Partners from './components/Partners';
 import Footer from './components/Footer';
 
-// الصفحات — تُحمَّل عند الطلب (code splitting)
+// الصفحات العامة
 const Home         = lazy(() => import('./pages/Home'));
 const About        = lazy(() => import('./pages/About'));
 const Projects     = lazy(() => import('./pages/Projects'));
@@ -17,19 +17,26 @@ const Contact      = lazy(() => import('./pages/Contact'));
 const Services     = lazy(() => import('./pages/Services'));
 const LegalPage    = lazy(() => import('./pages/LegalPage'));
 
+// بوابة العملاء
 const CustomerLogin = lazy(() => import('./pages/customer/CustomerLogin'));
 const Maintenance   = lazy(() => import('./pages/customer/Maintenance'));
 const Portal        = lazy(() => import('./pages/customer/Portal'));
 
+// لوحات الموظفين
 const AdminLogin      = lazy(() => import('./pages/admin/AdminLogin'));
 const Dashboard       = lazy(() => import('./pages/admin/Dashboard'));
 const TechDashboard   = lazy(() => import('./pages/admin/TechDashboard'));
 const LetterGenerator = lazy(() => import('./pages/admin/LetterGenerator'));
 const UnitInspection  = lazy(() => import('./pages/admin/UnitInspection'));
 const UnitHandover    = lazy(() => import('./pages/admin/UnitHandover'));
-const NotFound        = lazy(() => import('./pages/NotFound'));
 
-// شاشة تحميل بسيطة بين الصفحات
+// منصة SaaS (platform)
+const PlatformLogin     = lazy(() => import('./pages/platform/PlatformLogin'));
+const PlatformDashboard = lazy(() => import('./pages/platform/PlatformDashboard'));
+
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+// شاشة تحميل بسيطة
 const PageLoader = () => (
   <div className="min-h-[60vh] flex items-center justify-center">
     <div className="w-10 h-10 rounded-full border-4 border-[#c5a059]/20 border-t-[#c5a059] animate-spin" />
@@ -90,7 +97,14 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-const MainApp = () => {
+const PlatformRoute = ({ children }) => {
+  const { platformUser } = useContext(AppContext);
+  if (!platformUser) return <Navigate to="/platform/login" replace />;
+  return children;
+};
+
+// ─── Shell للموقع الرئيسي ──────────────────────────────────────────────────
+const MainShell = () => {
   useEffect(() => {
     document.title = "سماك العقارية | سقف يعلو برؤيتك، ومسكن يحكي قصتك";
     let icon = document.querySelector("link[rel~='icon']");
@@ -103,57 +117,83 @@ const MainApp = () => {
   }, []);
 
   return (
-    <Router>
-      <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-brand-950 dark:text-brand-50 bg-transparent">
+    <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-brand-950 dark:text-brand-50 bg-transparent">
+      <GlobalStyles />
+      <ToastNotification />
+      <WhatsAppFloat />
+      <Navbar />
 
-        <GlobalStyles />
-        <ToastNotification />
-        <WhatsAppFloat />
-        <Navbar />
+      <div className="flex-grow pt-24">
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* الصفحات العامة */}
+            <Route path="/"          element={<Home />} />
+            <Route path="/about"     element={<About />} />
+            <Route path="/projects"  element={<Projects />} />
+            <Route path="/contact"   element={<Contact />} />
+            <Route path="/services"  element={<Services />} />
+            <Route path="/privacy"   element={<LegalPage title="سياسة الخصوصية" />} />
+            <Route path="/terms"     element={<LegalPage title="الشروط والأحكام" />} />
+            <Route path="/inspection" element={<UnitInspection />} />
+            <Route path="/handover"  element={<ProtectedRoute><UnitHandover /></ProtectedRoute>} />
 
-        <div className="flex-grow pt-24">
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              {/* الصفحات العامة */}
-              <Route path="/"          element={<Home />} />
-              <Route path="/about"     element={<About />} />
-              <Route path="/projects"  element={<Projects />} />
-              <Route path="/contact"   element={<Contact />} />
-              <Route path="/services"  element={<Services />} />
-              <Route path="/privacy"   element={<LegalPage title="سياسة الخصوصية" />} />
-              <Route path="/terms"     element={<LegalPage title="الشروط والأحكام" />} />
-              <Route path="/inspection" element={<UnitInspection />} />
-              <Route path="/handover"  element={<ProtectedRoute><UnitHandover /></ProtectedRoute>} />
+            {/* بوابة العملاء */}
+            <Route path="/customer-login" element={<CustomerLogin />} />
+            <Route path="/portal"         element={<Portal />} />
+            <Route path="/maintenance"    element={<Maintenance />} />
 
-              {/* بوابة العملاء */}
-              <Route path="/customer-login" element={<CustomerLogin />} />
-              <Route path="/portal"         element={<Portal />} />
-              <Route path="/maintenance"    element={<Maintenance />} />
+            {/* لوحات الموظفين */}
+            <Route path="/login"                    element={<AdminLogin />} />
+            <Route path="/admin/dashboard/*"        element={<Dashboard />} />
+            <Route path="/admin/tech-dashboard"     element={<TechDashboard />} />
+            <Route path="/admin/letter-generator"   element={<LetterGenerator />} />
 
-              {/* لوحات التحكم */}
-              <Route path="/login"                    element={<AdminLogin />} />
-              <Route path="/admin/dashboard/*"        element={<Dashboard />} />
-              <Route path="/admin/tech-dashboard"     element={<TechDashboard />} />
-              <Route path="/admin/letter-generator"   element={<LetterGenerator />} />
-
-              {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </div>
-
-        <Partners />
-        <Footer />
-
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </div>
-    </Router>
+
+      <Partners />
+      <Footer />
+    </div>
   );
+};
+
+// ─── Shell للمنصة (SaaS platform — بدون Navbar/Footer) ────────────────────
+const PlatformShell = () => {
+  useEffect(() => {
+    document.title = "Semak Platform · لوحة الإدارة";
+  }, []);
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-4 border-slate-700 border-t-[#c5a059] animate-spin" />
+      </div>
+    }>
+      <Routes>
+        <Route path="/platform/login"       element={<PlatformLogin />} />
+        <Route path="/platform/dashboard/*" element={<PlatformRoute><PlatformDashboard /></PlatformRoute>} />
+        <Route path="/platform"             element={<Navigate to="/platform/login" replace />} />
+        <Route path="/platform/*"           element={<Navigate to="/platform/login" replace />} />
+      </Routes>
+    </Suspense>
+  );
+};
+
+// ─── جذر التطبيق — يختار الشل بناءً على المسار ───────────────────────────
+const AppRoot = () => {
+  const location = useLocation();
+  if (location.pathname.startsWith('/platform')) return <PlatformShell />;
+  return <MainShell />;
 };
 
 export default function App() {
   return (
     <AppProvider>
-      <MainApp />
+      <BrowserRouter>
+        <AppRoot />
+      </BrowserRouter>
     </AppProvider>
   );
 }

@@ -1,5 +1,9 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 
+// ─── مفاتيح localStorage ─────────────────────────────────────────────────────
+const LS_PLATFORM_JWT = 'semak_platform_token';
+const LS_ADMIN_JWT    = 'semak_admin_jwt';
+
 // إنشاء الخزنة (السياق)
 export const AppContext = createContext();
 
@@ -21,6 +25,24 @@ const applyTheme = (theme) => {
 
 export const AppProvider = ({ children }) => {
   const [adminUser, setAdminUser] = useState(null);
+
+  // ── مدير المنصة (SaaS platform owner) ──────────────────────────────────────
+  const [platformUser, setPlatformUserState] = useState(() => {
+    try {
+      const t = localStorage.getItem(LS_PLATFORM_JWT);
+      return t ? { token: t } : null;
+    } catch { return null; }
+  });
+  const setPlatformUser = useCallback((token) => {
+    if (token) {
+      localStorage.setItem(LS_PLATFORM_JWT, token);
+      setPlatformUserState({ token });
+    } else {
+      localStorage.removeItem(LS_PLATFORM_JWT);
+      setPlatformUserState(null);
+    }
+  }, []);
+  const logoutPlatform = useCallback(() => setPlatformUser(null), [setPlatformUser]);
 
   const [customer, setCustomerState] = useState(() => {
     try { const s = localStorage.getItem('semak_customer'); return s ? JSON.parse(s) : null; }
@@ -75,13 +97,16 @@ export const AppProvider = ({ children }) => {
     setAdminUser(null);
     setCustomerState(null);
     localStorage.removeItem("semak_admin_email");
+    localStorage.removeItem("semak_current_user");
     localStorage.removeItem("semak_customer");
+    localStorage.removeItem(LS_ADMIN_JWT);
   };
 
   return (
     <AppContext.Provider value={{
       adminUser, setAdminUser,
       customer, setCustomer,
+      platformUser, setPlatformUser, logoutPlatform,
       toast, showToast,
       theme, setTheme, cycleTheme,
       logout

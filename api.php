@@ -33,6 +33,20 @@ $_clientIp = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTT
 $_clientUa = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 250);
 define('MOTTASL_TOKEN', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo');
 
+// ─── JWT — مصادقة موحّدة (HS256 بدون مكتبة خارجية) ─────────────────────────
+// TOKEN_SECRET  : لإصدار/التحقق من رموز الموظفين والمستأجرين
+// PLATFORM_SECRET: لإصدار/التحقق من رموز مدير المنصة فقط
+// كلاهما يُحقن من GitHub Secrets وقت النشر (sed). يحتفظ بقيمة dev محليًا.
+$_ts = '__TOKEN_SECRET__';
+$_ps = '__PLATFORM_SECRET__';
+define('TOKEN_SECRET',    (strlen($_ts) > 0 && $_ts[0] === '_') ? 'semak-jwt-dev-2026'       : $_ts);
+define('PLATFORM_SECRET', (strlen($_ps) > 0 && $_ps[0] === '_') ? 'semak-platform-dev-2026'  : $_ps);
+$_pe = '__PLATFORM_EMAIL__';
+$_ph = '__PLATFORM_HASH__';
+define('PLATFORM_EMAIL', (strlen($_pe) > 0 && $_pe[0] === '_') ? ''  : $_pe);
+define('PLATFORM_HASH',  (strlen($_ph) > 0 && $_ph[0] === '_') ? ''  : $_ph);
+unset($_ts, $_ps, $_pe, $_ph);
+
 // ─── DDL migrations: runs once per schema version (skips on every subsequent request) ──
 $conn->query("CREATE TABLE IF NOT EXISTS db_schema_version (
     id         INT NOT NULL PRIMARY KEY,
@@ -470,6 +484,39 @@ $conn->query("ALTER TABLE acc_audit_log ADD INDEX IF NOT EXISTS idx_risk (tenant
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (2)");
 } // end DDL v2
 
+if ($__sv < 3) {
+// ─── v3: SaaS — جدول المستأجرين + tenant_id على users ──────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS tenants (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    slug          VARCHAR(60)  NOT NULL UNIQUE,
+    name          VARCHAR(255) NOT NULL,
+    plan          ENUM('trial','starter','pro','enterprise') DEFAULT 'trial',
+    status        ENUM('active','suspended','cancelled') DEFAULT 'active',
+    trial_ends    DATE DEFAULT NULL,
+    owner_email   VARCHAR(255) NOT NULL,
+    owner_name    VARCHAR(255) NOT NULL,
+    phone         VARCHAR(40)  DEFAULT NULL,
+    cr_number     VARCHAR(30)  DEFAULT NULL,
+    vat_number    VARCHAR(20)  DEFAULT NULL,
+    logo_url      VARCHAR(512) DEFAULT NULL,
+    domain        VARCHAR(120) DEFAULT NULL,
+    primary_color VARCHAR(20)  DEFAULT '#c5a059',
+    max_users     SMALLINT     DEFAULT 5,
+    notes         TEXT         DEFAULT NULL,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_slug   (slug),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// إدراج مستأجر سماك الأصلي (tenant_id=1) — لا يُعاد إدراجه إن وُجد
+$conn->query("INSERT IGNORE INTO tenants (id,slug,name,owner_email,owner_name,status,plan)
+              VALUES (1,'semak','سماك العقارية','admin@semak.sa','سماك العقارية','active','enterprise')");
+// ربط المستخدمين بمستأجريهم
+$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("ALTER TABLE users ADD INDEX    IF NOT EXISTS idx_user_tenant (tenant_id)");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (3)");
+} // end DDL v3
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -518,6 +565,37 @@ function notify($conn, $tid, $user_id, $type, $title, $body = null, $link = null
     $linkS = ($link === null) ? 'NULL' : "'" . $conn->real_escape_string((string)$link) . "'";
     $conn->query("INSERT INTO notifications (tenant_id,user_id,type,title,body,link)
                   VALUES ($tid,$uid,'$type','$title',$bodyS,$linkS)");
+}
+
+// ─── JWT (HS256 بدون مكتبة خارجية) ──────────────────────────────────────────
+function jwt_b64($d) { return rtrim(strtr(base64_encode($d), '+/', '-_'), '='); }
+function jwt_sign($payload, $secret = null) {
+    if ($secret === null) $secret = TOKEN_SECRET;
+    $h = jwt_b64('{"alg":"HS256","typ":"JWT"}');
+    $p = jwt_b64(json_encode($payload, JSON_UNESCAPED_UNICODE));
+    $s = jwt_b64(hash_hmac('sha256', "$h.$p", $secret, true));
+    return "$h.$p.$s";
+}
+function jwt_verify($token, $secret = null) {
+    if ($secret === null) $secret = TOKEN_SECRET;
+    $parts = explode('.', (string)$token);
+    if (count($parts) !== 3) return null;
+    [$h, $p, $s] = $parts;
+    $exp = jwt_b64(hash_hmac('sha256', "$h.$p", $secret, true));
+    if (!hash_equals($exp, $s)) return null;
+    $pl = json_decode(base64_decode(strtr($p, '-_', '+/')), true);
+    if (!is_array($pl)) return null;
+    if (isset($pl['exp']) && $pl['exp'] < time()) return null;
+    return $pl;
+}
+function jwt_from_request() {
+    $auth = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    if ($auth === '' && function_exists('getallheaders')) {
+        $hdrs = getallheaders();
+        $auth = $hdrs['Authorization'] ?? $hdrs['authorization'] ?? '';
+    }
+    if (strncasecmp($auth, 'Bearer ', 7) !== 0) return null;
+    return trim(substr($auth, 7));
 }
 
 // ─── البريد الإلكتروني (SMTP عبر بريد semak.sa) ──────────────────────────────
@@ -1051,12 +1129,164 @@ if (isset($input_data['email']) && isset($input_data['password'])) {
 
 ob_end_clean();
 
+// ─── استخراج هوية الطالب من JWT (اختياري — backward compatible) ───────────
+$_jwt_raw      = jwt_from_request();
+$_jwt_claims   = $_jwt_raw ? jwt_verify($_jwt_raw)                    : null;
+$_plat_claims  = $_jwt_raw ? jwt_verify($_jwt_raw, PLATFORM_SECRET)   : null;
+// نلغي plat_claims إن لم تكن بها role=platform_admin صريحة
+if (!isset($_plat_claims['role']) || $_plat_claims['role'] !== 'platform_admin') $_plat_claims = null;
+// إن كان platform_admin لا تعامله كمستخدم عادي
+if ($_plat_claims) $_jwt_claims = null;
+// tenant_id: من JWT أولاً، ثم من الطلب (backward compatible)
+$_jwt_tid = isset($_jwt_claims['tid']) ? (int)$_jwt_claims['tid'] : null;
+
 switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v422','deployed'=>'2026-06-06'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v425-saas','deployed'=>'2026-06-07'], JSON_UNESCAPED_UNICODE);
         break;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // منصة SaaS — إدارة المستأجرين (platform_*)
+    // تتطلب JWT موقّع بـ PLATFORM_SECRET
+    // ═══════════════════════════════════════════════════════════════════════
+
+    case 'platform_login': {
+        // مصادقة مدير المنصة — لا تعتمد على قاعدة البيانات
+        $email = trim($input_data['email'] ?? '');
+        $pass  = (string)($input_data['password'] ?? '');
+        if (PLATFORM_EMAIL === '' || PLATFORM_HASH === '') {
+            echo json_encode(['success'=>false,'message'=>'المنصة غير مُهيَّأة — راجع إعدادات GitHub Secrets'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        if ($email !== PLATFORM_EMAIL || !password_verify($pass, PLATFORM_HASH)) {
+            acc_audit($conn, 0, 'platform', 0, 'login_fail', "email=$email", 'platform', $_clientIp, $_clientUa);
+            echo json_encode(['success'=>false,'message'=>'بيانات الدخول غير صحيحة'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        $token = jwt_sign([
+            'sub'  => 'platform_admin',
+            'role' => 'platform_admin',
+            'email'=> $email,
+            'iat'  => time(),
+            'exp'  => time() + 86400 * 30,
+        ], PLATFORM_SECRET);
+        acc_audit($conn, 0, 'platform', 0, 'login', 'platform admin login', 'platform', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true,'token'=>$token,'role'=>'platform_admin'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_tenant_list': {
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $q = $conn->query("SELECT t.*,
+            (SELECT COUNT(*) FROM users u WHERE u.tenant_id=t.id) AS user_count,
+            (SELECT COUNT(*) FROM acc_invoices i WHERE i.tenant_id=t.id) AS invoice_count
+            FROM tenants t ORDER BY t.id DESC LIMIT 500");
+        $rows = [];
+        while ($r = $q->fetch_assoc()) $rows[] = $r;
+        echo json_encode(['success'=>true,'tenants'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_tenant_get': {
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $tid2 = (int)($input_data['id'] ?? $_GET['id'] ?? 0);
+        if (!$tid2) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $q = $conn->query("SELECT * FROM tenants WHERE id=$tid2 LIMIT 1");
+        if (!$q || !($row = $q->fetch_assoc())) { echo json_encode(['success'=>false,'message'=>'مستأجر غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        // إعدادات المنشأة
+        $sq = $conn->query("SELECT skey,sval FROM acc_settings WHERE tenant_id=$tid2");
+        $settings = [];
+        while ($sr = $sq->fetch_assoc()) $settings[$sr['skey']] = $sr['sval'];
+        // المستخدمون
+        $uq = $conn->query("SELECT id,name,email,role,status FROM users WHERE tenant_id=$tid2 LIMIT 50");
+        $users2 = [];
+        while ($ur = $uq->fetch_assoc()) $users2[] = $ur;
+        echo json_encode(['success'=>true,'tenant'=>$row,'settings'=>$settings,'users'=>$users2], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_tenant_create': {
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $slug  = strtolower(preg_replace('/[^a-z0-9\-]/', '', trim($input_data['slug'] ?? '')));
+        $name  = trim($conn->real_escape_string($input_data['name'] ?? ''));
+        $oEmail= trim($conn->real_escape_string($input_data['owner_email'] ?? ''));
+        $oName = trim($conn->real_escape_string($input_data['owner_name'] ?? ''));
+        $plan  = in_array($input_data['plan']??'trial',['trial','starter','pro','enterprise'],'') ? $input_data['plan'] : 'trial';
+        $phone = trim($conn->real_escape_string($input_data['phone'] ?? ''));
+        $trial = (!empty($input_data['trial_ends'])) ? "'".$conn->real_escape_string($input_data['trial_ends'])."'" : 'DATE_ADD(NOW(), INTERVAL 14 DAY)';
+        $notes = trim($conn->real_escape_string($input_data['notes'] ?? ''));
+        if (!$slug || !$name || !$oEmail) {
+            echo json_encode(['success'=>false,'message'=>'slug + name + owner_email مطلوبة'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        // slug فريد
+        $chk = $conn->query("SELECT id FROM tenants WHERE slug='$slug' LIMIT 1");
+        if ($chk && $chk->num_rows > 0) { echo json_encode(['success'=>false,'message'=>'الـ slug مستخدم — اختر آخر'], JSON_UNESCAPED_UNICODE); break; }
+
+        $conn->query("INSERT INTO tenants (slug,name,plan,owner_email,owner_name,phone,trial_ends,notes)
+                      VALUES ('$slug','$name','$plan','$oEmail','$oName','$phone',$trial,'$notes')");
+        $newTid = $conn->insert_id;
+        if (!$newTid) { echo json_encode(['success'=>false,'message'=>$conn->error], JSON_UNESCAPED_UNICODE); break; }
+
+        // نسخ دليل الحسابات الافتراضي من tenant 1 للمستأجر الجديد
+        $accsQ = $conn->query("SELECT code,name,type,parent_id,is_group FROM acc_accounts WHERE tenant_id=1 ORDER BY id");
+        $idMap = [];
+        while ($ac = $accsQ->fetch_assoc()) {
+            $parentSql = ($ac['parent_id'] && isset($idMap[$ac['parent_id']])) ? $idMap[$ac['parent_id']] : 'NULL';
+            $code2 = $conn->real_escape_string($ac['code']);
+            $name2 = $conn->real_escape_string($ac['name']);
+            $type2 = $conn->real_escape_string($ac['type']);
+            $conn->query("INSERT INTO acc_accounts (tenant_id,code,name,type,parent_id,is_group)
+                          VALUES ($newTid,'$code2','$name2','$type2',$parentSql,{$ac['is_group']})");
+            if ($conn->insert_id) $idMap[$ac['id']] = $conn->insert_id; // لاحقًا نحتاج original id
+        }
+        // إعداد acc_settings الأساسية
+        $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES
+            ($newTid,'company_name','$name'),
+            ($newTid,'company_email','$oEmail'),
+            ($newTid,'company_phone','$phone')
+            ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+
+        acc_audit($conn, $newTid, 'tenant', $newTid, 'create', "slug=$slug", 'platform', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true,'tenant_id'=>$newTid,'slug'=>$slug,'message'=>'تم إنشاء المستأجر بنجاح'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_tenant_update': {
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $tid2   = (int)($input_data['id'] ?? 0);
+        if (!$tid2) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $fields = [];
+        foreach (['name','owner_email','owner_name','phone','plan','status','logo_url','domain','primary_color','max_users','notes','trial_ends'] as $f) {
+            if (isset($input_data[$f])) {
+                if ($f === 'plan')   $val = in_array($input_data[$f],['trial','starter','pro','enterprise']) ? $input_data[$f] : 'trial';
+                elseif ($f === 'status') $val = in_array($input_data[$f],['active','suspended','cancelled']) ? $input_data[$f] : 'active';
+                elseif ($f === 'max_users') $val = max(1,(int)$input_data[$f]);
+                else $val = $conn->real_escape_string($input_data[$f]);
+                $fields[] = "`$f`=" . (is_int($val) ? $val : "'$val'");
+            }
+        }
+        if (empty($fields)) { echo json_encode(['success'=>false,'message'=>'لا توجد حقول للتحديث'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("UPDATE tenants SET " . implode(',', $fields) . " WHERE id=$tid2");
+        acc_audit($conn, $tid2, 'tenant', $tid2, 'update', implode('|', $fields), 'platform', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true,'message'=>'تم التحديث'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_stats': {
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $total   = (int)$conn->query("SELECT COUNT(*) c FROM tenants")->fetch_assoc()['c'];
+        $active  = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE status='active'")->fetch_assoc()['c'];
+        $trial   = (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE plan='trial' AND status='active'")->fetch_assoc()['c'];
+        $newMonth= (int)$conn->query("SELECT COUNT(*) c FROM tenants WHERE created_at>=DATE_FORMAT(NOW(),'%Y-%m-01')")->fetch_assoc()['c'];
+        $users   = (int)$conn->query("SELECT COUNT(*) c FROM users")->fetch_assoc()['c'];
+        $invs    = (int)$conn->query("SELECT COUNT(*) c FROM acc_invoices")->fetch_assoc()['c'];
+        $revenue = 0; // placeholder: يُستبدل بجدول اشتراكات لاحقًا
+        echo json_encode(['success'=>true,'stats'=>compact('total','active','trial','newMonth','users','invs','revenue')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     // ─── المصادقة ───────────────────────────────────────────────────────────
 

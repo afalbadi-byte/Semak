@@ -13,6 +13,19 @@ export const API_URL = import.meta.env.VITE_API_URL || 'https://semak.sa/api.php
 // معرّف المنشأة (للمحرّك المحاسبي المستقل). افتراضي 1 للإنتاج، قابل للتهيئة لاحقًا للـ SaaS.
 export const TENANT = Number(import.meta.env.VITE_TENANT_ID || 1);
 
+// ─── رموز JWT المخزونة في localStorage ──────────────────────────────────────
+export const LS_ADMIN_JWT    = 'semak_admin_jwt';
+export const LS_PLATFORM_JWT = 'semak_platform_token';
+
+export function getAdminToken()    { try { return localStorage.getItem(LS_ADMIN_JWT)    || null; } catch { return null; } }
+export function getPlatformToken() { try { return localStorage.getItem(LS_PLATFORM_JWT) || null; } catch { return null; } }
+
+// إرجاع ترويسة Authorization إن وُجد رمز صالح
+function authHeaders() {
+    const t = getPlatformToken() || getAdminToken();
+    return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 // ─── بناء رابط كامل مع باراميترات ───────────────────────────────────────────
 // يُستخدم للروابط المباشرة: window.open / <a href> / <img src> / روابط PDF.
 export function apiUrl(action, params = {}) {
@@ -36,9 +49,12 @@ export async function api(action, { method = 'GET', params = {}, body = null, te
     if (body != null) {
         // وجود body يعني POST تلقائيًا (ما لم يُحدَّد method صراحةً غير GET)
         opts.method  = method === 'GET' ? 'POST' : method;
-        opts.headers = { 'Content-Type': 'application/json' };
+        opts.headers = { 'Content-Type': 'application/json', ...authHeaders() };
         const payload = { action, ...(tenant != null ? { tenant_id: tenant } : {}), ...body };
         opts.body = JSON.stringify(payload);
+    } else {
+        // GET أو طلب بدون body — نضيف ترويسة المصادقة فقط
+        opts.headers = { ...authHeaders() };
     }
     const res = await fetch(url, opts);
     let json;
