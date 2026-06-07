@@ -215,13 +215,15 @@ $conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS project_label VARCHAR(
 $conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
 $conn->query("ALTER TABLE units    ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
 $conn->query("ALTER TABLE owners   ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE maintenance ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE leads       ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_projects_tid    ON projects(tenant_id)");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_units_tid       ON units(tenant_id)");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_maintenance_tid ON maintenance(tenant_id)");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_leads_tid       ON leads(tenant_id)");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_owners_natid    ON owners(national_id)");
+$conn->query("ALTER TABLE maintenance  ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("ALTER TABLE leads        ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("ALTER TABLE inspections  ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_projects_tid     ON projects(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_units_tid        ON units(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_maintenance_tid  ON maintenance(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_leads_tid        ON leads(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_inspections_tid  ON inspections(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_owners_natid     ON owners(national_id)");
 // جدول طلبات الشراء (Leads) للراغبين في الشراء من بوابة العملاء
 $conn->query("CREATE TABLE IF NOT EXISTS acc_leads (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -2623,14 +2625,15 @@ switch ($action) {
     // ─── الفحص والتسليم ─────────────────────────────────────────────────────
 
     case 'get_all_inspections':
-        $res  = $conn->query("SELECT * FROM inspections ORDER BY id DESC");
+        $tid  = $_jwt_tid ?? 1;
+        $res  = $conn->query("SELECT * FROM inspections WHERE tenant_id=$tid ORDER BY id DESC");
         $data = [];
         if ($res) { while ($row = $res->fetch_assoc()) { $data[] = $row; } }
         echo json_encode(["success" => true, "data" => $data]);
         break;
 
     case 'get_inspection':
-        $unit = $conn->real_escape_string($_GET['unit']);
+        $unit = $conn->real_escape_string($_GET['unit'] ?? '');
         $res  = $conn->query("SELECT id, unit, progress, status, client_submitted_at FROM inspections WHERE unit = '$unit' LIMIT 1");
         if ($res && $row = $res->fetch_assoc()) {
             echo json_encode(["success" => true, "data" => $row]);
@@ -2640,23 +2643,25 @@ switch ($action) {
         break;
 
     case 'set_inspection_status':
+        $tid    = $_jwt_tid ?? 1;
         $unit   = $conn->real_escape_string($input_data['unit'] ?? '');
         $status = $conn->real_escape_string($input_data['status'] ?? '');
         if (!$unit || !$status) { echo json_encode(["success" => false, "message" => "بيانات ناقصة"]); break; }
-        $conn->query("UPDATE inspections SET status='$status' WHERE unit='$unit'");
+        $conn->query("UPDATE inspections SET status='$status' WHERE unit='$unit' AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
 
     case 'save_inspection':
+        $tid       = $_jwt_tid ?? 1;
         $unit      = $conn->real_escape_string($input_data['unit']);
         $evaluator = (int)$input_data['evaluator_id'];
         $insData   = $conn->real_escape_string($input_data['inspection_data']);
         $progress  = (int)$input_data['progress'];
-        $check     = $conn->query("SELECT id FROM inspections WHERE unit = '$unit'");
+        $check     = $conn->query("SELECT id FROM inspections WHERE unit = '$unit' AND tenant_id=$tid");
         if ($check && $check->num_rows > 0) {
-            $conn->query("UPDATE inspections SET inspection_data='$insData', progress=$progress WHERE unit='$unit'");
+            $conn->query("UPDATE inspections SET inspection_data='$insData', progress=$progress WHERE unit='$unit' AND tenant_id=$tid");
         } else {
-            $conn->query("INSERT INTO inspections (unit, evaluator_id, inspection_data, progress) VALUES ('$unit', $evaluator, '$insData', $progress)");
+            $conn->query("INSERT INTO inspections (tenant_id, unit, evaluator_id, inspection_data, progress) VALUES ($tid, '$unit', $evaluator, '$insData', $progress)");
         }
         echo json_encode(["success" => true]);
         break;
@@ -2895,10 +2900,15 @@ switch ($action) {
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
             notify($conn, 1, null, 'maintenance', 'طلب صيانة جديد', 'العميل ' . $name . ' · وحدة ' . $unit . ' · ' . $type, '/admin/dashboard/maintenance');
-            acc_audit($conn, 1, 'maintenance', $new_id, 'create', 'طلب صيانة · ' . $name . ' · ' . $unit, $name);
+            acc_audit($conn, $tid, 'maintenance', $new_id, 'create', 'طلب صيانة · ' . $name . ' · ' . $unit, $name);
             $wa_token    = MOTTASL_TOKEN;
             $wa_headers  = ["Content-Type: application/json", "Authorization: Bearer $wa_token"];
-            $admin_phone = "966550163121";
+            // رقم المدير الخاص بالمستأجر (من جدول tenants أو الإعدادات)
+            $tPhoneRow   = $conn->query("SELECT phone FROM tenants WHERE id=$tid LIMIT 1");
+            $tPhone      = ($tPhoneRow && ($tpr = $tPhoneRow->fetch_assoc()) && !empty($tpr['phone']))
+                           ? preg_replace('/\D/', '', $tpr['phone']) : '966550163121';
+            if (substr($tPhone, 0, 3) !== '966') $tPhone = '966' . ltrim($tPhone, '0');
+            $admin_phone = $tPhone;
 
             // ① إشعار الإدارة (قالب semak_admin_maintenance)
             $ch = curl_init("https://api.mottasl.ai/v1/message/send?create=true");
@@ -3028,10 +3038,14 @@ switch ($action) {
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
             notify($conn, 1, null, 'lead', 'عميل محتمل جديد', 'الاسم: ' . $name . ' · ' . $interest, '/admin/dashboard/leads');
-            acc_audit($conn, 1, 'lead', $new_id, 'create', 'عميل محتمل · ' . $name . ' · ' . $interest, $name);
+            acc_audit($conn, $tid, 'lead', $new_id, 'create', 'عميل محتمل · ' . $name . ' · ' . $interest, $name);
             // إرسال إشعار واتساب للإدارة تلقائياً
-            $wa_token  = MOTTASL_TOKEN;
-            $admin_phone = "966550163121";
+            $wa_token    = MOTTASL_TOKEN;
+            $tPhoneRow   = $conn->query("SELECT phone FROM tenants WHERE id=$tid LIMIT 1");
+            $tPhone      = ($tPhoneRow && ($tpr = $tPhoneRow->fetch_assoc()) && !empty($tpr['phone']))
+                           ? preg_replace('/\D/', '', $tpr['phone']) : '966550163121';
+            if (substr($tPhone, 0, 3) !== '966') $tPhone = '966' . ltrim($tPhone, '0');
+            $admin_phone = $tPhone;
             // قالب semak_admin_lead: [name, phone, interest]
             $wa_payload = json_encode(["to" => $admin_phone, "type" => "template",
                 "template" => ["template_id" => "semak_admin_lead", "language" => "ar",
