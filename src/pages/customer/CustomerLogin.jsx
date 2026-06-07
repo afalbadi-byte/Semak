@@ -221,7 +221,7 @@ export default function CustomerLogin() {
                     onChange={e => setIdentifier(e.target.value)}
                     required autoFocus
                     className="w-full bg-slate-50 dark:bg-brand-900 border-2 border-slate-200 dark:border-brand-700 px-5 py-3.5 pr-12 rounded-xl outline-none focus:border-gold-500 focus:bg-white dark:focus:bg-brand-800 text-brand-800 dark:text-brand-50 transition font-black tracking-wide placeholder:font-normal placeholder:text-slate-300 dark:placeholder-brand-500"
-                    placeholder="SM-A01 أو 05xxxxxxxx"
+                    placeholder="رقم الوحدة · الجوال · رقم الهوية"
                   />
                 </div>
               </div>

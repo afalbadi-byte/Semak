@@ -182,6 +182,26 @@ if ($__pt && ($__ptr = $__pt->fetch_assoc()) && strpos($__ptr['ct'], "'partner'"
 // إضافة حقل الملاحظات للأطراف (ترحيل تلقائي مرة واحدة)
 $conn->query("ALTER TABLE acc_parties ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL");
 
+// بوابة المشترين: هوية وطنية + معرّف طرف محاسبي على جدول owners
+$conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS national_id VARCHAR(12) DEFAULT NULL");
+$conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS party_id INT DEFAULT NULL");
+$conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS project_label VARCHAR(200) DEFAULT NULL");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_owners_natid ON owners(national_id)");
+// جدول طلبات الشراء (Leads) للراغبين في الشراء من بوابة العملاء
+$conn->query("CREATE TABLE IF NOT EXISTS acc_leads (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(255) NOT NULL,
+    phone       VARCHAR(30)  NOT NULL,
+    national_id VARCHAR(12)  DEFAULT NULL,
+    unit_code   VARCHAR(40)  DEFAULT NULL,
+    project_id  INT          DEFAULT NULL,
+    notes       TEXT         DEFAULT NULL,
+    status      ENUM('new','contacted','reserved','closed') DEFAULT 'new',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_phone (phone),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // مراكز التكلفة
 $conn->query("CREATE TABLE IF NOT EXISTS acc_cost_centers (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -1377,7 +1397,21 @@ switch ($action) {
                 $q = $conn->query("SELECT id,owner_name,owner_email,owner_phone,unit_code FROM owners WHERE UPPER(unit_code)='$u' LIMIT 1");
                 if ($q && $r = $q->fetch_assoc()) $rec = ['id'=>(int)$r['id'],'name'=>$r['owner_name'],'email'=>$r['owner_email'],'phone'=>$r['owner_phone'],'ref'=>$r['unit_code']];
             } elseif ($type === 'national_id') {
-                echo json_encode(['success' => false, 'message' => 'الدخول برقم الهوية غير متاح حاليًا — استخدم رقم الوحدة أو الجوال أو البريد']); break;
+                $nid = $conn->real_escape_string($val);
+                $q = $conn->query("SELECT id,owner_name,owner_email,owner_phone,unit_code FROM owners WHERE national_id='$nid' LIMIT 1");
+                if ($q && $r = $q->fetch_assoc()) {
+                    $rec = ['id'=>(int)$r['id'],'name'=>$r['owner_name'],'email'=>$r['owner_email'],'phone'=>$r['owner_phone'],'ref'=>$r['unit_code']];
+                } else {
+                    // بحث احتياطي في acc_parties بواسطة رقم الضريبة (يُستخدم أحياناً لتخزين الهوية)
+                    $q2 = $conn->query("SELECT id,name,email,phone FROM acc_parties WHERE tenant_id=1 AND vat_number='$nid' LIMIT 1");
+                    if ($q2 && $r2 = $q2->fetch_assoc()) {
+                        // إنشاء مدخل مؤقت في owners إن لم يكن موجوداً
+                        $pn = $conn->real_escape_string($r2['name']); $pe = $conn->real_escape_string($r2['email']??''); $pp = $conn->real_escape_string($r2['phone']??'');
+                        $conn->query("INSERT INTO owners (owner_name,owner_email,owner_phone,unit_code,national_id,party_id) VALUES ('$pn','$pe','$pp','','$nid',{$r2['id']}) ON DUPLICATE KEY UPDATE national_id='$nid'");
+                        $newId = (int)$conn->insert_id ?: (int)(($conn->query("SELECT id FROM owners WHERE national_id='$nid' LIMIT 1"))->fetch_assoc()['id']??0);
+                        if ($newId) $rec = ['id'=>$newId,'name'=>$r2['name'],'email'=>$r2['email']??'','phone'=>$r2['phone']??'','ref'=>''];
+                    }
+                }
             }
         }
 
@@ -1510,12 +1544,110 @@ switch ($action) {
             acc_audit($conn, 1, 'auth', $rid, 'login', 'دخول موحّد ناجح · IP ' . $ip, $user['email'] ?? '');
             echo json_encode(['success' => true, 'scope' => 'staff', 'data' => $user, 'device_token' => $device_token]);
         } else {
-            $or = $conn->query("SELECT owner_name as name, owner_phone as phone, owner_email as email, unit_code as unit FROM owners WHERE id=$rid LIMIT 1");
+            $or = $conn->query("SELECT owner_name as name, owner_phone as phone, owner_email as email, unit_code as unit, national_id, party_id, project_label FROM owners WHERE id=$rid LIMIT 1");
             $owner = $or ? $or->fetch_assoc() : null;
             if (!$owner) { echo json_encode(['success' => false, 'message' => 'العميل غير موجود']); break; }
+            // اجلب اسم المشروع من جدول units إن لم يكن محفوظاً
+            if (empty($owner['project_label']) && !empty($owner['unit'])) {
+                $uc = $conn->real_escape_string($owner['unit']);
+                $pj = $conn->query("SELECT p.name FROM units u JOIN projects p ON p.id=u.project_id WHERE u.unit_code='$uc' LIMIT 1");
+                if ($pj && ($pjr = $pj->fetch_assoc())) $owner['project_label'] = $pjr['name'];
+            }
             acc_audit($conn, 1, 'auth', null, 'login', 'عميل · وحدة=' . ($owner['unit'] ?? ''), $owner['name'] ?? '', $_clientIp, $_clientUa);
             echo json_encode(['success' => true, 'scope' => 'customer', 'data' => $owner]);
         }
+        break;
+    }
+
+    // ─── بوابة العملاء / المشترين ────────────────────────────────────────────────
+
+    case 'customer_account': {
+        // كشف الحساب المالي للعميل: الفواتير المفتوحة + سجل المدفوعات
+        // البحث بالجوال ثم party_id (إن عُرِف)
+        $phone = preg_replace('/\D/', '', (string)($_GET['phone'] ?? ''));
+        $phone = ltrim($phone, '0');
+        $pid   = (int)($_GET['party_id'] ?? 0);
+        $tid   = 1;
+        // إيجاد الطرف
+        $party = null;
+        if ($pid > 0) {
+            $pr = $conn->query("SELECT id,name,phone,email FROM acc_parties WHERE id=$pid AND tenant_id=$tid LIMIT 1");
+            if ($pr) $party = $pr->fetch_assoc();
+        }
+        if (!$party && $phone !== '') {
+            $last9 = substr($phone, -9);
+            $le    = $conn->real_escape_string($last9);
+            $pr    = $conn->query("SELECT id,name,phone,email FROM acc_parties WHERE tenant_id=$tid AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE '%$le%' LIMIT 1");
+            if ($pr) $party = $pr->fetch_assoc();
+        }
+        if (!$party) { echo json_encode(['success'=>false,'message'=>'لا يوجد حساب مالي مرتبط']); break; }
+        $ppid = (int)$party['id'];
+        // الفواتير المفتوحة
+        $ir = $conn->query("SELECT id,invoice_no,issue_date,due_date,total,paid,status,doc_type FROM acc_invoices WHERE tenant_id=$tid AND party_id=$ppid AND status NOT IN ('draft','void') ORDER BY issue_date DESC LIMIT 50");
+        $invoices = []; while ($ir && ($x = $ir->fetch_assoc())) $invoices[] = $x;
+        // سجل المدفوعات
+        $pymr = $conn->query("SELECT pay_no,date,method,amount,invoice_id FROM acc_payments WHERE tenant_id=$tid AND party_id=$ppid ORDER BY date DESC LIMIT 50");
+        $payments = []; while ($pymr && ($x = $pymr->fetch_assoc())) $payments[] = $x;
+        // الإجماليات
+        $totInv = array_sum(array_column($invoices, 'total'));
+        $totPd  = array_sum(array_column($invoices, 'paid'));
+        $totBal = array_sum(array_map(fn($r) => max(0, $r['total']-$r['paid']), $invoices));
+        echo json_encode(['success'=>true,'party'=>$party,'invoices'=>$invoices,'payments'=>$payments,
+            'totals'=>['invoiced'=>round($totInv,2),'paid'=>round($totPd,2),'balance'=>round($totBal,2)]
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'customer_available_units': {
+        // الوحدات المتاحة للبيع: status='متاح' ولا يوجد مالك مسجّل
+        $res = $conn->query("
+            SELECT u.id, u.unit_code, u.status, u.spaces,
+                   p.id AS project_id, p.name AS project_name, p.description AS project_desc, p.status AS project_status
+            FROM units u
+            JOIN projects p ON p.id = u.project_id
+            LEFT JOIN owners o ON o.unit_code = u.unit_code
+            WHERE u.status = 'متاح' AND o.id IS NULL
+            ORDER BY p.name, u.unit_code
+            LIMIT 100");
+        $rows = [];
+        while ($res && ($x = $res->fetch_assoc())) {
+            $spaces = json_decode($x['spaces'] ?? '[]', true) ?: [];
+            // استخلاص المساحة والسعر من حقل spaces (مخصص حسب المشروع)
+            $area  = null; $price = null;
+            foreach ($spaces as $sp) {
+                if (!empty($sp['label']) && (strpos($sp['label'],'مساحة') !== false || strpos($sp['label'],'Area') !== false)) $area = $sp['value'] ?? null;
+                if (!empty($sp['label']) && (strpos($sp['label'],'سعر') !== false || strpos($sp['label'],'Price') !== false)) $price = $sp['value'] ?? null;
+            }
+            $rows[] = ['id'=>$x['id'],'unit_code'=>$x['unit_code'],'project_id'=>$x['project_id'],
+                'project_name'=>$x['project_name'],'project_desc'=>$x['project_desc'],'project_status'=>$x['project_status'],
+                'area'=>$area,'price'=>$price,'spaces'=>$spaces];
+        }
+        echo json_encode(['success'=>true,'data'=>$rows,'count'=>count($rows)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'customer_lead_save': {
+        // حفظ طلب اهتمام بشراء وحدة (Lead)
+        $name  = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $phone = $conn->real_escape_string(trim($input_data['phone'] ?? ''));
+        $nid   = $conn->real_escape_string(trim($input_data['national_id'] ?? ''));
+        $unit  = $conn->real_escape_string(trim($input_data['unit_code'] ?? ''));
+        $proj  = (int)($input_data['project_id'] ?? 0);
+        $notes = $conn->real_escape_string(trim($input_data['notes'] ?? ''));
+        if (!$name || !$phone) { echo json_encode(['success'=>false,'message'=>'الاسم والجوال مطلوبان']); break; }
+        $projSql = $proj > 0 ? $proj : 'NULL';
+        $conn->query("INSERT INTO acc_leads (name,phone,national_id,unit_code,project_id,notes) VALUES ('$name','$phone','$nid','$unit',$projSql,'$notes')");
+        $lid = (int)$conn->insert_id;
+        // إشعار واتساب للإدارة
+        $sRes = $conn->query("SELECT value FROM acc_settings WHERE tenant_id=1 AND key_name='company_phone' LIMIT 1");
+        $adminPhone = $sRes && ($sr=$sRes->fetch_assoc()) ? $sr['value'] : '';
+        if ($adminPhone) {
+            $aPhone = preg_replace('/\D/', '', $adminPhone); $aPhone = ltrim($aPhone, '0');
+            if (substr($aPhone,0,3)!=='966') $aPhone='966'.$aPhone;
+            $unitTxt = $unit ?: ($proj > 0 ? "مشروع #$proj" : 'غير محدد');
+            wa_send_text($aPhone, "🏠 طلب اهتمام جديد برقم $lid\nالاسم: $name\nالجوال: $phone\nالوحدة: $unitTxt\n" . ($notes ? "ملاحظات: $notes" : ''));
+        }
+        echo json_encode(['success'=>true,'lead_id'=>$lid,'message'=>'تم تسجيل طلبك، سيتواصل معك فريقنا قريباً'], JSON_UNESCAPED_UNICODE);
         break;
     }
 
