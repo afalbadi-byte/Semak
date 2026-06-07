@@ -6453,6 +6453,45 @@ switch ($action) {
         break;
     }
 
+    case 'tenant_usage': {
+        // استخدام المستأجر الحالي — عدد المستخدمين، الفواتير، حدود الباقة
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يجب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        // جلب بيانات الباقة والحدود من tenants
+        $planLimits = [
+            'trial'      => ['max_users'=>3,  'max_invoices_month'=>50],
+            'starter'    => ['max_users'=>5,  'max_invoices_month'=>500],
+            'pro'        => ['max_users'=>15, 'max_invoices_month'=>-1],
+            'enterprise' => ['max_users'=>-1, 'max_invoices_month'=>-1],
+        ];
+        $tq = $conn->query("SELECT plan,max_users FROM tenants WHERE id=$tid LIMIT 1");
+        $tr = $tq ? $tq->fetch_assoc() : null;
+        $plan2   = $tr['plan'] ?? 'trial';
+        $limits  = $planLimits[$plan2] ?? $planLimits['trial'];
+        if (($tr['max_users'] ?? 0) > 0) $limits['max_users'] = (int)$tr['max_users'];
+        // عدد المستخدمين الحاليين
+        $uRes = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE tenant_id=$tid");
+        $uCnt = (int)($uRes->fetch_assoc()['cnt'] ?? 0);
+        // فواتير هذا الشهر
+        $monthStart = date('Y-m-01');
+        $iRes = $conn->query("SELECT COUNT(*) AS cnt FROM acc_invoices WHERE tenant_id=$tid AND issue_date >= '$monthStart'");
+        $iCnt = (int)($iRes->fetch_assoc()['cnt'] ?? 0);
+        // التحقق من الرقم الضريبي
+        $vnRes = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=$tid AND skey='vat_number' LIMIT 1");
+        $vn    = $vnRes ? ($vnRes->fetch_assoc()['sval'] ?? '') : '';
+        $vatOk = preg_match('/^\d{15}$/', $vn) ? 1 : 0;
+        echo json_encode([
+            'success'             => true,
+            'plan'                => $plan2,
+            'users'               => $uCnt,
+            'max_users'           => $limits['max_users'],
+            'invoices_month'      => $iCnt,
+            'max_invoices_month'  => $limits['max_invoices_month'],
+            'vat_verified'        => $vatOk,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'delete_logo': {
         if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يجب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $tid = $_jwt_tid ?? 1;
