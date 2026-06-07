@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v425
+// deploy: 2026-06-07-v426
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -1618,7 +1618,18 @@ switch ($action) {
     // ─── هوية المنشأة (للفرونت-إند: ألوان + شعار + اسم) ────────────────────────
     case 'tenant_branding': {
         // endpoint عام — يُرجع إعدادات الهوية البصرية + بيانات الاشتراك
-        $btid = $_jwt_tid ?? 1;
+        // إذا لم يكن JWT وكان ?unit= موجوداً → ابحث عن المستأجر من رمز الوحدة (بوابة العملاء)
+        $btid = $_jwt_tid ?? null;
+        if (!$btid) {
+            $unitCode = $conn->real_escape_string(trim((string)($_GET['unit'] ?? '')));
+            if ($unitCode) {
+                $uq = $conn->query("SELECT p.tenant_id FROM units u
+                                     JOIN projects p ON u.project_id=p.id
+                                     WHERE u.unit_code='$unitCode' LIMIT 1");
+                if ($uq && ($ur = $uq->fetch_assoc())) $btid = (int)$ur['tenant_id'];
+            }
+        }
+        if (!$btid) $btid = 1;   // fallback نهائي — المستأجر الأول
         $tq = $conn->query("SELECT name,status,primary_color,logo_url,slug,plan,trial_ends FROM tenants WHERE id=$btid LIMIT 1");
         $tenant = $tq ? $tq->fetch_assoc() : null;
         if (!$tenant || $tenant['status'] === 'cancelled') {

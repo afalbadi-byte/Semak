@@ -27,7 +27,7 @@ const getWarrantyYears = (type, handoverDate) => {
 };
 
 export default function Maintenance() {
-  const { customer, setCustomer, showToast, branding } = useContext(AppContext);
+  const { customer, setCustomer, showToast, branding, setBranding } = useContext(AppContext);
   const companyName = branding?.company_name || 'سماك العقارية';
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,6 +57,12 @@ export default function Maintenance() {
       if (!customer) navigate("/customer-login");
       return;
     }
+
+    // جلب هوية المنشأة بناءً على الوحدة (بدون JWT — بوابة العملاء)
+    fetch(`${API_URL}?action=tenant_branding&unit=${encodeURIComponent(unitFromQR.trim())}`)
+      .then(r => r.json())
+      .then(b => { if (b.success) setBranding(b); })
+      .catch(() => {});
 
     // إذا الوحدة نفسها محمّلة مسبقاً، لا تعيد الجلب
     if (customer?.unit === unitFromQR) {

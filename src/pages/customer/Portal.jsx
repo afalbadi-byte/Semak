@@ -349,7 +349,7 @@ function AvailableUnitsTab({ customer }) {
    البوابة الرئيسية
 ──────────────────────────────────────────────────────────── */
 export default function Portal() {
-  const { customer, logout, showToast, branding } = useContext(AppContext);
+  const { customer, logout, showToast, branding, setBranding } = useContext(AppContext);
   const companyName = branding?.company_name || 'سماك العقارية';
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('unit'); // 'unit' | 'account' | 'units'
@@ -361,6 +361,13 @@ export default function Portal() {
     if (!customer) { navigate('/customer-login'); return; }
     // إن لم يكن لديه وحدة → ابدأ بتبويب الوحدات المتاحة
     if (!customer.unit) setActiveTab('units');
+    // جلب هوية المنشأة بناءً على الوحدة (تلقائي — بدون JWT)
+    if (customer.unit) {
+      fetch(`${API_URL}?action=tenant_branding&unit=${encodeURIComponent(customer.unit)}`)
+        .then(r => r.json())
+        .then(b => { if (b.success) setBranding(b); })
+        .catch(() => {});
+    }
     const fetchAll = async () => {
       if (!customer.unit) { setDataLoading(false); return; }
       try {
