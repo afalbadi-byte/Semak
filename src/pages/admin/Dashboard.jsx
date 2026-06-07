@@ -51,11 +51,13 @@ const ActivityLog       = React.lazy(() => import('./ActivityLog'));
 const SecuritySettings  = React.lazy(() => import('./SecuritySettings'));
 const SubscriptionPage  = React.lazy(() => import('./SubscriptionPage'));
 // ── بوابة التقنية ──────────────────────────────────────────────────────────
-const SwOverview  = React.lazy(() => import('./SwOverview'));
-const SwClients   = React.lazy(() => import('./SwClients'));
-const SwTickets   = React.lazy(() => import('./SwTickets'));
-const SwProducts  = React.lazy(() => import('./SwProducts'));
-const SwInvoices  = React.lazy(() => import('./SwInvoices'));
+const SwOverview     = React.lazy(() => import('./SwOverview'));
+const SwClients      = React.lazy(() => import('./SwClients'));
+const SwTickets      = React.lazy(() => import('./SwTickets'));
+const SwProducts     = React.lazy(() => import('./SwProducts'));
+const SwInvoices     = React.lazy(() => import('./SwInvoices'));
+// ── لوحة المنصة (Platform Admin) ────────────────────────────────────────────
+const PlatformAdmin  = React.lazy(() => import('./PlatformAdmin'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
@@ -438,6 +440,7 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
     const [switcherOpen, setSwitcherOpen] = useState(false);
 
     const isSoftware = activeTab?.startsWith('sw_');
+    const isPlatform = activeTab?.startsWith('platform_');
 
     const go = (tabId) => {
         setActiveTab(tabId);
@@ -451,8 +454,9 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
     };
     const switchBusiness = (sw) => {
         setSwitcherOpen(false);
-        if (sw === 'software' && !isSoftware) go('sw_overview');
-        if (sw === 'realestate' && isSoftware) go('overview');
+        if (sw === 'software'   && !isSoftware)  go('sw_overview');
+        if (sw === 'realestate' && (isSoftware || isPlatform)) go('overview');
+        if (sw === 'platform'   && !isPlatform)  go('platform_overview');
     };
 
     return (
@@ -474,11 +478,11 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
                         onClick={() => setSwitcherOpen(o => !o)}
                         className="w-full flex items-center gap-2.5 bg-white/10 hover:bg-white/15 px-3.5 py-2.5 rounded-xl transition-all group"
                     >
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black shrink-0 ${isSoftware ? 'bg-indigo-500' : 'bg-gold-500'}`}>
-                            {isSoftware ? '💻' : '🏗️'}
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black shrink-0 ${isPlatform ? 'bg-violet-600' : isSoftware ? 'bg-indigo-500' : 'bg-gold-500'}`}>
+                            {isPlatform ? '🛡️' : isSoftware ? '💻' : '🏗️'}
                         </div>
                         <span className="flex-1 text-right text-sm font-black text-white truncate">
-                            {isSoftware ? 'سماك التقنية' : 'سماك العقارية'}
+                            {isPlatform ? 'لوحة المنصة' : isSoftware ? 'سماك التقنية' : 'سماك العقارية'}
                         </span>
                         <ChevronDown size={14} className={`text-brand-300 group-hover:text-white transition-transform ${switcherOpen ? '' : '-rotate-90'}`} />
                     </button>
@@ -488,8 +492,9 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
                             {[
                                 { id:'realestate', emoji:'🏗️', label:'سماك العقارية', color:'bg-gold-500' },
                                 { id:'software',   emoji:'💻', label:'سماك التقنية',  color:'bg-indigo-500' },
+                                { id:'platform',   emoji:'🛡️', label:'لوحة المنصة',   color:'bg-violet-600' },
                             ].map(b => {
-                                const isActive = b.id === (isSoftware ? 'software' : 'realestate');
+                                const isActive = b.id === (isPlatform ? 'platform' : isSoftware ? 'software' : 'realestate');
                                 return (
                                     <button
                                         key={b.id}
@@ -509,7 +514,23 @@ function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLead
                 {/* ── التنقّل ──────────────────────────────────────────────── */}
                 <nav className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-1">
 
-                {isSoftware ? (
+                {isPlatform ? (
+                    // ── قائمة لوحة المنصة ────────────────────────────────
+                    <>
+                        <p className="px-3 py-1 text-[10px] font-black tracking-widest text-brand-400 uppercase mb-1">المنصة</p>
+                        {[{ tabId:'platform_overview', icon:ShieldCheck, label:'لوحة التحكم' }].map(item => {
+                            const Icon = item.icon;
+                            const isActive = activeTab === item.tabId;
+                            return (
+                                <button key={item.tabId} onClick={() => go(item.tabId)}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-sm font-bold ${isActive ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30' : 'text-brand-200 hover:bg-white/10 hover:text-white'}`}>
+                                    <Icon size={16} className={isActive ? 'text-white' : 'text-brand-300'} />
+                                    <span className="truncate">{item.label}</span>
+                                </button>
+                            );
+                        })}
+                    </>
+                ) : isSoftware ? (
                     // ── قائمة بوابة التقنية ──────────────────────────────
                     <>
                         <p className="px-3 py-1 text-[10px] font-black tracking-widest text-brand-400 uppercase mb-1">بوابة التقنية</p>
@@ -1221,6 +1242,8 @@ function DashboardInner({ onLogout }) {
         // بوابة التقنية
         sw_overview:'لوحة التقنية', sw_clients:'عملاء التقنية', sw_tickets:'تذاكر الدعم',
         sw_products:'المنتجات', sw_invoices:'فواتير التقنية',
+        // لوحة المنصة
+        platform_overview:'لوحة المنصة',
         clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
         rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
         ledger:'الدفترة المستقلة', accounting:'دفتر المحاسبة (دفترة)', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
@@ -1308,14 +1331,14 @@ function DashboardInner({ onLogout }) {
             <main className="flex-1 overflow-y-auto bg-transparent custom-scrollbar">
 
                 {/* ─── شريط التنقل ───────────────────────────────────────── */}
-                {activeTab !== 'overview' && activeTab !== 'sw_overview' && (
+                {activeTab !== 'overview' && activeTab !== 'sw_overview' && activeTab !== 'platform_overview' && (
                     <div className="sticky top-0 z-20 bg-white/95 dark:bg-brand-900/95 backdrop-blur px-4 md:px-8 py-3 border-b border-brand-100/70 dark:border-brand-700 flex items-center justify-between gap-3">
                         <button
-                            onClick={() => setActiveTab(activeTab?.startsWith('sw_') ? 'sw_overview' : 'overview')}
+                            onClick={() => setActiveTab(activeTab?.startsWith('platform_') ? 'platform_overview' : activeTab?.startsWith('sw_') ? 'sw_overview' : 'overview')}
                             className={`flex items-center gap-2 text-sm font-bold transition border px-3 md:px-4 py-2 rounded-xl ${activeTab?.startsWith('sw_') ? 'text-indigo-700 dark:text-indigo-300 hover:text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 border-indigo-100 dark:border-indigo-500/20 hover:border-indigo-400' : 'text-brand-800 dark:text-brand-100 hover:text-gold-600 dark:hover:text-gold-400 bg-brand-50 dark:bg-brand-800 hover:bg-gold-50 dark:hover:bg-brand-700 border-brand-100 dark:border-brand-700 hover:border-gold-400'}`}
                         >
                             <ArrowLeft size={16}/>
-                            <span className="hidden sm:inline">{activeTab?.startsWith('sw_') ? 'لوحة التقنية' : 'الرئيسية'}</span>
+                            <span className="hidden sm:inline">{activeTab?.startsWith('platform_') ? 'لوحة المنصة' : activeTab?.startsWith('sw_') ? 'لوحة التقنية' : 'الرئيسية'}</span>
                             <span className="sm:hidden">رجوع</span>
                         </button>
                         <h2 className="text-sm md:text-base font-black text-brand-800 dark:text-brand-50 truncate">{TAB_LABELS[activeTab]}</h2>
@@ -1659,11 +1682,13 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
                 {activeTab === 'subscription'&& hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SubscriptionPage /></div>}
                 {/* ── بوابة التقنية ─────────────────────────────────────── */}
-                {activeTab === 'sw_overview'  && <SwOverview  onNavigate={setActiveTab} />}
-                {activeTab === 'sw_clients'   && <SwClients   showToast={showToast} />}
-                {activeTab === 'sw_tickets'   && <SwTickets   showToast={showToast} />}
-                {activeTab === 'sw_products'  && <SwProducts  showToast={showToast} />}
-                {activeTab === 'sw_invoices'  && <SwInvoices  showToast={showToast} />}
+                {activeTab === 'sw_overview'      && <SwOverview  onNavigate={setActiveTab} />}
+                {activeTab === 'sw_clients'        && <SwClients   showToast={showToast} />}
+                {activeTab === 'sw_tickets'        && <SwTickets   showToast={showToast} />}
+                {activeTab === 'sw_products'       && <SwProducts  showToast={showToast} />}
+                {activeTab === 'sw_invoices'       && <SwInvoices  showToast={showToast} />}
+                {/* ── لوحة المنصة ────────────────────────────────────────── */}
+                {activeTab === 'platform_overview' && <PlatformAdmin showToast={showToast} />}
                 </Suspense>
                 </ErrorBoundary>
 

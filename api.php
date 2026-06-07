@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v436
+// deploy: 2026-06-07-v437
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -726,6 +726,33 @@ function notify($conn, $tid, $user_id, $type, $title, $body = null, $link = null
                   VALUES ($tid,$uid,'$type','$title',$bodyS,$linkS)");
 }
 
+// ─── SaaS helpers ────────────────────────────────────────────────────────────
+// هل تملك خطة المستأجر ميزة معينة؟ (يرجع true/false)
+function tenant_feature($conn, $tid, $feature) {
+    $tid = (int)$tid;
+    $r = $conn->query("SELECT p.feature_flags FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.tenant_id=$tid LIMIT 1");
+    if ($r && ($row = $r->fetch_assoc()) && !empty($row['feature_flags'])) {
+        $flags = json_decode($row['feature_flags'] ?? '{}', true);
+        return !empty($flags[(string)$feature]);
+    }
+    // Fallback: tenants.plan ENUM
+    $r2 = $conn->query("SELECT plan FROM tenants WHERE id=$tid LIMIT 1");
+    if ($r2 && ($t = $r2->fetch_assoc())) {
+        if ($feature === 'sw_portal') return in_array($t['plan'], ['pro','enterprise']);
+        return true;
+    }
+    return true; // افتراضي: مسموح
+}
+// ما هو الحد الأقصى لعدد الموظفين في خطة المستأجر؟
+function tenant_user_limit($conn, $tid) {
+    $tid = (int)$tid;
+    $r = $conn->query("SELECT p.max_users FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.tenant_id=$tid LIMIT 1");
+    if ($r && ($row = $r->fetch_assoc())) return max(1,(int)$row['max_users']);
+    $r2 = $conn->query("SELECT max_users FROM tenants WHERE id=$tid LIMIT 1");
+    if ($r2 && ($t = $r2->fetch_assoc())) return max(1,(int)$t['max_users']);
+    return 5;
+}
+
 // ─── JWT (HS256 بدون مكتبة خارجية) ──────────────────────────────────────────
 function jwt_b64($d) { return rtrim(strtr(base64_encode($d), '+/', '-_'), '='); }
 function jwt_sign($payload, $secret = null) {
@@ -1380,8 +1407,12 @@ switch ($action) {
         if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
         $q = $conn->query("SELECT t.*,
             (SELECT COUNT(*) FROM users u WHERE u.tenant_id=t.id) AS user_count,
-            (SELECT COUNT(*) FROM acc_invoices i WHERE i.tenant_id=t.id) AS invoice_count
-            FROM tenants t ORDER BY t.id DESC LIMIT 500");
+            (SELECT COUNT(*) FROM acc_invoices i WHERE i.tenant_id=t.id) AS invoice_count,
+            p.name AS plan_name, p.price_yearly AS plan_price_yearly, p.max_users AS plan_max_users
+            FROM tenants t
+            LEFT JOIN subscriptions s ON s.tenant_id=t.id
+            LEFT JOIN plans p ON p.id=s.plan_id
+            ORDER BY t.id DESC LIMIT 500");
         $rows = [];
         while ($r = $q->fetch_assoc()) $rows[] = $r;
         echo json_encode(['success'=>true,'tenants'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -1768,6 +1799,58 @@ switch ($action) {
         $sendReminder($expiredR, 'expired');
         echo json_encode(['success'=>true,'sent'=>$sent,'failed'=>$failed,
                           'total_sent'=>count($sent),'total_failed'=>count($failed)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_plan_list': {
+        // قائمة خطط الاشتراك (منصة فقط)
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $rows = []; $r = $conn->query("SELECT * FROM plans ORDER BY sort_order ASC");
+        while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'plans'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_plan_save': {
+        // إضافة أو تعديل خطة (منصة فقط)
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $id    = (int)($input_data['id'] ?? 0);
+        $code  = $conn->real_escape_string(strtolower(trim($input_data['code'] ?? '')));
+        $name  = $conn->real_escape_string(trim($input_data['name'] ?? ''));
+        $prM   = (float)($input_data['price_monthly'] ?? 0);
+        $prY   = (float)($input_data['price_yearly']  ?? 0);
+        $maxU  = max(1,(int)($input_data['max_users'] ?? 5));
+        $sort  = (int)($input_data['sort_order'] ?? 0);
+        $flags = $conn->real_escape_string(is_string($input_data['feature_flags'] ?? '') ? ($input_data['feature_flags'] ?? '{}') : json_encode($input_data['feature_flags'] ?? new stdClass()));
+        $active= isset($input_data['is_active']) ? (int)$input_data['is_active'] : 1;
+        if (!$name || !$code) { echo json_encode(['success'=>false,'message'=>'code و name مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        if ($id > 0) {
+            $conn->query("UPDATE plans SET code='$code',name='$name',price_monthly=$prM,price_yearly=$prY,max_users=$maxU,feature_flags='$flags',is_active=$active,sort_order=$sort WHERE id=$id");
+        } else {
+            $conn->query("INSERT INTO plans (code,name,price_monthly,price_yearly,max_users,feature_flags,is_active,sort_order) VALUES ('$code','$name',$prM,$prY,$maxU,'$flags',$active,$sort)");
+            $id = $conn->insert_id;
+        }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'platform_subscription_update': {
+        // تغيير خطة مستأجر (منصة فقط)
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $tid2  = (int)($input_data['tenant_id'] ?? 0);
+        $planCode = $conn->real_escape_string($input_data['plan_code'] ?? '');
+        if (!$tid2 || !$planCode) { echo json_encode(['success'=>false,'message'=>'tenant_id و plan_code مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $pr = $conn->query("SELECT id,max_users FROM plans WHERE code='$planCode' LIMIT 1");
+        if (!$pr || !($pl = $pr->fetch_assoc())) { echo json_encode(['success'=>false,'message'=>'خطة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $planId = (int)$pl['id']; $maxU = (int)$pl['max_users'];
+        $conn->query("INSERT INTO subscriptions (tenant_id,plan_id,billing_cycle,starts_at,auto_renew)
+                      VALUES ($tid2,$planId,'yearly',CURDATE(),1)
+                      ON DUPLICATE KEY UPDATE plan_id=$planId,starts_at=CURDATE(),auto_renew=1,cancelled_at=NULL");
+        // تحديث tenants.plan للتوافق مع الكود القديم
+        $planEsc = in_array($planCode,['trial','starter','pro','enterprise']) ? $planCode : 'trial';
+        $conn->query("UPDATE tenants SET plan='$planEsc',max_users=$maxU WHERE id=$tid2");
+        acc_audit($conn, $tid2, 'subscription', $tid2, 'update', "plan=$planCode", 'platform', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true,'message'=>'تم تحديث الخطة'], JSON_UNESCAPED_UNICODE);
         break;
     }
 
@@ -2974,6 +3057,10 @@ switch ($action) {
         if (!$name || !$email || strlen($rawPw) < 6) {
             echo json_encode(['success'=>false,'message'=>'الاسم والبريد وكلمة المرور (6+ أحرف) مطلوبة'], JSON_UNESCAPED_UNICODE); break;
         }
+        // التحقق من حد عدد المستخدمين
+        $maxU = tenant_user_limit($conn, $tid);
+        $curU = (int)(($conn->query("SELECT COUNT(*) c FROM users WHERE tenant_id=$tid"))->fetch_assoc()['c'] ?? 0);
+        if ($curU >= $maxU) { echo json_encode(['success'=>false,'message'=>"تجاوزت الحد الأقصى ($maxU موظف) في خطتك الحالية. رقّ خطتك لإضافة المزيد."], JSON_UNESCAPED_UNICODE); break; }
         $check = $conn->query("SELECT id FROM users WHERE email='$email' LIMIT 1");
         if ($check && $check->num_rows > 0) { echo json_encode(['success'=>false,'message'=>'هذا البريد موجود مسبقاً'], JSON_UNESCAPED_UNICODE); break; }
         $pwHash = $conn->real_escape_string(password_hash($rawPw, PASSWORD_BCRYPT));
@@ -2998,6 +3085,10 @@ switch ($action) {
         $job   = $conn->real_escape_string(trim($input_data['job'] ?? ''));
         $phone = $conn->real_escape_string(trim($input_data['phone'] ?? ''));
         if (!$name || !$email) { echo json_encode(['success'=>false,'message'=>'الاسم والبريد مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        // التحقق من حد عدد المستخدمين
+        $maxU = tenant_user_limit($conn, $tid);
+        $curU = (int)(($conn->query("SELECT COUNT(*) c FROM users WHERE tenant_id=$tid"))->fetch_assoc()['c'] ?? 0);
+        if ($curU >= $maxU) { echo json_encode(['success'=>false,'message'=>"تجاوزت الحد الأقصى ($maxU موظف) في خطتك الحالية. رقّ خطتك لإضافة المزيد."], JSON_UNESCAPED_UNICODE); break; }
         $check = $conn->query("SELECT id FROM users WHERE email='$email' LIMIT 1");
         if ($check && $check->num_rows > 0) { echo json_encode(['success'=>false,'message'=>'هذا البريد مستخدم مسبقاً'], JSON_UNESCAPED_UNICODE); break; }
         $tempPass = substr(str_shuffle('ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#'), 0, 10);
@@ -10656,6 +10747,7 @@ KNOWLEDGE;
 
     case 'sw_overview': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $clients_total  = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_clients WHERE tenant_id=$stid")) ? $r->fetch_assoc()['c'] : 0);
         $clients_active = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_clients WHERE tenant_id=$stid AND status='active'")) ? $r->fetch_assoc()['c'] : 0);
         $tickets_open   = (int)(($r=$conn->query("SELECT COUNT(*) c FROM sw_tickets WHERE tenant_id=$stid AND status IN ('open','in_progress')")) ? $r->fetch_assoc()['c'] : 0);
@@ -10684,6 +10776,7 @@ KNOWLEDGE;
 
     case 'sw_clients_list': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $rows = []; $r = $conn->query("SELECT * FROM sw_clients WHERE tenant_id=$stid ORDER BY id DESC");
         while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
         echo json_encode(['success'=>true,'clients'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -10692,6 +10785,7 @@ KNOWLEDGE;
 
     case 'sw_client_save': {
         $stid    = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $id      = (int)($input_data['id'] ?? 0);
         $name    = $conn->real_escape_string(trim($input_data['name'] ?? ''));
         $company = $conn->real_escape_string(trim($input_data['company'] ?? ''));
@@ -10712,6 +10806,7 @@ KNOWLEDGE;
 
     case 'sw_client_del': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $id = (int)($input_data['id'] ?? 0);
         if ($id > 0) $conn->query("DELETE FROM sw_clients WHERE id=$id AND tenant_id=$stid");
         echo json_encode(['success'=>true]);
@@ -10720,6 +10815,7 @@ KNOWLEDGE;
 
     case 'sw_tickets_list': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $rows = []; $r = $conn->query("SELECT t.*,c.name client_name FROM sw_tickets t LEFT JOIN sw_clients c ON c.id=t.client_id AND c.tenant_id=$stid WHERE t.tenant_id=$stid ORDER BY t.id DESC");
         while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
         echo json_encode(['success'=>true,'tickets'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -10728,6 +10824,7 @@ KNOWLEDGE;
 
     case 'sw_ticket_save': {
         $stid     = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $id       = (int)($input_data['id'] ?? 0);
         $cid      = (int)($input_data['client_id'] ?? 0);
         $subject  = $conn->real_escape_string(trim($input_data['subject'] ?? ''));
@@ -10750,6 +10847,7 @@ KNOWLEDGE;
 
     case 'sw_ticket_update': {
         $stid   = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $id     = (int)($input_data['id'] ?? 0);
         $status = $conn->real_escape_string($input_data['status'] ?? '');
         if ($id > 0 && $status) $conn->query("UPDATE sw_tickets SET status='$status',updated_at=NOW() WHERE id=$id AND tenant_id=$stid");
@@ -10759,6 +10857,7 @@ KNOWLEDGE;
 
     case 'sw_ticket_replies': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $tid = (int)($_GET['ticket_id'] ?? $input_data['ticket_id'] ?? 0);
         // نتحقق أن التذكرة تنتمي للمستأجر ثم نجلب الردود
         $rows = []; $r = $conn->query("SELECT r.* FROM sw_ticket_replies r INNER JOIN sw_tickets t ON t.id=r.ticket_id AND t.tenant_id=$stid WHERE r.ticket_id=$tid ORDER BY r.id ASC");
@@ -10769,6 +10868,7 @@ KNOWLEDGE;
 
     case 'sw_ticket_reply': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $tid  = (int)($input_data['ticket_id'] ?? 0);
         $body = $conn->real_escape_string(trim($input_data['body'] ?? ''));
         $uid  = (int)($_jwt_claims['uid'] ?? 0);
@@ -10787,6 +10887,7 @@ KNOWLEDGE;
 
     case 'sw_products_list': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $rows = []; $r = $conn->query("SELECT * FROM sw_products WHERE tenant_id=$stid ORDER BY active DESC, id DESC");
         while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
         echo json_encode(['success'=>true,'products'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -10795,6 +10896,7 @@ KNOWLEDGE;
 
     case 'sw_product_save': {
         $stid  = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $id    = (int)($input_data['id'] ?? 0);
         $name  = $conn->real_escape_string(trim($input_data['name'] ?? ''));
         $type  = $conn->real_escape_string($input_data['type'] ?? 'subscription');
@@ -10815,6 +10917,7 @@ KNOWLEDGE;
 
     case 'sw_invoices_list': {
         $stid = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $rows = []; $r = $conn->query("SELECT i.*,c.name client_name,p.name product_name FROM sw_invoices i LEFT JOIN sw_clients c ON c.id=i.client_id AND c.tenant_id=$stid LEFT JOIN sw_products p ON p.id=i.product_id AND p.tenant_id=$stid WHERE i.tenant_id=$stid ORDER BY i.id DESC");
         while ($r && $x = $r->fetch_assoc()) $rows[] = $x;
         echo json_encode(['success'=>true,'invoices'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -10823,6 +10926,7 @@ KNOWLEDGE;
 
     case 'sw_invoice_save': {
         $stid   = $_jwt_tid ?? 1;
+        if (!tenant_feature($conn, $stid, 'sw_portal')) { echo json_encode(['success'=>false,'message'=>'بوابة التقنية غير متاحة في خطتك الحالية.'], JSON_UNESCAPED_UNICODE); break; }
         $id     = (int)($input_data['id'] ?? 0);
         $cid    = (int)($input_data['client_id'] ?? 0);
         $pid    = (int)($input_data['product_id'] ?? 0);
