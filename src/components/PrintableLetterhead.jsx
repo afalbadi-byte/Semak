@@ -233,7 +233,7 @@ export const SEMAK_PRINT_CSS = `
  * مكوّن المحتوى القابل للطباعة (يتضمّن الهيدر/الفوتر/العلامة المائية الثابتة).
  * يجب أن يُلَفّ المحتوى داخل صفحة HTML تتضمن SEMAK_PRINT_CSS.
  */
-export default function PrintableLetterhead({ children, documentLabel = '', subtitle = '', date = '' }) {
+export default function PrintableLetterhead({ children, documentLabel = '', subtitle = '', date = '', companyName = 'سماك العقارية' }) {
     return (
         <>
             {/* العلامة المائية — position:fixed تتكرر تلقائياً على كل صفحة */}
@@ -248,7 +248,7 @@ export default function PrintableLetterhead({ children, documentLabel = '', subt
                 <div className="semak-print-header-main">
                     <img src={LOGO} alt="شعار سماك" />
                     <div className="semak-print-header-info">
-                        <h1>سماك العقارية</h1>
+                        <h1>{companyName}</h1>
                         <div className="tagline">سقف يعلو برؤيتك ومسكن يحكي قصتك</div>
                         <div className="cr">CR: 7051031099 — 920032842</div>
                     </div>
@@ -275,7 +275,7 @@ export default function PrintableLetterhead({ children, documentLabel = '', subt
             <div className="semak-print-footer">
                 <div className="semak-print-footer-inner">
                     <div className="semak-print-footer-left">
-                        <div className="name">سماك العقارية</div>
+                        <div className="name">{companyName}</div>
                         <div className="addr">المملكة العربية السعودية — مكة المكرمة — حي البوابة</div>
                     </div>
                     <div className="semak-print-footer-right">

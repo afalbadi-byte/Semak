@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Users, Search, RefreshCw, MessageCircle, UserCheck, X, Building, CheckCircle2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { sendWhatsAppMessage, normalizePhone } from '../../services/whatsappService';
 
 import { API_URL } from '../../lib/api/client';
+import { AppContext } from '../../context/AppContext';
 
 export default function LeadsManage({ showToast }) {
+    const { branding } = useContext(AppContext);
+    const companyName = branding?.company_name || 'سماك العقارية';
     const [leads, setLeads] = useState([]);
     const [projectsData, setProjectsData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -78,7 +81,7 @@ export default function LeadsManage({ showToast }) {
 
     // إرسال رسالة واتساب للمهتم — تلقائي عبر API
     const notifyWhatsApp = async (lead) => {
-        const msg = `مرحباً بك أستاذ ${lead.name}،\nمعك فريق المبيعات من *سماك العقارية* 🏢\n\nبناءً على طلبك واهتمامك بالوحدة (${lead.unit})، يسعدنا تواصلك وتقديم كافة التفاصيل والرد على استفساراتك.\n\nكيف يمكننا خدمتك اليوم؟`;
+        const msg = `مرحباً بك أستاذ ${lead.name}،\nمعك فريق المبيعات من *${companyName}* 🏢\n\nبناءً على طلبك واهتمامك بالوحدة (${lead.unit})، يسعدنا تواصلك وتقديم كافة التفاصيل والرد على استفساراتك.\n\nكيف يمكننا خدمتك اليوم؟`;
         const result = await sendWhatsAppMessage(lead.phone, msg);
         if (showToast) {
             if (result.success) showToast("تم الإرسال ✅", `أُرسلت رسالة واتساب لـ ${lead.name}`);

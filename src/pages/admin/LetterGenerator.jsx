@@ -32,7 +32,8 @@ const printInNewWindow = (jsx, title) => {
 };
 
 export default function LetterGenerator() {
-  const { user: contextUser, showToast } = useContext(AppContext);
+  const { user: contextUser, showToast, branding } = useContext(AppContext);
+  const companyName = branding?.company_name || 'سماك العقارية';
   const navigate = useNavigate();
 
   // 🔥 مرجع (Ref) لربط الورقة المخفية بالطابعة
@@ -61,7 +62,7 @@ export default function LetterGenerator() {
   // دالة الطباعة - نافذة جديدة مستقلة (الأكثر موثوقية)
   const handlePrint = () => {
     const jsx = (
-      <PrintableLetterhead documentLabel="خطاب رسمي" date={data.date}>
+      <PrintableLetterhead documentLabel="خطاب رسمي" date={data.date} companyName={companyName}>
         <div className="font-amiri" style={{ fontSize: '15px', lineHeight: 2.2, color: '#1e293b' }}>
           <div style={{ marginTop: '8mm', marginBottom: '6mm', borderRight: '4px solid #c5a059', paddingRight: '14px', paddingTop: '6px', paddingBottom: '6px', backgroundColor: '#f8fafc', borderRadius: '0 12px 12px 0' }}>
             <h3 style={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700, fontSize: '20px', color: '#1a365d', margin: 0, lineHeight: 1.6 }}>
@@ -358,7 +359,7 @@ export default function LetterGenerator() {
             <div className="px-12 pt-10 pb-6 flex justify-between items-center relative border-b border-slate-100">
               <img src={"/images/logo-main.png"} alt="شعار" className="h-28 object-contain drop-shadow-sm z-10" />
               <div className="text-left border-l-4 border-[#c5a059] pl-6 z-10">
-                <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">سماك العقارية</h1>
+                <h1 className="text-3xl font-black text-[#1a365d] tracking-tight">{companyName}</h1>
                 <p className="text-[#c5a059] font-bold text-sm mt-2 tracking-wider">سقف يعلو برؤيتك ومسكن يحكي قصتك</p>
                 <p className="text-slate-400 text-xs mt-1 font-sans tracking-widest">CR: 7051031099</p>
               </div>
@@ -415,7 +416,7 @@ export default function LetterGenerator() {
                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-[#c5a059]/20 rounded-full -ml-8 -mb-8 blur-xl"></div>
                 
                 <div className="relative z-10">
-                  <p className="font-bold text-base tracking-wide text-[#c5a059]">سماك العقارية</p>
+                  <p className="font-bold text-base tracking-wide text-[#c5a059]">{companyName}</p>
                   <p className="text-white/80 text-xs mt-1">المملكة العربية السعودية - مكة المكرمة - حي البوابة</p>
                 </div>
                 <div className="flex flex-col items-end gap-1.5 relative z-10 font-sans tracking-wide" dir="ltr">

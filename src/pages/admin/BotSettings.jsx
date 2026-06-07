@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Bot, MessageSquare, Users, TrendingUp, Zap, DollarSign, Clock, RefreshCw, Activity, CheckCircle2, AlertCircle } from 'lucide-react';
 
 import { API_URL } from '../../lib/api/client';
+import { AppContext } from '../../context/AppContext';
 
 export default function BotSettings() {
+    const { branding } = useContext(AppContext);
+    const companyName = branding?.company_name || 'سماك العقارية';
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [conversations, setConversations] = useState([]);
@@ -56,7 +59,7 @@ export default function BotSettings() {
                         </div>
                         <div>
                             <h1 className="text-2xl md:text-3xl font-black">المساعد الذكي — فهد</h1>
-                            <p className="text-sm text-slate-300 mt-1">مستشار المبيعات الافتراضي لسماك العقارية</p>
+                            <p className="text-sm text-slate-300 mt-1">مستشار المبيعات الافتراضي ل{companyName}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/30 px-4 py-2 rounded-xl">

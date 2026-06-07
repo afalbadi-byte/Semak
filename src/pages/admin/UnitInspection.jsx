@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { ChevronRight, ClipboardCheck, CheckCircle2, Save, RefreshCw, FileWarning, Settings2, ShieldCheck, Trash2, X, AlertTriangle, Hammer, Plus, HardHat, Copy, Link as LinkIcon, Eye } from 'lucide-react';
 
 import { API_URL } from '../../lib/api/client';
+import { AppContext } from '../../context/AppContext';
 
 export default function UnitInspection({ user, navigateTo, showToast }) {
+  const { branding } = useContext(AppContext);
+  const companyName = branding?.company_name || 'سماك العقارية';
   const [viewMode, setViewMode] = useState('list'); // list, setup, inspect, client_setup
   const [inspectionsList, setInspectionsList] = useState([]);
   const [dbProjects, setDbProjects] = useState([]);
@@ -175,7 +178,7 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
     if (!linkUnit) return;
     const link    = `https://semak.sa/handover?unit=${encodeURIComponent(String(linkUnit).trim())}`;
     const phone   = linkOwnerPhone.replace(/\D/g, '').replace(/^0/, '966').replace(/^(?!966)/, '966');
-    const message = `مرحباً 👋\nوحدتك العقارية ${linkUnit} جاهزة للمراجعة والتسليم.\n\nيرجى فتح الرابط أدناه، مراجعة نتائج الفحص، والتوقيع الإلكتروني على وثيقة الاستلام:\n\n${link}\n\nسماك العقارية 🏠`;
+    const message = `مرحباً 👋\nوحدتك العقارية ${linkUnit} جاهزة للمراجعة والتسليم.\n\nيرجى فتح الرابط أدناه، مراجعة نتائج الفحص، والتوقيع الإلكتروني على وثيقة الاستلام:\n\n${link}\n\n${companyName} 🏠`;
     if (phone && phone.length >= 10) {
       setSendingWa(true);
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');

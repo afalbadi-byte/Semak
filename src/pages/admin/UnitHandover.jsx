@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle, useContext } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import {
@@ -7,6 +7,7 @@ import {
   CalendarCheck2
 } from 'lucide-react';
 import { API_URL } from '../../utils/helpers';
+import { AppContext } from '../../context/AppContext';
 
 // ─────────────────────────────────────────────
 // لوحة التوقيع — Canvas خالص
@@ -95,13 +96,13 @@ SignaturePad.displayName = 'SignaturePad';
 // وثيقة الاستلام — للطباعة / PDF
 // ─────────────────────────────────────────────
 const HandoverDocument = forwardRef(
-  ({ unitCode, ownerName, ownerPhone, idNumber, signatureData, acceptedAt, progressScore, totalItems }, ref) => (
+  ({ unitCode, ownerName, ownerPhone, idNumber, signatureData, acceptedAt, progressScore, totalItems, companyName = 'سماك العقارية' }, ref) => (
     <div ref={ref} dir="rtl" style={{ fontFamily: "'Cairo', sans-serif", padding: 40, background: '#fff', color: '#1a1a1a' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #c5a059', paddingBottom: 20, marginBottom: 28 }}>
         <div>
-          <div style={{ fontSize: 26, fontWeight: 900, color: '#1a365d' }}>سماك العقارية</div>
+          <div style={{ fontSize: 26, fontWeight: 900, color: '#1a365d' }}>{companyName}</div>
           <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>semak.sa — خدمات تسليم الوحدات</div>
         </div>
         <div style={{ textAlign: 'center' }}>
@@ -136,7 +137,7 @@ const HandoverDocument = forwardRef(
       {/* Acceptance text */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, fontSize: 13, lineHeight: 2, color: '#444', marginBottom: 28 }}>
         أقرّ أنا <strong>{ownerName}</strong> حامل الهوية رقم <strong>{idNumber}</strong> بأنني عاينت الوحدة رقم <strong>{unitCode}</strong>
-        {' '}وفحصت جميع البنود المخصصة لي (<strong>{totalItems} بند</strong>) وأنها مطابقة للمواصفات المتفق عليها، وأستلمها رسمياً من شركة سماك العقارية،
+        {' '}وفحصت جميع البنود المخصصة لي (<strong>{totalItems} بند</strong>) وأنها مطابقة للمواصفات المتفق عليها، وأستلمها رسمياً من شركة {companyName}،
         ويبدأ سريان الضمان الشامل اعتباراً من تاريخ هذا التوقيع.
       </div>
 
@@ -154,13 +155,13 @@ const HandoverDocument = forwardRef(
         <div style={{ textAlign: 'center', width: 200 }}>
           <div style={{ borderBottom: '2px solid #cbd5e1', marginBottom: 8, height: 80 }} />
           <div style={{ fontSize: 11, color: '#888' }}>ختم وتوقيع الشركة</div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a365d', marginTop: 2 }}>سماك العقارية</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a365d', marginTop: 2 }}>{companyName}</div>
         </div>
       </div>
 
       {/* Footer */}
       <div style={{ marginTop: 36, paddingTop: 16, borderTop: '1px solid #e2e8f0', textAlign: 'center', fontSize: 10, color: '#aaa' }}>
-        وثيقة إلكترونية صادرة بتاريخ {acceptedAt} | سماك العقارية — semak.sa | جميع الحقوق محفوظة
+        وثيقة إلكترونية صادرة بتاريخ {acceptedAt} | {companyName} — semak.sa | جميع الحقوق محفوظة
       </div>
     </div>
   )
@@ -171,6 +172,8 @@ HandoverDocument.displayName = 'HandoverDocument';
 // المكوّن الرئيسي
 // ─────────────────────────────────────────────
 export default function UnitHandover() {
+  const { branding } = useContext(AppContext);
+  const companyName = branding?.company_name || 'سماك العقارية';
   const location = useLocation();
 
   const [unitCode,         setUnitCode]         = useState('');
@@ -376,6 +379,7 @@ export default function UnitHandover() {
           acceptedAt={acceptedAtDisplay}
           progressScore={progressScore}
           totalItems={totalItems}
+          companyName={companyName}
         />
       </div>
 

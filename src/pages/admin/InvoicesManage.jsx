@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Calendar, User, DollarSign, Receipt,
@@ -15,6 +15,7 @@ import TablePager from '../../components/TablePager';
 import { API_URL } from '../../lib/api/client';
 import { useToast } from '../../components/ui';
 import { usePartyDirectory } from '../../hooks/usePartyDirectory';
+import { AppContext } from '../../context/AppContext';
 
 // ─── حساب حالة الفاتورة ──────────────────────────────────────────
 function invoiceStatus(total, paid) {
@@ -90,6 +91,8 @@ function ConfirmDialog({ msg, onConfirm, onCancel }) {
 // المكوّن الرئيسي
 // ════════════════════════════════════════════════════════════════
 export default function InvoicesManage({ user, navigateTo, showToast: externalToast }) {
+  const { branding } = useContext(AppContext);
+  const companyName = branding?.company_name || 'سماك العقارية';
   const navigate   = useNavigate();
   const partyDir   = usePartyDirectory();
 
@@ -300,7 +303,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
     const total   = fmt(inv.total, inv.currency);
     const msg =
       `مرحباً ${inv.client || ''} 👋\n\n` +
-      `هذه فاتورتكم من *سماك العقارية*:\n` +
+      `هذه فاتورتكم من *${companyName}*:\n` +
       `🧾 رقم الفاتورة: #${inv.no || inv.id}\n` +
       `💰 الإجمالي: ${total}\n` +
       `📅 التاريخ: ${inv.date || ''}\n\n` +
