@@ -215,9 +215,13 @@ $conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS project_label VARCHAR(
 $conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
 $conn->query("ALTER TABLE units    ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
 $conn->query("ALTER TABLE owners   ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_projects_tid ON projects(tenant_id)");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_units_tid    ON units(tenant_id)");
-$conn->query("CREATE INDEX IF NOT EXISTS idx_owners_natid ON owners(national_id)");
+$conn->query("ALTER TABLE maintenance ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("ALTER TABLE leads       ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_projects_tid    ON projects(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_units_tid       ON units(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_maintenance_tid ON maintenance(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_leads_tid       ON leads(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_owners_natid    ON owners(national_id)");
 // جدول طلبات الشراء (Leads) للراغبين في الشراء من بوابة العملاء
 $conn->query("CREATE TABLE IF NOT EXISTS acc_leads (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -2871,13 +2875,15 @@ switch ($action) {
     // ─── الصيانة ─────────────────────────────────────────────────────────────
 
     case 'get_maintenance':
-        $res     = $conn->query("SELECT * FROM maintenance ORDER BY id DESC");
+        $tid     = $_jwt_tid ?? 1;
+        $res     = $conn->query("SELECT * FROM maintenance WHERE tenant_id=$tid ORDER BY id DESC");
         $tickets = [];
         if ($res) { while ($row = $res->fetch_assoc()) { $tickets[] = $row; } }
         echo json_encode($tickets);
         break;
 
     case 'add_maintenance':
+        $tid     = $_jwt_tid ?? 1;
         $name    = $conn->real_escape_string($input_data['name']   ?? '');
         $phone   = $conn->real_escape_string($input_data['phone']  ?? '');
         $unit    = $conn->real_escape_string($input_data['unit']   ?? '');
@@ -2885,7 +2891,7 @@ switch ($action) {
         $descrip = $conn->real_escape_string($input_data['desc']   ?? '');
         $date    = date('Y-m-d H:i:s');
         $status  = "قيد الانتظار";
-        $sql     = "INSERT INTO maintenance (name, phone, unit, type, descrip, status, date) VALUES ('$name', '$phone', '$unit', '$type', '$descrip', '$status', '$date')";
+        $sql     = "INSERT INTO maintenance (tenant_id, name, phone, unit, type, descrip, status, date) VALUES ($tid, '$name', '$phone', '$unit', '$type', '$descrip', '$status', '$date')";
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
             notify($conn, 1, null, 'maintenance', 'طلب صيانة جديد', 'العميل ' . $name . ' · وحدة ' . $unit . ' · ' . $type, '/admin/dashboard/maintenance');
@@ -2925,6 +2931,7 @@ switch ($action) {
         break;
 
     case 'update_maintenance':
+        $tid       = $_jwt_tid ?? 1;
         $ticket_id = (int)$input_data['ticket_id'];
         $value     = $conn->real_escape_string($input_data['new_value']);
         $allowed   = ['status', 'technician', 'descrip', 'otp'];
@@ -2935,12 +2942,12 @@ switch ($action) {
             $otp  = $conn->real_escape_string($input_data['otp']);
             $sql .= ", otp='$otp'";
         }
-        $sql .= " WHERE id=$ticket_id";
+        $sql .= " WHERE id=$ticket_id AND tenant_id=$tid";
         $conn->query($sql);
 
         // إرسال إشعار واتساب للعميل عند تغيير الحالة فقط
         if ($field === 'status') {
-            $t = $conn->query("SELECT * FROM maintenance WHERE id=$ticket_id");
+            $t = $conn->query("SELECT * FROM maintenance WHERE id=$ticket_id AND tenant_id=$tid");
             if ($t && $row = $t->fetch_assoc()) {
                 $client_phone = preg_replace('/\D/', '', $row['phone']);
                 $client_phone = ltrim($client_phone, '0');
@@ -2980,13 +2987,15 @@ switch ($action) {
     // ─── المهتمون (Leads) ────────────────────────────────────────────────────
 
     case 'get_leads':
-        $res   = $conn->query("SELECT * FROM leads ORDER BY id DESC");
+        $tid   = $_jwt_tid ?? 1;
+        $res   = $conn->query("SELECT * FROM leads WHERE tenant_id=$tid ORDER BY id DESC");
         $leads = [];
         if ($res) { while ($row = $res->fetch_assoc()) { $leads[] = $row; } }
         echo json_encode($leads);
         break;
 
     case 'add_lead':
+        $tid      = $_jwt_tid ?? 1;
         $name     = $conn->real_escape_string($input_data['name']     ?? '');
         $phone    = $conn->real_escape_string($input_data['phone']    ?? '');
         $interest = $conn->real_escape_string($input_data['interest'] ?? '');
@@ -2996,7 +3005,7 @@ switch ($action) {
         // ── منع تكرار الجوال: إذا الرقم مسجل مسبقاً، أضف الاهتمام للسجل القائم ──
         $clean_phone   = preg_replace('/\D/', '', $phone);
         $phone_no_zero = preg_replace('/^(0|966)/', '', $clean_phone);
-        $dup_res = $conn->query("SELECT id, interest, notes FROM leads WHERE REPLACE(REPLACE(phone, '+', ''), ' ', '') LIKE '%$phone_no_zero%' ORDER BY id DESC LIMIT 1");
+        $dup_res = $conn->query("SELECT id, interest, notes FROM leads WHERE tenant_id=$tid AND REPLACE(REPLACE(phone, '+', ''), ' ', '') LIKE '%$phone_no_zero%' ORDER BY id DESC LIMIT 1");
         if ($dup_res && $dup_row = $dup_res->fetch_assoc()) {
             $existing_id       = (int)$dup_row['id'];
             $existing_interest = $dup_row['interest'] ?? '';
@@ -3015,7 +3024,7 @@ switch ($action) {
             break;
         }
 
-        $sql = "INSERT INTO leads (name, phone, interest, source, unit, status) VALUES ('$name', '$phone', '$interest', '$source', '$interest', '$status')";
+        $sql = "INSERT INTO leads (tenant_id, name, phone, interest, source, unit, status) VALUES ($tid, '$name', '$phone', '$interest', '$source', '$interest', '$status')";
         if ($conn->query($sql)) {
             $new_id = $conn->insert_id;
             notify($conn, 1, null, 'lead', 'عميل محتمل جديد', 'الاسم: ' . $name . ' · ' . $interest, '/admin/dashboard/leads');
@@ -3041,7 +3050,7 @@ switch ($action) {
             echo json_encode(["success" => true, "id" => $new_id]);
         } else {
             $notes = $conn->real_escape_string("الوحدة: $interest | المصدر: $source");
-            $sql2  = "INSERT INTO leads (name, phone, status, notes) VALUES ('$name', '$phone', '$status', '$notes')";
+            $sql2  = "INSERT INTO leads (tenant_id, name, phone, status, notes) VALUES ($tid, '$name', '$phone', '$status', '$notes')";
             if ($conn->query($sql2)) {
                 echo json_encode(["success" => true, "id" => $conn->insert_id]);
             } else {
@@ -3051,6 +3060,7 @@ switch ($action) {
         break;
 
     case 'update_lead_status':
+        $tid    = $_jwt_tid ?? 1;
         $id     = (int)$input_data['id'];
         $status = $conn->real_escape_string($input_data['status']);
         $sql    = "UPDATE leads SET status='$status'";
@@ -3058,24 +3068,26 @@ switch ($action) {
             $notes = $conn->real_escape_string($input_data['notes']);
             $sql  .= ", notes='$notes'";
         }
-        $sql .= " WHERE id=$id";
+        $sql .= " WHERE id=$id AND tenant_id=$tid";
         $conn->query($sql);
         echo json_encode(["success" => true]);
         break;
 
     case 'delete_lead':
-        $id = (int)$input_data['id'];
-        $conn->query("DELETE FROM leads WHERE id=$id");
+        $tid = $_jwt_tid ?? 1;
+        $id  = (int)$input_data['id'];
+        $conn->query("DELETE FROM leads WHERE id=$id AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
 
     // ─── عدادات لوحة الإدارة (شارات الإشعارات) ─────────────────────────────────
     case 'dashboard_counts':
+        $tid    = $_jwt_tid ?? 1;
         $counts = [];
         $tasks  = [];
 
         // مهتمون جدد (لم تتغير حالتهم بعد)
-        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE status = 'جديد'");
+        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE tenant_id=$tid AND status = 'جديد'");
         $counts['leads_new'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
         if ($counts['leads_new'] > 0) {
             $tasks[] = ["icon" => "Users", "color" => "teal", "tab" => "leads",
@@ -3083,7 +3095,7 @@ switch ($action) {
         }
 
         // طلبات صيانة مفتوحة
-        $r = $conn->query("SELECT COUNT(*) c FROM maintenance WHERE status NOT IN ('مكتمل', 'مغلق', 'ملغي')");
+        $r = $conn->query("SELECT COUNT(*) c FROM maintenance WHERE tenant_id=$tid AND status NOT IN ('مكتمل', 'مغلق', 'ملغي')");
         $counts['maintenance_open'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
         if ($counts['maintenance_open'] > 0) {
             $tasks[] = ["icon" => "Wrench", "color" => "purple", "tab" => "maintenance",
@@ -3091,7 +3103,7 @@ switch ($action) {
         }
 
         // طلبات صيانة بلا فني
-        $r = $conn->query("SELECT COUNT(*) c FROM maintenance WHERE (technician IS NULL OR technician = '' OR technician = 'لم يتم التعيين') AND status NOT IN ('مكتمل', 'مغلق', 'ملغي')");
+        $r = $conn->query("SELECT COUNT(*) c FROM maintenance WHERE tenant_id=$tid AND (technician IS NULL OR technician = '' OR technician = 'لم يتم التعيين') AND status NOT IN ('مكتمل', 'مغلق', 'ملغي')");
         $counts['maintenance_unassigned'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
         if ($counts['maintenance_unassigned'] > 0) {
             $tasks[] = ["icon" => "AlertTriangle", "color" => "red", "tab" => "maintenance",
@@ -3111,7 +3123,7 @@ switch ($action) {
         }
 
         // اعتراضات ميزانية (في الملاحظات)
-        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE notes LIKE '%ميزانية%' OR notes LIKE '%اعتراض%'");
+        $r = $conn->query("SELECT COUNT(*) c FROM leads WHERE tenant_id=$tid AND (notes LIKE '%ميزانية%' OR notes LIKE '%اعتراض%')");
         $counts['budget_objections'] = (int)($r ? $r->fetch_assoc()['c'] : 0);
         if ($counts['budget_objections'] > 0) {
             $tasks[] = ["icon" => "DollarSign", "color" => "amber", "tab" => "leads",
