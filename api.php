@@ -6414,6 +6414,56 @@ switch ($action) {
         echo json_encode(['success'=>true,'saved'=>$n,'message'=>'تم حفظ إعدادات المنشأة'], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'upload_logo': {
+        // رفع شعار المنشأة — multipart/form-data, حقل اسمه "logo"
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يجب تسجيل الدخول أولاً'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        if (empty($_FILES['logo']) || $_FILES['logo']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['success'=>false,'message'=>'لم يتم استلام الملف — تأكد من إرساله بشكل صحيح'], JSON_UNESCAPED_UNICODE); break;
+        }
+        $file = $_FILES['logo'];
+        if ($file['size'] > 2 * 1024 * 1024) {
+            echo json_encode(['success'=>false,'message'=>'حجم الملف يتجاوز الحد المسموح (2 ميجابايت)'], JSON_UNESCAPED_UNICODE); break;
+        }
+        // التحقق من النوع الفعلي (ليس الامتداد فقط)
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+        $extMap = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif'];
+        if (!isset($extMap[$mime])) {
+            echo json_encode(['success'=>false,'message'=>'نوع الملف غير مدعوم — JPG/PNG/WebP/GIF فقط'], JSON_UNESCAPED_UNICODE); break;
+        }
+        $ext  = $extMap[$mime];
+        $dir  = __DIR__ . '/uploads/logos/';
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            echo json_encode(['success'=>false,'message'=>'تعذّر إنشاء مجلد الرفع على الخادم'], JSON_UNESCAPED_UNICODE); break;
+        }
+        // حذف الشعارات القديمة لنفس المستأجر
+        foreach (glob($dir . "logo_{$tid}.*") as $old) { @unlink($old); }
+        $filename = "logo_{$tid}.{$ext}";
+        if (!move_uploaded_file($file['tmp_name'], $dir . $filename)) {
+            echo json_encode(['success'=>false,'message'=>'فشل حفظ الملف على الخادم'], JSON_UNESCAPED_UNICODE); break;
+        }
+        $logoUrl = '/uploads/logos/' . $filename;
+        $urlEsc  = $conn->real_escape_string($logoUrl);
+        $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'company_logo','$urlEsc') ON DUPLICATE KEY UPDATE sval='$urlEsc'");
+        $conn->query("UPDATE tenants SET logo_url='$urlEsc' WHERE id=$tid");
+        acc_audit($conn, $tid, 'settings', null, 'logo_upload', $filename, 'admin', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true,'logo_url'=>$logoUrl,'message'=>'تم رفع الشعار بنجاح'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'delete_logo': {
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يجب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        $dir = __DIR__ . '/uploads/logos/';
+        foreach (glob($dir . "logo_{$tid}.*") as $old) { @unlink($old); }
+        $conn->query("DELETE FROM acc_settings WHERE tenant_id=$tid AND skey='company_logo'");
+        $conn->query("UPDATE tenants SET logo_url=NULL WHERE id=$tid");
+        echo json_encode(['success'=>true,'message'=>'تم حذف الشعار'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     // ─── نظام الوسوم (Tags) — قابلة للإنشاء/التلوين/الربط/الفلترة (نمط دفترة) ───────────
     case 'acc_tags_list':
         // كل الوسوم مع عدد مرّات الاستخدام (اختياري: فلترة بنوع كيان معيّن usage_entity)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
 import QRCode from 'react-qr-code';
 import {
     BookOpen, FileText, Layers, Plus, Trash2, RefreshCw, Save, X, Search,
@@ -6,6 +6,7 @@ import {
     AlertTriangle, AlertCircle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
     Settings, Printer, Building2, Loader2, Package, Calendar, Lock, Unlock,
     ChevronRight, ChevronUp, Activity, ArrowRightLeft, Shield, MessageCircle,
+    ImagePlus, Upload,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -4609,8 +4610,65 @@ function SettingsTab({ company, reload, toast }) {
     const { setBranding } = useContext(AppContext);
     const [form, setForm] = useState(company || {});
     const [saving, setSaving] = useState(false);
+    // ─── شعار المنشأة ───────────────────────────────────────────────────────
+    const [logoPreview, setLogoPreview] = useState(null);   // blob URL for preview before upload
+    const [logoFile,    setLogoFile]    = useState(null);   // File object
+    const [uploading,   setUploading]   = useState(false);
+    const fileRef = useRef(null);
+
     useEffect(() => { setForm(company || {}); }, [company]);
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const handleLogoSelect = (e) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        if (f.size > 2 * 1024 * 1024) { toast('حجم الملف يتجاوز 2 ميجابايت', 'error'); return; }
+        setLogoFile(f);
+        setLogoPreview(URL.createObjectURL(f));
+    };
+    const uploadLogo = async () => {
+        if (!logoFile) return;
+        setUploading(true);
+        try {
+            const fd = new FormData();
+            fd.append('logo', logoFile);
+            const jwt = getAdminToken();
+            const res = await fetch(`${API_URL}?action=upload_logo`, {
+                method: 'POST',
+                headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+                body: fd,
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(data.message || 'تم رفع الشعار');
+                set('company_logo', data.logo_url);
+                setLogoPreview(null);
+                setLogoFile(null);
+                // refresh branding context
+                fetch(`${API_URL}?action=tenant_branding`, {
+                    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+                }).then(r => r.json()).then(b => { if (b.success) setBranding(b); }).catch(() => {});
+                reload && reload();
+            } else { toast(data.message || 'فشل الرفع', 'error'); }
+        } catch { toast('خطأ في الاتصال', 'error'); } finally { setUploading(false); }
+    };
+    const deleteLogo = async () => {
+        if (!window.confirm('هل تريد حذف الشعار الحالي؟')) return;
+        const jwt = getAdminToken();
+        const res = await fetch(`${API_URL}?action=delete_logo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
+        });
+        const data = await res.json();
+        if (data.success) {
+            toast('تم حذف الشعار');
+            set('company_logo', '');
+            setLogoPreview(null);
+            setLogoFile(null);
+            reload && reload();
+        } else { toast(data.message || 'فشل الحذف', 'error'); }
+    };
+
     const save = async () => {
         if (!form.company_name) return toast('الاسم القانوني مطلوب', 'error');
         const vat = String(form.vat_number || '');
@@ -4640,6 +4698,64 @@ function SettingsTab({ company, reload, toast }) {
                     <p className="text-xs text-slate-500 dark:text-brand-400">يُستخدم في رمز QR للفواتير الضريبية وفي رأس الطباعة — أدخل البيانات الرسمية للمنشأة</p>
                 </div>
             </div>
+
+            {/* ─── شعار المنشأة ──────────────────────────────────────────── */}
+            <div className="flex items-center gap-6 p-4 rounded-2xl border border-slate-200 dark:border-brand-700 bg-slate-50 dark:bg-brand-900/50">
+                {/* معاينة الشعار */}
+                <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 dark:border-brand-600 flex items-center justify-center overflow-hidden bg-white dark:bg-brand-900 shrink-0">
+                    {(logoPreview || form.company_logo) ? (
+                        <img
+                            src={logoPreview || (form.company_logo + '?v=' + Date.now())}
+                            alt="شعار المنشأة"
+                            className="w-full h-full object-contain"
+                        />
+                    ) : (
+                        <ImagePlus size={28} className="text-slate-300 dark:text-brand-600" />
+                    )}
+                </div>
+                <div className="flex-1 space-y-3">
+                    <div>
+                        <p className="text-sm font-black text-brand-800 dark:text-brand-100 mb-0.5">شعار المنشأة</p>
+                        <p className="text-xs text-slate-500 dark:text-brand-400">JPG / PNG / WebP — بحد أقصى 2 ميجابايت</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <input
+                            ref={fileRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            className="sr-only"
+                            onChange={handleLogoSelect}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => fileRef.current?.click()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-brand-600 text-xs font-bold text-brand-700 dark:text-brand-200 hover:border-[#c5a059] hover:text-[#c5a059] transition bg-white dark:bg-brand-900"
+                        >
+                            <ImagePlus size={13} /> اختر شعاراً
+                        </button>
+                        {logoFile && (
+                            <button
+                                type="button"
+                                onClick={uploadLogo}
+                                disabled={uploading}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#c5a059] text-slate-950 text-xs font-black hover:bg-[#b8913f] transition disabled:opacity-60"
+                            >
+                                {uploading ? <><RefreshCw size={12} className="animate-spin" /> جارٍ الرفع…</> : <><Upload size={12} /> رفع الشعار</>}
+                            </button>
+                        )}
+                        {(form.company_logo && !logoFile) && (
+                            <button
+                                type="button"
+                                onClick={deleteLogo}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition bg-white dark:bg-brand-900"
+                            >
+                                <Trash2 size={12} /> حذف الشعار
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {SETTINGS_FIELDS.map(f => (
                     <div key={f.k} className={f.col === 2 ? 'md:col-span-2' : ''}>
