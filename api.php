@@ -211,6 +211,12 @@ $conn->query("ALTER TABLE acc_parties ADD COLUMN IF NOT EXISTS notes TEXT DEFAUL
 $conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS national_id VARCHAR(12) DEFAULT NULL");
 $conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS party_id INT DEFAULT NULL");
 $conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS project_label VARCHAR(200) DEFAULT NULL");
+// إضافة tenant_id للجداول القديمة (ترحيل آمن — القيم الموجودة تُعيَّن للمستأجر 1)
+$conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("ALTER TABLE units    ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("ALTER TABLE owners   ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_projects_tid ON projects(tenant_id)");
+$conn->query("CREATE INDEX IF NOT EXISTS idx_units_tid    ON units(tenant_id)");
 $conn->query("CREATE INDEX IF NOT EXISTS idx_owners_natid ON owners(national_id)");
 // جدول طلبات الشراء (Leads) للراغبين في الشراء من بوابة العملاء
 $conn->query("CREATE TABLE IF NOT EXISTS acc_leads (
@@ -2423,12 +2429,13 @@ switch ($action) {
     // ─── المشاريع والوحدات ──────────────────────────────────────────────────
 
     case 'get_projects_data':
+        $tid = $_jwt_tid ?? 1;
         $projects = [];
-        $p_query = $conn->query("SELECT * FROM projects ORDER BY id DESC");
+        $p_query = $conn->query("SELECT * FROM projects WHERE tenant_id=$tid ORDER BY id DESC");
         if ($p_query) {
             while ($p_row = $p_query->fetch_assoc()) {
                 $proj_id = $p_row['id'];
-                $u_query = $conn->query("SELECT u.id, u.unit_code, u.spaces, u.status, o.id as owner_id, o.owner_name, o.owner_phone, o.owner_email FROM units u LEFT JOIN owners o ON u.unit_code = o.unit_code WHERE u.project_id = $proj_id ORDER BY u.id ASC");
+                $u_query = $conn->query("SELECT u.id, u.unit_code, u.spaces, u.status, o.id as owner_id, o.owner_name, o.owner_phone, o.owner_email FROM units u LEFT JOIN owners o ON u.unit_code = o.unit_code WHERE u.project_id = $proj_id AND u.tenant_id=$tid ORDER BY u.id ASC");
                 $units_details = [];
                 $units_basic   = [];
                 if ($u_query) {
@@ -2448,75 +2455,83 @@ switch ($action) {
         break;
 
     case 'get_units_status':
-        $res  = $conn->query("SELECT unit_code FROM owners");
+        $tid = $_jwt_tid ?? 1;
+        $res  = $conn->query("SELECT unit_code FROM owners WHERE tenant_id=$tid");
         $sold = [];
         if ($res) { while ($row = $res->fetch_assoc()) { $sold[$row['unit_code']] = 'مباعة'; } }
         echo json_encode(['success' => true, 'data' => $sold]);
         break;
 
     case 'add_project':
+        $tid = $_jwt_tid ?? 1;
         $name = $conn->real_escape_string($input_data['name']);
         $desc = $conn->real_escape_string($input_data['description'] ?? '');
-        $conn->query("INSERT INTO projects (name, description) VALUES ('$name', '$desc')");
+        $conn->query("INSERT INTO projects (name, description, tenant_id) VALUES ('$name', '$desc', $tid)");
         echo json_encode(["success" => true]);
         break;
 
     case 'update_project_info':
+        $tid    = $_jwt_tid ?? 1;
         $id     = (int)$input_data['id'];
         $name   = $conn->real_escape_string($input_data['name']);
         $desc   = $conn->real_escape_string($input_data['description']);
         $status = $conn->real_escape_string($input_data['status']);
-        $conn->query("UPDATE projects SET name='$name', description='$desc', status='$status' WHERE id=$id");
+        $conn->query("UPDATE projects SET name='$name', description='$desc', status='$status' WHERE id=$id AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
 
     case 'add_unit_card':
+        $tid      = $_jwt_tid ?? 1;
         $projId   = (int)$input_data['project_id'];
         $unitCode = $conn->real_escape_string($input_data['unit_code']);
         $spaces   = json_encode([], JSON_UNESCAPED_UNICODE);
-        $check    = $conn->query("SELECT id FROM units WHERE project_id=$projId AND unit_code='$unitCode'");
+        $check    = $conn->query("SELECT id FROM units WHERE project_id=$projId AND unit_code='$unitCode' AND tenant_id=$tid");
         if ($check->num_rows > 0) { echo json_encode(["success" => false, "message" => "هذه الوحدة موجودة مسبقاً"]); break; }
-        $conn->query("INSERT INTO units (project_id, unit_code, spaces, status) VALUES ($projId, '$unitCode', '$spaces', 'متاح')");
+        $conn->query("INSERT INTO units (project_id, unit_code, spaces, status, tenant_id) VALUES ($projId, '$unitCode', '$spaces', 'متاح', $tid)");
         echo json_encode(["success" => true, "unit_id" => $conn->insert_id]);
         break;
 
     case 'update_unit_spaces':
+        $tid    = $_jwt_tid ?? 1;
         $unitId = (int)$input_data['unit_id'];
         $spaces = $conn->real_escape_string(json_encode($input_data['spaces'], JSON_UNESCAPED_UNICODE));
-        $conn->query("UPDATE units SET spaces = '$spaces' WHERE id = $unitId");
+        $conn->query("UPDATE units SET spaces = '$spaces' WHERE id = $unitId AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
 
     case 'update_unit_status':
+        $tid    = $_jwt_tid ?? 1;
         $unitId = (int)$input_data['unit_id'];
         $allowed = ['متاح', 'مباعة', 'محجوز'];
         $status  = $input_data['status'] ?? '';
         if (!in_array($status, $allowed)) { echo json_encode(["success" => false, "message" => "حالة غير صالحة"]); break; }
         $status = $conn->real_escape_string($status);
-        $conn->query("UPDATE units SET status = '$status' WHERE id = $unitId");
+        $conn->query("UPDATE units SET status = '$status' WHERE id = $unitId AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
 
     case 'delete_unit_card':
+        $tid    = $_jwt_tid ?? 1;
         $unitId = (int)$input_data['unit_id'];
-        $conn->query("DELETE FROM units WHERE id = $unitId");
+        $conn->query("DELETE FROM units WHERE id = $unitId AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
 
     case 'duplicate_project':
+        $tid     = $_jwt_tid ?? 1;
         $orig_id = (int)$input_data['project_id'];
-        $res = $conn->query("SELECT * FROM projects WHERE id = $orig_id");
+        $res = $conn->query("SELECT * FROM projects WHERE id = $orig_id AND tenant_id=$tid");
         if ($row = $res->fetch_assoc()) {
             $newName = $conn->real_escape_string($row['name'] . " (نسخة)");
             $newDesc = $conn->real_escape_string($row['description']);
             $status  = $conn->real_escape_string($row['status']);
-            $conn->query("INSERT INTO projects (name, description, status) VALUES ('$newName', '$newDesc', '$status')");
+            $conn->query("INSERT INTO projects (name, description, status, tenant_id) VALUES ('$newName', '$newDesc', '$status', $tid)");
             $new_proj_id = $conn->insert_id;
-            $u_res = $conn->query("SELECT * FROM units WHERE project_id = $orig_id");
+            $u_res = $conn->query("SELECT * FROM units WHERE project_id = $orig_id AND tenant_id=$tid");
             while ($u_row = $u_res->fetch_assoc()) {
                 $u_code   = $conn->real_escape_string($u_row['unit_code'] . "-C");
                 $u_spaces = $conn->real_escape_string($u_row['spaces']);
-                $conn->query("INSERT INTO units (project_id, unit_code, spaces, status) VALUES ($new_proj_id, '$u_code', '$u_spaces', 'متاح')");
+                $conn->query("INSERT INTO units (project_id, unit_code, spaces, status, tenant_id) VALUES ($new_proj_id, '$u_code', '$u_spaces', 'متاح', $tid)");
             }
             echo json_encode(["success" => true]);
         } else {
@@ -2525,15 +2540,16 @@ switch ($action) {
         break;
 
     case 'duplicate_unit':
+        $tid      = $_jwt_tid ?? 1;
         $unit_id  = (int)$input_data['unit_id'];
         $new_code = $conn->real_escape_string($input_data['new_unit_code']);
-        $res = $conn->query("SELECT * FROM units WHERE id = $unit_id");
+        $res = $conn->query("SELECT * FROM units WHERE id = $unit_id AND tenant_id=$tid");
         if ($row = $res->fetch_assoc()) {
             $proj_id = $row['project_id'];
             $spaces  = $conn->real_escape_string($row['spaces']);
-            $check   = $conn->query("SELECT id FROM units WHERE project_id=$proj_id AND unit_code='$new_code'");
+            $check   = $conn->query("SELECT id FROM units WHERE project_id=$proj_id AND unit_code='$new_code' AND tenant_id=$tid");
             if ($check->num_rows > 0) { echo json_encode(["success" => false, "message" => "رقم الوحدة الجديد مستخدم مسبقاً"]); break; }
-            $conn->query("INSERT INTO units (project_id, unit_code, spaces, status) VALUES ($proj_id, '$new_code', '$spaces', 'متاح')");
+            $conn->query("INSERT INTO units (project_id, unit_code, spaces, status, tenant_id) VALUES ($proj_id, '$new_code', '$spaces', 'متاح', $tid)");
             echo json_encode(["success" => true]);
         } else {
             echo json_encode(["success" => false]);
@@ -2543,17 +2559,19 @@ switch ($action) {
     // ─── الملاك ─────────────────────────────────────────────────────────────
 
     case 'add_owner':
+        $tid   = $_jwt_tid ?? 1;
         $unit  = $conn->real_escape_string($input_data['unit_code']);
         $name  = $conn->real_escape_string($input_data['name']);
         $phone = $conn->real_escape_string($input_data['phone']);
         $email = $conn->real_escape_string($input_data['email']);
-        $conn->query("INSERT INTO owners (unit_code, owner_name, owner_phone, owner_email) VALUES ('$unit', '$name', '$phone', '$email')");
-        $conn->query("UPDATE units SET status = 'مباعة' WHERE unit_code = '$unit'");
+        $conn->query("INSERT INTO owners (unit_code, owner_name, owner_phone, owner_email, tenant_id) VALUES ('$unit', '$name', '$phone', '$email', $tid)");
+        $conn->query("UPDATE units SET status = 'مباعة' WHERE unit_code = '$unit' AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
 
     case 'get_owners':
-        $res  = $conn->query("SELECT o.*, p.name as project_name FROM owners o LEFT JOIN units u ON o.unit_code = u.unit_code LEFT JOIN projects p ON u.project_id = p.id ORDER BY o.id DESC");
+        $tid  = $_jwt_tid ?? 1;
+        $res  = $conn->query("SELECT o.*, p.name as project_name FROM owners o LEFT JOIN units u ON o.unit_code = u.unit_code LEFT JOIN projects p ON u.project_id = p.id WHERE o.tenant_id=$tid ORDER BY o.id DESC");
         $list = [];
         if ($res) { while ($row = $res->fetch_assoc()) { $list[] = $row; } }
         echo json_encode(["success" => true, "data" => $list]);
