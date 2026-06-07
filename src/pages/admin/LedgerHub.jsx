@@ -5,7 +5,7 @@ import {
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
     AlertTriangle, AlertCircle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
     Settings, Printer, Building2, Loader2, Package, Calendar, Lock, Unlock,
-    ChevronRight, Activity, ArrowRightLeft,
+    ChevronRight, ChevronUp, Activity, ArrowRightLeft, Shield,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -6017,6 +6017,261 @@ function FixedAssetsTab({ accounts, toast }) {
     );
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+//  تبويب التدقيق المالي — سجل أحداث محاسبية مع مستوى خطورة + diff
+// ════════════════════════════════════════════════════════════════════════════
+const AUDIT_ENTITIES = ['entry','invoice','payment','gl','zatca','migration','settings','reclass'];
+const AUDIT_ENTITY_LABELS = {
+    entry:'القيود', invoice:'الفواتير', payment:'السندات',
+    gl:'دفتر الأستاذ', zatca:'زاتكا', migration:'الاستيراد',
+    settings:'الإعدادات', reclass:'إعادة تصنيف',
+};
+const AUDIT_ACTION_META = {
+    create:      { label:'إنشاء',     cls:'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' },
+    update:      { label:'تعديل',     cls:'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' },
+    delete:      { label:'حذف',       cls:'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' },
+    void:        { label:'إلغاء',     cls:'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' },
+    post:        { label:'ترحيل',     cls:'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' },
+    reverse:     { label:'عكس',       cls:'bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300' },
+    close_year:  { label:'إقفال سنة', cls:'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' },
+    reopen_year: { label:'فتح سنة',   cls:'bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300' },
+    zatca_stamp: { label:'ختم ZATCA', cls:'bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300' },
+    save:        { label:'حفظ إعدادات',cls:'bg-slate-50 text-slate-600 dark:bg-brand-800 dark:text-brand-300' },
+};
+const AUDIT_RISK = {
+    4:{ label:'حرج',   dot:'bg-red-500',    cls:'text-red-700 dark:text-red-400' },
+    3:{ label:'عالي',  dot:'bg-orange-500', cls:'text-orange-700 dark:text-orange-400' },
+    2:{ label:'متوسط', dot:'bg-amber-400',  cls:'text-amber-700 dark:text-amber-400' },
+    1:{ label:'منخفض', dot:'bg-slate-400',  cls:'text-slate-500 dark:text-brand-500' },
+};
+const auditFmtAgo = s => {
+    if (!s) return '—';
+    try {
+        const sec = Math.floor((Date.now() - new Date(s.replace(' ','T'))) / 1000);
+        if (sec < 60)    return 'منذ ثوانٍ';
+        if (sec < 3600)  return `منذ ${Math.floor(sec/60)} د`;
+        if (sec < 86400) return `منذ ${Math.floor(sec/3600)} س`;
+        const d = new Date(s.replace(' ','T'));
+        return d.toLocaleDateString('ar-SA', { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit' });
+    } catch { return s; }
+};
+
+function AuditTab({ toast }) {
+    const [rows,     setRows]     = useState([]);
+    const [total,    setTotal]    = useState(0);
+    const [page,     setPage]     = useState(1);
+    const [loading,  setLoading]  = useState(true);
+    const [expanded, setExpanded] = useState(null);
+    const [q,        setQ]        = useState('');
+    const [ent,      setEnt]      = useState('');
+    const [risk,     setRisk]     = useState('');
+    const [from,     setFrom]     = useState('');
+    const [to,       setTo]       = useState('');
+    const PER = 50;
+
+    const load = useCallback(async (p = 1) => {
+        setLoading(true);
+        try {
+            const body = { q, from, to, page: p, per: PER,
+                entity: ent || AUDIT_ENTITIES.join(','), // placeholder — backend filters by list
+            };
+            if (risk) body.risk = risk;
+            // استخدم entity list via repeated param أو filter client-side
+            const r = await api('activity_log', { method: 'POST', body: {
+                ...body,
+                entity: ent || '',  // فارغ = كل
+                q: ent ? q : (q ? q : AUDIT_ENTITIES.join(' ')),
+            }});
+            // filter client-side to financial entities
+            const data = (r.data || []).filter(x => !ent ? AUDIT_ENTITIES.includes(x.entity) : x.entity === ent);
+            setRows(data);
+            setTotal(r.total || 0);
+            setPage(r.page || p);
+        } catch (e) { toast?.(e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [q, ent, risk, from, to]);
+
+    // Better: use entity filter + risk filter properly
+    const loadProper = useCallback(async (p = 1) => {
+        setLoading(true);
+        try {
+            // load each entity type in one call by passing no entity filter then client-filter
+            const body = { page: p, per: 200, from, to };
+            if (risk) body.risk = risk;
+            if (ent)  body.entity = ent;
+            if (q)    body.q = q;
+            const r = await api('activity_log', { method: 'POST', body });
+            const data = (r.data || []).filter(x => AUDIT_ENTITIES.includes(x.entity));
+            setRows(data);
+            setTotal(data.length);
+            setPage(p);
+        } catch (e) { toast?.(e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [q, ent, risk, from, to]);
+
+    useEffect(() => { loadProper(1); }, []); // eslint-disable-line
+
+    const apply = () => loadProper(1);
+    const reset = () => { setQ(''); setEnt(''); setRisk(''); setFrom(''); setTo(''); setTimeout(() => loadProper(1), 0); };
+
+    const exportCSV = () => {
+        const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const hdrs = ['الوقت','المستخدم','القسم','العملية','التفاصيل','IP','الخطورة','هاش'];
+        const data = rows.map(r => [
+            r.created_at, r.actor||'', AUDIT_ENTITY_LABELS[r.entity]||r.entity,
+            AUDIT_ACTION_META[r.action]?.label || r.action,
+            r.detail||'', r.ip_address||'',
+            AUDIT_RISK[r.risk_level]?.label||'', r.row_hash||'',
+        ]);
+        const csv = '﻿' + [hdrs, ...data].map(row => row.map(esc).join(',')).join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `financial_audit_${Date.now()}.csv`; a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    return (
+        <div className="space-y-4">
+            {/* فلاتر */}
+            <div className="flex flex-wrap items-end gap-2 no-print">
+                <div className="relative">
+                    <Search size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-brand-500" />
+                    <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && apply()}
+                        placeholder="بحث…" className="pr-8 pl-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold bg-white dark:bg-brand-900 text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059] w-44" />
+                </div>
+                <select value={ent} onChange={e => setEnt(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold bg-white dark:bg-brand-900 text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059]">
+                    <option value="">كل الأقسام</option>
+                    {AUDIT_ENTITIES.map(k => <option key={k} value={k}>{AUDIT_ENTITY_LABELS[k]||k}</option>)}
+                </select>
+                <select value={risk} onChange={e => setRisk(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold bg-white dark:bg-brand-900 text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059]">
+                    <option value="">كل الخطورة</option>
+                    <option value="4">🔴 حرج فأعلى</option>
+                    <option value="3">🟠 عالي فأعلى</option>
+                    <option value="2">🟡 متوسط فأعلى</option>
+                </select>
+                <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold bg-white dark:bg-brand-900 text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059]" />
+                <input type="date" value={to} onChange={e => setTo(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 text-sm font-bold bg-white dark:bg-brand-900 text-brand-800 dark:text-brand-100 outline-none focus:border-[#c5a059]" />
+                <button onClick={apply}
+                    className="px-4 py-2 rounded-xl text-sm font-black bg-brand-800 text-white hover:bg-brand-900 transition">
+                    تطبيق
+                </button>
+                <button onClick={reset}
+                    className="px-3 py-2 rounded-xl text-sm font-bold border border-slate-200 dark:border-brand-700 text-slate-500 dark:text-brand-400 hover:border-rose-400 hover:text-rose-500 transition">
+                    <X size={14} />
+                </button>
+                <div className="flex-1" />
+                <button onClick={exportCSV}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-emerald-400 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
+                    <Download size={14} /> تصدير CSV
+                </button>
+                <button onClick={() => loadProper(1)} disabled={loading}
+                    className="p-2 rounded-xl border border-slate-200 dark:border-brand-700 text-slate-500 dark:text-brand-400 hover:border-[#c5a059] transition">
+                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                </button>
+            </div>
+
+            {/* الجدول */}
+            <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm overflow-hidden">
+                {loading ? <div className="py-16 text-center text-slate-400 dark:text-brand-500"><RefreshCw className="animate-spin mx-auto" size={28} /></div>
+                : rows.length === 0 ? <div className="py-16 text-center text-slate-300 dark:text-brand-700 font-bold text-sm">لا توجد أحداث مطابقة</div>
+                : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="bg-slate-50/70 dark:bg-brand-800/40 text-[11px] font-black text-slate-400 dark:text-brand-500 border-b border-slate-100 dark:border-brand-700">
+                                    <th className="text-right px-3 py-3">الوقت</th>
+                                    <th className="text-right px-3 py-3">الفاعل</th>
+                                    <th className="text-right px-3 py-3">القسم</th>
+                                    <th className="text-right px-3 py-3">العملية</th>
+                                    <th className="text-right px-3 py-3">الخطورة</th>
+                                    <th className="text-right px-3 py-3">التفاصيل</th>
+                                    <th className="text-right px-3 py-3 hidden md:table-cell">IP</th>
+                                    <th className="w-8 px-2 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.map(r => {
+                                    const am = AUDIT_ACTION_META[r.action] || { label: r.action, cls: 'bg-slate-50 text-slate-600 dark:bg-brand-800 dark:text-brand-300' };
+                                    const rm = AUDIT_RISK[r.risk_level] || AUDIT_RISK[1];
+                                    const isOpen = expanded === r.id;
+                                    return (
+                                        <React.Fragment key={r.id}>
+                                            <tr className={`border-b border-slate-50 dark:border-brand-800 transition ${isOpen ? 'bg-slate-50/80 dark:bg-brand-800/50' : 'hover:bg-slate-50/60 dark:hover:bg-brand-800/30'}`}>
+                                                <td className="px-3 py-2.5 text-xs text-slate-500 dark:text-brand-400 font-bold whitespace-nowrap">{auditFmtAgo(r.created_at)}</td>
+                                                <td className="px-3 py-2.5 text-xs font-bold text-brand-800 dark:text-brand-100 max-w-[100px] truncate">{r.actor || '—'}</td>
+                                                <td className="px-3 py-2.5 text-xs font-bold text-slate-600 dark:text-brand-200">{AUDIT_ENTITY_LABELS[r.entity]||r.entity}</td>
+                                                <td className="px-3 py-2.5">
+                                                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-lg ${am.cls}`}>{am.label}</span>
+                                                </td>
+                                                <td className="px-3 py-2.5">
+                                                    <span className={`inline-flex items-center gap-1 text-[11px] font-black ${rm.cls}`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${rm.dot} shrink-0`} />{rm.label}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2.5 text-xs text-slate-600 dark:text-brand-200 max-w-[200px] truncate">{r.detail || '—'}</td>
+                                                <td className="px-3 py-2.5 text-xs font-mono text-slate-400 dark:text-brand-600 whitespace-nowrap hidden md:table-cell" dir="ltr">{r.ip_address || '—'}</td>
+                                                <td className="px-2 py-2.5">
+                                                    <button onClick={() => setExpanded(isOpen ? null : r.id)}
+                                                        className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-brand-700 text-slate-400 dark:text-brand-500 transition">
+                                                        {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {isOpen && (
+                                                <tr className="border-b border-slate-100 dark:border-brand-700 bg-slate-50/60 dark:bg-brand-800/40">
+                                                    <td colSpan={8} className="px-5 py-3">
+                                                        <div className="text-xs space-y-1 text-slate-600 dark:text-brand-300">
+                                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                                <div><span className="text-slate-400 dark:text-brand-500">الوقت الكامل: </span><span className="font-mono">{r.created_at}</span></div>
+                                                                <div><span className="text-slate-400 dark:text-brand-500">الحدث: </span><span className="font-mono">#{r.id}</span></div>
+                                                                {r.entity_id && <div><span className="text-slate-400 dark:text-brand-500">كيان: </span><span className="font-mono">{r.entity}#{r.entity_id}</span></div>}
+                                                                <div><span className="text-slate-400 dark:text-brand-500">IP: </span><span className="font-mono" dir="ltr">{r.ip_address||'—'}</span></div>
+                                                            </div>
+                                                            {r.user_agent && <div className="text-slate-400 dark:text-brand-600 truncate">الجهاز: {r.user_agent}</div>}
+                                                            {r.row_hash && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="text-slate-400 dark:text-brand-500">هاش:</span>
+                                                                    <span className="font-mono text-[10px] text-slate-400 dark:text-brand-600 break-all" dir="ltr">{r.row_hash}</span>
+                                                                    <span className="text-emerald-600 dark:text-emerald-500 font-black text-[10px]">✓</span>
+                                                                </div>
+                                                            )}
+                                                            {(r.old_data || r.new_data) && (
+                                                                <div className="grid grid-cols-2 gap-2 mt-1">
+                                                                    {r.old_data && <div className="bg-red-50 dark:bg-red-500/10 rounded-lg p-2"><div className="text-[10px] font-black text-red-600 dark:text-red-400 mb-1">قبل:</div><pre className="text-[10px] text-red-700 dark:text-red-300 overflow-auto max-h-24 whitespace-pre-wrap break-all">{r.old_data}</pre></div>}
+                                                                    {r.new_data && <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-lg p-2"><div className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 mb-1">بعد:</div><pre className="text-[10px] text-emerald-700 dark:text-emerald-300 overflow-auto max-h-24 whitespace-pre-wrap break-all">{r.new_data}</pre></div>}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                {/* إجمالي */}
+                {!loading && rows.length > 0 && (
+                    <div className="px-4 py-2.5 border-t border-slate-50 dark:border-brand-700 text-[12px] font-bold text-slate-400 dark:text-brand-500 flex items-center justify-between">
+                        <span>{rows.length} حدث معروض</span>
+                        {rows.filter(r => Number(r.risk_level) >= 4).length > 0 && (
+                            <span className="text-red-600 dark:text-red-400 flex items-center gap-1">
+                                <AlertCircle size={12} /> {rows.filter(r => Number(r.risk_level) >= 4).length} حدث حرج
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 const TABS = [
     { id: 'home',  label: 'الرئيسية',       icon: Activity },
     { id: 'chart', label: 'دليل الحسابات', icon: BookOpen },
@@ -6037,6 +6292,7 @@ const TABS = [
     { id: 'budget', label: 'الميزانية التقديرية', icon: TrendingUp },
     { id: 'assets',  label: 'الأصول الثابتة',  icon: Building2 },
     { id: 'periods', label: 'السنوات المالية', icon: Calendar },
+    { id: 'audit',   label: 'سجل التدقيق',    icon: Shield   },
     { id: 'settings', label: 'ملف المنشأة', icon: Settings },
 ];
 
@@ -6170,6 +6426,7 @@ export default function LedgerHub() {
                     {activeTab === 'budget' && <BudgetTab accounts={accounts} toast={toast} />}
                     {activeTab === 'assets'  && <FixedAssetsTab accounts={accounts} toast={toast} />}
                     {activeTab === 'periods' && <FiscalPeriodsTab toast={toast} />}
+                    {activeTab === 'audit'   && <AuditTab toast={toast} />}
                     {activeTab === 'settings' && <SettingsTab company={company} reload={loadCompany} toast={toast} />}
                 </div>
             </div>

@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-06-v424
+// deploy: 2026-06-07-v425
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -28,6 +28,9 @@ if ($conn->connect_error) {
     die(json_encode(["success" => false, "message" => "فشل الاتصال بقاعدة البيانات"]));
 }
 $conn->set_charset("utf8mb4");
+// ─── fingerprint العميل (IP + User-Agent) — متاح عالمياً ─────────────────
+$_clientIp = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '')[0]);
+$_clientUa = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 250);
 define('MOTTASL_TOKEN', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo');
 
 // ─── DDL migrations: runs once per schema version (skips on every subsequent request) ──
@@ -435,6 +438,18 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_zatca (
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (1)");
 } // end DDL v1
 
+if ($__sv < 2) {
+// ─── v2: عمدة مستوى الخطورة + IP + UA + diff + tamper-hash ──────────────
+$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)      DEFAULT NULL AFTER actor");
+$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS user_agent VARCHAR(250)     DEFAULT NULL AFTER ip_address");
+$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS old_data   MEDIUMTEXT       DEFAULT NULL AFTER user_agent");
+$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS new_data   MEDIUMTEXT       DEFAULT NULL AFTER old_data");
+$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS risk_level TINYINT UNSIGNED DEFAULT 1   AFTER new_data");
+$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS row_hash   VARCHAR(64)      DEFAULT NULL AFTER risk_level");
+$conn->query("ALTER TABLE acc_audit_log ADD INDEX IF NOT EXISTS idx_risk (tenant_id, risk_level)");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (2)");
+} // end DDL v2
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -443,16 +458,35 @@ function acc_next_no($conn, $tid, $kind, $yr) {
                   ON DUPLICATE KEY UPDATE last_no=LAST_INSERT_ID(last_no+1)");
     return (int)$conn->insert_id;
 }
-// تسجيل حركة في سجل التدقيق
-function acc_audit($conn, $tid, $entity, $eid, $action, $detail, $actor) {
+// تسجيل حركة في سجل التدقيق — عالمي المستوى
+function acc_audit($conn, $tid, $entity, $eid, $action, $detail, $actor, $ip = '', $ua = '', $old = null, $new = null) {
+    // اكتشاف مستوى الخطورة تلقائياً
+    static $r4 = ['delete','void','reverse','reopen_year','close_year'];
+    static $r3 = ['update','post','zatca_stamp','recurring_run','save','reclass','parties'];
+    static $r2 = ['create','login','otp_sent'];
+    if (in_array($action, $r4, true))      $risk = 4; // حرج
+    elseif (in_array($action, $r3, true))  $risk = 3; // عالي
+    elseif (in_array($action, $r2, true))  $risk = 2; // متوسط
+    else                                    $risk = 1; // منخفض (login_fail,view,otp_fail...)
+    // login_fail و otp_fail خطر حرج
+    if (in_array($action, ['login_fail','otp_fail'], true)) $risk = 4;
+    // تنظيف وتحويل
     $tid    = (int)$tid;
     $entity = $conn->real_escape_string($entity);
     $action = $conn->real_escape_string($action);
-    $detail = $conn->real_escape_string(is_string($detail) ? $detail : json_encode($detail, JSON_UNESCAPED_UNICODE));
-    $actor  = $conn->real_escape_string((string)($actor ?? ''));
+    $det    = $conn->real_escape_string(is_string($detail) ? $detail : json_encode($detail, JSON_UNESCAPED_UNICODE));
+    $act    = $conn->real_escape_string((string)($actor ?? ''));
+    $ipEsc  = $conn->real_escape_string(substr((string)$ip, 0, 45));
+    $uaEsc  = $conn->real_escape_string(substr((string)$ua, 0, 250));
+    $oldEsc = $old === null ? 'NULL' : ("'" . $conn->real_escape_string(is_string($old) ? $old : json_encode($old, JSON_UNESCAPED_UNICODE)) . "'");
+    $newEsc = $new === null ? 'NULL' : ("'" . $conn->real_escape_string(is_string($new) ? $new : json_encode($new, JSON_UNESCAPED_UNICODE)) . "'");
     $eidSql = ($eid === null) ? 'NULL' : (int)$eid;
-    $conn->query("INSERT INTO acc_audit_log (tenant_id,entity,entity_id,action,detail,actor)
-                  VALUES ($tid,'$entity',$eidSql,'$action','$detail'," . ($actor !== '' ? "'$actor'" : 'NULL') . ")");
+    $now    = date('Y-m-d H:i:s');
+    // هاش tamper-proof لكل صف
+    $hash   = hash('sha256', "$tid|$entity|$eidSql|$action|$det|$now|SEMAK_AUDIT_v2");
+    $conn->query("INSERT INTO acc_audit_log
+        (tenant_id,entity,entity_id,action,detail,actor,ip_address,user_agent,old_data,new_data,risk_level,row_hash)
+        VALUES ($tid,'$entity',$eidSql,'$action','$det'," . ($act !== '' ? "'$act'" : 'NULL') . ",'$ipEsc','$uaEsc',$oldEsc,$newEsc,$risk,'$hash')");
 }
 // إنشاء تنبيه داخل اللوحة (user_id = null يعني تنبيه عام لكل المستخدمين)
 function notify($conn, $tid, $user_id, $type, $title, $body = null, $link = null) {
@@ -1042,7 +1076,7 @@ switch ($action) {
                     $tr  = $conn->query("SELECT id FROM trusted_devices WHERE user_id=$uid AND token_hash='$dh' AND expires_at > '$now' LIMIT 1");
                     if ($tr && $tr->num_rows > 0) {
                         unset($row['password']);
-                        acc_audit($conn, 1, 'auth', $uid, 'login', 'دخول عبر جهاز موثوق · IP ' . $ip, $row['email'] ?? $email);
+                        acc_audit($conn, 1, 'auth', $uid, 'login', 'جهاز موثوق', $row['email'] ?? $email, $_clientIp, $_clientUa);
                         echo json_encode(["success" => true, "data" => $row]);
                         break;
                     }
@@ -1059,7 +1093,7 @@ switch ($action) {
                 $cl = $conn->real_escape_string($channel);
                 $conn->query("INSERT INTO login_otp (user_id,ticket,code,channel,expires_at) VALUES ($uid,'$tk','$cd','$cl','$expires')");
                 $sent = send_login_otp($row, $channel, $code);
-                acc_audit($conn, 1, 'auth', $uid, 'otp_sent', 'إرسال رمز دخول عبر ' . $channel . ' · IP ' . $ip, $row['email'] ?? $email);
+                acc_audit($conn, 1, 'auth', $uid, 'otp_sent', 'قناة=' . $channel, $row['email'] ?? $email, $_clientIp, $_clientUa);
                 echo json_encode([
                     "success"      => true,
                     "otp_required" => true,
@@ -1076,10 +1110,10 @@ switch ($action) {
 
             // ── الوضع الاعتيادي (بدون تحقق بخطوتين) ──
             unset($row['password']);
-            acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح · IP ' . $ip, $row['email'] ?? $email);
+            acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح', $row['email'] ?? $email, $_clientIp, $_clientUa);
             echo json_encode(["success" => true, "data" => $row]);
         } else {
-            acc_audit($conn, 1, 'auth', null, 'login_fail', 'محاولة دخول فاشلة · IP ' . $ip, $input_data['email'] ?? '');
+            acc_audit($conn, 1, 'auth', null, 'login_fail', 'محاولة فاشلة', $input_data['email'] ?? '', $_clientIp, $_clientUa);
             echo json_encode(["success" => false, "message" => "البريد الإلكتروني أو كلمة المرور غير صحيحة"]);
         }
         break;
@@ -1129,7 +1163,7 @@ switch ($action) {
         }
         if (!hash_equals((string)$otp['code'], (string)$code)) {
             $conn->query("UPDATE login_otp SET attempts=attempts+1 WHERE id=$oid");
-            acc_audit($conn, 1, 'auth', (int)$otp['user_id'], 'otp_fail', 'رمز دخول خاطئ · IP ' . $ip, '');
+            acc_audit($conn, 1, 'auth', (int)$otp['user_id'], 'otp_fail', 'رمز خاطئ', '', $_clientIp, $_clientUa);
             echo json_encode(['success' => false, 'message' => 'الرمز غير صحيح']); break;
         }
         $uid = (int)$otp['user_id'];
@@ -1146,7 +1180,7 @@ switch ($action) {
             $label = $conn->real_escape_string(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 150));
             $conn->query("INSERT INTO trusted_devices (user_id,token_hash,label,expires_at) VALUES ($uid,'$dh','$label','$exp')");
         }
-        acc_audit($conn, 1, 'auth', $uid, 'login', 'تسجيل دخول ناجح (تحقق بخطوتين) · IP ' . $ip, $user['email'] ?? '');
+        acc_audit($conn, 1, 'auth', $uid, 'login', 'دخول بتحقق خطوتين', $user['email'] ?? '', $_clientIp, $_clientUa);
         echo json_encode(['success' => true, 'data' => $user, 'device_token' => $device_token]);
         break;
     }
@@ -1479,7 +1513,7 @@ switch ($action) {
             $or = $conn->query("SELECT owner_name as name, owner_phone as phone, owner_email as email, unit_code as unit FROM owners WHERE id=$rid LIMIT 1");
             $owner = $or ? $or->fetch_assoc() : null;
             if (!$owner) { echo json_encode(['success' => false, 'message' => 'العميل غير موجود']); break; }
-            acc_audit($conn, 1, 'auth', null, 'login', 'دخول عميل موحّد ناجح · وحدة ' . ($owner['unit'] ?? '') . ' · IP ' . $ip, $owner['name'] ?? '');
+            acc_audit($conn, 1, 'auth', null, 'login', 'عميل · وحدة=' . ($owner['unit'] ?? ''), $owner['name'] ?? '', $_clientIp, $_clientUa);
             echo json_encode(['success' => true, 'scope' => 'customer', 'data' => $owner]);
         }
         break;
@@ -1498,8 +1532,30 @@ switch ($action) {
     }
 
     case 'activity_log': {
-        $gv = function ($k) use ($input_data) { return isset($input_data[$k]) ? trim((string)$input_data[$k]) : ''; };
-        $tid  = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+        $gv  = function ($k) use ($input_data) { return isset($input_data[$k]) ? trim((string)$input_data[$k]) : ''; };
+        $tid = isset($input_data['tenant_id']) ? (int)$input_data['tenant_id'] : 1;
+
+        // ── وضع الإحصاءات ────────────────────────────────────────────────
+        if (!empty($input_data['stats'])) {
+            $today = date('Y-m-d');
+            $week  = date('Y-m-d', strtotime('-7 days'));
+            $month = date('Y-m-d', strtotime('-30 days'));
+            $s = [];
+            $r = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid AND DATE(created_at)='$today'");
+            $s['today']    = $r ? (int)$r->fetch_assoc()['c'] : 0;
+            $r = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid AND risk_level>=4 AND created_at>='$week 00:00:00'");
+            $s['critical'] = $r ? (int)$r->fetch_assoc()['c'] : 0;
+            $r = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid AND risk_level=3 AND created_at>='$week 00:00:00'");
+            $s['high']     = $r ? (int)$r->fetch_assoc()['c'] : 0;
+            $r = $conn->query("SELECT COUNT(DISTINCT actor) AS c FROM acc_audit_log WHERE tenant_id=$tid AND actor IS NOT NULL AND created_at>='$month 00:00:00'");
+            $s['actors']   = $r ? (int)$r->fetch_assoc()['c'] : 0;
+            $r = $conn->query("SELECT entity, COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid GROUP BY entity ORDER BY c DESC LIMIT 5");
+            $s['top'] = []; if ($r) while ($x = $r->fetch_assoc()) $s['top'][] = $x;
+            echo json_encode(['success'=>true,'stats'=>$s], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        // ── قائمة الأحداث ─────────────────────────────────────────────────
         $page = max(1, (int)($gv('page') ?: 1));
         $per  = min(200, max(1, (int)($gv('per') ?: 50)));
         $off  = ($page - 1) * $per;
@@ -1508,22 +1564,49 @@ switch ($action) {
         if ($gv('entity') !== '') $w[] = "entity = '" . $conn->real_escape_string($gv('entity')) . "'";
         if ($gv('action') !== '') $w[] = "action = '" . $conn->real_escape_string($gv('action')) . "'";
         if ($gv('actor')  !== '') $w[] = "actor LIKE '%" . $conn->real_escape_string($gv('actor')) . "%'";
-        if ($gv('q')      !== '') {
-            $q = $conn->real_escape_string($gv('q'));
-            $w[] = "(detail LIKE '%$q%' OR actor LIKE '%$q%' OR entity LIKE '%$q%')";
+        if ($gv('ip')     !== '') $w[] = "ip_address LIKE '%" . $conn->real_escape_string($gv('ip')) . "%'";
+        if ($gv('risk')   !== '') {
+            $rMin = (int)$gv('risk');
+            $w[] = "risk_level >= $rMin";
+        }
+        if ($gv('q') !== '') {
+            $q   = $conn->real_escape_string($gv('q'));
+            $w[] = "(detail LIKE '%$q%' OR actor LIKE '%$q%' OR entity LIKE '%$q%' OR ip_address LIKE '%$q%')";
         }
         if ($gv('from') !== '') $w[] = "created_at >= '" . $conn->real_escape_string($gv('from')) . " 00:00:00'";
         if ($gv('to')   !== '') $w[] = "created_at <= '" . $conn->real_escape_string($gv('to'))   . " 23:59:59'";
         $where = implode(' AND ', $w);
 
-        $cnt = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE $where");
+        $cnt   = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE $where");
         $total = $cnt ? (int)$cnt->fetch_assoc()['c'] : 0;
 
-        $rows = [];
-        $r = $conn->query("SELECT id, entity, entity_id, action, detail, actor, created_at FROM acc_audit_log WHERE $where ORDER BY id DESC LIMIT $per OFFSET $off");
+        $rows  = [];
+        $r = $conn->query("SELECT id,entity,entity_id,action,detail,actor,ip_address,user_agent,old_data,new_data,risk_level,row_hash,created_at
+                           FROM acc_audit_log WHERE $where ORDER BY id DESC LIMIT $per OFFSET $off");
         if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
 
-        echo json_encode(['success' => true, 'data' => $rows, 'total' => $total, 'page' => $page, 'per' => $per], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$total,'page'=>$page,'per'=>$per], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'audit_stats': {
+        // اختصار مباشر للإحصاءات (GET مريح للـ dashboard)
+        $tid   = (int)($_GET['tenant'] ?? 1);
+        $today = date('Y-m-d');
+        $week  = date('Y-m-d', strtotime('-7 days'));
+        $month = date('Y-m-d', strtotime('-30 days'));
+        $s = [];
+        $r = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid AND DATE(created_at)='$today'");
+        $s['today']    = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        $r = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid AND risk_level>=4 AND created_at>='$week 00:00:00'");
+        $s['critical'] = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        $r = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid AND risk_level=3 AND created_at>='$week 00:00:00'");
+        $s['high']     = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        $r = $conn->query("SELECT COUNT(DISTINCT actor) AS c FROM acc_audit_log WHERE tenant_id=$tid AND actor IS NOT NULL AND created_at>='$month 00:00:00'");
+        $s['actors']   = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        $r = $conn->query("SELECT COUNT(*) AS c FROM acc_audit_log WHERE tenant_id=$tid");
+        $s['total']    = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        echo json_encode(['success'=>true,'stats'=>$s], JSON_UNESCAPED_UNICODE);
         break;
     }
 
