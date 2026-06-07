@@ -6334,7 +6334,7 @@ switch ($action) {
         if ($from) $w .= " AND i.issue_date>='$from'";
         if ($to)   $w .= " AND i.issue_date<='$to'";
         if ($pid)  $w .= " AND i.party_id=$pid";
-        $res = $conn->query("SELECT i.*, COALESCE(p.name,i.party_name) party_label
+        $res = $conn->query("SELECT i.*, COALESCE(p.name,i.party_name) party_label, p.phone AS party_phone
                              FROM acc_invoices i LEFT JOIN acc_parties p ON p.id=i.party_id
                              WHERE $w ORDER BY i.issue_date DESC, i.id DESC LIMIT 500");
         $rows = []; while ($res && ($x = $res->fetch_assoc())) $rows[] = $x;
@@ -6355,6 +6355,109 @@ switch ($action) {
         $payments = []; while ($pr && ($x = $pr->fetch_assoc())) $payments[] = $x;
         echo json_encode(['success'=>true,'invoice'=>$head,'items'=>$items,'payments'=>$payments], JSON_UNESCAPED_UNICODE);
         break;
+
+    case 'inv_whatsapp': {
+        // إرسال إشعار واتساب للعميل بتفاصيل الفاتورة
+        $tid = (int)($input_data['tenant_id'] ?? 1);
+        $id  = (int)($input_data['id'] ?? 0);
+        $by  = $conn->real_escape_string($input_data['actor'] ?? '');
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'معرّف الفاتورة مطلوب']); break; }
+        $res = $conn->query("SELECT i.*, COALESCE(p.name,i.party_name) AS cust_name, p.phone AS cust_phone
+                             FROM acc_invoices i LEFT JOIN acc_parties p ON p.id=i.party_id
+                             WHERE i.id=$id AND i.tenant_id=$tid LIMIT 1");
+        $inv = $res ? $res->fetch_assoc() : null;
+        if (!$inv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة']); break; }
+        // رقم الجوال
+        $phone = preg_replace('/\D/', '', (string)($inv['cust_phone'] ?? ''));
+        $phone = ltrim($phone, '0');
+        if (strlen($phone) < 9) { echo json_encode(['success'=>false,'message'=>'لا يوجد رقم جوال صالح للعميل']); break; }
+        if (substr($phone, 0, 3) !== '966') $phone = '966' . $phone;
+        // اسم الشركة
+        $sRes = $conn->query("SELECT value FROM acc_settings WHERE tenant_id=$tid AND key_name='company_name' LIMIT 1");
+        $co   = ($sRes && ($sr = $sRes->fetch_assoc())) ? $sr['value'] : 'سماك العقارية';
+        // بناء الرسالة
+        $no   = $inv['invoice_no'] ?: "#$id";
+        $cust = $inv['cust_name'] ?: 'عزيزي العميل';
+        $dt   = $inv['issue_date'] ?? '';
+        $due  = $inv['due_date'] ? "\nتاريخ الاستحقاق: {$inv['due_date']}" : '';
+        $tot  = number_format((float)$inv['total'], 2);
+        $paid = number_format((float)$inv['paid'], 2);
+        $bal  = max(0, (float)$inv['total'] - (float)$inv['paid']);
+        $balFmt = number_format($bal, 2);
+        $docLbl = $inv['doc_type'] === 'sales' ? 'فاتورة' : 'فاتورة مشتريات';
+        $body = "مرحباً {$cust} 👋\n\n"
+              . "نُحيطكم علماً بـ{$docLbl} من {$co}:\n"
+              . "─────────────────\n"
+              . "رقم الفاتورة: *{$no}*\n"
+              . "التاريخ: {$dt}{$due}\n"
+              . "الإجمالي: *{$tot} ﷼*\n"
+              . ($inv['paid'] > 0 ? "المسدَّد: {$paid} ﷼\n" : '')
+              . ($bal > 0.01 ? "المتبقي: *{$balFmt} ﷼*\n" : "✅ مسدّدة بالكامل\n")
+              . "─────────────────\n"
+              . "شكراً لتعاملكم معنا 🙏";
+        $ok = wa_send_text($phone, $body);
+        if ($ok) {
+            acc_audit($conn, $tid, 'invoice', $id, 'whatsapp', "$no → $phone", $by, $_clientIp, $_clientUa);
+            echo json_encode(['success'=>true,'message'=>'تم إرسال الإشعار عبر واتساب ✓'], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode(['success'=>false,'message'=>'فشل إرسال الواتساب — تحقق من رقم العميل وإعدادات Mottasl'], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
+    case 'gl_ratios': {
+        // النسب المالية المحسوبة من دفتر الأستاذ والفواتير
+        $tid = (int)($_GET['tenant'] ?? 1);
+        $ys  = date('Y') . '-01-01';
+        // إيرادات ومصروفات السنة
+        $rr = $conn->query("SELECT
+            SUM(CASE WHEN a.type='revenue' THEN GREATEST(0,l.credit-l.debit) ELSE 0 END) AS rev,
+            SUM(CASE WHEN a.type='expense' THEN GREATEST(0,l.debit-l.credit) ELSE 0 END) AS exp
+            FROM acc_lines l
+            JOIN acc_entries e ON e.id=l.entry_id AND e.tenant_id=l.tenant_id AND e.is_posted=1 AND e.date>='$ys'
+            JOIN acc_accounts a ON a.id=l.account_id AND a.tenant_id=l.tenant_id AND a.is_group=0
+            WHERE l.tenant_id=$tid");
+        $re  = $rr ? $rr->fetch_assoc() : [];
+        $rev = max(0,(float)($re['rev']??0));
+        $exp = max(0,(float)($re['exp']??0));
+        $net = $rev - $exp;
+        // نقدية (حسابات نقد + بنوك)
+        $cr = $conn->query("SELECT COALESCE(SUM(l.debit-l.credit),0) AS v
+            FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id AND e.is_posted=1
+            JOIN acc_accounts a ON a.id=l.account_id AND a.is_group=0
+            WHERE l.tenant_id=$tid AND a.type='asset'
+            AND (a.name LIKE '%نقد%' OR a.name LIKE '%صندوق%' OR a.name LIKE '%بنك%' OR a.name LIKE '%كاش%')");
+        $cashV = max(0,(float)(($cr ? $cr->fetch_assoc() : ['v'=>0])['v']));
+        // ذمم مدينة/دائنة من الفواتير المفتوحة
+        $ar = $conn->query("SELECT COALESCE(SUM(ROUND(total-paid,2)),0) AS v FROM acc_invoices WHERE tenant_id=$tid AND doc_type='sales' AND status IN ('posted','partial')");
+        $arV = max(0,(float)(($ar ? $ar->fetch_assoc() : ['v'=>0])['v']));
+        $ap = $conn->query("SELECT COALESCE(SUM(ROUND(total-paid,2)),0) AS v FROM acc_invoices WHERE tenant_id=$tid AND doc_type='purchase' AND status IN ('posted','partial')");
+        $apV = max(0,(float)(($ap ? $ap->fetch_assoc() : ['v'=>0])['v']));
+        // إجمالي الأصول والخصوم
+        $bs = $conn->query("SELECT
+            SUM(CASE WHEN a.type='asset'     THEN GREATEST(0,l.debit-l.credit)  ELSE 0 END) AS ta,
+            SUM(CASE WHEN a.type='liability' THEN GREATEST(0,l.credit-l.debit)  ELSE 0 END) AS tl
+            FROM acc_lines l JOIN acc_entries e ON e.id=l.entry_id AND e.tenant_id=l.tenant_id AND e.is_posted=1
+            JOIN acc_accounts a ON a.id=l.account_id AND a.tenant_id=l.tenant_id AND a.is_group=0
+            WHERE l.tenant_id=$tid");
+        $bsd = $bs ? $bs->fetch_assoc() : [];
+        $ta  = max(0,(float)($bsd['ta']??0));
+        $tl  = max(0,(float)($bsd['tl']??0));
+        // حساب النسب
+        $ratios = [
+            'net_margin'  => $rev  > 0 ? round($net/$rev*100,1)       : null,
+            'dso'         => $rev  > 0 ? round($arV/($rev/365),0)     : null,
+            'dpo'         => $exp  > 0 ? round($apV/($exp/365),0)     : null,
+            'debt_ratio'  => $ta   > 0 ? round($tl/$ta*100,1)         : null,
+            'ar_ap_ratio' => $apV  > 0 ? round($arV/$apV,2)           : null,
+            'cash_ap'     => $apV  > 0 ? round($cashV/$apV,2)         : null,
+            'revenue'=>round($rev,2),'expenses'=>round($exp,2),'net'=>round($net,2),
+            'ar'=>round($arV,2),'ap'=>round($apV,2),'cash'=>round($cashV,2),
+            'total_assets'=>round($ta,2),'total_liab'=>round($tl,2),
+        ];
+        echo json_encode(['success'=>true,'ratios'=>$ratios], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     case 'gl_product_ledger':
         // حركة صنف: مشتريات = وارد (+) ، مبيعات = منصرف (-) — من بنود الفواتير المُرحّلة.

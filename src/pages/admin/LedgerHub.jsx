@@ -5,7 +5,7 @@ import {
     Scale, TrendingUp, Wallet, Users, Edit2, RotateCcw, Eye, Download, Copy,
     AlertTriangle, AlertCircle, CheckCircle2, PieChart, FileBarChart2, Banknote, ChevronDown,
     Settings, Printer, Building2, Loader2, Package, Calendar, Lock, Unlock,
-    ChevronRight, ChevronUp, Activity, ArrowRightLeft, Shield,
+    ChevronRight, ChevronUp, Activity, ArrowRightLeft, Shield, MessageCircle,
 } from 'lucide-react';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -177,11 +177,35 @@ function MonthlySparkChart({ months, onClick }) {
     );
 }
 
+// ─── بطاقة نسبة مالية ─────────────────────────────────────────────────────────
+function RatioCard({ label, value, sub, status }) {
+    const map = {
+        good: { bg:'bg-emerald-50 dark:bg-emerald-500/10', text:'text-emerald-700 dark:text-emerald-400', dot:'bg-emerald-500' },
+        warn: { bg:'bg-amber-50 dark:bg-amber-500/10',   text:'text-amber-700 dark:text-amber-400',   dot:'bg-amber-400'   },
+        bad:  { bg:'bg-rose-50 dark:bg-rose-500/10',     text:'text-rose-700 dark:text-rose-400',     dot:'bg-rose-500'    },
+        n:    { bg:'bg-slate-50 dark:bg-brand-800/40',   text:'text-slate-600 dark:text-brand-300',   dot:'bg-slate-400'   },
+    };
+    const s = map[status] || map.n;
+    return (
+        <div className={`rounded-xl p-3.5 ${s.bg}`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${s.dot} shrink-0`} />
+                <span className={`text-[11px] font-black ${s.text}`}>{label}</span>
+            </div>
+            <div className={`text-xl font-black tabular-nums ${s.text}`}>{value}</div>
+            {sub && <div className="text-[10px] font-bold text-slate-400 dark:text-brand-600 mt-1">{sub}</div>}
+        </div>
+    );
+}
+
 function DashboardHomeTab({ setActiveTab, toast }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [monthly, setMonthly] = useState(null);
     const curYear = new Date().getFullYear().toString();
+    const [showRatios, setShowRatios] = useState(false);
+    const [ratios,     setRatios]     = useState(null);
+    const [ratLoading, setRatLoading] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -197,6 +221,16 @@ function DashboardHomeTab({ setActiveTab, toast }) {
             .then(r => { if (r.success) setMonthly(r.months); })
             .catch(() => {});
     }, []); // eslint-disable-line
+
+    // تحميل النسب المالية عند الطلب فقط
+    const loadRatios = useCallback(async () => {
+        if (ratios || ratLoading) return;
+        setRatLoading(true);
+        try { const r = await api('gl_ratios', {}); if (r.success) setRatios(r.ratios); }
+        catch {} finally { setRatLoading(false); }
+    }, [ratios, ratLoading]);
+
+    useEffect(() => { if (showRatios) loadRatios(); }, [showRatios]); // eslint-disable-line
 
     const KPI = ({ label, value, sub, color, icon: Icon, onClick }) => (
         <button onClick={onClick}
@@ -291,6 +325,52 @@ function DashboardHomeTab({ setActiveTab, toast }) {
                     </div>
                 </div>
             )}
+
+            {/* النسب المالية — قابل للطي */}
+            <div className="bg-white dark:bg-brand-900 rounded-2xl border border-slate-100 dark:border-brand-700 shadow-sm overflow-hidden">
+                <button onClick={() => setShowRatios(s => !s)}
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-brand-800/40 transition">
+                    <div className="flex items-center gap-2.5">
+                        <Scale size={16} className="text-[#c5a059]" />
+                        <span className="text-sm font-black text-brand-800 dark:text-brand-100">النسب المالية</span>
+                    </div>
+                    {showRatios ? <ChevronUp size={15} className="text-slate-400 dark:text-brand-500" /> : <ChevronDown size={15} className="text-slate-400 dark:text-brand-500" />}
+                </button>
+                {showRatios && (
+                    <div className="border-t border-slate-100 dark:border-brand-700 p-4">
+                        {ratLoading ? (
+                            <div className="text-center py-4"><Loader2 className="animate-spin mx-auto text-slate-400" size={22} /></div>
+                        ) : !ratios ? null : (
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <RatioCard label="صافي الهامش ٪"
+                                    value={ratios.net_margin !== null ? `${ratios.net_margin}%` : '—'}
+                                    sub="(إيرادات − مصروفات) ÷ إيرادات"
+                                    status={ratios.net_margin === null ? 'n' : ratios.net_margin > 10 ? 'good' : ratios.net_margin > 0 ? 'warn' : 'bad'} />
+                                <RatioCard label="أيام التحصيل DSO"
+                                    value={ratios.dso !== null ? `${ratios.dso} يوم` : '—'}
+                                    sub="ذمم مدينة ÷ (إيرادات ÷ 365)"
+                                    status={ratios.dso === null ? 'n' : ratios.dso < 30 ? 'good' : ratios.dso < 60 ? 'warn' : 'bad'} />
+                                <RatioCard label="أيام السداد DPO"
+                                    value={ratios.dpo !== null ? `${ratios.dpo} يوم` : '—'}
+                                    sub="ذمم دائنة ÷ (مصروفات ÷ 365)"
+                                    status={ratios.dpo === null ? 'n' : ratios.dpo < 45 ? 'good' : ratios.dpo < 90 ? 'warn' : 'bad'} />
+                                <RatioCard label="نسبة الديون"
+                                    value={ratios.debt_ratio !== null ? `${ratios.debt_ratio}%` : '—'}
+                                    sub="إجمالي الخصوم ÷ إجمالي الأصول"
+                                    status={ratios.debt_ratio === null ? 'n' : ratios.debt_ratio < 40 ? 'good' : ratios.debt_ratio < 70 ? 'warn' : 'bad'} />
+                                <RatioCard label="مدين ÷ دائن"
+                                    value={ratios.ar_ap_ratio !== null ? `${ratios.ar_ap_ratio}×` : '—'}
+                                    sub="ذمم مدينة ÷ ذمم دائنة (> 1 جيد)"
+                                    status={ratios.ar_ap_ratio === null ? 'n' : ratios.ar_ap_ratio > 1 ? 'good' : ratios.ar_ap_ratio > 0.5 ? 'warn' : 'bad'} />
+                                <RatioCard label="تغطية الدائنين"
+                                    value={ratios.cash_ap !== null ? `${ratios.cash_ap}×` : '—'}
+                                    sub="نقدية ÷ ذمم دائنة (> 1 ممتاز)"
+                                    status={ratios.cash_ap === null ? 'n' : ratios.cash_ap > 1 ? 'good' : ratios.cash_ap > 0.3 ? 'warn' : 'bad'} />
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* آخر القيود */}
@@ -3581,6 +3661,7 @@ function InvoicesTab({ docType, parties, accounts, products = [], company = {}, 
     const [quickPay,  setQuickPay]  = useState(null); // { id, invoice_no, party_id, party_label, balance_due }
     const [qpBusy,    setQpBusy]    = useState(false);
     const [qpForm,    setQpForm]    = useState({ amount: '', date: todayISO(), method: 'cash', notes: '' });
+    const [waSending, setWaSending] = useState(null); // invoice id being sent via WhatsApp
 
     const partyOptions = useMemo(
         () => parties.filter(p => p.type === (isSales ? 'customer' : 'supplier')),
@@ -3650,6 +3731,15 @@ function InvoicesTab({ docType, parties, accounts, products = [], company = {}, 
     const openView = async (id) => {
         try { const r = await api('inv_single', { params: { id } }); if (r.success) setViewing(r); else toast(r.message, 'error'); }
         catch (e) { toast(e.message, 'error'); }
+    };
+
+    const sendWhatsApp = async (inv) => {
+        setWaSending(inv.id);
+        try {
+            const r = await api('inv_whatsapp', { method: 'POST', body: { id: inv.id } });
+            toast(r.message || (r.success ? 'تم الإرسال' : 'فشل الإرسال'), r.success ? 'success' : 'error');
+        } catch (e) { toast(e.message, 'error'); }
+        finally { setWaSending(null); }
     };
 
     const submitQuickPay = async () => {
@@ -3817,6 +3907,13 @@ th{background:#f8fafc;color:#475569;font-weight:700}
                                                     }} title={isSales ? 'تسجيل دفعة' : 'تسجيل سداد'}
                                                         className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                                                         <Wallet size={15} />
+                                                    </button>
+                                                )}
+                                                {isSales && inv.party_phone && (inv.status === 'posted' || inv.status === 'partial') && (
+                                                    <button onClick={() => sendWhatsApp(inv)} disabled={waSending === inv.id}
+                                                        title="إرسال إشعار واتساب للعميل"
+                                                        className="p-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-500/10 text-green-600 dark:text-green-400 disabled:opacity-40">
+                                                        {waSending === inv.id ? <RefreshCw size={15} className="animate-spin" /> : <MessageCircle size={15} />}
                                                     </button>
                                                 )}
                                                 {(inv.status === 'posted') && <button onClick={() => act('inv_void', inv.id, 'إلغاء الفاتورة وعكس قيدها؟')} title="إلغاء" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><RotateCcw size={15} /></button>}
