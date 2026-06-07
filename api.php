@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v429
+// deploy: 2026-06-07-v430
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -10500,14 +10500,14 @@ KNOWLEDGE;
     case 'emergency_otp': {
         $ekey = trim((string)($_GET['k'] ?? $input_data['k'] ?? ''));
         if ($ekey !== 'SemakDev2026!') { echo json_encode(['success'=>false,'message'=>'غير مصرح']); break; }
-        $email = $conn->real_escape_string(trim((string)($_GET['email'] ?? '')));
-        if (!$email) { echo json_encode(['success'=>false,'message'=>'email مطلوب']); break; }
-        // list=1 → أظهر كل المستخدمين
+        // list=1 → أظهر كل المستخدمين (بدون email)
         if (!empty($_GET['list'])) {
             $lr = $conn->query("SELECT id,username,email,role,twofa FROM users ORDER BY id LIMIT 20");
             $users = []; while($lr && $x=$lr->fetch_assoc()) $users[]=$x;
             echo json_encode(['success'=>true,'users'=>$users], JSON_UNESCAPED_UNICODE); break;
         }
+        $email = $conn->real_escape_string(trim((string)($_GET['email'] ?? '')));
+        if (!$email) { echo json_encode(['success'=>false,'message'=>'email مطلوب']); break; }
 
         $ur = $conn->query("SELECT id FROM users WHERE (email='$email' OR username='$email') LIMIT 1");
         $urow = $ur ? $ur->fetch_assoc() : null;
