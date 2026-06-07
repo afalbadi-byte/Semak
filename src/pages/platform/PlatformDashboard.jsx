@@ -69,14 +69,28 @@ const Stat = ({ icon, label, value, sub }) => (
 
 // ─── Overview Tab ──────────────────────────────────────────────────────────
 function OverviewTab() {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [stats,        setStats]        = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [sending,      setSending]      = useState(false);
+  const [reminderRes,  setReminderRes]  = useState(null);
 
-  useEffect(() => {
+  const reload = () => {
+    setLoading(true);
     platApi('platform_stats').then(r => {
       if (r.success) setStats(r.stats);
     }).finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { reload(); }, []);
+
+  const sendReminders = async () => {
+    setSending(true); setReminderRes(null);
+    try {
+      const r = await platApi('platform_trial_reminders');
+      setReminderRes(r);
+    } catch { setReminderRes({ success: false, message: 'Network error' }); }
+    finally { setSending(false); }
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -89,7 +103,19 @@ function OverviewTab() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-black text-white">Platform Overview</h2>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h2 className="text-lg font-black text-white">Platform Overview</h2>
+        <div className="flex gap-2">
+          <button onClick={reload} className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white text-xs font-bold transition flex items-center gap-1.5">
+            <RefreshCw size={13} /> Refresh
+          </button>
+          <button onClick={sendReminders} disabled={sending}
+            className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50">
+            {sending ? <RefreshCw size={13} className="animate-spin"/> : <Send size={13} />}
+            Send Trial Reminders
+          </button>
+        </div>
+      </div>
 
       {/* Row 1 — tenant counts */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -112,6 +138,22 @@ function OverviewTab() {
         <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-400 text-sm font-bold">
           <AlertTriangle size={16} className="shrink-0" />
           {stats.expiredTrials} trial tenant{stats.expiredTrials > 1 ? 's' : ''} expired — they will be auto-suspended on next login.
+        </div>
+      )}
+
+      {/* Reminder result */}
+      {reminderRes && (
+        <div className={`rounded-xl px-4 py-3 text-sm font-bold border ${reminderRes.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+          {reminderRes.success
+            ? `✓ Sent ${reminderRes.total_sent} reminder${reminderRes.total_sent !== 1 ? 's' : ''} — ${reminderRes.total_failed} failed.`
+            : `✗ ${reminderRes.message}`}
+          {reminderRes.sent?.length > 0 && (
+            <div className="mt-2 space-y-0.5 text-xs font-normal">
+              {reminderRes.sent.map((s, i) => (
+                <div key={i} className="text-emerald-300">{s.name} ({s.email}) — {s.type === 'soon' ? `${s.days}d left` : 'expired'}</div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

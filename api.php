@@ -1549,6 +1549,72 @@ switch ($action) {
         break;
     }
 
+    case 'platform_trial_reminders': {
+        // إرسال تذكيرات انتهاء التجربة تلقائياً — منصة فقط
+        if (!$_plat_claims) { echo json_encode(['success'=>false,'message'=>'غير مصرح'], JSON_UNESCAPED_UNICODE); break; }
+        $today    = date('Y-m-d');
+        $in3days  = date('Y-m-d', strtotime('+3 days'));
+        $in7days  = date('Y-m-d', strtotime('+7 days'));
+        $yesterday= date('Y-m-d', strtotime('-1 day'));
+
+        // مستأجرون تنتهي تجربتهم خلال 7 أيام (لم ترسل لهم تذكير اليوم)
+        $soonR = $conn->query("SELECT t.*,
+                   (SELECT email FROM users WHERE tenant_id=t.id AND role='admin' ORDER BY id ASC LIMIT 1) admin_email,
+                   (SELECT name  FROM users WHERE tenant_id=t.id AND role='admin' ORDER BY id ASC LIMIT 1) admin_name
+                 FROM tenants t
+                 WHERE t.plan='trial' AND t.status='active'
+                   AND t.trial_ends >= '$today' AND t.trial_ends <= '$in7days'
+                 ORDER BY t.trial_ends ASC LIMIT 50");
+        $expiredR = $conn->query("SELECT t.*,
+                   (SELECT email FROM users WHERE tenant_id=t.id AND role='admin' ORDER BY id ASC LIMIT 1) admin_email,
+                   (SELECT name  FROM users WHERE tenant_id=t.id AND role='admin' ORDER BY id ASC LIMIT 1) admin_name
+                 FROM tenants t
+                 WHERE t.plan='trial' AND t.status='active'
+                   AND t.trial_ends < '$today' AND t.trial_ends >= '$yesterday'
+                 LIMIT 20");
+
+        $sent = []; $failed = [];
+        $upgradeUrl = 'https://wa.me/966920032842?text=' . rawurlencode('أود ترقية اشتراكي في سماك');
+        $loginUrl   = 'https://semak.sa/login';
+
+        $sendReminder = function($rows, $type) use ($conn, $upgradeUrl, $loginUrl, &$sent, &$failed) {
+            while ($rows && ($t = $rows->fetch_assoc())) {
+                if (empty($t['admin_email'])) continue;
+                $days  = (int)ceil((strtotime($t['trial_ends']) - time()) / 86400);
+                $name  = $t['name'];
+                $aName = $t['admin_name'] ?? $t['owner_name'] ?? 'عزيزي المدير';
+                $aEmail= $t['admin_email'];
+                if ($type === 'soon') {
+                    $subj  = "تجربة سماك تنتهي خلال {$days} " . ($days === 1 ? 'يوم' : 'أيام');
+                    $body  = "مرحباً {$aName}،<br><br>تنتهي فترة تجربتك المجانية في نظام <b>" . htmlspecialchars($name)
+                           . "</b> خلال <b>{$days} " . ($days===1?'يوم':'أيام') . "</b> ({$t['trial_ends']}).<br><br>"
+                           . "لمواصلة الاستخدام دون انقطاع، يرجى ترقية اشتراكك قبل انتهاء المدة.<br><br>"
+                           . "تواصل معنا الآن وسنساعدك في اختيار الباقة المناسبة لشركتك.";
+                } else {
+                    $subj  = "انتهت فترة التجربة المجانية في سماك";
+                    $body  = "مرحباً {$aName}،<br><br>انتهت فترة تجربتك المجانية في نظام <b>" . htmlspecialchars($name) . "</b>.<br><br>"
+                           . "لإعادة تفعيل حسابك والاحتفاظ بجميع بياناتك، تواصل معنا لترقية الاشتراك.<br><br>"
+                           . "<b>ملاحظة:</b> سيُوقف الحساب تلقائياً عند محاولة الدخول إذا لم يتم الاشتراك.";
+                }
+                $html = email_template($subj, $body,
+                    ['label' => 'ترقية الاشتراك الآن', 'url' => $upgradeUrl]);
+                $ok = send_email($aEmail, $aName, $subj, $html);
+                if ($ok) {
+                    $sent[]   = ['id'=>(int)$t['id'],'name'=>$name,'email'=>$aEmail,'days'=>$type==='soon'?$days:0,'type'=>$type];
+                    $conn->query("UPDATE tenants SET notes=CONCAT(IFNULL(notes,''),'[تذكير {$type} " . date('Y-m-d') . "] ') WHERE id={$t['id']}");
+                } else {
+                    $failed[] = ['id'=>(int)$t['id'],'name'=>$name,'email'=>$aEmail];
+                }
+            }
+        };
+
+        $sendReminder($soonR,    'soon');
+        $sendReminder($expiredR, 'expired');
+        echo json_encode(['success'=>true,'sent'=>$sent,'failed'=>$failed,
+                          'total_sent'=>count($sent),'total_failed'=>count($failed)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     // ─── هوية المنشأة (للفرونت-إند: ألوان + شعار + اسم) ────────────────────────
     case 'tenant_branding': {
         // endpoint عام — يُرجع إعدادات الهوية البصرية + بيانات الاشتراك
