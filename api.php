@@ -1426,14 +1426,18 @@ switch ($action) {
 
     case 'platform_via_jwt': {
         // SSO: إذا كان المستخدم admin ← يحصل على platform token مباشرة
-        if (!$jwt_payload || ($jwt_payload['role'] ?? '') !== 'admin') {
+        if (!$_jwt_claims || ($_jwt_claims['role'] ?? '') !== 'admin') {
             echo json_encode(['success'=>false,'message'=>'يتطلب صلاحية مدير'], JSON_UNESCAPED_UNICODE);
             break;
         }
+        // جلب اسم/بريد المستخدم من DB للسجل
+        $uid_sso = (int)($_jwt_claims['sub'] ?? 0);
+        $usr_row = $uid_sso ? $conn->query("SELECT name, email FROM users WHERE id=$uid_sso LIMIT 1")->fetch_assoc() : [];
         $token = jwt_sign([
             'sub'   => 'platform_admin',
             'role'  => 'platform_admin',
-            'email' => $jwt_payload['email'] ?? ($jwt_payload['name'] ?? 'admin'),
+            'email' => $usr_row['email'] ?? 'admin@semak.sa',
+            'name'  => $usr_row['name']  ?? 'Admin',
             'iat'   => time(),
             'exp'   => time() + 86400 * 7,
         ], PLATFORM_SECRET);
@@ -11021,7 +11025,7 @@ KNOWLEDGE;
     // ══════════════════════════════════════════════════════════════════════════
 
     case 're_contracts_list': {
-        $tid  = (int)($jwt_payload['tenant_id'] ?? 1);
+        $tid  = (int)($_jwt_claims['tid'] ?? 1);
         $rows = [];
         $res  = $conn->query("
             SELECT c.*, p.name AS project_name
@@ -11036,7 +11040,7 @@ KNOWLEDGE;
     }
 
     case 're_contract_save': {
-        $tid = (int)($jwt_payload['tenant_id'] ?? 1);
+        $tid = (int)($_jwt_claims['tid'] ?? 1);
         $id  = (int)($body['id'] ?? 0);
         $pj  = (int)($body['project_id'] ?? 0) ?: 'NULL';
         $cn  = $conn->real_escape_string($body['contractor_name'] ?? '');
@@ -11072,7 +11076,7 @@ KNOWLEDGE;
     }
 
     case 're_purchases_list': {
-        $tid  = (int)($jwt_payload['tenant_id'] ?? 1);
+        $tid  = (int)($_jwt_claims['tid'] ?? 1);
         $rows = [];
         $res  = $conn->query("
             SELECT po.*, p.name AS project_name
@@ -11090,7 +11094,7 @@ KNOWLEDGE;
     }
 
     case 're_purchase_save': {
-        $tid = (int)($jwt_payload['tenant_id'] ?? 1);
+        $tid = (int)($_jwt_claims['tid'] ?? 1);
         $id  = (int)($body['id'] ?? 0);
         $pj  = (int)($body['project_id'] ?? 0) ?: 'NULL';
         $sn  = $conn->real_escape_string($body['supplier_name'] ?? '');
