@@ -3,7 +3,7 @@ import {
     ShieldCheck, Mail, MessageCircle, Send, MailCheck, RefreshCw,
     Lock, CheckCircle2, AlertTriangle, KeyRound
 } from 'lucide-react';
-import { apiPost, TENANT, currentUser } from '../../lib/api/client';
+import { apiPost, TENANT, currentUser, API_URL, getAdminToken } from '../../lib/api/client';
 
 export default function SecuritySettings({ showToast }) {
     const u = currentUser() || {};
@@ -75,6 +75,34 @@ export default function SecuritySettings({ showToast }) {
             }
         } catch { toast('خطأ', 'فشل الاتصال بالسيرفر', 'error'); }
         finally { setSending(false); }
+    };
+
+    // ─── تغيير كلمة المرور ───────────────────────────────────────────────
+    const [pwOld, setPwOld]     = useState('');
+    const [pwNew, setPwNew]     = useState('');
+    const [pwCf,  setPwCf]      = useState('');
+    const [savingPw, setSavingPw] = useState(false);
+
+    const changePassword = async () => {
+        if (!pwOld || !pwNew || !pwCf) { toast('تنبيه', 'أدخل جميع الحقول', 'error'); return; }
+        if (pwNew.length < 8)           { toast('تنبيه', 'كلمة المرور يجب أن تكون 8 أحرف على الأقل', 'error'); return; }
+        if (pwNew !== pwCf)             { toast('تنبيه', 'كلمتا المرور غير متطابقتين', 'error'); return; }
+        setSavingPw(true);
+        try {
+            const jwt = getAdminToken();
+            const res = await fetch(`${API_URL}?action=change_password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
+                body: JSON.stringify({ old_password: pwOld, new_password: pwNew }),
+            }).then(r => r.json());
+            if (res.success) {
+                toast('تم', 'تم تغيير كلمة المرور بنجاح');
+                setPwOld(''); setPwNew(''); setPwCf('');
+            } else {
+                toast('خطأ', res.message || 'تعذّر تغيير كلمة المرور', 'error');
+            }
+        } catch { toast('خطأ', 'فشل الاتصال بالسيرفر', 'error'); }
+        finally { setSavingPw(false); }
     };
 
     const Card = ({ icon: Icon, title, desc, children }) => (
@@ -164,6 +192,36 @@ export default function SecuritySettings({ showToast }) {
                     <div className="flex justify-end">
                         <button onClick={sendUpdate} disabled={sending} className="btn btn-primary px-6 py-3 flex items-center gap-2">
                             {sending ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />} إرسال البريد
+                        </button>
+                    </div>
+                </div>
+            </Card>
+
+            {/* تغيير كلمة المرور */}
+            <Card icon={KeyRound} title="تغيير كلمة المرور" desc="استخدم كلمة مرور قوية لحماية حسابك.">
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-black text-slate-500 dark:text-brand-400 mb-1.5">كلمة المرور الحالية</label>
+                        <input type="password" value={pwOld} onChange={e => setPwOld(e.target.value)}
+                            className="input w-full py-3" placeholder="••••••••" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-black text-slate-500 dark:text-brand-400 mb-1.5">كلمة المرور الجديدة</label>
+                            <input type="password" value={pwNew} onChange={e => setPwNew(e.target.value)}
+                                className="input w-full py-3" placeholder="8 أحرف على الأقل" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-black text-slate-500 dark:text-brand-400 mb-1.5">تأكيد كلمة المرور</label>
+                            <input type="password" value={pwCf} onChange={e => setPwCf(e.target.value)}
+                                className="input w-full py-3" placeholder="••••••••" />
+                        </div>
+                    </div>
+                    <div className="flex justify-end">
+                        <button onClick={changePassword} disabled={savingPw}
+                            className="btn btn-primary px-6 py-3 flex items-center gap-2">
+                            {savingPw ? <RefreshCw size={16} className="animate-spin" /> : <Lock size={16} />}
+                            تغيير كلمة المرور
                         </button>
                     </div>
                 </div>
