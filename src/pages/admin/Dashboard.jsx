@@ -1305,6 +1305,47 @@ function DashboardInner({ onLogout }) {
                             </div>
                         </div>
 
+                        {/* ─── آخر الفواتير ──────────────────────────────────── */}
+                        {(nativeStats?.recent_inv?.length > 0) && (
+                        <div className="bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-base font-black text-brand-800 dark:text-brand-50 flex items-center gap-2">
+                                    <Receipt size={18} className="text-gold-500"/> آخر الفواتير
+                                </h3>
+                                <button onClick={() => setActiveTab('invoices')}
+                                    className="text-xs font-bold text-slate-500 hover:text-[#c5a059] transition flex items-center gap-1">
+                                    عرض الكل <ChevronRight size={12}/>
+                                </button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-brand-100 dark:border-brand-700">
+                                            {['رقم الفاتورة','العميل','التاريخ','الإجمالي'].map(h => (
+                                                <th key={h} className="text-right py-2 px-2 text-[10px] font-bold text-slate-400 dark:text-brand-500 uppercase tracking-widest">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {nativeStats.recent_inv.map(inv => (
+                                            <tr key={inv.id} onClick={() => setActiveTab('invoices')}
+                                                className="border-b border-brand-50 dark:border-brand-800/50 hover:bg-brand-50 dark:hover:bg-brand-800/40 cursor-pointer transition">
+                                                <td className="py-2.5 px-2">
+                                                    <span className="font-mono text-xs text-[#c5a059] font-bold">{inv.invoice_number || `#${inv.id}`}</span>
+                                                </td>
+                                                <td className="py-2.5 px-2 text-brand-800 dark:text-brand-200 font-bold truncate max-w-[140px]">{inv.party_name || '—'}</td>
+                                                <td className="py-2.5 px-2 text-slate-500 dark:text-brand-400 text-xs">{inv.issue_date?.slice(0,10) || '—'}</td>
+                                                <td className="py-2.5 px-2 font-black tabular-nums text-brand-800 dark:text-brand-100 text-right" dir="ltr">
+                                                    {Number(inv.total_amount || 0).toLocaleString('en-US', {maximumFractionDigits:0})} ﷼
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        )}
+
                         {/* ─── الأدوات — شبكة موحّدة حسب الأقسام ───────────── */}
                         <div className="space-y-7">
                             {DEPARTMENTS.map(dept => (
