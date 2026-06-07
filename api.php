@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v428
+// deploy: 2026-06-07-v429
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -10502,6 +10502,13 @@ KNOWLEDGE;
         if ($ekey !== 'SemakDev2026!') { echo json_encode(['success'=>false,'message'=>'غير مصرح']); break; }
         $email = $conn->real_escape_string(trim((string)($_GET['email'] ?? '')));
         if (!$email) { echo json_encode(['success'=>false,'message'=>'email مطلوب']); break; }
+        // list=1 → أظهر كل المستخدمين
+        if (!empty($_GET['list'])) {
+            $lr = $conn->query("SELECT id,username,email,role,twofa FROM users ORDER BY id LIMIT 20");
+            $users = []; while($lr && $x=$lr->fetch_assoc()) $users[]=$x;
+            echo json_encode(['success'=>true,'users'=>$users], JSON_UNESCAPED_UNICODE); break;
+        }
+
         $ur = $conn->query("SELECT id FROM users WHERE (email='$email' OR username='$email') LIMIT 1");
         $urow = $ur ? $ur->fetch_assoc() : null;
         if (!$urow) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود']); break; }
