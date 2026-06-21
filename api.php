@@ -4530,7 +4530,7 @@ switch ($action) {
             'amount'              => (float)($body['amount'] ?? 0),
             'expense_category_id' => $body['category_id']  ?? '',
             'supplier_id'         => $body['supplier_id']  ?? '',
-            'notes'               => $body['notes']        ?? '',
+            'note'                => $body['notes']        ?? '',
             'work_order_id'       => $body['work_order_id'] ?? null,
         ]];
         if ($is_update) $payload['Expense']['id'] = $exp_id;
