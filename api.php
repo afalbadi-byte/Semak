@@ -4532,6 +4532,7 @@ switch ($action) {
             'supplier_id'         => $body['supplier_id']  ?? '',
             'note'                => $body['notes']        ?? '',
             'work_order_id'       => $body['work_order_id'] ?? null,
+            'treasury_id'         => $body['treasury_id']  ?? '',
         ]];
         if ($is_update) $payload['Expense']['id'] = $exp_id;
         $ch = curl_init($url);
