@@ -4316,6 +4316,14 @@ switch ($action) {
         echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_purchase_delete':
+        $dk = "__DAFTRA_KEY__"; $pur_id = (int)($_GET['id'] ?? 0);
+        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pur_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
+        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>in_array($code,[200,202,204]),'http_code'=>$code]);
+        break;
+
     // ══════════════════════════════════════════════════════════════════════
     // وحدة الخزاين
     // ══════════════════════════════════════════════════════════════════════
