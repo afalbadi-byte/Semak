@@ -4316,6 +4316,17 @@ switch ($action) {
         echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_purchase_get':
+        // جلب تفاصيل مشتراة واحدة (بما في ذلك المرفقات والبنود)
+        $dk = "__DAFTRA_KEY__"; $pur_id = (int)($_GET['id'] ?? 0);
+        if (!$pur_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pur_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $data = json_decode($res, true) ?? [];
+        echo json_encode(['success'=>$code===200,'http_code'=>$code,'data'=>$data], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_purchase_delete':
         $dk = "__DAFTRA_KEY__"; $pur_id = (int)($_GET['id'] ?? 0);
         $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pur_id.json");
