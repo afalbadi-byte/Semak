@@ -4328,27 +4328,42 @@ switch ($action) {
         break;
 
     case 'daftra_attachment_download':
-        // تحميل مرفق من دفترة عبر attachment_id → يرجع base64
-        $dk = "__DAFTRA_KEY__"; $att_id = (int)($_GET['id'] ?? 0);
-        if (!$att_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
-        // Try direct file API
-        $urls = [
-            "https://semak.daftra.com/api2/attachments/$att_id.json",
-            "https://semak.daftra.com/api2/files/$att_id.json",
-            "https://semak.daftra.com/api2/attachments/$att_id/download",
-        ];
-        $results = [];
-        foreach ($urls as $url) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $ct = curl_getinfo($ch, CURLINFO_CONTENT_TYPE); curl_close($ch);
-            $results[] = ['url'=>$url, 'http_code'=>$code, 'content_type'=>$ct, 'size'=>strlen($res), 'preview'=>substr($res,0,500)];
-            if ($code === 200 && (strpos($ct,'pdf') !== false || strpos($ct,'octet') !== false)) {
-                echo json_encode(['success'=>true,'http_code'=>$code,'content_type'=>$ct,'size'=>strlen($res),'base64'=>base64_encode($res)], JSON_UNESCAPED_UNICODE);
-                break 2;
-            }
+        // تحميل مرفق من دفترة عبر المسار (path) باستخدام /s3/ + session cookie
+        $path = $_GET['path'] ?? '';
+        if (!$path) { echo json_encode(['success'=>false,'message'=>'path مطلوب (مثال: files/11ddb74/purchase_order/UUID.pdf)']); break; }
+        $session = daftra_session_cookie($conn);
+        $url = "https://semak.daftra.com/s3/" . ltrim($path, '/');
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_COOKIE => "daftra_session=$session",
+            CURLOPT_HTTPHEADER => ["Accept: */*"],
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $ct = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($ch);
+        if ($code === 200 && strlen($res) > 100) {
+            echo json_encode([
+                'success' => true,
+                'http_code' => $code,
+                'content_type' => $ct,
+                'size' => strlen($res),
+                'base64' => base64_encode($res),
+            ], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'http_code' => $code,
+                'content_type' => $ct,
+                'size' => strlen($res),
+                'final_url_domain' => parse_url($finalUrl, PHP_URL_HOST),
+            ], JSON_UNESCAPED_UNICODE);
         }
-        echo json_encode(['success'=>false,'message'=>'لم يُعثر على المرفق','attempts'=>$results], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_purchase_delete':
