@@ -4327,6 +4327,30 @@ switch ($action) {
         echo json_encode(['success'=>$code===200,'http_code'=>$code,'data'=>$data], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_attachment_download':
+        // تحميل مرفق من دفترة عبر attachment_id → يرجع base64
+        $dk = "__DAFTRA_KEY__"; $att_id = (int)($_GET['id'] ?? 0);
+        if (!$att_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+        // Try direct file API
+        $urls = [
+            "https://semak.daftra.com/api2/attachments/$att_id.json",
+            "https://semak.daftra.com/api2/files/$att_id.json",
+            "https://semak.daftra.com/api2/attachments/$att_id/download",
+        ];
+        $results = [];
+        foreach ($urls as $url) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $ct = curl_getinfo($ch, CURLINFO_CONTENT_TYPE); curl_close($ch);
+            $results[] = ['url'=>$url, 'http_code'=>$code, 'content_type'=>$ct, 'size'=>strlen($res), 'preview'=>substr($res,0,500)];
+            if ($code === 200 && (strpos($ct,'pdf') !== false || strpos($ct,'octet') !== false)) {
+                echo json_encode(['success'=>true,'http_code'=>$code,'content_type'=>$ct,'size'=>strlen($res),'base64'=>base64_encode($res)], JSON_UNESCAPED_UNICODE);
+                break 2;
+            }
+        }
+        echo json_encode(['success'=>false,'message'=>'لم يُعثر على المرفق','attempts'=>$results], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'daftra_purchase_delete':
         $dk = "__DAFTRA_KEY__"; $pur_id = (int)($_GET['id'] ?? 0);
         $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pur_id.json");
