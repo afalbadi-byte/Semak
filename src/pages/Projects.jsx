@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageMeta from '../components/PageMeta';
 import { API_URL } from '../utils/helpers';
-import FloorPlan3D from '../components/FloorPlan3D';
-import { HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ChevronDown, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
+import { HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ZoomIn, ChevronDown, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
 
 
 export default function Projects() {
   const navigate = useNavigate();
   const [selectedFloor, setSelectedFloor] = useState("first");
   const [expandedUnit, setExpandedUnit] = useState(null);
+  const [previewImg, setPreviewImg] = useState(null);
   const [soldUnits, setSoldUnits] = useState({});
 
   useEffect(() => {
@@ -249,14 +249,35 @@ export default function Projects() {
               </div>
             )}
           </div>
-          <div className="order-1 lg:order-2 h-full min-h-[480px]">
-            <div className="relative overflow-hidden rounded-3xl shadow-xl border-4 border-white h-full bg-gradient-to-br from-slate-50 dark:from-brand-900 to-blue-50 dark:to-brand-800" style={{ minHeight: 480 }}>
-              <FloorPlan3D key={selectedFloor} floorId={selectedFloor} />
+          <div className="order-1 lg:order-2 h-full min-h-[420px]">
+            <div className="relative overflow-hidden rounded-3xl shadow-xl border-4 border-white h-full bg-white dark:bg-brand-900 flex items-center justify-center p-2">
+              <img
+                key={selectedFloor}
+                src={`/images/floor-${selectedFloor === 'ground' ? 'ground' : selectedFloor === 'first' ? '1' : selectedFloor === 'second' ? '2' : selectedFloor === 'third' ? '3' : '4'}.jpg`}
+                alt={`مخطط ${floors.find(f => f.id === selectedFloor)?.label}`}
+                className="w-full h-full object-contain rounded-2xl cursor-pointer hover:scale-[1.02] transition-transform duration-300"
+                style={{ maxHeight: '520px' }}
+                onClick={() => setPreviewImg(`/images/floor-${selectedFloor === 'ground' ? 'ground' : selectedFloor === 'first' ? '1' : selectedFloor === 'second' ? '2' : selectedFloor === 'third' ? '3' : '4'}.jpg`)}
+              />
+              <button
+                onClick={() => setPreviewImg(`/images/floor-${selectedFloor === 'ground' ? 'ground' : selectedFloor === 'first' ? '1' : selectedFloor === 'second' ? '2' : selectedFloor === 'third' ? '3' : '4'}.jpg`)}
+                className="absolute bottom-4 left-4 bg-brand-800/80 hover:bg-brand-800 text-white p-2.5 rounded-xl backdrop-blur-sm transition shadow-lg"
+              >
+                <ZoomIn size={20} />
+              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    {/* مودال عرض المخطط بالحجم الكامل */}
+    {previewImg && (
+      <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 animate-fadeIn" onClick={() => setPreviewImg(null)}>
+        <button className="absolute top-6 left-6 text-white/80 hover:text-white text-4xl font-light z-10 bg-white/10 hover:bg-white/20 w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition" onClick={() => setPreviewImg(null)}>&times;</button>
+        <img src={previewImg} alt="معاينة المخطط" className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()} />
+      </div>
+    )}
     </>
   );
 }
