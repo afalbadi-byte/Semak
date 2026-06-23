@@ -211,6 +211,16 @@ export default function Projects() {
                     </div>
                     {expandedUnit === unit.id && (
                       <div className="px-5 pb-5 bg-slate-50/50 dark:bg-brand-800/30 border-t border-slate-100 dark:border-brand-700 pt-4 animate-fadeIn">
+                        {/* 3D Render Image */}
+                        <div className="mb-5">
+                          <p className="text-xs font-bold text-[#c5a059] tracking-wide mb-2">المنظور التخيلي للوحدة</p>
+                          <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-brand-700 cursor-pointer group" onClick={(e) => { e.stopPropagation(); setPreviewImg(`/images/render-${unit.id}.png`); }}>
+                            <img src={`/images/render-${unit.id}.png`} alt={`ريندر ${unit.title}`} className="w-full h-auto object-cover group-hover:scale-[1.03] transition-transform duration-500" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-3">
+                              <span className="text-white text-xs font-bold flex items-center gap-1"><ZoomIn size={14} /> اضغط للتكبير</span>
+                            </div>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-3 text-sm text-slate-600 dark:text-brand-300 mb-6">
                           <span className="flex items-center gap-2"><Ruler size={16} className="text-gold-500" /> {unit.roof ? "422 م²" : "204 م²"}</span>
                           <span className="flex items-center gap-2"><Bed size={16} className="text-gold-500" /> {unit.roof ? "4 غرف" : "5 غرف"}</span>
