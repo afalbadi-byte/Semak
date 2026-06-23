@@ -253,14 +253,14 @@ export default function Projects() {
             <div className="relative overflow-hidden rounded-3xl shadow-xl border-4 border-white h-full bg-white dark:bg-brand-900 flex items-center justify-center p-2">
               <img
                 key={selectedFloor}
-                src={`/images/floor-${selectedFloor === 'ground' ? 'ground.jpg' : selectedFloor === 'first' ? '1.png' : selectedFloor === 'second' ? '2.png' : selectedFloor === 'third' ? '3.png' : '4.png'}`}
+                src={`/images/floor-${selectedFloor === 'ground' ? 'ground.jpg' : selectedFloor === 'first' ? '1.png' : selectedFloor === 'second' ? '2.png' : selectedFloor === 'third' ? '3.png' : '4.jpg'}`}
                 alt={`مخطط ${floors.find(f => f.id === selectedFloor)?.label}`}
                 className="w-full h-full object-contain rounded-2xl cursor-pointer hover:scale-[1.02] transition-transform duration-300"
                 style={{ maxHeight: '520px' }}
-                onClick={() => setPreviewImg(`/images/floor-${selectedFloor === 'ground' ? 'ground.jpg' : selectedFloor === 'first' ? '1.png' : selectedFloor === 'second' ? '2.png' : selectedFloor === 'third' ? '3.png' : '4.png'}`)}
+                onClick={() => setPreviewImg(`/images/floor-${selectedFloor === 'ground' ? 'ground.jpg' : selectedFloor === 'first' ? '1.png' : selectedFloor === 'second' ? '2.png' : selectedFloor === 'third' ? '3.png' : '4.jpg'}`)}
               />
               <button
-                onClick={() => setPreviewImg(`/images/floor-${selectedFloor === 'ground' ? 'ground.jpg' : selectedFloor === 'first' ? '1.png' : selectedFloor === 'second' ? '2.png' : selectedFloor === 'third' ? '3.png' : '4.png'}`)}
+                onClick={() => setPreviewImg(`/images/floor-${selectedFloor === 'ground' ? 'ground.jpg' : selectedFloor === 'first' ? '1.png' : selectedFloor === 'second' ? '2.png' : selectedFloor === 'third' ? '3.png' : '4.jpg'}`)}
                 className="absolute bottom-4 left-4 bg-brand-800/80 hover:bg-brand-800 text-white p-2.5 rounded-xl backdrop-blur-sm transition shadow-lg"
               >
                 <ZoomIn size={20} />
