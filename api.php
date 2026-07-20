@@ -7065,6 +7065,40 @@ switch ($action) {
         }
         break;
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // قيد المطور العقاري (الهيئة العامة للعقار) — حالة أداة المتابعة
+    // تُخزَّن كامل حالة الأداة كـ JSON blob واحد لكل tenant في
+    // acc_settings['rega_dev_tracker'] (عمود sval نوعه TEXT ≈ 64KB يكفي).
+    // ═══════════════════════════════════════════════════════════════════════
+    case 'rega_tracker_get': {
+        // يتطلب جلسة موظف صالحة
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        $raw = acc_setting($conn, $tid, 'rega_dev_tracker', '');
+        $data = null;
+        if ($raw !== '' && $raw !== null) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) $data = $decoded;
+        }
+        echo json_encode(['success'=>true, 'data'=>$data], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'rega_tracker_save': {
+        // يتطلب جلسة موظف صالحة — يحفظ كامل الحالة المرسلة في المفتاح data
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid     = $_jwt_tid ?? 1;
+        $payload = $input_data['data'] ?? null;
+        if (!is_array($payload)) { echo json_encode(['success'=>false,'message'=>'بيانات غير صالحة'], JSON_UNESCAPED_UNICODE); break; }
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        if (strlen($json) > 60000) { echo json_encode(['success'=>false,'message'=>'حجم البيانات كبير جداً'], JSON_UNESCAPED_UNICODE); break; }
+        $vv = $conn->real_escape_string($json);
+        $ok = $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'rega_dev_tracker','$vv')
+                            ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        echo json_encode(['success'=>(bool)$ok, 'message'=>$ok?'تم الحفظ':$conn->error], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_settings_get':
         // ملف الشركة (يُستخدم في QR والطباعة) — يعيد المفاتيح المعروفة مع قيم افتراضية فارغة
         $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
@@ -10201,7 +10235,7 @@ switch ($action) {
 
 === أسلوب البداية ===
 - لا تبدأ بالحديث عن المشروع. عرّف بنفسك باسمك "فهد" ثم عرّف الشركة باختصار، ثم اسأل العميل عن احتياجه.
-- مثال للترحيب الأول: "السلام عليكم، أهلاً بك في سماك العقارية. معك فهد من فريق المبيعات. سماك شركة سعودية متخصصة في التطوير العقاري وإدارة الأملاك ومقرها مكة المكرمة. كيف يمكنني خدمتك؟"
+- مثال للترحيب الأول: "السلام عليكم، أهلاً بك في سماك العقارية. معك فهد، المستشار الذكي لسماك — نظام ذكاء اصطناعي مدرَّب على مشاريع وخدمات الشركة. سماك شركة سعودية متخصصة في التطوير العقاري وإدارة الأملاك ومقرها مكة المكرمة. كيف يمكنني خدمتك؟"
 - لا تذكر اسم المشروع (سماك البوابة 1) في أول رسالة إلا إذا سأل العميل عنه مباشرة.
 
 === أسلوب البيع الذكي ===
@@ -10660,6 +10694,31 @@ KNOWLEDGE;
         $claude_messages = [];
         foreach ($history_rows as $h) {
             $claude_messages[] = ["role" => $h['role'], "content" => $h['message']];
+        }
+
+        // ── رد فوري على طلب الموقع / اللوكيشن (بدون Claude) ──
+        $loc_keywords = ['لوكيشن','الموقع','موقع','عنوان','مكان المشروع','مكان','خريطة','الخارطة','كيف اوصل','كيف أوصل','location','map','where'];
+        $user_msg_lower = mb_strtolower($user_msg, 'UTF-8');
+        $is_location_request = false;
+        foreach ($loc_keywords as $kw) {
+            if (mb_strpos($user_msg_lower, mb_strtolower($kw, 'UTF-8')) !== false) {
+                $is_location_request = true;
+                break;
+            }
+        }
+        if ($is_location_request) {
+            $loc_reply = "يسعدنا خدمتكم.\n\nموقع مشروع سماك البوابة 1 على الخريطة:\nhttps://maps.app.goo.gl/ZbGW4bjhYpkmaguj6?g_st=ic\n\nالمشروع في حي البوابة، مكة المكرمة. للاستفسار والحجز: 920032842";
+            $safe_loc_reply = $conn->real_escape_string($loc_reply);
+            $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'assistant', '$safe_loc_reply')");
+            $wa_loc_payload = json_encode(["to" => $from_phone, "type" => "text", "text" => ["body" => $loc_reply]], JSON_UNESCAPED_UNICODE);
+            $ch_loc = curl_init("{$mottasl_base}/message/send");
+            curl_setopt_array($ch_loc, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $wa_loc_payload,
+                CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer {$mottasl_key}"], CURLOPT_TIMEOUT => 10]);
+            $loc_result = curl_exec($ch_loc);
+            curl_close($ch_loc);
+            file_put_contents($log_file, date('Y-m-d H:i:s') . " | location_auto_reply → $from_phone\n", FILE_APPEND);
+            echo json_encode(["ok" => true, "type" => "location_reply", "sent" => json_decode($loc_result, true)]);
+            break;
         }
 
         // ── استدعاء Claude API ──
