@@ -1,13 +1,9 @@
-﻿name: Build & Deploy to semak.sa
+name: Build & Deploy to semak.sa
 
 on:
   push:
     branches: [main]
 
-# Only one deploy may run at a time. If a newer push arrives while an older
-# deploy is still grinding through the FTP backoff window, cancel the stale
-# run so it can't overwrite the newer build on the server (avoids version
-# regressions when two pushes land close together).
 concurrency:
   group: deploy-semak
   cancel-in-progress: true
@@ -20,9 +16,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # api.php is the SOLE backend API. A parse error would take down the
-      # entire live site, so we hard-gate the deploy on a PHP syntax check
-      # BEFORE building or uploading anything. ubuntu-latest ships with PHP.
       - name: Lint api.php (syntax gate)
         run: php -l api.php
 
@@ -64,9 +57,6 @@ jobs:
       - name: Inject Daftra session cookie
         run: sed -i "s|__DAFTRA_SESSION__|${{ secrets.DAFTRA_SESSION_COOKIE }}|g" dist/api.php
 
-      # SMTP credentials for the semak.sa mailbox (outbound email engine + login OTP).
-      # All optional: if a secret is unset its placeholder stays, smtp_ready() returns
-      # false, and send_email() degrades gracefully (returns ok:false, never crashes).
       - name: Inject SMTP credentials
         run: |
           sed -i "s|__SMTP_HOST__|${{ secrets.SMTP_HOST }}|g" dist/api.php
@@ -77,10 +67,6 @@ jobs:
           sed -i "s|__SMTP_FROM_NAME__|${{ secrets.SMTP_FROM_NAME }}|g" dist/api.php
           sed -i "s|__SMTP_SECURE__|${{ secrets.SMTP_SECURE }}|g" dist/api.php
 
-      # SaaS platform secrets — JWT signing keys + platform admin credentials.
-      # If unset: JWT falls back to dev keys (works but insecure on prod — set these!).
-      # PLATFORM_HASH must be the bcrypt hash of the platform admin password
-      # generated with: php -r "echo password_hash('YOUR_PASS', PASSWORD_BCRYPT);"
       - name: Inject SaaS JWT & platform admin secrets
         run: |
           sed -i "s|__TOKEN_SECRET__|${{ secrets.TOKEN_SECRET }}|g"       dist/api.php
@@ -88,174 +74,7 @@ jobs:
           sed -i "s|__PLATFORM_EMAIL__|${{ secrets.PLATFORM_EMAIL }}|g"   dist/api.php
           sed -i "s|__PLATFORM_HASH__|${{ secrets.PLATFORM_HASH }}|g"     dist/api.php
 
-      # Hostinger FTP suffers outage windows that can exceed 30 min. We space
-      # attempts out with escalating backoff sleeps to ride out a long outage —
-      # 8 attempts spanning ~35 min. Each gate checks only the IMMEDIATELY
-      # preceding attempt: if a prior attempt succeeded, its successor's step is
-      # skipped (outcome 'skipped' != 'failure'), so the chain stops cleanly.
-      # Attempts 1-7 use continue-on-error; the final attempt gates job success.
-      - name: Deploy to server via FTP (attempt 1)
-        id: ftp1
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: minimal
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Backoff before attempt 2
-        if: steps.ftp1.outcome == 'failure'
-        run: sleep 180
-
-      - name: Deploy to server via FTP (attempt 2)
-        id: ftp2
-        if: steps.ftp1.outcome == 'failure'
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: minimal
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Backoff before attempt 3
-        if: steps.ftp2.outcome == 'failure'
-        run: sleep 300
-
-      - name: Deploy to server via FTP (attempt 3)
-        id: ftp3
-        if: steps.ftp2.outcome == 'failure'
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: minimal
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Backoff before attempt 4
-        if: steps.ftp3.outcome == 'failure'
-        run: sleep 300
-
-      - name: Deploy to server via FTP (attempt 4)
-        id: ftp4
-        if: steps.ftp3.outcome == 'failure'
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: minimal
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Backoff before attempt 5
-        if: steps.ftp4.outcome == 'failure'
-        run: sleep 300
-
-      - name: Deploy to server via FTP (attempt 5)
-        id: ftp5
-        if: steps.ftp4.outcome == 'failure'
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: minimal
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Backoff before attempt 6
-        if: steps.ftp5.outcome == 'failure'
-        run: sleep 300
-
-      - name: Deploy to server via FTP (attempt 6)
-        id: ftp6
-        if: steps.ftp5.outcome == 'failure'
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: minimal
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Backoff before attempt 7
-        if: steps.ftp6.outcome == 'failure'
-        run: sleep 300
-
-      - name: Deploy to server via FTP (attempt 7)
-        id: ftp7
-        if: steps.ftp6.outcome == 'failure'
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: minimal
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Backoff before attempt 8
-        if: steps.ftp7.outcome == 'failure'
-        run: sleep 300
-
-      - name: Deploy to server via FTP (attempt 8, final)
-        if: steps.ftp7.outcome == 'failure'
+      - name: Deploy to server via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ${{ secrets.FTP_HOST }}
