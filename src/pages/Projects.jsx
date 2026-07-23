@@ -1,23 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageMeta from '../components/PageMeta';
 import { API_URL } from '../utils/helpers';
 import { HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ZoomIn, ChevronDown, ChevronLeft, ChevronRight, X, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
 
 const galleryImages = [
-  { src: '/images/exterior-front.jpg',      label: 'الواجهة الأمامية',    category: 'exterior' },
-  { src: '/images/exterior-side.jpg',       label: 'الواجهة الجانبية',    category: 'exterior' },
-  { src: '/images/exterior-corner.jpg',     label: 'زاوية المشروع',       category: 'exterior' },
-  { src: '/images/interior-lobby.jpg',      label: 'المدخل الرئيسي',      category: 'interior' },
-  { src: '/images/interior-unit-entrance.jpg', label: 'مدخل الشقة',       category: 'interior' },
-  { src: '/images/interior-corridor.jpg',   label: 'الممر الداخلي',       category: 'interior' },
-  { src: '/images/interior-kitchen.jpg',    label: 'المطبخ',              category: 'interior' },
-  { src: '/images/interior-bedroom.jpg',    label: 'غرفة النوم',          category: 'interior' },
-  { src: '/images/interior-bathroom.jpg',   label: 'الحمام',              category: 'interior' },
-  { src: '/images/interior-living.jpg',     label: 'غرفة المعيشة',        category: 'interior' },
-  { src: '/images/interior-elevator.jpg',   label: 'المصعد',              category: 'interior' },
-  { src: '/images/interior-staircase.jpg',  label: 'الدرج الداخلي',       category: 'interior' },
-  { src: '/images/interior-parking.jpg',    label: 'موقف السيارات',       category: 'interior' },
+  { src: '/images/exterior-front.jpg',         label: 'الواجهة الأمامية',  category: 'exterior' },
+  { src: '/images/exterior-side.jpg',          label: 'الواجهة الجانبية',  category: 'exterior' },
+  { src: '/images/exterior-corner.jpg',        label: 'زاوية المشروع',     category: 'exterior' },
+  { src: '/images/interior-lobby.jpg',         label: 'المدخل الرئيسي',    category: 'interior' },
+  { src: '/images/interior-unit-entrance.jpg', label: 'مدخل الشقة',        category: 'interior' },
+  { src: '/images/interior-corridor.jpg',      label: 'الممر الداخلي',     category: 'interior' },
+  { src: '/images/interior-kitchen.jpg',       label: 'المطبخ',            category: 'interior' },
+  { src: '/images/interior-bedroom.jpg',       label: 'غرفة النوم',        category: 'interior' },
+  { src: '/images/interior-bathroom.jpg',      label: 'الحمام',            category: 'interior' },
+  { src: '/images/interior-living.jpg',        label: 'غرفة المعيشة',      category: 'interior' },
+  { src: '/images/interior-elevator.jpg',      label: 'المصعد',            category: 'interior' },
+  { src: '/images/interior-staircase.jpg',     label: 'الدرج الداخلي',     category: 'interior' },
+  { src: '/images/interior-parking.jpg',       label: 'موقف السيارات',     category: 'interior' },
 ];
 
 const FILTERS = [
@@ -33,7 +33,9 @@ export default function Projects() {
   const [previewImg, setPreviewImg] = useState(null);
   const [soldUnits, setSoldUnits] = useState({});
   const [galleryFilter, setGalleryFilter] = useState('all');
-  const [galleryModal, setGalleryModal] = useState(null); // { images, index }
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [galleryModal, setGalleryModal] = useState(null);
+  const thumbnailStripRef = useRef(null);
 
   useEffect(() => {
     fetch(`${API_URL}?action=get_units_status`)
@@ -42,16 +44,33 @@ export default function Projects() {
       .catch(() => {});
   }, []);
 
+  // إعادة تعيين الفهرس عند تغيير الفلتر
+  useEffect(() => { setActiveIndex(0); }, [galleryFilter]);
+
+  // تمرير المصغّرة النشطة إلى منتصف الشريط
   useEffect(() => {
-    if (!galleryModal) return;
+    const strip = thumbnailStripRef.current;
+    if (!strip) return;
+    const thumb = strip.children[activeIndex];
+    if (thumb) thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [activeIndex]);
+
+  // تنقل بلوحة المفاتيح — معرض رئيسي أو مودال مفتوح
+  useEffect(() => {
+    const filtered = galleryFilter === 'all' ? galleryImages : galleryImages.filter(g => g.category === galleryFilter);
     const handler = (e) => {
-      if (e.key === 'ArrowRight') setGalleryModal(g => ({ ...g, index: (g.index - 1 + g.images.length) % g.images.length }));
-      if (e.key === 'ArrowLeft')  setGalleryModal(g => ({ ...g, index: (g.index + 1) % g.images.length }));
-      if (e.key === 'Escape')     setGalleryModal(null);
+      if (galleryModal) {
+        if (e.key === 'ArrowRight') setGalleryModal(g => ({ ...g, index: (g.index - 1 + g.images.length) % g.images.length }));
+        if (e.key === 'ArrowLeft')  setGalleryModal(g => ({ ...g, index: (g.index + 1) % g.images.length }));
+        if (e.key === 'Escape')     setGalleryModal(null);
+      } else {
+        if (e.key === 'ArrowRight') setActiveIndex(i => (i - 1 + filtered.length) % filtered.length);
+        if (e.key === 'ArrowLeft')  setActiveIndex(i => (i + 1) % filtered.length);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [galleryModal]);
+  }, [galleryModal, galleryFilter]);
 
   const toggleUnit = (id) => setExpandedUnit(expandedUnit === id ? null : id);
   const isSoldUnit = (unitId) => !!soldUnits[unitId.toUpperCase()];
@@ -60,10 +79,10 @@ export default function Projects() {
     ? galleryImages
     : galleryImages.filter(img => img.category === galleryFilter);
 
-  const openGallery = (images, index) => setGalleryModal({ images, index });
-  const closeGallery = () => setGalleryModal(null);
-  const prevImg = (e) => { e.stopPropagation(); setGalleryModal(g => ({ ...g, index: (g.index - 1 + g.images.length) % g.images.length })); };
-  const nextImg = (e) => { e.stopPropagation(); setGalleryModal(g => ({ ...g, index: (g.index + 1) % g.images.length })); };
+  const prevMain = (e) => { e.stopPropagation(); setActiveIndex(i => (i - 1 + filteredGallery.length) % filteredGallery.length); };
+  const nextMain = (e) => { e.stopPropagation(); setActiveIndex(i => (i + 1) % filteredGallery.length); };
+  const prevModal = (e) => { e.stopPropagation(); setGalleryModal(g => ({ ...g, index: (g.index - 1 + g.images.length) % g.images.length })); };
+  const nextModal = (e) => { e.stopPropagation(); setGalleryModal(g => ({ ...g, index: (g.index + 1) % g.images.length })); };
 
   const floors = [
     { id: "ground", label: "الدور الأرضي" },
@@ -76,15 +95,15 @@ export default function Projects() {
   const unitsBase = {
     first:  [
       { id: "sm-a01", title: "وحدة SM-A01", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية",  isSpecial: false }
+      { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية",   isSpecial: false }
     ],
     second: [
       { id: "sm-a03", title: "وحدة SM-A03", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية",  isSpecial: false }
+      { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية",   isSpecial: false }
     ],
     third:  [
       { id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية",  isSpecial: false }
+      { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية",   isSpecial: false }
     ],
     fourth: [
       { id: "sm-a07", title: "وحدة SM-A07", price: "1,100,000 ريال", badge: "فيلا روف فاخرة", isSpecial: true, roof: true }
@@ -97,6 +116,8 @@ export default function Projects() {
       units.map(u => ({ ...u, isSold: isSoldUnit(u.id) }))
     ])
   );
+
+  const currentImg = filteredGallery[activeIndex] ?? filteredGallery[0];
 
   return (
     <>
@@ -112,23 +133,17 @@ export default function Projects() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="bg-white dark:bg-brand-900 p-6 rounded-[2rem] card-hover border border-slate-100 dark:border-brand-700 group">
-            <div className="w-12 h-12 bg-blue-50 text-brand-800 dark:text-brand-300 rounded-xl flex items-center justify-center mb-4 group-hover:bg-brand-800 group-hover:text-white transition-colors duration-500">
-              <HousePlus size={24} />
-            </div>
+            <div className="w-12 h-12 bg-blue-50 text-brand-800 dark:text-brand-300 rounded-xl flex items-center justify-center mb-4 group-hover:bg-brand-800 group-hover:text-white transition-colors duration-500"><HousePlus size={24} /></div>
             <h4 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-3">بيئة ذكية متكاملة</h4>
             <p className="text-slate-500 dark:text-brand-300 text-sm leading-relaxed">وحدات مجهزة بالكامل بأنظمة الإنارة والدخول الذكي، مع بنية تحتية مرنة تتيح لك التوسع وإضافة المزيد.</p>
           </div>
           <div className="bg-white dark:bg-brand-900 p-6 rounded-[2rem] card-hover border border-slate-100 dark:border-brand-700 group">
-            <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-red-600 group-hover:text-white transition-colors duration-500">
-              <ShieldCheck size={24} />
-            </div>
+            <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center mb-4 group-hover:bg-red-600 group-hover:text-white transition-colors duration-500"><ShieldCheck size={24} /></div>
             <h4 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-3">أمان العائلة أولاً</h4>
             <p className="text-slate-500 dark:text-brand-300 text-sm leading-relaxed">أنظمة مراقبة CCTV متطورة، وأقفال إلكترونية ذكية تضمن لك ولعائلتك أقصى درجات الحماية.</p>
           </div>
           <div className="bg-white dark:bg-brand-900 p-6 rounded-[2rem] card-hover border border-slate-100 dark:border-brand-700 group">
-            <div className="w-12 h-12 bg-amber-50 text-gold-500 rounded-xl flex items-center justify-center mb-4 group-hover:bg-gold-500 group-hover:text-white transition-colors duration-500">
-              <Award size={24} />
-            </div>
+            <div className="w-12 h-12 bg-amber-50 text-gold-500 rounded-xl flex items-center justify-center mb-4 group-hover:bg-gold-500 group-hover:text-white transition-colors duration-500"><Award size={24} /></div>
             <h4 className="text-xl font-black text-brand-800 dark:text-brand-100 mb-3">جودة بلا تنازلات</h4>
             <p className="text-slate-500 dark:text-brand-300 text-sm leading-relaxed">استخدام أرقى خامات البورسلان، الرخام، والأدوات الصحية من ماركات عالمية موثوقة.</p>
           </div>
@@ -158,7 +173,7 @@ export default function Projects() {
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
                   <div className="flex items-center gap-3 mb-2"><Moon className="text-gold-500" size={20} /><span className="font-bold text-lg">مقابل</span></div>
-                  <p className="text-slate-400 text-sm">مسجد </p>
+                  <p className="text-slate-400 text-sm">مسجد</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
                   <div className="flex items-center gap-3 mb-2"><TreePine className="text-gold-500" size={20} /><span className="font-bold text-lg">مقابل</span></div>
@@ -206,12 +221,8 @@ export default function Projects() {
             {selectedFloor === "ground" ? (
               <div className="space-y-4">
                 <p className="text-slate-500 dark:text-brand-300 mb-8 leading-relaxed">تم تخصيص الدور الأرضي بالكامل لمواقف السيارات والخدمات العامة للمبنى.</p>
-                <div className="bg-white dark:bg-brand-900/40 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 flex items-center gap-4 text-brand-800 dark:text-brand-100 font-bold">
-                  <Car className="text-gold-500" /> مواقف خاصة
-                </div>
-                <div className="bg-white dark:bg-brand-900/40 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 flex items-center gap-4 text-brand-800 dark:text-brand-100 font-bold">
-                  <HousePlus className="text-gold-500" /> مدخل ومصعد
-                </div>
+                <div className="bg-white dark:bg-brand-900/40 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 flex items-center gap-4 text-brand-800 dark:text-brand-100 font-bold"><Car className="text-gold-500" /> مواقف خاصة</div>
+                <div className="bg-white dark:bg-brand-900/40 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 flex items-center gap-4 text-brand-800 dark:text-brand-100 font-bold"><HousePlus className="text-gold-500" /> مدخل ومصعد</div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -258,11 +269,7 @@ export default function Projects() {
                           >
                             <CalendarCheck size={18} /> {unit.isSold ? "الوحدة غير متاحة" : "احجز هذه الوحدة"}
                           </button>
-                          <a
-                            href="tel:920032842"
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex-1 bg-white dark:bg-brand-900 border-2 border-brand-800 dark:border-brand-700 text-brand-800 dark:text-brand-300 py-3 rounded-xl text-sm font-bold hover:bg-slate-50 dark:hover:bg-brand-800 transition flex items-center justify-center gap-2 shadow-sm"
-                          >
+                          <a href="tel:920032842" onClick={(e) => e.stopPropagation()} className="flex-1 bg-white dark:bg-brand-900 border-2 border-brand-800 dark:border-brand-700 text-brand-800 dark:text-brand-300 py-3 rounded-xl text-sm font-bold hover:bg-slate-50 dark:hover:bg-brand-800 transition flex items-center justify-center gap-2 shadow-sm">
                             <PhoneCall size={18} /> 920032842
                           </a>
                         </div>
@@ -296,14 +303,16 @@ export default function Projects() {
 
       {/* ===== معرض الصور ===== */}
       <div className="container mx-auto px-6 mt-24">
+
+        {/* العنوان */}
         <div className="text-center mb-12">
           <p className="text-[#c5a059] font-black tracking-[0.3em] text-xs uppercase mb-3">استكشف المشروع</p>
           <h2 className="text-3xl md:text-4xl font-black text-[#1a365d] dark:text-brand-100 mb-4">معرض صور البوابة 1</h2>
           <p className="text-slate-500 dark:text-brand-300 max-w-xl mx-auto">رندرات معمارية تعكس مستوى التصميم والتشطيب في كل ركن من المشروع</p>
         </div>
 
-        {/* فلاتر الفئات */}
-        <div className="flex flex-wrap justify-center gap-3 mb-10">
+        {/* فلاتر */}
+        <div className="flex flex-wrap justify-center gap-3 mb-8">
           {FILTERS.map(tab => {
             const count = tab.id === 'all' ? galleryImages.length : galleryImages.filter(g => g.category === tab.id).length;
             const active = galleryFilter === tab.id;
@@ -311,41 +320,88 @@ export default function Projects() {
               <button
                 key={tab.id}
                 onClick={() => setGalleryFilter(tab.id)}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm border-2 transition-all duration-300 ${active ? 'bg-[#1a365d] text-white border-[#1a365d] shadow-lg scale-[1.03]' : 'text-[#1a365d] dark:text-brand-300 border-[#1a365d]/20 dark:border-brand-700 hover:border-[#1a365d]/60 dark:hover:border-brand-500 bg-white dark:bg-brand-900'}`}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm border-2 transition-all duration-300 ${active ? 'bg-[#1a365d] text-white border-[#1a365d] shadow-lg' : 'text-[#1a365d] dark:text-brand-300 border-[#1a365d]/20 dark:border-brand-700 hover:border-[#1a365d]/60 bg-white dark:bg-brand-900'}`}
               >
                 {tab.label}
-                <span className={`text-xs px-2 py-0.5 rounded-full font-black ${active ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400'}`}>
-                  {count}
-                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-black ${active ? 'bg-white/20' : 'bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400'}`}>{count}</span>
               </button>
             );
           })}
         </div>
 
-        {/* شبكة الصور */}
-        <div key={galleryFilter} className="columns-1 sm:columns-2 lg:columns-3 gap-4 animate-fadeIn">
-          {filteredGallery.map((img, i) => (
-            <div
-              key={img.src}
-              className="break-inside-avoid mb-4 overflow-hidden rounded-2xl cursor-pointer group relative shadow-sm hover:shadow-2xl transition-all duration-500"
-              onClick={() => openGallery(filteredGallery, i)}
-            >
-              <img
-                src={img.src}
-                alt={img.label}
-                loading="lazy"
-                className="w-full h-auto object-cover group-hover:scale-[1.04] transition-transform duration-700 block"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#1a365d]/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-400 flex flex-col justify-end p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-white font-bold text-sm drop-shadow">{img.label}</span>
-                  <div className="bg-white/90 rounded-full p-2 shadow">
-                    <ZoomIn size={16} className="text-[#1a365d]" />
-                  </div>
-                </div>
+        {/* بطاقة المعرض */}
+        <div className="bg-white dark:bg-brand-900 rounded-[2rem] overflow-hidden shadow-xl border border-slate-100 dark:border-brand-700">
+
+          {/* الصورة الرئيسية الكبيرة */}
+          <div
+            className="relative h-[380px] sm:h-[480px] md:h-[580px] overflow-hidden bg-slate-900 cursor-pointer group"
+            onClick={() => setGalleryModal({ images: filteredGallery, index: activeIndex })}
+          >
+            <img
+              key={currentImg?.src}
+              src={currentImg?.src}
+              alt={currentImg?.label}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] animate-fadeIn"
+            />
+
+            {/* تدرج سفلي */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+
+            {/* اسم الصورة + عداد */}
+            <div className="absolute bottom-0 right-0 left-0 p-5 md:p-7 flex items-end justify-between pointer-events-none">
+              <div>
+                <p className="text-white font-black text-lg md:text-2xl drop-shadow-lg">{currentImg?.label}</p>
+                <p className="text-white/60 text-sm font-bold mt-1">{activeIndex + 1} / {filteredGallery.length}</p>
+              </div>
+              <div className="bg-white/20 backdrop-blur-sm rounded-full p-3 group-hover:bg-white/40 transition pointer-events-auto">
+                <ZoomIn size={20} className="text-white" />
               </div>
             </div>
-          ))}
+
+            {/* زر السابق */}
+            <button
+              className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm transition opacity-0 group-hover:opacity-100 z-10"
+              onClick={prevMain}
+            >
+              <ChevronRight size={22} />
+            </button>
+
+            {/* زر التالي */}
+            <button
+              className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm transition opacity-0 group-hover:opacity-100 z-10"
+              onClick={nextMain}
+            >
+              <ChevronLeft size={22} />
+            </button>
+          </div>
+
+          {/* شريط المصغرات */}
+          <div className="p-4 bg-slate-50 dark:bg-brand-900/60 border-t border-slate-100 dark:border-brand-700">
+            <div
+              ref={thumbnailStripRef}
+              className="flex gap-3 overflow-x-auto pb-1 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-200 dark:[&::-webkit-scrollbar-track]:bg-brand-800 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-400 dark:[&::-webkit-scrollbar-thumb]:bg-brand-600"
+            >
+              {filteredGallery.map((img, i) => (
+                <div
+                  key={img.src}
+                  onClick={() => setActiveIndex(i)}
+                  className={`flex-shrink-0 w-20 h-14 sm:w-24 sm:h-16 md:w-28 md:h-20 rounded-xl overflow-hidden cursor-pointer transition-all duration-250 border-2 ${
+                    i === activeIndex
+                      ? 'border-[#c5a059] shadow-lg shadow-[#c5a059]/30 scale-[1.06]'
+                      : 'border-transparent opacity-55 hover:opacity-90 hover:scale-[1.03]'
+                  }`}
+                >
+                  <img
+                    src={img.src}
+                    alt={img.label}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -359,56 +415,33 @@ export default function Projects() {
       </div>
     )}
 
-    {/* مودال معرض الصور */}
+    {/* مودال المعرض بالحجم الكامل */}
     {galleryModal && (
-      <div
-        className="fixed inset-0 z-[150] bg-black/95 flex items-center justify-center animate-fadeIn"
-        onClick={closeGallery}
-      >
-        {/* إغلاق */}
-        <button
-          className="absolute top-5 left-5 bg-white/10 hover:bg-white/25 text-white w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20"
-          onClick={closeGallery}
-        >
+      <div className="fixed inset-0 z-[150] bg-black/95 flex items-center justify-center animate-fadeIn" onClick={() => setGalleryModal(null)}>
+        <button className="absolute top-5 left-5 bg-white/10 hover:bg-white/25 text-white w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20" onClick={() => setGalleryModal(null)}>
           <X size={20} />
         </button>
-
-        {/* عداد */}
         <div className="absolute top-5 right-5 text-white/70 text-sm font-bold bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm z-20">
           {galleryModal.index + 1} / {galleryModal.images.length}
         </div>
-
-        {/* الصورة */}
         <img
           src={galleryModal.images[galleryModal.index].src}
           alt={galleryModal.images[galleryModal.index].label}
           className="max-w-[90vw] max-h-[85vh] object-contain rounded-xl shadow-2xl z-10 select-none"
           onClick={e => e.stopPropagation()}
         />
-
-        {/* اسم الصورة */}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white font-bold text-sm md:text-base bg-black/50 px-6 py-2.5 rounded-full backdrop-blur-sm z-20 whitespace-nowrap">
           {galleryModal.images[galleryModal.index].label}
         </div>
-
-        {/* تنقل — السابق (يمين في RTL) */}
         {galleryModal.images.length > 1 && (
-          <button
-            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20"
-            onClick={prevImg}
-          >
-            <ChevronRight size={26} />
-          </button>
-        )}
-
-        {/* تنقل — التالي (يسار في RTL) */}
-        {galleryModal.images.length > 1 && (
-          <button
-            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20"
-            onClick={nextImg}
-          >
-            <ChevronLeft size={26} />
-          </button>
+          <>
+            <button className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20" onClick={prevModal}>
+              <ChevronRight size={26} />
+            </button>
+            <button className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20" onClick={nextModal}>
+              <ChevronLeft size={26} />
+            </button>
+          </>
         )}
       </div>
     )}
