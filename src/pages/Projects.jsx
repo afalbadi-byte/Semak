@@ -2,8 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageMeta from '../components/PageMeta';
 import { API_URL } from '../utils/helpers';
-import { HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ZoomIn, ChevronDown, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
+import { HousePlus, ShieldCheck, Award, Building, TramFront, Plane, Moon, TreePine, ShoppingCart, MapPin, ZoomIn, ChevronDown, ChevronLeft, ChevronRight, X, Ruler, Bed, UserCheck, Droplets, Fingerprint, Wifi, Umbrella, Box, Car, Layers, Bath, CalendarCheck, PhoneCall } from 'lucide-react';
 
+const galleryImages = [
+  { src: '/images/exterior-front.jpg',      label: 'الواجهة الأمامية',    category: 'exterior' },
+  { src: '/images/exterior-side.jpg',       label: 'الواجهة الجانبية',    category: 'exterior' },
+  { src: '/images/exterior-corner.jpg',     label: 'زاوية المشروع',       category: 'exterior' },
+  { src: '/images/interior-lobby.jpg',      label: 'المدخل الرئيسي',      category: 'interior' },
+  { src: '/images/interior-unit-entrance.jpg', label: 'مدخل الشقة',       category: 'interior' },
+  { src: '/images/interior-corridor.jpg',   label: 'الممر الداخلي',       category: 'interior' },
+  { src: '/images/interior-kitchen.jpg',    label: 'المطبخ',              category: 'interior' },
+  { src: '/images/interior-bedroom.jpg',    label: 'غرفة النوم',          category: 'interior' },
+  { src: '/images/interior-bathroom.jpg',   label: 'الحمام',              category: 'interior' },
+  { src: '/images/interior-living.jpg',     label: 'غرفة المعيشة',        category: 'interior' },
+  { src: '/images/interior-elevator.jpg',   label: 'المصعد',              category: 'interior' },
+  { src: '/images/interior-staircase.jpg',  label: 'الدرج الداخلي',       category: 'interior' },
+  { src: '/images/interior-parking.jpg',    label: 'موقف السيارات',       category: 'interior' },
+];
+
+const FILTERS = [
+  { id: 'all',      label: 'الكل' },
+  { id: 'exterior', label: 'الواجهات الخارجية' },
+  { id: 'interior', label: 'التصاميم الداخلية' },
+];
 
 export default function Projects() {
   const navigate = useNavigate();
@@ -11,6 +32,8 @@ export default function Projects() {
   const [expandedUnit, setExpandedUnit] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
   const [soldUnits, setSoldUnits] = useState({});
+  const [galleryFilter, setGalleryFilter] = useState('all');
+  const [galleryModal, setGalleryModal] = useState(null); // { images, index }
 
   useEffect(() => {
     fetch(`${API_URL}?action=get_units_status`)
@@ -19,30 +42,49 @@ export default function Projects() {
       .catch(() => {});
   }, []);
 
-  const toggleUnit = (id) => setExpandedUnit(expandedUnit === id ? null : id);
+  useEffect(() => {
+    if (!galleryModal) return;
+    const handler = (e) => {
+      if (e.key === 'ArrowRight') setGalleryModal(g => ({ ...g, index: (g.index - 1 + g.images.length) % g.images.length }));
+      if (e.key === 'ArrowLeft')  setGalleryModal(g => ({ ...g, index: (g.index + 1) % g.images.length }));
+      if (e.key === 'Escape')     setGalleryModal(null);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [galleryModal]);
 
+  const toggleUnit = (id) => setExpandedUnit(expandedUnit === id ? null : id);
   const isSoldUnit = (unitId) => !!soldUnits[unitId.toUpperCase()];
+
+  const filteredGallery = galleryFilter === 'all'
+    ? galleryImages
+    : galleryImages.filter(img => img.category === galleryFilter);
+
+  const openGallery = (images, index) => setGalleryModal({ images, index });
+  const closeGallery = () => setGalleryModal(null);
+  const prevImg = (e) => { e.stopPropagation(); setGalleryModal(g => ({ ...g, index: (g.index - 1 + g.images.length) % g.images.length })); };
+  const nextImg = (e) => { e.stopPropagation(); setGalleryModal(g => ({ ...g, index: (g.index + 1) % g.images.length })); };
 
   const floors = [
     { id: "ground", label: "الدور الأرضي" },
-    { id: "first", label: "الدور الأول" },
+    { id: "first",  label: "الدور الأول" },
     { id: "second", label: "الدور الثاني" },
-    { id: "third", label: "الدور الثالث" },
+    { id: "third",  label: "الدور الثالث" },
     { id: "fourth", label: "الدور الرابع" }
   ];
 
   const unitsBase = {
-    first: [
-      { id: "sm-a01", title: "وحدة SM-A01", price: "720,000 ريال", badge: "واجهتين", isSpecial: true },
-      { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
+    first:  [
+      { id: "sm-a01", title: "وحدة SM-A01", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية",  isSpecial: false }
     ],
     second: [
-      { id: "sm-a03", title: "وحدة SM-A03", price: "720,000 ريال", badge: "واجهتين", isSpecial: true },
-      { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
+      { id: "sm-a03", title: "وحدة SM-A03", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية",  isSpecial: false }
     ],
-    third: [
-      { id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين", isSpecial: true },
-      { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية", isSpecial: false }
+    third:  [
+      { id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية",  isSpecial: false }
     ],
     fourth: [
       { id: "sm-a07", title: "وحدة SM-A07", price: "1,100,000 ريال", badge: "فيلا روف فاخرة", isSpecial: true, roof: true }
@@ -60,6 +102,8 @@ export default function Projects() {
     <>
     <PageMeta title="مشاريعنا" description="استكشف مشروع سماك البوابة 1 — 7 وحدات سكنية حصرية بمواصفات فاخرة في حي البوابة بمكة المكرمة." />
     <div className="pt-32 pb-20 bg-slate-50 dark:bg-brand-900/40 min-h-screen animate-fadeIn">
+
+      {/* ===== مميزات المشروع ===== */}
       <div className="container mx-auto px-6 mb-24">
         <div className="max-w-3xl mx-auto text-center mb-16">
           <h2 className="text-gold-500 font-black tracking-[0.3em] uppercase text-sm mb-4 leading-tight">مشاريعنا</h2>
@@ -91,6 +135,7 @@ export default function Projects() {
         </div>
       </div>
 
+      {/* ===== الموقع ===== */}
       <div className="relative overflow-hidden bg-cover bg-center py-20 mb-24" style={{ backgroundImage: `url('/images/project-aerial.jpg')` }}>
         <div className="absolute inset-0 bg-[#1a365d]/90" />
         <div className="container mx-auto px-6 relative z-10">
@@ -100,45 +145,27 @@ export default function Projects() {
               <h3 className="text-4xl font-black text-white mb-8">في قلب الحدث، وقريب من خدماتك</h3>
               <div className="grid grid-cols-2 gap-4 text-white">
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Building className="text-gold-500" size={20} />
-                    <span className="font-bold text-lg">15 دقيقة</span>
-                  </div>
+                  <div className="flex items-center gap-3 mb-2"><Building className="text-gold-500" size={20} /><span className="font-bold text-lg">15 دقيقة</span></div>
                   <p className="text-slate-400 text-sm">عن المسجد الحرام</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
-                  <div className="flex items-center gap-3 mb-2">
-                    <TramFront className="text-gold-500" size={20} />
-                    <span className="font-bold text-lg">9 دقائق</span>
-                  </div>
+                  <div className="flex items-center gap-3 mb-2"><TramFront className="text-gold-500" size={20} /><span className="font-bold text-lg">9 دقائق</span></div>
                   <p className="text-slate-400 text-sm">عن محطة قطار الحرمين</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Plane className="text-gold-500" size={20} />
-                    <span className="font-bold text-lg">50 دقيقة</span>
-                  </div>
+                  <div className="flex items-center gap-3 mb-2"><Plane className="text-gold-500" size={20} /><span className="font-bold text-lg">50 دقيقة</span></div>
                   <p className="text-slate-400 text-sm">عن مطار الملك عبدالعزيز</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Moon className="text-gold-500" size={20} />
-                    <span className="font-bold text-lg">مقابل</span>
-                  </div>
+                  <div className="flex items-center gap-3 mb-2"><Moon className="text-gold-500" size={20} /><span className="font-bold text-lg">مقابل</span></div>
                   <p className="text-slate-400 text-sm">مسجد </p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
-                  <div className="flex items-center gap-3 mb-2">
-                    <TreePine className="text-gold-500" size={20} />
-                    <span className="font-bold text-lg">مقابل</span>
-                  </div>
+                  <div className="flex items-center gap-3 mb-2"><TreePine className="text-gold-500" size={20} /><span className="font-bold text-lg">مقابل</span></div>
                   <p className="text-slate-400 text-sm">حديقة عامة</p>
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm hover:bg-white/10 transition">
-                  <div className="flex items-center gap-3 mb-2">
-                    <ShoppingCart className="text-gold-500" size={20} />
-                    <span className="font-bold text-lg">5 دقائق</span>
-                  </div>
+                  <div className="flex items-center gap-3 mb-2"><ShoppingCart className="text-gold-500" size={20} /><span className="font-bold text-lg">5 دقائق</span></div>
                   <p className="text-slate-400 text-sm">خمسة من المتاجر الكبرى</p>
                 </div>
               </div>
@@ -152,9 +179,7 @@ export default function Projects() {
                 <p className="text-white/80 font-bold text-sm">وحدات<br />فقط</p>
               </div>
               <a href="https://maps.google.com/" target="_blank" rel="noreferrer" className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white text-brand-800 px-8 py-4 rounded-2xl font-bold shadow-2xl hover:bg-gold-500 hover:text-white transition flex items-center gap-3 group z-20 whitespace-nowrap">
-                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-white/20 transition">
-                  <MapPin size={20} />
-                </div>
+                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-white/20 transition"><MapPin size={20} /></div>
                 <span>افتح الموقع في خرائط جوجل</span>
               </a>
             </div>
@@ -162,6 +187,7 @@ export default function Projects() {
         </div>
       </div>
 
+      {/* ===== مخططات المشروع ===== */}
       <div className="container mx-auto px-6">
         <div className="text-center mb-12">
           <h2 className="text-gold-500 font-black tracking-[0.3em] uppercase text-sm mb-4">مخططات المشروع</h2>
@@ -218,14 +244,12 @@ export default function Projects() {
                           <span className="flex items-center gap-2"><Droplets size={16} className="text-gold-500" /> غرفة غسيل</span>
                           {!unit.roof && <span className="flex items-center gap-2"><Fingerprint size={16} className="text-gold-500" /> دخول ذكي</span>}
                           {!unit.roof && <span className="flex items-center gap-2"><Wifi size={16} className="text-gold-500" /> منزل ذكي</span>}
-                          {unit.roof && <span className="flex items-center gap-2"><Umbrella size={16} className="text-gold-500" /> سطح خاص كبير</span>}
+                          {unit.roof  && <span className="flex items-center gap-2"><Umbrella size={16} className="text-gold-500" /> سطح خاص كبير</span>}
                           {!unit.roof && <span className="flex items-center gap-2"><Box size={16} className="text-gold-500" /> مستودع</span>}
                           {!unit.roof && <span className="flex items-center gap-2"><Car size={16} className="text-gold-500" /> موقف خاص</span>}
                           <span className="col-span-2 flex items-center gap-2"><Layers size={16} className="text-gold-500" /> خزان أرضي وعلوي مستقل</span>
                           <span className="col-span-2 flex items-center gap-2"><Bath size={16} className="text-gold-500" /> 4 دورات مياه</span>
                         </div>
-                        
-                        {/* أزرار الحجز والاتصال الجديدة */}
                         <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200 dark:border-brand-700 relative z-30">
                           <button
                             onClick={(e) => { e.stopPropagation(); window.scrollTo(0, 0); navigate('/contact'); }}
@@ -269,13 +293,123 @@ export default function Projects() {
           </div>
         </div>
       </div>
+
+      {/* ===== معرض الصور ===== */}
+      <div className="container mx-auto px-6 mt-24">
+        <div className="text-center mb-12">
+          <p className="text-[#c5a059] font-black tracking-[0.3em] text-xs uppercase mb-3">استكشف المشروع</p>
+          <h2 className="text-3xl md:text-4xl font-black text-[#1a365d] dark:text-brand-100 mb-4">معرض صور البوابة 1</h2>
+          <p className="text-slate-500 dark:text-brand-300 max-w-xl mx-auto">رندرات معمارية تعكس مستوى التصميم والتشطيب في كل ركن من المشروع</p>
+        </div>
+
+        {/* فلاتر الفئات */}
+        <div className="flex flex-wrap justify-center gap-3 mb-10">
+          {FILTERS.map(tab => {
+            const count = tab.id === 'all' ? galleryImages.length : galleryImages.filter(g => g.category === tab.id).length;
+            const active = galleryFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setGalleryFilter(tab.id)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm border-2 transition-all duration-300 ${active ? 'bg-[#1a365d] text-white border-[#1a365d] shadow-lg scale-[1.03]' : 'text-[#1a365d] dark:text-brand-300 border-[#1a365d]/20 dark:border-brand-700 hover:border-[#1a365d]/60 dark:hover:border-brand-500 bg-white dark:bg-brand-900'}`}
+              >
+                {tab.label}
+                <span className={`text-xs px-2 py-0.5 rounded-full font-black ${active ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-400'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* شبكة الصور */}
+        <div key={galleryFilter} className="columns-1 sm:columns-2 lg:columns-3 gap-4 animate-fadeIn">
+          {filteredGallery.map((img, i) => (
+            <div
+              key={img.src}
+              className="break-inside-avoid mb-4 overflow-hidden rounded-2xl cursor-pointer group relative shadow-sm hover:shadow-2xl transition-all duration-500"
+              onClick={() => openGallery(filteredGallery, i)}
+            >
+              <img
+                src={img.src}
+                alt={img.label}
+                loading="lazy"
+                className="w-full h-auto object-cover group-hover:scale-[1.04] transition-transform duration-700 block"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#1a365d]/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-400 flex flex-col justify-end p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-white font-bold text-sm drop-shadow">{img.label}</span>
+                  <div className="bg-white/90 rounded-full p-2 shadow">
+                    <ZoomIn size={16} className="text-[#1a365d]" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
 
-    {/* مودال عرض المخطط بالحجم الكامل */}
+    {/* مودال مخطط الطوابق */}
     {previewImg && (
       <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 animate-fadeIn" onClick={() => setPreviewImg(null)}>
         <button className="absolute top-6 left-6 text-white/80 hover:text-white text-4xl font-light z-10 bg-white/10 hover:bg-white/20 w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition" onClick={() => setPreviewImg(null)}>&times;</button>
         <img src={previewImg} alt="معاينة المخطط" className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()} />
+      </div>
+    )}
+
+    {/* مودال معرض الصور */}
+    {galleryModal && (
+      <div
+        className="fixed inset-0 z-[150] bg-black/95 flex items-center justify-center animate-fadeIn"
+        onClick={closeGallery}
+      >
+        {/* إغلاق */}
+        <button
+          className="absolute top-5 left-5 bg-white/10 hover:bg-white/25 text-white w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20"
+          onClick={closeGallery}
+        >
+          <X size={20} />
+        </button>
+
+        {/* عداد */}
+        <div className="absolute top-5 right-5 text-white/70 text-sm font-bold bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm z-20">
+          {galleryModal.index + 1} / {galleryModal.images.length}
+        </div>
+
+        {/* الصورة */}
+        <img
+          src={galleryModal.images[galleryModal.index].src}
+          alt={galleryModal.images[galleryModal.index].label}
+          className="max-w-[90vw] max-h-[85vh] object-contain rounded-xl shadow-2xl z-10 select-none"
+          onClick={e => e.stopPropagation()}
+        />
+
+        {/* اسم الصورة */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white font-bold text-sm md:text-base bg-black/50 px-6 py-2.5 rounded-full backdrop-blur-sm z-20 whitespace-nowrap">
+          {galleryModal.images[galleryModal.index].label}
+        </div>
+
+        {/* تنقل — السابق (يمين في RTL) */}
+        {galleryModal.images.length > 1 && (
+          <button
+            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20"
+            onClick={prevImg}
+          >
+            <ChevronRight size={26} />
+          </button>
+        )}
+
+        {/* تنقل — التالي (يسار في RTL) */}
+        {galleryModal.images.length > 1 && (
+          <button
+            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/30 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm transition z-20"
+            onClick={nextImg}
+          >
+            <ChevronLeft size={26} />
+          </button>
+        )}
       </div>
     )}
     </>
