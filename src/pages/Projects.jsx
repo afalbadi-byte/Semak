@@ -249,7 +249,7 @@ export default function Projects() {
                     {expandedUnit === unit.id && (
                       <div className="px-5 pb-5 bg-slate-50/50 dark:bg-brand-800/30 border-t border-slate-100 dark:border-brand-700 pt-4 animate-fadeIn">
                         <div className="grid grid-cols-2 gap-3 text-sm text-slate-600 dark:text-brand-300 mb-6">
-                          <span className="flex items-center gap-2"><Ruler size={16} className="text-gold-500" /> {unit.roof ? "422 م²" : "204 م²"}</span>
+                          <span className="flex items-center gap-2"><Ruler size={16} className="text-gold-500" /> {unit.roof ? "477 م²" : "197 م²"}</span>
                           <span className="flex items-center gap-2"><Bed size={16} className="text-gold-500" /> {unit.roof ? "4 غرف" : "5 غرف"}</span>
                           <span className="flex items-center gap-2"><UserCheck size={16} className="text-gold-500" /> غرفة خادمة</span>
                           <span className="flex items-center gap-2"><Droplets size={16} className="text-gold-500" /> غرفة غسيل</span>
