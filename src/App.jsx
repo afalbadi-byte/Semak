@@ -14,6 +14,7 @@ import Footer from './components/Footer';
 const Home         = lazy(() => import('./pages/Home'));
 const About        = lazy(() => import('./pages/About'));
 const Projects     = lazy(() => import('./pages/Projects'));
+const Gallery      = lazy(() => import('./pages/Gallery'));
 const Contact      = lazy(() => import('./pages/Contact'));
 const Services     = lazy(() => import('./pages/Services'));
 const LegalPage    = lazy(() => import('./pages/LegalPage'));
@@ -38,6 +39,7 @@ const PlatformDashboard = lazy(() => import('./pages/platform/PlatformDashboard'
 
 // سماك التقنية
 const TechApp = lazy(() => import('./pages/tech/TechApp'));
+const BrandSocialKit = lazy(() => import('./pages/BrandSocialKit'));
 
 const NotFound = lazy(() => import('./pages/NotFound'));
 
@@ -135,8 +137,10 @@ const MainShell = () => {
             <Route path="/"          element={<Home />} />
             <Route path="/about"     element={<About />} />
             <Route path="/projects"  element={<Projects />} />
+            <Route path="/gallery"   element={<Gallery />} />
             <Route path="/contact"   element={<Contact />} />
             <Route path="/services"  element={<Services />} />
+            <Route path="/brand"     element={<BrandSocialKit />} />
             <Route path="/privacy"   element={<LegalPage title="سياسة الخصوصية" />} />
             <Route path="/terms"     element={<LegalPage title="الشروط والأحكام" />} />
             <Route path="/inspection" element={<UnitInspection />} />
