@@ -12,21 +12,41 @@ import {
 } from 'lucide-react';
 
 // ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
-const ContractsManage   = React.lazy(() => import('./ContractsManage'));
-const PurchaseOrders    = React.lazy(() => import('./PurchaseOrders'));
 const UnitInspection    = React.lazy(() => import('./UnitInspection'));
 const SnagList          = React.lazy(() => import('./SnagList'));
 const UsersManage       = React.lazy(() => import('./UsersManage'));
 const MaintenanceManage = React.lazy(() => import('./MaintenanceManage'));
 const LeadsManage       = React.lazy(() => import('./LeadsManage'));
 const BotSettings       = React.lazy(() => import('./BotSettings'));
+const Finance           = React.lazy(() => import('./Finance'));
+const DaftraExplorer    = React.lazy(() => import('./DaftraExplorer'));
 const WorkCycles        = React.lazy(() => import('./WorkCycles'));
 const FeasibilityCalc   = React.lazy(() => import('./FeasibilityCalc'));
 const UnitsOverview     = React.lazy(() => import('./UnitsOverview'));
 const ProjectsManage    = React.lazy(() => import('./ProjectsManage'));
 const UnitsEdit         = React.lazy(() => import('./UnitsEdit'));
 const WhatsAppInbox     = React.lazy(() => import('./WhatsAppInbox'));
+const InvoicesManage    = React.lazy(() => import('./InvoicesManage'));
+const PurchasesManage   = React.lazy(() => import('./PurchasesManage'));
+const TreasuryManage    = React.lazy(() => import('./TreasuryManage'));
+const ReportsHub        = React.lazy(() => import('./ReportsHub'));
+const QuotationsManage  = React.lazy(() => import('./QuotationsManage'));
+const ExpensesManage    = React.lazy(() => import('./ExpensesManage'));
+const ClientsManage     = React.lazy(() => import('./ClientsManage'));
+const SuppliersManage   = React.lazy(() => import('./SuppliersManage'));
+const ProductsManage    = React.lazy(() => import('./ProductsManage'));
+const ChequesManage     = React.lazy(() => import('./ChequesManage'));
 const RentalsManage     = React.lazy(() => import('./RentalsManage'));
+const PaymentsManage    = React.lazy(() => import('./PaymentsManage'));
+const AccountingHub     = React.lazy(() => import('./AccountingHub'));
+const LedgerHub         = React.lazy(() => import('./LedgerHub'));
+const NotesReturns      = React.lazy(() => import('./NotesReturns'));
+const DaftraLink        = React.lazy(() => import('./DaftraLink'));
+const PartyDetail       = React.lazy(() => import('./PartyDetail'));
+const EntryDetail       = React.lazy(() => import('./EntryDetail'));
+const InvoiceDetail     = React.lazy(() => import('./InvoiceDetail'));
+const AccountDetail     = React.lazy(() => import('./AccountDetail'));
+const ProductMovement   = React.lazy(() => import('./ProductMovement'));
 const ActivityLog       = React.lazy(() => import('./ActivityLog'));
 const SecuritySettings  = React.lazy(() => import('./SecuritySettings'));
 const SubscriptionPage  = React.lazy(() => import('./SubscriptionPage'));
@@ -402,93 +422,70 @@ function SectionTools({ dept, hasPermission, dashCounts, setActiveTab, loadLeads
 function Sidebar({ departments, hasPermission, activeTab, setActiveTab, loadLeads, dbUser, onLogout, isOpen, onClose, companyName }) {
     const { branding } = useContext(AppContext);
     const [openGroups, setOpenGroups] = useState({});
-
-    const go = (tabId) => {
-        setActiveTab(tabId);
+    const go = (tool) => {
+        if (tool.isExternal)  window.open(tool.path, '_blank');
+        else if (tool.isLink) window.location.href = tool.path;
+        else { setActiveTab(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
         onClose && onClose();
     };
-    const goTool = (tool) => {
-        if (tool.isExternal)  { window.open(tool.path, '_blank'); onClose && onClose(); }
-        else if (tool.isLink) { window.location.href = tool.path; }
-        else { go(tool.tabId); if (tool.tabId === 'leads') loadLeads(); }
-    };
-
     return (
         <>
             {isOpen && (
                 <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} aria-hidden="true" />
             )}
             <aside className={`fixed lg:static inset-y-0 right-0 z-50 w-72 shrink-0 bg-brand-800 dark:bg-brand-950 text-brand-50 flex flex-col shadow-2xl border-l border-white/5 dark:border-brand-800 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
-
                 {/* الشعار */}
                 <div className="h-20 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
-                    <img src="/images/logo-light.png" alt={companyName || 'سماك'} className="h-11 w-auto object-contain" />
+                    <img src="/images/logo-light.png" alt={companyName || 'سماك العقارية'} className="h-11 w-auto object-contain" />
                     <button onClick={onClose} className="lg:hidden text-brand-200 hover:text-white p-1" aria-label="إغلاق"><X size={22} /></button>
                 </div>
-
-                {/* ── التنقّل ──────────────────────────────────────────────── */}
+                {/* التنقّل */}
                 <nav className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-1">
-                    {/* ── قائمة العقارية ───────────────────────────────────── */}
-                    <>
-                        <button
-                            onClick={() => go('overview')}
-                            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-gold-500 text-white shadow-lg shadow-gold-500/20' : 'text-brand-100 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            <LayoutDashboard size={18} /> الرئيسية
-                        </button>
-                        {departments.map(dept => {
-                            const tools = dept.tools.filter(t => hasPermission(t.permKey));
-                            if (tools.length === 0) return null;
-                            const groupActive = tools.some(t => t.tabId === activeTab);
-                            const open = dept.id in openGroups ? openGroups[dept.id] : groupActive;
-                            const DeptIcon = dept.icon;
-                            return (
-                                <div key={dept.id} className="pt-1.5">
-                                    <button
-                                        onClick={() => setOpenGroups(g => ({ ...g, [dept.id]: !open }))}
-                                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-black tracking-wide transition-colors ${groupActive ? 'text-gold-300' : 'text-brand-300 hover:text-brand-100'}`}
-                                    >
-                                        <DeptIcon size={15} className="shrink-0" />
-                                        <span className="flex-1 text-right truncate">{dept.label}</span>
-                                        <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
-                                    </button>
-                                    {open && (
-                                        <div className="mt-0.5 space-y-0.5 pr-2.5">
-                                            {tools.map(tool => {
-                                                const ToolIcon = tool.icon;
-                                                const isActive = tool.tabId === activeTab;
-                                                return (
-                                                    <button
-                                                        key={tool.id}
-                                                        onClick={() => goTool(tool)}
-                                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-bold transition-all ${isActive ? 'bg-gold-500 text-white shadow-md shadow-gold-500/20' : 'text-brand-200 hover:bg-white/5 hover:text-white'}`}
-                                                    >
-                                                        <ToolIcon size={16} className="shrink-0 opacity-90" />
-                                                        <span className="flex-1 text-right truncate">{tool.label}</span>
-                                                        {(tool.isExternal || tool.isLink) && <ExternalLink size={12} className="opacity-50 shrink-0" />}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </>
-                </nav>
-
-                {/* رابط سماك التقنية */}
-                <div className="px-3 pb-2 shrink-0">
-                    <a
-                        href="/tech"
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-bold text-brand-300 hover:bg-white/10 hover:text-white transition border border-white/10 hover:border-white/20"
+                    <button
+                        onClick={() => { setActiveTab('overview'); onClose && onClose(); }}
+                        className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-gold-500 text-white shadow-lg shadow-gold-500/20' : 'text-brand-100 hover:bg-white/5 hover:text-white'}`}
                     >
-                        <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center text-white text-xs font-black shrink-0">ت</div>
-                        <span className="flex-1 text-right">سماك التقنية</span>
-                        <ExternalLink size={13} className="opacity-50 shrink-0" />
-                    </a>
-                </div>
-
+                        <LayoutDashboard size={18} /> الرئيسية
+                    </button>
+                    {departments.map(dept => {
+                        const tools = dept.tools.filter(t => hasPermission(t.permKey));
+                        if (tools.length === 0) return null;
+                        const groupActive = tools.some(t => t.tabId === activeTab);
+                        const open = dept.id in openGroups ? openGroups[dept.id] : groupActive;
+                        const DeptIcon = dept.icon;
+                        return (
+                            <div key={dept.id} className="pt-1.5">
+                                <button
+                                    onClick={() => setOpenGroups(g => ({ ...g, [dept.id]: !open }))}
+                                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-black tracking-wide transition-colors ${groupActive ? 'text-gold-300' : 'text-brand-300 hover:text-brand-100'}`}
+                                >
+                                    <DeptIcon size={15} className="shrink-0" />
+                                    <span className="flex-1 text-right truncate">{dept.label}</span>
+                                    <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                                </button>
+                                {open && (
+                                    <div className="mt-0.5 space-y-0.5 pr-2.5">
+                                        {tools.map(tool => {
+                                            const ToolIcon = tool.icon;
+                                            const isActive = tool.tabId === activeTab;
+                                            return (
+                                                <button
+                                                    key={tool.id}
+                                                    onClick={() => go(tool)}
+                                                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-bold transition-all ${isActive ? 'bg-gold-500 text-white shadow-md shadow-gold-500/20' : 'text-brand-200 hover:bg-white/5 hover:text-white'}`}
+                                                >
+                                                    <ToolIcon size={16} className="shrink-0 opacity-90" />
+                                                    <span className="flex-1 text-right truncate">{tool.label}</span>
+                                                    {(tool.isExternal || tool.isLink) && <ExternalLink size={12} className="opacity-50 shrink-0" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </nav>
                 {/* المستخدم + خروج */}
                 <div className="p-3 border-t border-white/10 shrink-0 space-y-2">
                     <div className="flex items-center gap-2.5 px-2 py-1.5">
@@ -886,6 +883,12 @@ function DashboardInner({ onLogout }) {
     const [dataLoading,   setDataLoading]   = useState(false);
     const [dashCounts,    setDashCounts]    = useState({});
     const [dashTasks,     setDashTasks]     = useState([]);
+    const [deptStats,     setDeptStats]     = useState(null);
+    const [statsLoading,  setStatsLoading]  = useState(false);
+    const [trend,         setTrend]         = useState(null);
+    const [trendLoading,  setTrendLoading]  = useState(false);
+    const [glKpis,        setGlKpis]        = useState(null);
+    const [glKpisLoading, setGlKpisLoading] = useState(false);
     const [nativeStats,   setNativeStats]   = useState(null);
     const [nativeLoading, setNativeLoading] = useState(false);
     const [usage,         setUsage]         = useState(null);
@@ -895,6 +898,33 @@ function DashboardInner({ onLogout }) {
             const data = await apiGet('dashboard_counts');
             if (data.success) { setDashCounts(data.counts || {}); setDashTasks(data.tasks || []); }
         } catch {}
+    };
+
+    const loadDeptStats = async () => {
+        setStatsLoading(true);
+        try {
+            const data = await apiGet('dept_stats');
+            if (data.success) setDeptStats(data);
+        } catch {}
+        finally { setStatsLoading(false); }
+    };
+
+    const loadTrend = async () => {
+        setTrendLoading(true);
+        try {
+            const data = await apiGet('dashboard_trend');
+            if (data.success) setTrend(data.trend || []);
+        } catch {}
+        finally { setTrendLoading(false); }
+    };
+
+    const loadGlKpis = async () => {
+        setGlKpisLoading(true);
+        try {
+            const data = await apiGet('gl_dashboard_kpis');
+            if (data.success) setGlKpis(data);
+        } catch {}
+        finally { setGlKpisLoading(false); }
     };
 
     const loadNativeStats = async () => {
@@ -921,7 +951,13 @@ function DashboardInner({ onLogout }) {
         if (activeTab === 'overview') {
             loadDashboardCounts();
             loadNativeStats();
+            loadGlKpis();
             loadUsage();
+            // Daftra stats — فقط للمستأجر 1 (سماك) الذي يملك مفتاح دفترة
+            if (branding?.plan === 'enterprise' || !branding?.plan) {
+                loadDeptStats();
+                loadTrend();
+            }
         }
     }, [activeTab]);
 
@@ -998,13 +1034,18 @@ function DashboardInner({ onLogout }) {
             ],
         },
         {
-            id:'procurement', color:'amber', icon:Briefcase,
+            id:'procurement', color:'amber', icon:Briefcase, statsKey:'procurement',
             label:'المشتريات والتعاقدات',
-            desc:'عقود المقاولين · طلبات الشراء · أوامر ومراحل العمل',
+            desc:'أوامر العمل · الموردون · المنتجات · متابعة مراحل التنفيذ',
             tools:[
-                { id:'contracts',   tabId:'contracts',   label:'التعاقدات',           icon:FileText,      permKey:'projects', color:'amber'  },
-                { id:'purchases',   tabId:'purchases',   label:'طلبات الشراء',         icon:ShoppingCart,  permKey:'projects', color:'orange' },
-                { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance',  color:'teal'  },
+                { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
+                { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
+                { id:'products',    tabId:'products',    label:'المنتجات والخدمات',    icon:Package,        permKey:'finance', color:'cyan'   },
+            ],
+            statsChips: (s, fmt) => [
+                { icon:Briefcase,      label:'الموردون',    value: fmt(s?.suppliers),   color:'amber' },
+                { icon:ClipboardCheck, label:'أوامر العمل', value: fmt(s?.work_orders), color:'blue'  },
+                s?.open > 0 ? { icon:AlertTriangle, label:'مفتوحة', value: s?.open, color:'red' } : null,
             ],
         },
         {
@@ -1016,14 +1057,55 @@ function DashboardInner({ onLogout }) {
             ],
         },
         {
+            id:'contacts', color:'purple', icon:UserCheck,
+            label:'جهات الاتصال',
+            desc:'العملاء · الموردون · بيانات الاتصال',
+            tools:[
+                { id:'clients',   tabId:'clients',   label:'إدارة العملاء',  icon:Users,     permKey:'finance', color:'purple' },
+            ],
+        },
+        {
+            id:'finance', color:'emerald', icon:Landmark, statsKey:'finance',
+            label:'الشؤون المالية والمحاسبية',
+            desc:'الفواتير · عروض الأسعار · المصروفات · الشيكات · الخزاين · التقارير',
+            tools:[
+                { id:'invoices',    tabId:'invoices',    label:'الفواتير',            icon:Receipt,      permKey:'finance', color:'emerald' },
+                { id:'quotations',  tabId:'quotations',  label:'عروض الأسعار',        icon:FileText,     permKey:'finance', color:'sky'     },
+                { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',       icon:ShoppingCart, permKey:'finance', color:'amber'   },
+                { id:'expenses',    tabId:'expenses',    label:'المصروفات',           icon:Tag,          permKey:'finance', color:'red'     },
+                { id:'payments',    tabId:'payments',    label:'المدفوعات والتحصيل',  icon:ArrowRightLeft,permKey:'finance', color:'green'   },
+                { id:'cheques',     tabId:'cheques',     label:'الشيكات',             icon:CreditCard,   permKey:'finance', color:'indigo'  },
+                { id:'treasury',    tabId:'treasury',    label:'الخزاين',             icon:Coins,        permKey:'finance', color:'teal'    },
+                { id:'reports',     tabId:'reports',     label:'التقارير المالية',    icon:BarChart3,    permKey:'finance', color:'blue'    },
+                { id:'finance',     tabId:'finance',     label:'الإيرادات والمصروفات',icon:DollarSign,   permKey:'finance', color:'slate'   },
+                { id:'letters',     tabId:'letters',     label:'الوثائق الرسمية',     icon:FilePenLine,  permKey:'letters', color:'rose',   isLink:true, path:'/admin/letter-generator' },
+            ],
+            statsChips: (s, fmt) => [
+                { icon:TrendingUp, label:'إيرادات الشهر',  value: fmt(s?.revenue_month)  + ' ﷼', color:'emerald' },
+                { icon:DollarSign, label:'مصروفات الشهر', value: fmt(s?.expenses_month) + ' ﷼', color:'red'     },
+                { icon:BarChart3,  label:'صافي الكل',      value: fmt(s?.net)            + ' ﷼', color: (s?.net ?? 0) >= 0 ? 'teal' : 'red' },
+            ],
+        },
+        {
+            id:'accounting', color:'indigo', icon:BookOpen,
+            label:'المحاسبة',
+            desc:'الدفترة المستقلة · دليل الحسابات · القيود اليومية · التقارير المالية · مراكز التكلفة · الإشعارات والمرتجعات',
+            tools:[
+                { id:'ledger',     tabId:'ledger',     label:'الدفترة المستقلة',     icon:BookOpen, permKey:'finance', color:'indigo' },
+                { id:'parties',    tabId:'parties',    label:'كشوف حسابات الأطراف',  icon:Users,    permKey:'finance', color:'purple' },
+                { id:'accounting', tabId:'accounting', label:'دفتر المحاسبة (دفترة)', icon:FileText, permKey:'finance', color:'slate'  },
+                { id:'notes',      tabId:'notes',      label:'الإشعارات والمرتجعات', icon:FileText, permKey:'finance', color:'rose'   },
+            ],
+        },
+        {
             id:'it', color:'indigo', icon:Cpu,
             label:'تقنية المعلومات',
             desc:'الأنظمة الرقمية · الذكاء الاصطناعي · البنية التقنية · سجل النشاط',
             tools:[
-                { id:'letters',      tabId:'letters',      label:'الوثائق الرسمية',      icon:FilePenLine, permKey:'letters',      color:'rose',    isLink:true, path:'/admin/letter-generator' },
-                { id:'activity_log', tabId:'activity_log', label:'سجل النشاط',           icon:ScrollText,  permKey:'activity_log', color:'slate'  },
-                { id:'security',     tabId:'security',     label:'الأمان والبريد',        icon:ShieldCheck, permKey:'all',          color:'emerald'},
-                { id:'subscription', tabId:'subscription', label:'الاشتراك والباقة',      icon:Zap,         permKey:'all',          color:'amber' },
+                { id:'daftra_link',  tabId:'daftra_link',  label:'ربط دفترة',   icon:Link2,      permKey:'finance',       color:'indigo', planRequired:'enterprise' },
+                { id:'activity_log', tabId:'activity_log', label:'سجل النشاط', icon:ScrollText, permKey:'activity_log',  color:'slate'  },
+                { id:'security',     tabId:'security',     label:'الأمان والبريد', icon:ShieldCheck, permKey:'all',       color:'emerald'},
+                { id:'subscription', tabId:'subscription', label:'الاشتراك والباقة', icon:Zap,    permKey:'all',           color:'amber' },
             ],
         },
         {
@@ -1046,16 +1128,18 @@ function DashboardInner({ onLogout }) {
 
     // ─── العناوين ────────────────────────────────────────────────────────────
     const TAB_LABELS = {
-        overview:'لوحة الإدارة',       projects:'المشاريع والأبراج',
-        units:'الوحدات والمخطط',        units_edit:'تسجيل الملاك',
-        feasibility:'الجدوى والتسعير', inspection:'محاضر التسليم',
-        snaglist:'تقارير الملاحظات',   maintenance:'الصيانة',
-        leads:'العملاء المحتملون',      bot:'خدمة العملاء الذكية',
-        whatsapp:'صندوق الرسائل',       qr:'رموز الوحدات',
-        letters:'الوثائق الرسمية',      work_cycles:'أوامر ومراحل العمل',
-        contracts:'التعاقدات مع المقاولين', purchases:'طلبات الشراء والمواد',
-        rentals:'الإيجارات والعقود',    users:'إدارة الفريق',
-        activity_log:'سجل النشاط',      security:'الأمان والبريد',
+        overview:'لوحة الإدارة', projects:'المشاريع والأبراج', units:'الوحدات والمخطط',
+        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', inspection:'محاضر التسليم',
+        snaglist:'تقارير الملاحظات', maintenance:'الصيانة', leads:'العملاء المحتملون',
+        bot:'خدمة العملاء الذكية', whatsapp:'صندوق الرسائل', qr:'رموز الوحدات',
+        letters:'الوثائق الرسمية', finance:'الإيرادات والمصروفات', daftra_explorer:'التقارير المالية',
+        work_cycles:'أوامر ومراحل العمل', users:'إدارة الفريق',
+        invoices:'الفواتير', purchases:'فواتير الشراء', treasury:'الخزاين', reports:'التقارير المالية',
+        quotations:'عروض الأسعار', expenses:'المصروفات', cheques:'الشيكات',
+        clients:'إدارة العملاء', suppliers:'إدارة الموردين', products:'المنتجات والخدمات',
+        rentals:'الإيجارات والعقود', payments:'المدفوعات والتحصيل',
+        ledger:'الدفترة المستقلة', accounting:'دفتر المحاسبة (دفترة)', notes:'الإشعارات والمرتجعات', daftra_link:'ربط دفترة',
+        parties:'كشوف حسابات الأطراف', activity_log:'سجل النشاط', security:'الأمان والبريد',
         subscription:'الاشتراك والباقة',
         rega:'قيد المطور العقاري',
     };
@@ -1144,7 +1228,7 @@ function DashboardInner({ onLogout }) {
                     <div className="sticky top-0 z-20 bg-white/95 dark:bg-brand-900/95 backdrop-blur px-4 md:px-8 py-3 border-b border-brand-100/70 dark:border-brand-700 flex items-center justify-between gap-3">
                         <button
                             onClick={() => setActiveTab('overview')}
-                            className="flex items-center gap-2 text-sm font-bold transition border px-3 md:px-4 py-2 rounded-xl text-brand-800 dark:text-brand-100 hover:text-gold-600 dark:hover:text-gold-400 bg-brand-50 dark:bg-brand-800 hover:bg-gold-50 dark:hover:bg-brand-700 border-brand-100 dark:border-brand-700 hover:border-gold-400"
+                            className="flex items-center gap-2 text-sm font-bold text-brand-800 dark:text-brand-100 hover:text-gold-600 dark:hover:text-gold-400 transition bg-brand-50 dark:bg-brand-800 hover:bg-gold-50 dark:hover:bg-brand-700 border border-brand-100 dark:border-brand-700 hover:border-gold-400 px-3 md:px-4 py-2 rounded-xl"
                         >
                             <ArrowLeft size={16}/>
                             <span className="hidden sm:inline">الرئيسية</span>
@@ -1158,7 +1242,23 @@ function DashboardInner({ onLogout }) {
                     الصفحة الرئيسية — تصميم موحّد نظيف
                 ════════════════════════════════════════════════════════════ */}
                 {activeTab === 'overview' && (() => {
-                    const ns = nativeStats || {};
+                    // إحصائيات محلية (Native GL) — تعمل لكل المستأجرين
+                    const ns  = nativeStats || {};
+                    // إحصائيات دفترة (Daftra) — للمستأجر 1 فقط كمرجع إضافي
+                    const fin = deptStats?.finance || {};
+                    const fmtSAR = (n) => (n != null ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—') + ' ﷼';
+                    // صافي GL من glKpis أو نحسبه من native
+                    const netYtd  = glKpis?.net_income_ytd ?? 0;
+                    const revYtd  = glKpis?.revenue_ytd    ?? 0;
+                    // إيرادات ومصروفات الشهر — native > daftra fallback
+                    const revMonth = ns.rev_month  ?? fin.revenue_month  ?? 0;
+                    const expMonth = ns.exp_month  ?? fin.expenses_month ?? 0;
+                    const invMonth = ns.inv_month  ?? deptStats?.sales?.invoices_month ?? 0;
+                    const clients  = ns.clients    ?? deptStats?.sales?.clients ?? 0;
+                    // اتجاه الرسم البياني — native > daftra fallback
+                    const chartTrend = (nativeStats?.trend?.length ? nativeStats.trend : null)
+                                    ?? trend ?? [];
+                    const anyLoading = nativeLoading || glKpisLoading;
                     return (
                     <div className="p-4 md:p-8 animate-fadeIn max-w-7xl mx-auto space-y-8">
 
@@ -1166,15 +1266,80 @@ function DashboardInner({ onLogout }) {
                         <div className="flex items-center justify-between flex-wrap gap-3">
                             <div>
                                 <h2 className="text-2xl md:text-3xl font-black text-brand-800 dark:text-brand-50">مرحباً، {dbUser.name.split(' ')[0]}</h2>
-                                <p className="text-slate-500 dark:text-brand-300 text-sm mt-1">نظرة شاملة على أداء المنشأة العقارية</p>
+                                <p className="text-slate-500 dark:text-brand-300 text-sm mt-1">نظرة شاملة على أداء المنشأة</p>
                             </div>
-                            <button onClick={() => { loadDashboardCounts(); loadNativeStats(); loadUsage(); }}
+                            <button onClick={() => { loadDashboardCounts(); loadNativeStats(); loadGlKpis(); if (branding?.plan === 'enterprise' || !branding?.plan) { loadDeptStats(); loadTrend(); } }}
                                 className="bg-white dark:bg-brand-800 border border-brand-100 dark:border-brand-700 hover:border-gold-400 text-slate-600 dark:text-brand-200 hover:text-gold-600 dark:hover:text-gold-400 px-4 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2 shadow-sm">
-                                <RefreshCw size={14} className={nativeLoading ? 'animate-spin' : ''}/> تحديث
+                                <RefreshCw size={14} className={anyLoading ? 'animate-spin' : ''}/> تحديث
                             </button>
                         </div>
 
-                        {/* ─── إحصائيات العقارات ──────────────────────────────── */}
+                        {/* ─── المؤشرات المالية الكبيرة (Native GL) ──────────── */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <KpiCard icon={TrendingUp} tone="emerald" label="إيرادات الشهر"
+                                value={fmtSAR(revMonth)} sub="من محرّك المحاسبة" loading={anyLoading}/>
+                            <KpiCard icon={DollarSign} tone="red" label="مصروفات الشهر"
+                                value={fmtSAR(expMonth)} sub="إجمالي مصروفات هذا الشهر" loading={anyLoading}/>
+                            <KpiCard icon={BarChart3} tone={netYtd >= 0 ? 'navy' : 'red'} label="صافي الدخل السنوي"
+                                value={fmtSAR(netYtd)} sub={`إيرادات ${fmtSAR(revYtd)} · ${new Date().getFullYear()}`} loading={glKpisLoading}/>
+                            <KpiCard icon={Receipt} tone="gold" label="فواتير الشهر"
+                                value={String(invMonth || '—')} sub={`${clients} عميل مسجّل`} loading={anyLoading}/>
+                        </div>
+
+                        {/* ─── مؤشرات المحاسبة من المحرّك المستقل ──────── */}
+                        {(glKpis || glKpisLoading) && (
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            {/* AR */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center shrink-0">
+                                    <ArrowRightLeft size={18} className="text-blue-600 dark:text-blue-400"/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">ذمم العملاء (AR)</p>
+                                    {glKpisLoading ? <div className="h-5 w-20 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className="text-base font-black text-blue-700 dark:text-blue-400 tabular-nums leading-tight" dir="ltr">{fmtSAR(glKpis?.ar)}</p>}
+                                </div>
+                            </div>
+                            {/* AP */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
+                                    <ArrowRightLeft size={18} className="text-amber-600 dark:text-amber-400"/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">ذمم الموردين (AP)</p>
+                                    {glKpisLoading ? <div className="h-5 w-20 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className="text-base font-black text-amber-700 dark:text-amber-400 tabular-nums leading-tight" dir="ltr">{fmtSAR(glKpis?.ap)}</p>}
+                                </div>
+                            </div>
+                            {/* صافي الدخل YTD */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${(glKpis?.net_income_ytd??0)>=0?'bg-emerald-50 dark:bg-emerald-500/10':'bg-red-50 dark:bg-red-500/10'}`}>
+                                    <TrendingUp size={18} className={(glKpis?.net_income_ytd??0)>=0?'text-emerald-600 dark:text-emerald-400':'text-red-500'}/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">صافي الدخل {glKpis?.year ?? new Date().getFullYear()}</p>
+                                    {glKpisLoading ? <div className="h-5 w-20 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className={`text-base font-black tabular-nums leading-tight ${(glKpis?.net_income_ytd??0)>=0?'text-emerald-700 dark:text-emerald-400':'text-red-600'}`} dir="ltr">{fmtSAR(glKpis?.net_income_ytd)}</p>}
+                                </div>
+                            </div>
+                            {/* ذمم متأخرة */}
+                            <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${(glKpis?.overdue_parties??0)>0?'bg-red-50 dark:bg-red-500/10':'bg-emerald-50 dark:bg-emerald-500/10'}`}>
+                                    <AlertTriangle size={18} className={(glKpis?.overdue_parties??0)>0?'text-red-500':'text-emerald-600 dark:text-emerald-400'}/>
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-brand-400">ذمم متأخرة +30 يوم</p>
+                                    {glKpisLoading ? <div className="h-5 w-16 bg-slate-100 dark:bg-brand-800 rounded animate-pulse mt-1"/> :
+                                    <p className={`text-base font-black tabular-nums leading-tight ${(glKpis?.overdue_parties??0)>0?'text-red-600':'text-emerald-700 dark:text-emerald-400'}`}>
+                                        {glKpis?.overdue_parties ?? 0} طرف
+                                    </p>}
+                                </div>
+                            </div>
+                        </div>
+                        )}
+
+                        {/* ─── الرسم البياني + بطاقات السرعة + المهام ───── */}
+                        {/* بطاقات: مشاريع، وحدات، ملاك */}
                         {nativeStats && (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             <div className="bg-white dark:bg-brand-900 border border-brand-100/70 dark:border-brand-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
@@ -1217,15 +1382,17 @@ function DashboardInner({ onLogout }) {
                         </div>
                         )}
 
-                        {/* ─── بطاقة الإعداد الأولي ──────────────────────────── */}
+                        {/* ─── بطاقة الإعداد الأولي (تظهر للمستأجرين الجدد) ── */}
                         {nativeStats?.onboarding && (() => {
                             const ob = nativeStats.onboarding;
                             const steps = [
-                                { done: ob.project, label: 'إنشاء أول مشروع',       tab: 'projects', icon: '🏗️' },
-                                { done: ob.team,    label: 'دعوة أحد أعضاء الفريق', tab: 'users',    icon: '👥' },
+                                { done: ob.logo,    label: 'رفع شعار الشركة',        tab: 'ledger',   icon: '🖼️' },
+                                { done: ob.vat,     label: 'إدخال الرقم الضريبي',     tab: 'ledger',   icon: '🏛️' },
+                                { done: ob.project, label: 'إنشاء أول مشروع',         tab: 'projects', icon: '🏗️' },
+                                { done: ob.team,    label: 'دعوة أحد أعضاء الفريق',   tab: 'users',    icon: '👥' },
                             ];
                             const doneCount = steps.filter(s => s.done).length;
-                            if (doneCount === steps.length) return null;
+                            if (doneCount === steps.length) return null; // مكتمل — تختفي
                             const pct = Math.round((doneCount / steps.length) * 100);
                             return (
                             <div className="bg-white dark:bg-brand-900 border border-[#c5a059]/30 rounded-3xl shadow-card p-5 md:p-6">
@@ -1241,13 +1408,17 @@ function DashboardInner({ onLogout }) {
                                     </div>
                                     <div className="text-2xl font-black text-[#c5a059]">{pct}%</div>
                                 </div>
+                                {/* شريط التقدم */}
                                 <div className="w-full h-2 rounded-full bg-brand-100 dark:bg-brand-800 mb-4 overflow-hidden">
                                     <div className="h-full rounded-full bg-[#c5a059] transition-all duration-700" style={{width: `${pct}%`}}/>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                     {steps.map((s, i) => (
                                         <button key={i} onClick={() => setActiveTab(s.tab)}
-                                            className={`flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold transition border ${s.done ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-brand-50 dark:bg-brand-800 border-brand-100 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059]/40'}`}>
+                                            className={`flex items-center gap-2 p-2.5 rounded-xl text-xs font-bold transition border
+                                                ${s.done
+                                                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                                                    : 'bg-brand-50 dark:bg-brand-800 border-brand-100 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059]/40'}`}>
                                             <span>{s.done ? '✅' : s.icon}</span>
                                             <span className="text-right leading-tight">{s.label}</span>
                                         </button>
@@ -1257,34 +1428,87 @@ function DashboardInner({ onLogout }) {
                             );
                         })()}
 
-                        {/* ─── المهام المعلّقة ─────────────────────────────────── */}
-                        <div className="bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6">
-                            <h3 className="text-base font-black text-brand-800 dark:text-brand-50 flex items-center gap-2 mb-4">
-                                <AlertTriangle size={18} className="text-amber-500"/> مهام تحتاج إنجاز
-                            </h3>
-                            {dashTasks.length > 0 ? (
-                                <ul className="space-y-1.5">
-                                    {dashTasks.map((t, i) => (
-                                        <li key={i}
-                                            onClick={() => { setActiveTab(t.tab); if (t.tab === 'leads') loadLeads(); }}
-                                            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-800 cursor-pointer transition border border-transparent hover:border-brand-100 dark:hover:border-brand-700"
-                                        >
-                                            <span className={`w-2 h-2 rounded-full bg-${t.color}-500 shrink-0`}/>
-                                            <span className="text-[13px] text-slate-700 dark:text-brand-200 font-bold flex-1 leading-tight">{t.text}</span>
-                                            <ChevronRight size={14} className="text-slate-300 dark:text-brand-500 shrink-0"/>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : (
-                                <div className="flex flex-col items-center justify-center text-center py-6">
-                                    <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-500/15 rounded-2xl flex items-center justify-center mb-3">
-                                        <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400"/>
-                                    </div>
-                                    <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-300">كل شيء تحت السيطرة</h4>
-                                    <p className="text-xs text-slate-400 dark:text-brand-400 mt-1">لا توجد مهام معلّقة حالياً</p>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                            {/* الرسم البياني */}
+                            <div className="lg:col-span-2 bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6">
+                                <div className="flex items-center justify-between mb-5">
+                                    <h3 className="text-base font-black text-brand-800 dark:text-brand-50 flex items-center gap-2">
+                                        <BarChart3 size={18} className="text-gold-500"/> الإيرادات والمصروفات — آخر 6 أشهر
+                                    </h3>
                                 </div>
-                            )}
+                                <TrendChart data={chartTrend} loading={nativeLoading && !chartTrend.length}/>
+                            </div>
+
+                            {/* المهام المعلّقة */}
+                            <div className="bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6 flex flex-col">
+                                <h3 className="text-base font-black text-brand-800 dark:text-brand-50 flex items-center gap-2 mb-4">
+                                    <AlertTriangle size={18} className="text-amber-500"/> مهام تحتاج إنجاز
+                                </h3>
+                                {dashTasks.length > 0 ? (
+                                    <ul className="space-y-1.5 flex-1">
+                                        {dashTasks.map((t, i) => (
+                                            <li key={i}
+                                                onClick={() => { setActiveTab(t.tab); if (t.tab === 'leads') loadLeads(); }}
+                                                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-800 cursor-pointer transition border border-transparent hover:border-brand-100 dark:hover:border-brand-700"
+                                            >
+                                                <span className={`w-2 h-2 rounded-full bg-${t.color}-500 shrink-0`}/>
+                                                <span className="text-[13px] text-slate-700 dark:text-brand-200 font-bold flex-1 leading-tight">{t.text}</span>
+                                                <ChevronRight size={14} className="text-slate-300 dark:text-brand-500 shrink-0"/>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+                                        <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-500/15 rounded-2xl flex items-center justify-center mb-3">
+                                            <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400"/>
+                                        </div>
+                                        <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-300">كل شيء تحت السيطرة</h4>
+                                        <p className="text-xs text-slate-400 dark:text-brand-400 mt-1">لا توجد مهام معلّقة حالياً</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
+
+                        {/* ─── آخر الفواتير ──────────────────────────────────── */}
+                        {(nativeStats?.recent_inv?.length > 0) && (
+                        <div className="bg-white dark:bg-brand-900 rounded-3xl border border-brand-100/70 dark:border-brand-700 shadow-card p-5 md:p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-base font-black text-brand-800 dark:text-brand-50 flex items-center gap-2">
+                                    <Receipt size={18} className="text-gold-500"/> آخر الفواتير
+                                </h3>
+                                <button onClick={() => setActiveTab('invoices')}
+                                    className="text-xs font-bold text-slate-500 hover:text-[#c5a059] transition flex items-center gap-1">
+                                    عرض الكل <ChevronRight size={12}/>
+                                </button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-brand-100 dark:border-brand-700">
+                                            {['رقم الفاتورة','العميل','التاريخ','الإجمالي'].map(h => (
+                                                <th key={h} className="text-right py-2 px-2 text-[10px] font-bold text-slate-400 dark:text-brand-500 uppercase tracking-widest">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {nativeStats.recent_inv.map(inv => (
+                                            <tr key={inv.id} onClick={() => setActiveTab('invoices')}
+                                                className="border-b border-brand-50 dark:border-brand-800/50 hover:bg-brand-50 dark:hover:bg-brand-800/40 cursor-pointer transition">
+                                                <td className="py-2.5 px-2">
+                                                    <span className="font-mono text-xs text-[#c5a059] font-bold">{inv.invoice_number || `#${inv.id}`}</span>
+                                                </td>
+                                                <td className="py-2.5 px-2 text-brand-800 dark:text-brand-200 font-bold truncate max-w-[140px]">{inv.party_name || '—'}</td>
+                                                <td className="py-2.5 px-2 text-slate-500 dark:text-brand-400 text-xs">{inv.issue_date?.slice(0,10) || '—'}</td>
+                                                <td className="py-2.5 px-2 font-black tabular-nums text-brand-800 dark:text-brand-100 text-right" dir="ltr">
+                                                    {Number(inv.total_amount || 0).toLocaleString('en-US', {maximumFractionDigits:0})} ﷼
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        )}
 
                         {/* ─── الأدوات — شبكة موحّدة حسب الأقسام ───────────── */}
                         <div className="space-y-7">
@@ -1311,7 +1535,6 @@ function DashboardInner({ onLogout }) {
                         <Loader2 size={32} className="animate-spin text-brand-300 dark:text-brand-500" />
                     </div>
                 }>
-                {/* ── مشاريع ─────────────────────────────────────────────── */}
                 {activeTab === 'projects'    && hasPermission('projects')    && <ProjectsManage />}
                 {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={showToast} />}
                 {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={showToast} /></div>}
@@ -1319,24 +1542,40 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={showToast} /></div>}
                 {activeTab === 'snaglist'    && hasPermission('snaglist')    && <div className="animate-fadeIn p-6 md:p-8"><SnagList /></div>}
                 {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}
+                {activeTab === 'users'       && hasPermission('users_manage')&& <div className="animate-fadeIn p-6 md:p-8"><UsersManage showToast={showToast} /></div>}
                 {activeTab === 'qr'          && hasPermission('qr')          && <QrSection />}
-                {/* ── مبيعات ─────────────────────────────────────────────── */}
-                {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
-                {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="starter" featureName="صندوق الرسائل" onUpgrade={() => setActiveTab('subscription')}><WhatsAppInbox /></PlanGate></div>}
                 {activeTab === 'bot'         && hasPermission('bot')         && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="pro" featureName="خدمة العملاء الذكية" onUpgrade={() => setActiveTab('subscription')}><BotSettings /></PlanGate></div>}
                 {activeTab === 'campaign'    && hasPermission('whatsapp')    && <div className="animate-fadeIn p-6 md:p-8"><WhatsAppCampaign showToast={showToast} /></div>}
-                {/* ── عمليات ومشتريات ────────────────────────────────────── */}
-                {activeTab === 'contracts'   && hasPermission('projects')    && <div className="animate-fadeIn"><ContractsManage showToast={showToast} /></div>}
-                {activeTab === 'purchases'   && hasPermission('projects')    && <div className="animate-fadeIn"><PurchaseOrders showToast={showToast} /></div>}
+                {activeTab === 'rega'        && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><RegaDevTracker showToast={showToast} /></div>}
+                {activeTab === 'finance'     && hasPermission('finance')     && <div className="animate-fadeIn"><Finance /></div>}
+                {activeTab === 'daftra_explorer' && hasPermission('finance') && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="enterprise" featureName="مستكشف دفترة" onUpgrade={() => setActiveTab('subscription')}><DaftraExplorer /></PlanGate></div>}
                 {activeTab === 'work_cycles' && hasPermission('finance')     && <div className="animate-fadeIn"><WorkCycles /></div>}
+                {activeTab === 'invoices'    && hasPermission('finance')     && <div className="animate-fadeIn"><InvoicesManage /></div>}
+                {activeTab === 'quotations'  && hasPermission('finance')     && <div className="animate-fadeIn"><QuotationsManage /></div>}
+                {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
+                {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
+                {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}
+                {activeTab === 'parties'     && hasPermission('finance')     && <PartyDetail partyId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'entry'       && hasPermission('finance')     && <EntryDetail entryId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'inv'         && hasPermission('finance')     && <InvoiceDetail invoiceId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'acct'        && hasPermission('finance')     && <AccountDetail accountId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'prod'        && hasPermission('finance')     && <ProductMovement productId={detailId} setActiveTab={setActiveTab} />}
+                {activeTab === 'ledger'      && hasPermission('finance')     && <div className="animate-fadeIn"><LedgerHub /></div>}
+                {activeTab === 'accounting'  && hasPermission('finance')     && <div className="animate-fadeIn"><AccountingHub /></div>}
+                {activeTab === 'notes'       && hasPermission('finance')     && <div className="animate-fadeIn"><NotesReturns /></div>}
+                {activeTab === 'daftra_link' && hasPermission('finance')     && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="enterprise" featureName="ربط دفترة" onUpgrade={() => setActiveTab('subscription')}><DaftraLink /></PlanGate></div>}
+                {activeTab === 'cheques'     && hasPermission('finance')     && <div className="animate-fadeIn"><ChequesManage /></div>}
+                {activeTab === 'treasury'    && hasPermission('finance')     && <div className="animate-fadeIn"><TreasuryManage /></div>}
+                {activeTab === 'reports'     && hasPermission('finance')     && <div className="animate-fadeIn"><ReportsHub /></div>}
+                {activeTab === 'clients'     && hasPermission('finance')     && <div className="animate-fadeIn"><ClientsManage /></div>}
+                {activeTab === 'suppliers'   && hasPermission('finance')     && <div className="animate-fadeIn"><SuppliersManage /></div>}
+                {activeTab === 'products'    && hasPermission('finance')     && <div className="animate-fadeIn"><ProductsManage /></div>}
                 {activeTab === 'rentals'     && hasPermission('finance')     && <div className="animate-fadeIn"><RentalsManage /></div>}
-                {/* ── فريق + إعدادات ─────────────────────────────────────── */}
-                {activeTab === 'users'       && hasPermission('users_manage')&& <div className="animate-fadeIn p-6 md:p-8"><UsersManage showToast={showToast} /></div>}
+                {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
+                {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="starter" featureName="صندوق الرسائل" onUpgrade={() => setActiveTab('subscription')}><WhatsAppInbox /></PlanGate></div>}
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
                 {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
                 {activeTab === 'subscription'&& hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SubscriptionPage /></div>}
-                {/* ── التراخيص والامتثال ──────────────────────────────────── */}
-                {activeTab === 'rega'        && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><RegaDevTracker showToast={showToast} /></div>}
                 </Suspense>
                 </ErrorBoundary>
 
