@@ -10680,6 +10680,42 @@ KNOWLEDGE;
             $customer_context .= "\n[ملاحظة: تم تسجيل العميل '$contact_name' تلقائياً في قائمة المهتمين الآن. اعتبره عميلاً جديداً.]\n";
         }
 
+        // ── حالة الوحدات من قاعدة البيانات (حي - يُحدَّث مع كل محادثة) ──
+        $units_context = "\n═══ حالة الوحدات (محدّثة الآن من النظام) ═══\n";
+        $units_q = $conn->query(
+            "SELECT u.unit_code, u.status, o.owner_name
+             FROM units u
+             LEFT JOIN owners o ON o.unit_code = u.unit_code AND o.tenant_id = u.tenant_id
+             WHERE u.unit_code IN ('SM-A01','SM-A02','SM-A03','SM-A04','SM-A05','SM-A06','SM-A07')
+             ORDER BY u.unit_code ASC"
+        );
+        $units_live = [];
+        if ($units_q) {
+            while ($ur = $units_q->fetch_assoc()) {
+                $units_live[$ur['unit_code']] = $ur['status'];
+            }
+        }
+        // وحدات موجودة في owners لكن ربما غير في units
+        $owners_q = $conn->query(
+            "SELECT unit_code FROM owners
+             WHERE unit_code IN ('SM-A01','SM-A02','SM-A03','SM-A04','SM-A05','SM-A06','SM-A07')"
+        );
+        if ($owners_q) {
+            while ($or2 = $owners_q->fetch_assoc()) {
+                if (!isset($units_live[$or2['unit_code']])) {
+                    $units_live[$or2['unit_code']] = 'مباعة';
+                }
+            }
+        }
+        $all_units = ['SM-A01','SM-A02','SM-A03','SM-A04','SM-A05','SM-A06','SM-A07'];
+        foreach ($all_units as $uc) {
+            $st = $units_live[$uc] ?? 'متاح';
+            $label = $st === 'مباعة' ? 'مباعة' : ($st === 'محجوز' ? 'محجوزة' : 'متاحة للبيع');
+            $units_context .= "- $uc: $label\n";
+        }
+        $units_context .= "استخدم هذه الحالة دائماً ولا تعتمد على ما في ذاكرتك. إذا كانت الوحدة مباعة أو محجوزة لا تعرضها على العميل.\n";
+        $customer_context .= $units_context;
+
         // إضافة سياق العميل للـ system prompt
         $semak_knowledge_with_context = $semak_knowledge . "\n\n" . $customer_context;
 
