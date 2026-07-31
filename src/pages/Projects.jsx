@@ -302,7 +302,7 @@ export default function Projects() {
       </div>
 
       {/* ===== معرض الصور ===== */}
-      <div className="container mx-auto px-6 mt-24">
+      <div id="gallery" className="container mx-auto px-6 mt-24">
 
         {/* العنوان */}
         <div className="text-center mb-12">

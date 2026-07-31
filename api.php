@@ -10359,28 +10359,9 @@ switch ($action) {
 - سطح خاص كبير جداً
 - خزان أرضي وعلوي مستقل
 
-📸 صور المشروع (أرسلها مباشرة عند الطلب — لا تنتظر موافقة):
-إذا طلب العميل صوراً أو قال "أبغى أشوف" أو "عندكم صور" أرسل الروابط التالية مباشرة في ردك:
-
-صور خارجية:
-https://semak.sa/images/exterior-front.jpg
-https://semak.sa/images/exterior-side.jpg
-https://semak.sa/images/exterior-corner.jpg
-https://semak.sa/images/project-aerial.jpg
-
-صور داخلية:
-https://semak.sa/images/interior-living.jpg
-https://semak.sa/images/interior-bedroom.jpg
-https://semak.sa/images/interior-kitchen.jpg
-https://semak.sa/images/interior-bathroom.jpg
-
-مخططات الأدوار:
-https://semak.sa/images/floor-1.jpg
-https://semak.sa/images/floor-2.jpg
-https://semak.sa/images/floor-3.jpg
-https://semak.sa/images/floor-4.jpg
-
-لا ترسل كل الصور دفعة واحدة — اسأل العميل ماذا يريد: "خارجية، داخلية، أم مخططات؟" ثم أرسل المجموعة المناسبة فقط (3-4 روابط).
+📸 صور المشروع:
+إذا طلب العميل صوراً أو قال "أبغى أشوف" أو "عندكم صور" أو "أرسل صور" أرسل هذا الرابط مباشرة — فيه معرض كامل بهوية سماك (خارجية، داخلية، مخططات):
+https://semak.sa/projects#gallery
 
 ✨ المميزات العامة للمشروع:
 - بيئة ذكية متكاملة: أنظمة إنارة ودخول ذكي
