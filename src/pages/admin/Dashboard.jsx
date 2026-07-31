@@ -8,7 +8,7 @@ import {
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
     Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2,
-    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock
+    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock, Megaphone
 } from 'lucide-react';
 
 // ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
@@ -30,6 +30,8 @@ const RentalsManage     = React.lazy(() => import('./RentalsManage'));
 const ActivityLog       = React.lazy(() => import('./ActivityLog'));
 const SecuritySettings  = React.lazy(() => import('./SecuritySettings'));
 const SubscriptionPage  = React.lazy(() => import('./SubscriptionPage'));
+const RegaDevTracker    = React.lazy(() => import('./RegaDevTracker'));
+const WhatsAppCampaign  = React.lazy(() => import('./WhatsAppCampaign'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
@@ -971,6 +973,7 @@ function DashboardInner({ onLogout }) {
             tools:[
                 { id:'leads',       tabId:'leads',       label:'العملاء المحتملون',   icon:Users,         permKey:'leads',       badge:'leads_new',           color:'teal'   },
                 { id:'whatsapp',    tabId:'whatsapp',    label:'صندوق الرسائل',        icon:MessageCircle, permKey:'whatsapp',    planRequired:'starter',                      color:'green'  },
+                { id:'campaign',    tabId:'campaign',    label:'الحملات التسويقية',    icon:Megaphone,     permKey:'whatsapp',    planRequired:'starter',                      color:'green'  },
                 { id:'bot',         tabId:'bot',         label:'خدمة العملاء الذكية', icon:Bot,           permKey:'bot',         badge:'bot_customers_today', color:'amber', badgeLabel:'اليوم', planRequired:'pro' },
                 { id:'feasibility', tabId:'feasibility', label:'الجدوى والتسعير',      icon:BarChart3,     permKey:'feasibility',                              color:'emerald'},
             ],
@@ -1031,6 +1034,14 @@ function DashboardInner({ onLogout }) {
                 { id:'users', tabId:'users', label:'إدارة الفريق', icon:UserCircle, permKey:'users_manage', color:'purple' },
             ],
         },
+        {
+            id:'compliance', color:'indigo', icon:Landmark,
+            label:'التراخيص والامتثال',
+            desc:'قيد المطور العقاري لدى الهيئة العامة للعقار · متابعة المستندات والنقاط والجدول الزمني',
+            tools:[
+                { id:'rega', tabId:'rega', label:'قيد المطور العقاري', icon:Landmark, permKey:'all', color:'indigo' },
+            ],
+        },
     ];
 
     // ─── العناوين ────────────────────────────────────────────────────────────
@@ -1046,6 +1057,7 @@ function DashboardInner({ onLogout }) {
         rentals:'الإيجارات والعقود',    users:'إدارة الفريق',
         activity_log:'سجل النشاط',      security:'الأمان والبريد',
         subscription:'الاشتراك والباقة',
+        rega:'قيد المطور العقاري',
     };
 
     if (authLoading) return (
@@ -1312,6 +1324,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="starter" featureName="صندوق الرسائل" onUpgrade={() => setActiveTab('subscription')}><WhatsAppInbox /></PlanGate></div>}
                 {activeTab === 'bot'         && hasPermission('bot')         && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="pro" featureName="خدمة العملاء الذكية" onUpgrade={() => setActiveTab('subscription')}><BotSettings /></PlanGate></div>}
+                {activeTab === 'campaign'    && hasPermission('whatsapp')    && <div className="animate-fadeIn p-6 md:p-8"><WhatsAppCampaign showToast={showToast} /></div>}
                 {/* ── عمليات ومشتريات ────────────────────────────────────── */}
                 {activeTab === 'contracts'   && hasPermission('projects')    && <div className="animate-fadeIn"><ContractsManage showToast={showToast} /></div>}
                 {activeTab === 'purchases'   && hasPermission('projects')    && <div className="animate-fadeIn"><PurchaseOrders showToast={showToast} /></div>}
@@ -1322,6 +1335,8 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
                 {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
                 {activeTab === 'subscription'&& hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SubscriptionPage /></div>}
+                {/* ── التراخيص والامتثال ──────────────────────────────────── */}
+                {activeTab === 'rega'        && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><RegaDevTracker showToast={showToast} /></div>}
                 </Suspense>
                 </ErrorBoundary>
 

@@ -73,7 +73,10 @@ export default function Projects() {
   }, [galleryModal, galleryFilter]);
 
   const toggleUnit = (id) => setExpandedUnit(expandedUnit === id ? null : id);
-  const isSoldUnit = (unitId) => !!soldUnits[unitId.toUpperCase()];
+  const MANUALLY_SOLD = ['SM-A05', 'SM-A07']; // وحدات مباعة (ختم يدوي)
+  const isSoldUnit = (unitId) => MANUALLY_SOLD.includes(unitId.toUpperCase()) || !!soldUnits[unitId.toUpperCase()];
+  // مخطط الوحدة: 1/3/5 (واجهتين) أصلي · 2/4/6 (أمامية) معكوس أفقياً
+  const unitPlan = (unit) => unit.roof ? null : (unit.isSpecial ? '/images/unit-plan-a.png' : '/images/unit-plan-b.png');
 
   const filteredGallery = galleryFilter === 'all'
     ? galleryImages
@@ -187,13 +190,13 @@ export default function Projects() {
             </div>
             <div className="relative h-[500px] map-container">
               <div className="absolute inset-0 bg-slate-800 rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white/5">
-                <iframe title="موقع المشروع" width="100%" height="100%" frameBorder="0" style={{ border: 0 }} src="https://maps.google.com/maps?q=Mecca&t=&z=13&ie=UTF8&iwloc=&output=embed" allowFullScreen={true} />
+                <iframe title="موقع المشروع" width="100%" height="100%" frameBorder="0" style={{ border: 0 }} src="https://maps.google.com/maps?q=21.379472,39.716935&t=&z=17&ie=UTF8&iwloc=&output=embed" allowFullScreen={true} />
               </div>
               <div className="absolute top-10 -right-4 bg-gold-500 p-6 rounded-l-[2rem] shadow-2xl z-20">
                 <p className="text-white font-black text-2xl">7</p>
                 <p className="text-white/80 font-bold text-sm">وحدات<br />فقط</p>
               </div>
-              <a href="https://maps.google.com/" target="_blank" rel="noreferrer" className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white text-brand-800 px-8 py-4 rounded-2xl font-bold shadow-2xl hover:bg-gold-500 hover:text-white transition flex items-center gap-3 group z-20 whitespace-nowrap">
+              <a href="https://www.google.com/maps/search/?api=1&query=21.379472,39.716935" target="_blank" rel="noreferrer" className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white text-brand-800 px-8 py-4 rounded-2xl font-bold shadow-2xl hover:bg-gold-500 hover:text-white transition flex items-center gap-3 group z-20 whitespace-nowrap">
                 <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-white/20 transition"><MapPin size={20} /></div>
                 <span>افتح الموقع في خرائط جوجل</span>
               </a>
@@ -231,7 +234,7 @@ export default function Projects() {
                     {unit.isSpecial && <div className="absolute top-0 left-0 bg-gold-500 text-white text-xs px-3 py-1 rounded-br-lg z-10">مميزة</div>}
                     {unit.isSold && (
                       <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-[1px] pointer-events-none">
-                        <div className="border-[5px] border-red-600 text-red-600 text-3xl font-black px-6 py-2 rounded-xl transform -rotate-12 opacity-80 shadow-lg tracking-wider">تم البيع / محجوز</div>
+                        <div className="border-[5px] border-red-600 text-red-600 text-3xl font-black px-6 py-2 rounded-xl transform -rotate-12 opacity-80 shadow-lg tracking-wider">مباع</div>
                       </div>
                     )}
                     <div className="p-5 cursor-pointer" onClick={() => toggleUnit(unit.id)}>
@@ -261,6 +264,15 @@ export default function Projects() {
                           <span className="col-span-2 flex items-center gap-2"><Layers size={16} className="text-gold-500" /> خزان أرضي وعلوي مستقل</span>
                           <span className="col-span-2 flex items-center gap-2"><Bath size={16} className="text-gold-500" /> 4 دورات مياه</span>
                         </div>
+                        {unitPlan(unit) && (
+                          <div className="mb-6">
+                            <p className="text-xs font-bold text-slate-500 dark:text-brand-300 mb-2 flex items-center gap-1.5"><Layers size={14} className="text-gold-500" /> مخطط الوحدة</p>
+                            <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-brand-700 bg-white cursor-pointer group" onClick={(e) => { e.stopPropagation(); setPreviewImg(unitPlan(unit)); }}>
+                              <img src={unitPlan(unit)} alt={`مخطط ${unit.title}`} className="w-full object-contain max-h-72 group-hover:scale-[1.02] transition-transform" loading="lazy" />
+                              <div className="absolute bottom-3 left-3 bg-brand-800/80 text-white p-2 rounded-lg backdrop-blur-sm"><ZoomIn size={16} /></div>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200 dark:border-brand-700 relative z-30">
                           <button
                             onClick={(e) => { e.stopPropagation(); window.scrollTo(0, 0); navigate('/contact'); }}
