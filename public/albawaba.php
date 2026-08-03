@@ -213,7 +213,7 @@ html,body { font-family:'Cairo', Tahoma, sans-serif; color:var(--navy); backgrou
   -webkit-mask-image:linear-gradient(to bottom, transparent 0%, #000 26%, #000 100%); mask-image:linear-gradient(to bottom, transparent 0%, #000 26%, #000 100%); }
 .swoosh { position:absolute; inset:0; z-index:2; width:100%; height:100%; pointer-events:none; }
 .cover2-top { position:relative; z-index:3; display:flex; justify-content:space-between; align-items:flex-start; padding:16mm 16mm 0; }
-.c2-logo { height:74px; filter:brightness(0) invert(1); }
+.c2-logo { height:222px; filter:brightness(0) invert(1); }
 .c2-proj { text-align:left; }
 .c2-proj .p1 { font-weight:900; font-size:24px; color:#fff; }
 .c2-proj .p2 { font-weight:700; font-size:12.5px; color:var(--gold); margin-top:4px; }
