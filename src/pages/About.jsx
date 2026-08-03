@@ -64,42 +64,11 @@ export default function About() {
             </span>
           </div>
 
-          {/* ── الآية القرآنية ── */}
-          <div className="text-center mb-16">
-            {/* فاصل ذهبي علوي */}
-            <div className="flex items-center justify-center gap-4 mb-10">
-              <div className="h-px w-24 bg-gradient-to-r from-transparent to-[#c5a059]/50" />
-              <span className="text-gold-500/60 text-lg">✦</span>
-              <div className="h-px w-24 bg-gradient-to-l from-transparent to-[#c5a059]/50" />
-            </div>
-
-            {/* إطار الآية */}
-            <div className="relative inline-block w-full max-w-2xl mx-auto">
-              <div className="absolute -inset-4 bg-gold-500/5 rounded-3xl blur-2xl" />
-              <div className="relative border border-gold-500/20 rounded-3xl py-12 px-8 bg-gradient-to-b from-white/[0.03] to-transparent">
-                {/* زاوية تزيينية */}
-                <span className="absolute top-4 right-5 text-gold-500/25 text-3xl font-serif leading-none select-none">﴿</span>
-                <span className="absolute bottom-4 left-5 text-gold-500/25 text-3xl font-serif leading-none select-none">﴾</span>
-
-                <blockquote
-                  className="text-3xl md:text-[2.6rem] text-white leading-[2] tracking-wide"
-                  style={{ fontFamily: "'Amiri', serif" }}
-                >
-                  رَفَعَ سَمْكَهَا فَسَوَّاهَا
-                </blockquote>
-              </div>
-            </div>
-
-            <p className="text-gold-500/60 text-xs font-bold tracking-[0.35em] mt-6 uppercase">
-              سورة النازعات · الآية ٢٨
-            </p>
-
-            {/* فاصل ذهبي سفلي */}
-            <div className="flex items-center justify-center gap-4 mt-10">
-              <div className="h-px w-24 bg-gradient-to-r from-transparent to-[#c5a059]/50" />
-              <span className="text-gold-500/60 text-lg">✦</span>
-              <div className="h-px w-24 bg-gradient-to-l from-transparent to-[#c5a059]/50" />
-            </div>
+          {/* ── فاصل ذهبي ── */}
+          <div className="flex items-center justify-center gap-4 mb-16">
+            <div className="h-px w-24 bg-gradient-to-r from-transparent to-[#c5a059]/50" />
+            <span className="text-gold-500/60 text-lg">✦</span>
+            <div className="h-px w-24 bg-gradient-to-l from-transparent to-[#c5a059]/50" />
           </div>
 
           {/* ── بطاقتا الشرح ── */}
@@ -110,9 +79,7 @@ export default function About() {
                 <h3 className="text-gold-500 font-black text-lg">معنى الاسم</h3>
               </div>
               <p className="text-slate-400 leading-[2] text-base">
-                <strong className="text-white font-bold">سماك</strong> جمع مفردة "سمك"، والسمك في العربية هو السقف الرفيع المتين. وقد وردت هذه الكلمة في كتاب الله، إذ وصف الله سبحانه بها السماء في قوله الكريم:{' '}
-                <em className="text-gold-500 font-bold not-italic">"رَفَعَ سَمْكَهَا فَسَوَّاهَا"</em>
-                {' '}— علوٌّ وإحكام لا نظير له.
+                <strong className="text-white font-bold">سماك</strong> جمع مفردة "سمك"، و«السمك» في اللغة العربية هو السقف الرفيع المتين؛ اسمٌ يحمل معاني العلوّ والإتقان والرسوخ.
               </p>
             </div>
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 hover:border-gold-500/25 transition-colors duration-300">
@@ -121,7 +88,7 @@ export default function About() {
                 <h3 className="text-gold-500 font-black text-lg">عمق الاختيار</h3>
               </div>
               <p className="text-slate-400 leading-[2] text-base">
-                اخترنا هذا الاسم لما يحمله من معنى راسخ في لغتنا وفي كتاب الله؛ فالسمك هو السقف الرفيع المتين، وهذا بالضبط ما نسعى إليه — سقف لا يحمي فحسب، بل{' '}
+                اخترنا هذا الاسم لما يحمله من معنى راسخ في لغتنا؛ فالسمك هو السقف الرفيع المتين، وهذا بالضبط ما نسعى إليه — سقف لا يحمي فحسب، بل{' '}
                 <strong className="text-white font-bold">يعلو برؤيتك</strong>{' '}
                 ويروي قصة صاحبه.
               </p>
@@ -143,7 +110,7 @@ export default function About() {
               ومسكن يحكي <span className="text-gold-500">قصتك</span>
             </p>
             <p className="text-slate-500 text-sm mt-6 max-w-lg mx-auto leading-relaxed">
-              من آية قرآنية تصف عظمة الخلق، إلى شعار يلخّص رسالتنا — كل مشروع نبنيه رفعةٌ لك ولأسرتك، وحكاية تبدأ بك.
+              من معنى الاسم الراسخ في لغتنا، إلى شعار يلخّص رسالتنا — كل مشروع نبنيه رفعةٌ لك ولأسرتك، وحكاية تبدأ بك.
             </p>
           </div>
 
