@@ -110,7 +110,7 @@ export default function About() {
               ومسكن يحكي <span className="text-gold-500">قصتك</span>
             </p>
             <p className="text-slate-500 text-sm mt-6 max-w-lg mx-auto leading-relaxed">
-              من معنى الاسم الراسخ في لغتنا، إلى شعار يلخّص رسالتنا — كل مشروع نبنيه رفعةٌ لك ولأسرتك، وحكاية تبدأ بك.
+              من معنى الاسم الراسخ في لغتنا، إلى شعارٍ يعبّر عن رؤيتنا والتزامنا بجودة ما نقدّمه لكم.
             </p>
           </div>
 
