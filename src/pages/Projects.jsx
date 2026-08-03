@@ -125,7 +125,7 @@ export default function Projects() {
   return (
     <>
     <PageMeta title="مشاريعنا" description="استكشف مشروع سماك البوابة 1 — 7 وحدات سكنية حصرية بمواصفات فاخرة في حي البوابة بمكة المكرمة." />
-    <div className="pt-32 pb-20 bg-slate-50 dark:bg-brand-900/40 min-h-screen animate-fadeIn">
+    <div className="pt-32 pb-20 bg-slate-50 dark:bg-brand-900/40 min-h-screen animate-fadeIn wm-light-bg">
 
       {/* ===== مميزات المشروع ===== */}
       <div className="container mx-auto px-6 mb-24">

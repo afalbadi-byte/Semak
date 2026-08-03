@@ -6,7 +6,6 @@ import { CircleCheckBig } from 'lucide-react';
 
 // المكونات المشتركة — تُحمَّل فوراً لأنها موجودة في كل الصفحات
 import GlobalStyles from './components/GlobalStyles';
-import Watermark from './components/Watermark';
 import Navbar from './components/Navbar';
 import Partners from './components/Partners';
 import Footer from './components/Footer';
@@ -127,7 +126,6 @@ const MainShell = () => {
   return (
     <div dir="rtl" className="min-h-screen flex flex-col font-cairo text-brand-950 dark:text-brand-50 bg-transparent">
       <GlobalStyles />
-      <Watermark />
       <ToastNotification />
       <WhatsAppFloat />
       <Navbar />

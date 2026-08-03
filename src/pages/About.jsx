@@ -31,7 +31,7 @@ export default function About() {
         </div>
       </div>
 
-      <div className="py-24 bg-white dark:bg-brand-900 relative overflow-hidden">
+      <div className="py-24 bg-white dark:bg-brand-900 relative overflow-hidden wm-light-bg">
         <div className="absolute top-0 right-0 w-96 h-96 bg-gold-500/5 rounded-bl-[100%] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand-800/5 rounded-tr-[100%] pointer-events-none" />
         <div className="absolute top-10 left-10 text-[200px] text-slate-50 dark:text-brand-800 font-black leading-none -z-10 select-none hidden md:block">01</div>
@@ -49,7 +49,7 @@ export default function About() {
       {/* ═══════════════════════════════════════════════════
           قسم العلامة التجارية — عمق الاسم وجذره القرآني
           ═══════════════════════════════════════════════════ */}
-      <div className="py-28 bg-[#0a0f1e] relative overflow-hidden">
+      <div className="py-28 bg-[#0a0f1e] relative overflow-hidden wm-dark-bg">
         {/* نقاط ذهبية خلفية */}
         <div className="absolute inset-0 opacity-[0.035]" style={{ backgroundImage: "radial-gradient(#c5a059 1px, transparent 1px)", backgroundSize: "36px 36px" }} />
         {/* توهج مركزي */}
@@ -73,7 +73,7 @@ export default function About() {
 
           {/* ── بطاقتا الشرح ── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-14">
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 hover:border-gold-500/25 transition-colors duration-300">
+            <div className="bg-[#121a2e] border border-white/[0.08] rounded-3xl p-8 hover:border-gold-500/25 transition-colors duration-300">
               <div className="flex items-center gap-3 mb-5">
                 <span className="w-8 h-8 rounded-full bg-gold-500/15 text-gold-500 flex items-center justify-center text-sm font-black" style={{ fontFamily: "'Amiri', serif" }}>١</span>
                 <h3 className="text-gold-500 font-black text-lg">معنى الاسم</h3>
@@ -82,7 +82,7 @@ export default function About() {
                 <strong className="text-white font-bold">سماك</strong> جمع مفردة "سمك"، و«السمك» في اللغة العربية هو السقف الرفيع المتين؛ اسمٌ يحمل معاني العلوّ والإتقان والرسوخ.
               </p>
             </div>
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-8 hover:border-gold-500/25 transition-colors duration-300">
+            <div className="bg-[#121a2e] border border-white/[0.08] rounded-3xl p-8 hover:border-gold-500/25 transition-colors duration-300">
               <div className="flex items-center gap-3 mb-5">
                 <span className="w-8 h-8 rounded-full bg-gold-500/15 text-gold-500 flex items-center justify-center text-sm font-black" style={{ fontFamily: "'Amiri', serif" }}>٢</span>
                 <h3 className="text-gold-500 font-black text-lg">عمق الاختيار</h3>
@@ -96,7 +96,7 @@ export default function About() {
           </div>
 
           {/* ── الـ Slogan ── */}
-          <div className="relative text-center rounded-[2rem] border border-gold-500/20 bg-gradient-to-b from-[#c5a059]/[0.06] to-transparent p-10 md:p-14">
+          <div className="relative text-center rounded-[2rem] border border-gold-500/20 bg-[#0f1628] bg-gradient-to-b from-[#c5a059]/[0.06] to-transparent p-10 md:p-14">
             {/* شارة "شعارنا" تعلو الحد */}
             <div className="absolute -top-[1px] left-1/2 -translate-x-1/2">
               <span className="inline-block px-5 py-1 bg-[#0a0f1e] text-gold-500/70 text-[10px] font-bold tracking-[0.4em] border-x border-t border-gold-500/20 rounded-t-xl">
@@ -117,7 +117,7 @@ export default function About() {
         </div>
       </div>
 
-      <div className="py-24 bg-slate-50 dark:bg-brand-900/40 relative">
+      <div className="py-24 bg-slate-50 dark:bg-brand-900/40 relative wm-light-bg">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')] opacity-40" />
         <div className="container mx-auto px-6 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16">
           <div className="bg-white dark:bg-brand-900 p-10 rounded-[3rem] shadow-xl border-t-8 border-brand-800 hover:-translate-y-2 transition-transform duration-500 group">
@@ -145,7 +145,7 @@ export default function About() {
         </div>
       </div>
 
-      <div className="py-24 bg-brand-800 relative overflow-hidden">
+      <div className="py-24 bg-brand-800 relative overflow-hidden wm-dark-bg">
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(#c5a059 1px, transparent 1px)", backgroundSize: "30px 30px" }} />
         <div className="container mx-auto px-6 relative z-10">
           <div className="text-center mb-16">
@@ -160,7 +160,7 @@ export default function About() {
               if (val.color === "amber") bg = "from-amber-400 to-amber-600 shadow-amber-500/30";
               
               return (
-                <div key={idx} className="bg-white/5 backdrop-blur-md border border-white/10 p-8 rounded-[2.5rem] hover:bg-white/10 transition-colors duration-300 group">
+                <div key={idx} className="bg-[#15294a] border border-white/10 p-8 rounded-[2.5rem] hover:bg-[#1a3358] transition-colors duration-300 group">
                   <div className={`w-16 h-16 bg-gradient-to-br ${bg} rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg group-hover:scale-110 transition-transform`}>
                     <Icon size={32} />
                   </div>

@@ -124,7 +124,7 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ المميزات ══════════════════════════ */}
-    <div className="bg-white dark:bg-brand-900 py-24">
+    <div className="bg-white dark:bg-brand-900 py-24 wm-light-bg">
       <div className="container mx-auto px-6 max-w-6xl">
         <div className="text-center mb-16">
           <p className="text-gold-500 font-black tracking-[0.3em] text-xs uppercase mb-3">لماذا سماك؟</p>
@@ -154,7 +154,7 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ الموقع ══════════════════════════ */}
-    <div className="bg-[#0a0f1e] py-24">
+    <div className="bg-[#0a0f1e] py-24 wm-dark-bg">
       <div className="container mx-auto px-6 max-w-6xl">
         <div className="text-center mb-16">
           <p className="text-gold-500 font-black tracking-[0.3em] text-xs uppercase mb-3">الموقع الاستراتيجي</p>
@@ -167,7 +167,7 @@ export default function Home() {
           {locations.map((l, i) => {
             const Icon = l.icon;
             return (
-              <div key={i} className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-6 text-center transition-all group">
+              <div key={i} className="bg-[#121a2e] hover:bg-[#18223c] border border-white/10 rounded-2xl p-6 text-center transition-all group relative z-[1]">
                 <div className="w-12 h-12 bg-gold-500/10 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-gold-500/20 transition">
                   <Icon size={22} className="text-gold-500" />
                 </div>
@@ -189,7 +189,7 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ تيزر الوحدات ══════════════════════════ */}
-    <div className="bg-slate-50 dark:bg-brand-900/40 py-24">
+    <div className="bg-slate-50 dark:bg-brand-900/40 py-24 wm-light-bg">
       <div className="container mx-auto px-6 max-w-6xl">
         <div className="flex items-end justify-between mb-12 flex-wrap gap-4">
           <div>
@@ -238,7 +238,7 @@ export default function Home() {
     </div>
 
     {/* ══════════════════════════ CTA نهائي ══════════════════════════ */}
-    <div className="relative py-28 bg-[#0a0f1e] overflow-hidden">
+    <div className="relative py-28 bg-[#0a0f1e] overflow-hidden wm-dark-bg">
       {/* توهج ذهبي خلفي */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-gold-500/8 rounded-full blur-[120px] pointer-events-none" />
       {/* خطوط زخرفية */}

@@ -64,7 +64,7 @@ export default function Gallery() {
     <>
       <PageMeta title="معرض صور سماك البوابة 1" description="استعرض صور مشروع سماك البوابة 1 — واجهات خارجية وتصاميم داخلية فاخرة في حي البوابة، مكة المكرمة." />
 
-      <div className="min-h-screen bg-slate-50 dark:bg-brand-950 py-8 px-4">
+      <div className="min-h-screen bg-slate-50 dark:bg-brand-950 py-8 px-4 wm-light-bg">
 
         {/* شعار */}
         <div className="flex justify-center mb-8">

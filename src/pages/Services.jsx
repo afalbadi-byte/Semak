@@ -43,7 +43,7 @@ export default function Services() {
   return (
     <>
     <PageMeta title="خدماتنا" description="خدمات سماك العقارية — تطوير عقاري، إدارة أملاك، تشطيبات فاخرة، ومنازل ذكية في مكة المكرمة." />
-    <div className="bg-slate-50 dark:bg-brand-900/40 min-h-screen animate-fadeIn pb-20 pt-32">
+    <div className="bg-slate-50 dark:bg-brand-900/40 min-h-screen animate-fadeIn pb-20 pt-32 wm-light-bg">
       {/* رأس الصفحة */}
       <div className="container mx-auto px-6 mb-16 text-center">
         <h2 className="text-gold-500 font-black tracking-[0.3em] uppercase text-sm mb-4">مجالات التميز</h2>
@@ -71,7 +71,7 @@ export default function Services() {
         </div>
 
         {/* دعوة لاتخاذ إجراء */}
-        <div className="mt-20 bg-brand-800 rounded-[3rem] p-10 md:p-16 text-center text-white shadow-2xl relative overflow-hidden">
+        <div className="mt-20 bg-brand-800 rounded-[3rem] p-10 md:p-16 text-center text-white shadow-2xl relative overflow-hidden wm-dark-bg">
           <div className="absolute top-0 right-0 w-64 h-64 bg-gold-500/20 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10" />
           <h3 className="text-3xl md:text-4xl font-black mb-6 relative z-10">هل تبحث عن شريك استراتيجي لعقارك؟</h3>
           <p className="text-slate-300 mb-10 max-w-2xl mx-auto relative z-10">تواصل معنا اليوم ودعنا نناقش كيف يمكننا في سماك العقارية تلبية احتياجاتك بأعلى معايير الجودة والاحترافية.</p>

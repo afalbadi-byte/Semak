@@ -9,6 +9,10 @@ export default function GlobalStyles() {
       .font-amiri { font-family: 'Amiri', serif; }
       
       body { font-family: 'Cairo', sans-serif; overflow-x: hidden; }
+
+      /* علامة سماك المائية كخلفية أقسام — خلف المحتوى مباشرة (البوكسات تغطّيها) */
+      .wm-light-bg { background-image: url('/images/semak-wm-light.png'); background-repeat: no-repeat; background-position: center; background-size: cover; }
+      .wm-dark-bg  { background-image: url('/images/semak-wm-dark.png');  background-repeat: no-repeat; background-position: center; background-size: cover; }
       .hero-gradient { background: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.6)); }
       .text-glow { text-shadow: 0 0 15px rgba(197, 160, 89, 0.4); }
       .card-hover { transition: all 0.3s ease; }
