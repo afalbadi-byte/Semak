@@ -49,7 +49,7 @@ export default function GlobalStyles() {
       }
       .decorative-strip { position: absolute; right: 0; top: 0; bottom: 0; width: 8mm; background: linear-gradient(180deg, #1a365d 0%, #1a365d 85%, #c5a059 85%, #c5a059 100%); z-index: 10; -webkit-print-color-adjust: exact; }
       .corner-accent { position: absolute; bottom: 20mm; left: 20mm; width: 30mm; height: 30mm; border-bottom: 2px solid #c5a059; border-left: 2px solid #c5a059; opacity: 0.3; pointer-events: none; z-index: 5; }
-      .watermark { position: absolute; top: 55%; left: 45%; transform: translate(-50%, -50%); opacity: 0.04; width: 80%; pointer-events: none; filter: grayscale(100%); z-index: 0; }
+      .watermark { position: absolute; top: 55%; left: 45%; transform: translate(-50%, -50%); opacity: 0.045; width: 72%; pointer-events: none; z-index: 0; }
       .letter-header { padding: 15mm 20mm 5mm 30mm; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; }
       .letter-footer { margin-top: auto; background-color: #1a365d; color: white; padding: 12px 0; border-top: 4px solid #c5a059; z-index: 20; -webkit-print-color-adjust: exact !important; }
       .letter-body { padding: 10mm 20mm 10mm 30mm; flex-grow: 1; font-family: 'Amiri', serif; font-size: 18px; line-height: 2.2; position: relative; z-index: 5; display: flex; flex-direction: column; font-variant-ligatures: no-common-ligatures; letter-spacing: 0px; }

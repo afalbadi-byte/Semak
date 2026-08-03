@@ -13,6 +13,8 @@ import React from 'react';
  */
 
 const LOGO = 'https://semak.sa/images/logo-main.png';
+// علامة سماك المائية الجديدة — مطلقة المسار لأن الطباعة تتم في نافذة مستقلة
+const WATERMARK = 'https://semak.sa/images/semak-watermark.png';
 
 // CSS كامل يُحقن في نافذة الطباعة الجديدة
 export const SEMAK_PRINT_CSS = `
@@ -193,15 +195,15 @@ export const SEMAK_PRINT_CSS = `
   }
 
   /* العلامة المائية — تتكرر على كل صفحة عبر position:fixed */
+  /* العلامة المائية الجديدة — صورة مُلوّنة مسبقاً بلا فلتر (مسطّحة، خفيفة عند التصدير PDF) */
   .semak-print-watermark {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 60%;
-    max-width: 500px;
+    width: 62%;
+    max-width: 520px;
     opacity: 0.05;
-    filter: grayscale(100%);
     pointer-events: none;
     z-index: 0;
   }
@@ -237,7 +239,7 @@ export default function PrintableLetterhead({ children, documentLabel = '', subt
     return (
         <>
             {/* العلامة المائية — position:fixed تتكرر تلقائياً على كل صفحة */}
-            <img className="semak-print-watermark" src={LOGO} alt="" aria-hidden="true" />
+            <img className="semak-print-watermark" src={WATERMARK} alt="" aria-hidden="true" />
 
             {/* الهيدر الثابت — يتكرر على كل صفحة */}
             <div className="semak-print-header">

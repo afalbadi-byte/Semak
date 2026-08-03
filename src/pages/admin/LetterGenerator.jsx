@@ -367,7 +367,7 @@ export default function LetterGenerator() {
             </div>
             
             <div className="font-amiri text-lg relative z-10 flex-grow pt-8 px-12 pb-12 w-full break-words overflow-hidden">
-              <img src={"/images/logo-main.png"} className="absolute top-[30%] left-1/2 transform -translate-x-1/2 opacity-[0.03] w-[70%] pointer-events-none grayscale" alt="" />
+              <img src={"/images/semak-watermark.png"} className="absolute top-[28%] left-1/2 transform -translate-x-1/2 opacity-[0.045] w-[62%] pointer-events-none" alt="" />
               
               <div className="flex justify-between items-center mb-10 pb-4 border-b border-dashed border-slate-200">
                 <div className="flex items-center gap-2 text-sm font-cairo">
