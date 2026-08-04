@@ -1422,6 +1422,15 @@ if ($_jwt_tid && $_jwt_tid !== 1) {
 
 switch ($action) {
 
+    case 'wa_log_out':
+        // تشخيص: آخر 30 سطر من اللوج تحتوي على رسائل صادرة (out) — لمعرفة صيغة payload أزير
+        $lf = __DIR__ . '/wa_debug.log';
+        if (!file_exists($lf)) { echo json_encode(['lines'=>[]]); break; }
+        $lines = array_slice(file($lf), -200);
+        $out_lines = array_values(array_filter($lines, fn($l) => str_contains($l, '"out"') || str_contains($l, 'direction') || str_contains($l, 'out')));
+        echo json_encode(['lines' => array_slice($out_lines, -30)], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
         echo json_encode(['success'=>true,'version'=>'v426-saas','deployed'=>'2026-06-07'], JSON_UNESCAPED_UNICODE);
