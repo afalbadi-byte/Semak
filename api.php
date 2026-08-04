@@ -10822,10 +10822,10 @@ KNOWLEDGE;
         $safe_msg   = $conn->real_escape_string($user_msg);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'user', '$safe_msg')");
 
-        // ── تحقق: هل المحادثة مُعيَّنة لموظف في Azeer؟ إذا نعم → فهد يسكت ──
-        if (($payload['chat_status'] ?? '') === 'assigned') {
+        // ── تحقق: هل الموظف تسلّم المحادثة في Azeer؟ (host_id يُملأ عند تعيين موظف) ──
+        if (!empty($payload['host_id'])) {
             file_put_contents($log_file,
-                date('Y-m-d H:i:s') . " | chat_status=assigned → skipping Claude for $from_phone\n",
+                date('Y-m-d H:i:s') . " | host_id={$payload['host_id']} → agent assigned, skipping Claude for $from_phone\n",
                 FILE_APPEND);
             echo json_encode(["ok" => true, "bot_paused" => true, "reason" => "agent_assigned"]);
             break;
