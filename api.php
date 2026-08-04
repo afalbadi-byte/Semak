@@ -1378,6 +1378,8 @@ $conn->query("CREATE TABLE IF NOT EXISTS wa_human_takeover (
     taken_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// مسح أي تسليمات قديمة خاطئة (أُنشئت بسبب ردود البوت قبل الإصلاح)
+$conn->query("DELETE FROM wa_human_takeover WHERE taken_at < DATE_SUB(NOW(), INTERVAL 24 HOUR)");
 
 $raw_input  = file_get_contents("php://input");
 $input_data = json_decode($raw_input, true);
@@ -10100,6 +10102,39 @@ switch ($action) {
         echo json_encode(["success" => true, "data" => $rows]);
         break;
 
+    // ─── تسليم محادثة البوت لموظف (يدوي) ───────────────────────────────────
+
+    case 'wa_takeover':
+        // موظف يستلم المحادثة → فهد يصمت 24 ساعة
+        $takeover_phone = preg_replace('/\D/', '', $input_data['phone'] ?? '');
+        if (!$takeover_phone) { echo json_encode(['success' => false, 'error' => 'missing phone']); break; }
+        $safe_tp = $conn->real_escape_string($takeover_phone);
+        $conn->query("INSERT INTO wa_human_takeover (phone) VALUES ('$safe_tp')
+                      ON DUPLICATE KEY UPDATE taken_at = NOW()");
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'wa_release':
+        // تحرير المحادثة → فهد يعود للرد فوراً
+        $release_phone = preg_replace('/\D/', '', $input_data['phone'] ?? '');
+        if (!$release_phone) { echo json_encode(['success' => false, 'error' => 'missing phone']); break; }
+        $safe_rp = $conn->real_escape_string($release_phone);
+        $conn->query("DELETE FROM wa_human_takeover WHERE phone = '$safe_rp'");
+        echo json_encode(['success' => true]);
+        break;
+
+    case 'wa_takeover_list':
+        // قائمة المحادثات المُسلَّمة (للوحة التحكم)
+        $res = $conn->query(
+            "SELECT phone, taken_at FROM wa_human_takeover
+             WHERE taken_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+             ORDER BY taken_at DESC"
+        );
+        $taken = [];
+        if ($res) while ($r = $res->fetch_assoc()) $taken[] = $r;
+        echo json_encode(['success' => true, 'data' => $taken]);
+        break;
+
     // ─── واتساب ─────────────────────────────────────────────────────────────
 
     case 'update_wa_status':
@@ -10583,18 +10618,11 @@ KNOWLEDGE;
         $from_phone = null;
         $user_msg   = null;
 
-        // رسالة صادرة (direction=out) = موظف استلم المحادثة → سجّل التسليم وأوقف البوت
+        // تجاهل الرسائل الصادرة (direction=out) — لا نستخدمها للكشف عن الموظف
+        // لأن Mottasl يطلق نفس الـ webhook لردود البوت وردود الموظف معاً
+        // التسليم يتم يدوياً من لوحة التحكم عبر action=wa_takeover
         if (($payload['direction'] ?? '') === 'out') {
-            $to_phone_raw = $payload['to']
-                         ?? $payload['data']['to']
-                         ?? $payload['entry'][0]['changes'][0]['value']['messages'][0]['to']
-                         ?? null;
-            if ($to_phone_raw) {
-                $safe_to = $conn->real_escape_string(preg_replace('/\D/', '', $to_phone_raw));
-                $conn->query("INSERT INTO wa_human_takeover (phone) VALUES ('$safe_to')
-                              ON DUPLICATE KEY UPDATE taken_at = NOW()");
-            }
-            echo json_encode(["ok" => true, "skipped" => "outgoing - human takeover recorded"]);
+            echo json_encode(["ok" => true, "skipped" => "outgoing message ignored"]);
             break;
         }
 
