@@ -148,6 +148,23 @@ export default function WhatsAppInbox() {
       };
     }
 
+    // كشف كلمات الإيقاف/الاستئناف وتحديث حالة فهد تلقائياً
+    if (!selectedTemplate) {
+      if (msgBody.includes("حياك الله")) {
+        await fetch("https://semak.sa/api.php", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "wa_bot_toggle", phone: targetPhone, paused: 1 }),
+        });
+        setBotPaused(true);
+      } else if (msgBody.includes("سعدنا بخدمتك")) {
+        await fetch("https://semak.sa/api.php", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "wa_bot_toggle", phone: targetPhone, paused: 0 }),
+        });
+        setBotPaused(false);
+      }
+    }
+
     setSending(true);
     try {
       const res = await fetch("https://semak.sa/api.php", {
