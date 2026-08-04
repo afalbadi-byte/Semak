@@ -10253,6 +10253,31 @@ switch ($action) {
     // "حياك الله"      → يوقف فهد لهذا العميل
     // "سعدنا بخدمتك"  → يعيد تفعيل فهد لهذا العميل
     // ════════════════════════════════════════════════════════════════════════
+    case 'wa_bot_status':
+        $ph = preg_replace('/\D/', '', trim($data['phone'] ?? ''));
+        if (!$ph) { echo json_encode(['paused' => false]); break; }
+        $r = $conn->query("SELECT paused FROM wa_bot_paused WHERE phone='" . $conn->real_escape_string($ph) . "' LIMIT 1");
+        $paused_val = ($r && ($row = $r->fetch_assoc())) ? (bool)$row['paused'] : false;
+        echo json_encode(['paused' => $paused_val]);
+        break;
+
+    case 'wa_bot_toggle':
+        $ph  = preg_replace('/\D/', '', trim($data['phone'] ?? ''));
+        $val = (int)($data['paused'] ?? 0);
+        if (!$ph) { echo json_encode(['success' => false]); break; }
+        $conn->query(
+            "CREATE TABLE IF NOT EXISTS wa_bot_paused (
+                phone VARCHAR(50) NOT NULL PRIMARY KEY,
+                paused TINYINT(1) NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $sp = $conn->real_escape_string($ph);
+        $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$sp', $val)
+                      ON DUPLICATE KEY UPDATE paused = $val");
+        echo json_encode(['success' => true, 'paused' => (bool)$val]);
+        break;
+
     case 'send_whatsapp':
         $to_phone  = preg_replace('/\D/', '', trim($data['phone'] ?? ''));
         $msg_body  = trim($data['message'] ?? '');

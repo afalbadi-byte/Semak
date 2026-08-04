@@ -22,6 +22,10 @@ export default function WhatsAppInbox() {
   const [sending, setSending]         = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // حالة بوت فهد لهذه المحادثة
+  const [botPaused, setBotPaused] = useState(false);
+  const [togglingBot, setTogglingBot] = useState(false);
+
   // قوالب Azeer
   const [templates, setTemplates]           = useState([]);
   const [showTemplates, setShowTemplates]   = useState(false);
@@ -55,12 +59,42 @@ export default function WhatsAppInbox() {
     return () => clearInterval(iv);
   }, [fetchConversations]);
 
+  // جلب حالة فهد عند تغيير المحادثة
+  const fetchBotStatus = useCallback(async (phone) => {
+    try {
+      const res = await fetch("https://semak.sa/api.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "wa_bot_status", phone }),
+      });
+      const data = await res.json();
+      setBotPaused(!!data.paused);
+    } catch { /* تجاهل — الحالة الافتراضية: نشط */ }
+  }, []);
+
+  // تبديل حالة فهد (إيقاف / تفعيل)
+  const toggleBot = async () => {
+    if (!selectedPhone || togglingBot) return;
+    setTogglingBot(true);
+    const newPaused = !botPaused;
+    try {
+      await fetch("https://semak.sa/api.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "wa_bot_toggle", phone: selectedPhone, paused: newPaused ? 1 : 0 }),
+      });
+      setBotPaused(newPaused);
+    } catch { /* تجاهل */ }
+    setTogglingBot(false);
+  };
+
   useEffect(() => {
     if (!selectedPhone) return;
     fetchMessages(selectedPhone);
+    fetchBotStatus(selectedPhone);
     const iv = setInterval(() => fetchMessages(selectedPhone), REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [selectedPhone, fetchMessages]);
+  }, [selectedPhone, fetchMessages, fetchBotStatus]);
 
   // ─── جلب القوالب ────────────────────────────────────────────
   const handleLoadTemplates = async () => {
@@ -250,6 +284,23 @@ export default function WhatsAppInbox() {
                   <p className="font-bold text-gray-800 dark:text-brand-100 text-sm">رسالة جديدة</p>
                   <p className="text-xs text-gray-500 dark:text-brand-400 font-mono">{newPhone || "أدخل رقم الجوال"}</p>
                 </div>
+              )}
+
+              {/* زر إيقاف / تفعيل فهد */}
+              {selectedPhone && (
+                <button
+                  onClick={toggleBot}
+                  disabled={togglingBot}
+                  title={botPaused ? "فهد موقوف — انقر لتفعيله" : "فهد نشط — انقر لإيقافه"}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                    botPaused
+                      ? "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 hover:bg-red-200"
+                      : "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 hover:bg-green-200"
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${botPaused ? "bg-red-500" : "bg-green-500"}`} />
+                  فهد: {botPaused ? "موقوف" : "نشط"}
+                </button>
               )}
 
               {/* زر القوالب */}
