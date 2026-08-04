@@ -89,16 +89,25 @@ jobs:
           path: dist/
           retention-days: 7
 
+      - name: Decode SSH key
+        run: |
+          echo "${{ secrets.SSH_KEY }}" | base64 -d > ${{ github.workspace }}/dk
+          chmod 600 ${{ github.workspace }}/dk
+
       - name: Deploy via scp-action
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
+          key_path: /github/workspace/dk
           source: "dist/*"
           target: ${{ secrets.SSH_TARGET }}
           strip_components: 1
           rm: false
           timeout: 60s
           command_timeout: 10m
+
+      - name: Clean up key
+        if: always()
+        run: rm -f ${{ github.workspace }}/dk
