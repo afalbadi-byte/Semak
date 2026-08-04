@@ -81,41 +81,16 @@ jobs:
           sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"             dist/api.php
           sed -i "s|__MOTTASL_TOKEN__|${{ secrets.MOTTASL_TOKEN }}|g" dist/api.php
 
-      - name: Deploy to server via FTP
-        id: ftp1
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      - name: Deploy to server via SSH/SCP
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 300000
-          log-level: standard
-          security: loose
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Deploy to server via FTP (retry — force full)
-        if: steps.ftp1.outcome == 'failure'
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          local-dir: ./dist/
-          server-dir: ./
-          timeout: 600000
-          log-level: standard
-          security: loose
-          dangerous-clean-slate: false
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "dist/*"
+          target: ${{ secrets.SSH_TARGET }}
+          strip_components: 1
+          rm: false
+          timeout: 120s
+          command_timeout: 10m
