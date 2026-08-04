@@ -10636,7 +10636,7 @@ KNOWLEDGE;
                     $conn->query("INSERT INTO wa_human_takeover (phone) VALUES ('$safe_to')
                                   ON DUPLICATE KEY UPDATE taken_at = NOW()");
                     echo json_encode(["ok" => true, "action" => "takeover recorded"]);
-                } elseif (mb_strpos($out_body, '/رجع') !== false) {
+                } elseif (mb_strpos($out_body, 'سعدنا بخدمتك') !== false) {
                     // موظف أنهى دوره → فهد يعود فوراً
                     $conn->query("DELETE FROM wa_human_takeover WHERE phone = '$safe_to'");
                     echo json_encode(["ok" => true, "action" => "bot released"]);
