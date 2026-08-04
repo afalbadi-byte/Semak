@@ -10770,6 +10770,44 @@ KNOWLEDGE;
             $customer_context .= "\n[ملاحظة: تم تسجيل العميل '$contact_name' تلقائياً في قائمة المهتمين الآن. اعتبره عميلاً جديداً.]\n";
         }
 
+        // ── جلب محتوى البروشور الحالي (cache 6 ساعات — يتجدد تلقائياً عند تحديث البروشور) ──
+        $brochure_cache_path = __DIR__ . '/brochure_cache.txt';
+        $cache_ttl = 6 * 3600;
+        $brochure_fetched = '';
+        $need_fetch = !file_exists($brochure_cache_path) || (time() - filemtime($brochure_cache_path)) > $cache_ttl;
+        if ($need_fetch) {
+            $bch = curl_init('https://brochure.semak.sa');
+            curl_setopt_array($bch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_USERAGENT      => 'SemakBot/1.0',
+            ]);
+            $bhtml = curl_exec($bch);
+            $berr  = curl_errno($bch);
+            curl_close($bch);
+            if (!$berr && $bhtml) {
+                // احذف الصور المضمّنة (base64) لتقليل الحجم قبل المعالجة
+                $bhtml = preg_replace('/src=["\']data:[^"\']{20,}["\']/', 'src=""', $bhtml);
+                $bhtml = preg_replace('/<script\b[^>]*>.*?<\/script>/si', '', $bhtml);
+                $bhtml = preg_replace('/<style\b[^>]*>.*?<\/style>/si',  '', $bhtml);
+                $btext = strip_tags($bhtml);
+                $btext = preg_replace('/\h+/', ' ', $btext);
+                $btext = preg_replace('/(\n\s*){3,}/', "\n\n", trim($btext));
+                $btext = mb_substr($btext, 0, 5000);
+                file_put_contents($brochure_cache_path, $btext);
+                $brochure_fetched = $btext;
+            } elseif (file_exists($brochure_cache_path)) {
+                // إذا فشل الجلب استخدم الـ cache القديم
+                $brochure_fetched = file_get_contents($brochure_cache_path);
+            }
+        } else {
+            $brochure_fetched = file_get_contents($brochure_cache_path);
+        }
+        if (!empty($brochure_fetched)) {
+            $customer_context .= "\n═══ محتوى البروشور الرسمي (مُحدَّث تلقائياً — هذا هو المرجع الأحدث والأدق) ═══\n" . $brochure_fetched . "\n";
+        }
+
         // ── حالة الوحدات من قاعدة البيانات (حي - يُحدَّث مع كل محادثة) ──
         $units_context = "\n═══ حالة الوحدات (محدّثة الآن من النظام) ═══\n";
         $units_q = $conn->query(
