@@ -4,9 +4,9 @@ if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
 $__o = $_SERVER['HTTP_ORIGIN'] ?? '';
-header(in_array($__o, ['https://semak.icu','http://localhost:5173','http://localhost:5174'], true)
+header(in_array($__o, ['https://semak.sa','https://www.semak.sa','https://semak.icu','http://localhost:5173','http://localhost:5174'], true)
     ? "Access-Control-Allow-Origin: $__o"
-    : "Access-Control-Allow-Origin: https://semak.icu");
+    : "Access-Control-Allow-Origin: https://semak.sa");
 header("Vary: Origin");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
@@ -17,9 +17,9 @@ header("Pragma: no-cache");
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') { http_response_code(200); exit(0); }
 
 $db_host = "localhost";
-$db_user = "u817059398_Ahmed";
-$db_pass = "Medo@3225";
-$db_name = "u817059398_Semak_DB";
+$db_user = "__DB_USER__";
+$db_pass = "__DB_PASS__";
+$db_name = "__DB_NAME__";
 
 mysqli_report(MYSQLI_REPORT_OFF);
 $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
@@ -31,7 +31,7 @@ $conn->set_charset("utf8mb4");
 // ─── fingerprint العميل (IP + User-Agent) — متاح عالمياً ─────────────────
 $_clientIp = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '')[0]);
 $_clientUa = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 250);
-define('MOTTASL_TOKEN', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaHR0cHM6Ly9oYXN1cmEuaW8vand0L2NsYWltcyI6eyJ4LWF2Yy1hcGlrZXktaWQiOiI0MzdmYjcxMC1mYjE1LTRjZDgtOWY4NC1jY2RkNDRmNmFmNGMiLCJ4LWF2Yy1hcGlrZXktc2NvcGUiOiJpbnNlcnQiLCJ4LWF2Yy1ob3N0LWlkIjoiZjNjZWZhMGUtYmQyYi00NjY0LWE5MzUtZmY5ZTc4MDY3MGRmIiwieC1hdmMtcGxhdGZvcm0taWQiOiJhLmYuYWxiYWRpQGdtYWlsLmNvbSIsIngtYXZjLXBsYXRmb3JtLXR5cGUiOiJhdm9jYWRvIiwieC1oYXN1cmEtYWxsb3dlZC1yb2xlcyI6WyJhZG1pbiIsInN1cGVyYWRtaW4iXSwieC1oYXN1cmEtYnVzaW5lc3MtaWQiOiI5OTBmMmU3Mi00NDY4LTQ4ZmQtODAzMi1mODY1ZGI1ODdlZjYiLCJ4LWhhc3VyYS1kZWZhdWx0LXJvbGUiOiJhZG1pbiIsIngtaGFzdXJhLXByb2ZpbGUtaWQiOiI5OTE0NjE4IiwieC1oYXN1cmEtdXNlci1pZCI6Ijk5MTQ2MTgifSwiaWF0IjoxNzc4NzY3MTQ2LCJpc3MiOiJhdm9jYWRvLWNvcmUiLCJuYW1lIjoiQWhtZWQiLCJzdWIiOiI5OTE0NjE4In0.FtRdRnpdvZT6Xji2kPchvqw2AaOnp6ISYvE7KbICEwo');
+define('MOTTASL_TOKEN', '__MOTTASL_TOKEN__');
 
 // ─── إعدادات الشركة (تُحمَّل مرة واحدة لكل طلب — متاحة عالمياً) ────────────
 // tenant_id يُحدَّد من JWT إن وُجد، وإلا يبقى 1 (الإنتاج الافتراضي).
@@ -1369,6 +1369,14 @@ $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
     message     TEXT NOT NULL,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_phone_time (phone, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// ─── auto-migrate: human takeover tracking ───────────────────────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS wa_human_takeover (
+    id       INT AUTO_INCREMENT PRIMARY KEY,
+    phone    VARCHAR(30) NOT NULL,
+    taken_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 $raw_input  = file_get_contents("php://input");
@@ -10363,6 +10371,10 @@ switch ($action) {
 إذا طلب العميل صوراً أو قال "أبغى أشوف" أو "عندكم صور" أو "أرسل صور" أرسل هذا الرابط مباشرة — صفحة معرض الصور فقط بهوية سماك (خارجية وداخلية):
 https://semak.sa/gallery
 
+📋 ملف المشروع الكامل (بروشور):
+إذا طلب العميل ملف المشروع أو قال "أرسل ملف" أو "بروشور" أو "تفاصيل" أو "الملف" أرسل هذا الرابط مباشرة:
+https://brochure.semak.sa/
+
 ✨ المميزات العامة للمشروع:
 - بيئة ذكية متكاملة: أنظمة إنارة ودخول ذكي
 - أمان 24/7: كاميرات CCTV وأقفال إلكترونية ذكية
@@ -10571,9 +10583,18 @@ KNOWLEDGE;
         $from_phone = null;
         $user_msg   = null;
 
-        // تجاهل الرسائل الصادرة (direction=out)
+        // رسالة صادرة (direction=out) = موظف استلم المحادثة → سجّل التسليم وأوقف البوت
         if (($payload['direction'] ?? '') === 'out') {
-            echo json_encode(["ok" => true, "skipped" => "outgoing message"]);
+            $to_phone_raw = $payload['to']
+                         ?? $payload['data']['to']
+                         ?? $payload['entry'][0]['changes'][0]['value']['messages'][0]['to']
+                         ?? null;
+            if ($to_phone_raw) {
+                $safe_to = $conn->real_escape_string(preg_replace('/\D/', '', $to_phone_raw));
+                $conn->query("INSERT INTO wa_human_takeover (phone) VALUES ('$safe_to')
+                              ON DUPLICATE KEY UPDATE taken_at = NOW()");
+            }
+            echo json_encode(["ok" => true, "skipped" => "outgoing - human takeover recorded"]);
             break;
         }
 
@@ -10615,6 +10636,14 @@ KNOWLEDGE;
         }
 
         $from_phone = preg_replace('/\D/', '', $from_phone);
+
+        // ── التحقق من التسليم للموظف — إذا استلم أحد من الفريق هذه المحادثة، لا يرد فهد ──
+        $safe_phone_chk = $conn->real_escape_string($from_phone);
+        $takeover_chk   = $conn->query("SELECT id FROM wa_human_takeover WHERE phone = '$safe_phone_chk' LIMIT 1");
+        if ($takeover_chk && $takeover_chk->num_rows > 0) {
+            echo json_encode(["ok" => true, "skipped" => "human agent owns this conversation"]);
+            break;
+        }
 
         // ── حفظ رسالة المستخدم ──
         $safe_phone = $conn->real_escape_string($from_phone);
