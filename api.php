@@ -10249,6 +10249,56 @@ switch ($action) {
         break;
 
     // ════════════════════════════════════════════════════════════════════════
+    // إرسال رسالة واتساب يدوية من لوحة الأدمن (الموظف يرد على العميل)
+    // "حياك الله"      → يوقف فهد لهذا العميل
+    // "سعدنا بخدمتك"  → يعيد تفعيل فهد لهذا العميل
+    // ════════════════════════════════════════════════════════════════════════
+    case 'send_whatsapp':
+        $to_phone  = preg_replace('/\D/', '', trim($data['phone'] ?? ''));
+        $msg_body  = trim($data['message'] ?? '');
+
+        if (!$to_phone || $msg_body === '') {
+            echo json_encode(['success' => false, 'message' => 'phone and message required']);
+            break;
+        }
+
+        // إنشاء جدول حالة البوت إن لم يكن موجوداً
+        $conn->query(
+            "CREATE TABLE IF NOT EXISTS wa_bot_paused (
+                phone      VARCHAR(50)  NOT NULL PRIMARY KEY,
+                paused     TINYINT(1)   NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+
+        $safe_to     = $conn->real_escape_string($to_phone);
+        $bot_paused  = null;
+
+        if (mb_strpos($msg_body, 'حياك الله') !== false) {
+            $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$safe_to', 1)
+                          ON DUPLICATE KEY UPDATE paused = 1");
+            $bot_paused = true;
+        } elseif (mb_strpos($msg_body, 'سعدنا بخدمتك') !== false) {
+            $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$safe_to', 0)
+                          ON DUPLICATE KEY UPDATE paused = 0");
+            $bot_paused = false;
+        }
+
+        // إرسال الرسالة عبر Mottasl
+        $sent = wa_send_text($to_phone, $msg_body);
+
+        // حفظ الرسالة في سجل المحادثات
+        $safe_body = $conn->real_escape_string(mb_substr($msg_body, 0, 2000));
+        $conn->query("INSERT INTO wa_bot_conversations (phone, role, message)
+                      VALUES ('$safe_to', 'admin', '$safe_body')");
+
+        echo json_encode([
+            'success'    => $sent,
+            'bot_paused' => $bot_paused,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ════════════════════════════════════════════════════════════════════════
     // بوت الواتساب — يستقبل الرسائل الواردة ويرد بالذكاء الاصطناعي
     // ════════════════════════════════════════════════════════════════════════
     case 'wa_webhook':
@@ -10710,6 +10760,17 @@ KNOWLEDGE;
         $safe_phone = $conn->real_escape_string($from_phone);
         $safe_msg   = $conn->real_escape_string($user_msg);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'user', '$safe_msg')");
+
+        // ── تحقق: هل أوقف الموظف فهد لهذا العميل؟ ──
+        $paused_q = $conn->query("SELECT paused FROM wa_bot_paused WHERE phone='$safe_phone' LIMIT 1");
+        if ($paused_q && ($pr = $paused_q->fetch_assoc()) && $pr['paused'] == 1) {
+            // البوت موقوف — لا ترد، فقط سجّل
+            file_put_contents($log_file,
+                date('Y-m-d H:i:s') . " | bot PAUSED for $from_phone — skipping Claude\n",
+                FILE_APPEND);
+            echo json_encode(["ok" => true, "bot_paused" => true]);
+            break;
+        }
 
         // ── جلب بيانات العميل من قاعدة البيانات ──
         // الجوال قد يكون مخزّن بصيغة 05xxxxxxxx أو 9665xxxxxxxx، نبحث عن كل الصيغ
