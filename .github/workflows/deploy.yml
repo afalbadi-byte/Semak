@@ -81,13 +81,18 @@ jobs:
           sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"             dist/api.php
           sed -i "s|__MOTTASL_TOKEN__|${{ secrets.MOTTASL_TOKEN }}|g" dist/api.php
 
+      - name: Write SSH key
+        run: |
+          echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+
       - name: Deploy to server via SSH/SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
+          key_path: /tmp/deploy_key
           source: "dist/*"
           target: ${{ secrets.SSH_TARGET }}
           strip_components: 1
