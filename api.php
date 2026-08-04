@@ -10409,9 +10409,6 @@ switch ($action) {
 إذا طلب العميل صوراً أو قال "أبغى أشوف" أو "عندكم صور" أو "أرسل صور" أرسل هذا الرابط مباشرة — صفحة معرض الصور فقط بهوية سماك (خارجية وداخلية):
 https://semak.sa/gallery
 
-📋 ملف المشروع الكامل (بروشور):
-إذا طلب العميل ملف المشروع أو قال "أرسل ملف" أو "بروشور" أو "تفاصيل" أو "الملف" أرسل هذا الرابط مباشرة:
-https://brochure.semak.sa/
 
 ✨ المميزات العامة للمشروع:
 - بيئة ذكية متكاملة: أنظمة إنارة ودخول ذكي
@@ -10621,34 +10618,9 @@ KNOWLEDGE;
         $from_phone = null;
         $user_msg   = null;
 
-        // رسائل صادرة (direction=out) — نكشف كلمة التسليم فقط
+        // تجاهل الرسائل الصادرة
         if (($payload['direction'] ?? '') === 'out') {
-            $out_body = $payload['message_body']['text']['body']
-                     ?? $payload['message_body']['body']
-                     ?? $payload['body']
-                     ?? '';
-            $to_raw = $payload['to']
-                   ?? $payload['data']['to']
-                   ?? null;
-
-            if ($to_raw) {
-                $safe_to = $conn->real_escape_string(preg_replace('/\D/', '', $to_raw));
-
-                if (mb_strpos($out_body, 'حياك الله') !== false) {
-                    // موظف أرسل الكلمة → فهد يصمت 24 ساعة
-                    $conn->query("INSERT INTO wa_human_takeover (phone) VALUES ('$safe_to')
-                                  ON DUPLICATE KEY UPDATE taken_at = NOW()");
-                    echo json_encode(["ok" => true, "action" => "takeover recorded"]);
-                } elseif (mb_strpos($out_body, 'سعدنا بخدمتك') !== false) {
-                    // موظف أنهى دوره → فهد يعود فوراً
-                    $conn->query("DELETE FROM wa_human_takeover WHERE phone = '$safe_to'");
-                    echo json_encode(["ok" => true, "action" => "bot released"]);
-                } else {
-                    echo json_encode(["ok" => true, "skipped" => "outgoing - no command"]);
-                }
-            } else {
-                echo json_encode(["ok" => true, "skipped" => "outgoing - no to phone"]);
-            }
+            echo json_encode(["ok" => true, "skipped" => "outgoing message"]);
             break;
         }
 
@@ -10690,14 +10662,6 @@ KNOWLEDGE;
         }
 
         $from_phone = preg_replace('/\D/', '', $from_phone);
-
-        // ── التحقق من التسليم للموظف — إذا استلم أحد من الفريق هذه المحادثة، لا يرد فهد ──
-        $safe_phone_chk = $conn->real_escape_string($from_phone);
-        $takeover_chk   = $conn->query("SELECT id FROM wa_human_takeover WHERE phone = '$safe_phone_chk' LIMIT 1");
-        if ($takeover_chk && $takeover_chk->num_rows > 0) {
-            echo json_encode(["ok" => true, "skipped" => "human agent owns this conversation"]);
-            break;
-        }
 
         // ── حفظ رسالة المستخدم ──
         $safe_phone = $conn->real_escape_string($from_phone);
