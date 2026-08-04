@@ -28,6 +28,8 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        // استثناء مسارات المشاركة/الملفات المرفوعة يدوياً من إعادة توجيه SPA (حتى تفتح مباشرةً)
+        navigateFallbackDenylist: [/^\/share\//, /^\/api\.php/, /\.(pdf|zip|xml|txt)$/i],
         globPatterns: ['**/*.{js,css,html,woff2}', 'images/logo-*.{png,jpg}', 'images/favicon.png'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
