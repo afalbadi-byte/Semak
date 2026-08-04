@@ -10639,7 +10639,7 @@ KNOWLEDGE;
 
         // ── التحقق من التسليم للموظف — إذا استلم أحد من الفريق هذه المحادثة، لا يرد فهد ──
         $safe_phone_chk = $conn->real_escape_string($from_phone);
-        $takeover_chk   = $conn->query("SELECT id FROM wa_human_takeover WHERE phone = '$safe_phone_chk' LIMIT 1");
+        $takeover_chk   = $conn->query("SELECT id FROM wa_human_takeover WHERE phone = '$safe_phone_chk' AND taken_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1");
         if ($takeover_chk && $takeover_chk->num_rows > 0) {
             echo json_encode(["ok" => true, "skipped" => "human agent owns this conversation"]);
             break;
