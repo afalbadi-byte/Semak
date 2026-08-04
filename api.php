@@ -10618,11 +10618,34 @@ KNOWLEDGE;
         $from_phone = null;
         $user_msg   = null;
 
-        // تجاهل الرسائل الصادرة (direction=out) — لا نستخدمها للكشف عن الموظف
-        // لأن Mottasl يطلق نفس الـ webhook لردود البوت وردود الموظف معاً
-        // التسليم يتم يدوياً من لوحة التحكم عبر action=wa_takeover
+        // رسائل صادرة (direction=out) — نكشف كلمة التسليم فقط
         if (($payload['direction'] ?? '') === 'out') {
-            echo json_encode(["ok" => true, "skipped" => "outgoing message ignored"]);
+            $out_body = $payload['message_body']['text']['body']
+                     ?? $payload['message_body']['body']
+                     ?? $payload['body']
+                     ?? '';
+            $to_raw = $payload['to']
+                   ?? $payload['data']['to']
+                   ?? null;
+
+            if ($to_raw) {
+                $safe_to = $conn->real_escape_string(preg_replace('/\D/', '', $to_raw));
+
+                if (mb_strpos($out_body, '/استلمت') !== false) {
+                    // موظف أرسل الكلمة → فهد يصمت 24 ساعة
+                    $conn->query("INSERT INTO wa_human_takeover (phone) VALUES ('$safe_to')
+                                  ON DUPLICATE KEY UPDATE taken_at = NOW()");
+                    echo json_encode(["ok" => true, "action" => "takeover recorded"]);
+                } elseif (mb_strpos($out_body, '/رجع') !== false) {
+                    // موظف أنهى دوره → فهد يعود فوراً
+                    $conn->query("DELETE FROM wa_human_takeover WHERE phone = '$safe_to'");
+                    echo json_encode(["ok" => true, "action" => "bot released"]);
+                } else {
+                    echo json_encode(["ok" => true, "skipped" => "outgoing - no command"]);
+                }
+            } else {
+                echo json_encode(["ok" => true, "skipped" => "outgoing - no to phone"]);
+            }
             break;
         }
 
