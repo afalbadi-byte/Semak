@@ -10797,8 +10797,14 @@ KNOWLEDGE;
                 }
             }
         }
+        // وحدات مباعة بشكل قاطع بغض النظر عن قاعدة البيانات
+        $sold_override = ['SM-A05' => true, 'SM-A07' => true];
         $all_units = ['SM-A01','SM-A02','SM-A03','SM-A04','SM-A05','SM-A06','SM-A07'];
         foreach ($all_units as $uc) {
+            if (isset($sold_override[$uc])) {
+                $units_context .= "- $uc: مباعة\n";
+                continue;
+            }
             $st = $units_live[$uc] ?? 'متاح';
             $label = $st === 'مباعة' ? 'مباعة' : ($st === 'محجوز' ? 'محجوزة' : 'متاحة للبيع');
             $units_context .= "- $uc: $label\n";
