@@ -10711,8 +10711,35 @@ KNOWLEDGE;
         $from_phone = null;
         $user_msg   = null;
 
-        // تجاهل الرسائل الصادرة
+        // الرسائل الصادرة (الموظف يرسل) — نفحص كلمات الإيقاف/الاستئناف أولاً قبل التجاهل
         if (($payload['direction'] ?? '') === 'out') {
+            $out_body  = $payload['message_body']['text']['body']
+                      ?? $payload['message_body']['body']
+                      ?? $payload['text']['body']
+                      ?? $payload['body']
+                      ?? '';
+            $out_phone = preg_replace('/\D/', '', $payload['to'] ?? $payload['from'] ?? '');
+            if ($out_phone && $out_body !== '') {
+                $conn->query(
+                    "CREATE TABLE IF NOT EXISTS wa_bot_paused (
+                        phone      VARCHAR(50) NOT NULL PRIMARY KEY,
+                        paused     TINYINT(1)  NOT NULL DEFAULT 0,
+                        updated_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+                );
+                $safe_out = $conn->real_escape_string($out_phone);
+                if (mb_strpos($out_body, 'حياك الله') !== false) {
+                    $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$safe_out', 1)
+                                  ON DUPLICATE KEY UPDATE paused = 1");
+                    file_put_contents($log_file,
+                        date('Y-m-d H:i:s') . " | BOT PAUSED for $out_phone (outgoing: حياك الله)\n", FILE_APPEND);
+                } elseif (mb_strpos($out_body, 'سعدنا بخدمتك') !== false) {
+                    $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$safe_out', 0)
+                                  ON DUPLICATE KEY UPDATE paused = 0");
+                    file_put_contents($log_file,
+                        date('Y-m-d H:i:s') . " | BOT RESUMED for $out_phone (outgoing: سعدنا بخدمتك)\n", FILE_APPEND);
+                }
+            }
             echo json_encode(["ok" => true, "skipped" => "outgoing message"]);
             break;
         }
