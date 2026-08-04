@@ -81,12 +81,19 @@ jobs:
           sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"             dist/api.php
           sed -i "s|__MOTTASL_TOKEN__|${{ secrets.VITE_MOTTASL_API_KEY }}|g" dist/api.php
 
+      - name: Save built files as artifact (manual upload fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-semak-${{ github.run_number }}
+          path: dist/
+          retention-days: 3
+
       - name: Deploy via rsync over SSH
         run: |
           echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          rsync -az --checksum \
-            -e "ssh -p ${{ secrets.SSH_PORT }} -i /tmp/deploy_key -o StrictHostKeyChecking=no" \
+          rsync -az --checksum --timeout=60 \
+            -e "ssh -p ${{ secrets.SSH_PORT }} -i /tmp/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=10" \
             dist/ \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_TARGET }}/
           rm -f /tmp/deploy_key

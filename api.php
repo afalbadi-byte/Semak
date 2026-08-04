@@ -10831,6 +10831,16 @@ KNOWLEDGE;
             break;
         }
 
+        // ── تحقق: هل البوت موقوف يدوياً لهذا الرقم؟ ──
+        $bp_r = $conn->query("SELECT paused FROM wa_bot_paused WHERE phone='$safe_phone' LIMIT 1");
+        if ($bp_r && ($bp_row = $bp_r->fetch_assoc()) && $bp_row['paused']) {
+            file_put_contents($log_file,
+                date('Y-m-d H:i:s') . " | bot manually paused for $from_phone → skipping Claude\n",
+                FILE_APPEND);
+            echo json_encode(["ok" => true, "bot_paused" => true, "reason" => "manual_pause"]);
+            break;
+        }
+
         // ── جلب بيانات العميل من قاعدة البيانات ──
         // الجوال قد يكون مخزّن بصيغة 05xxxxxxxx أو 9665xxxxxxxx، نبحث عن كل الصيغ
         $phone_local = preg_replace('/^966/', '0', $safe_phone);  // 9665... → 05...
