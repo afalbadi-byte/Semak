@@ -74,7 +74,34 @@ jobs:
           sed -i "s|__PLATFORM_EMAIL__|${{ secrets.PLATFORM_EMAIL }}|g"   dist/api.php
           sed -i "s|__PLATFORM_HASH__|${{ secrets.PLATFORM_HASH }}|g"     dist/api.php
 
+      - name: Inject DB credentials & Mottasl token
+        run: |
+          sed -i "s|__DB_USER__|${{ secrets.DB_USER }}|g"             dist/api.php
+          sed -i "s|__DB_PASS__|${{ secrets.DB_PASS }}|g"             dist/api.php
+          sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"             dist/api.php
+          sed -i "s|__MOTTASL_TOKEN__|${{ secrets.MOTTASL_TOKEN }}|g" dist/api.php
+
       - name: Deploy to server via FTP
+        id: ftp1
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          local-dir: ./dist/
+          server-dir: ./
+          timeout: 300000
+          log-level: minimal
+          security: loose
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+      - name: Deploy to server via FTP (retry)
+        if: steps.ftp1.outcome == 'failure'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ${{ secrets.FTP_HOST }}
@@ -85,6 +112,7 @@ jobs:
           server-dir: ./
           timeout: 600000
           log-level: minimal
+          security: loose
           exclude: |
             **/.git*
             **/.git*/**
