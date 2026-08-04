@@ -89,6 +89,12 @@ jobs:
           path: dist/
           retention-days: 7
 
+      - name: Test SSH port reachability
+        run: |
+          echo "Testing TCP to ${{ secrets.SSH_HOST }}:${{ secrets.SSH_PORT }} ..."
+          timeout 10 bash -c "echo > /dev/tcp/${{ secrets.SSH_HOST }}/${{ secrets.SSH_PORT }}" \
+            && echo "✅ PORT OPEN" || echo "❌ PORT CLOSED / TIMEOUT"
+
       - name: Deploy via rsync over SSH
         run: |
           echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
