@@ -1378,8 +1378,6 @@ $conn->query("CREATE TABLE IF NOT EXISTS wa_human_takeover (
     taken_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-// مسح أي تسليمات قديمة خاطئة (أُنشئت بسبب ردود البوت قبل الإصلاح)
-$conn->query("DELETE FROM wa_human_takeover WHERE taken_at < DATE_SUB(NOW(), INTERVAL 24 HOUR)");
 
 $raw_input  = file_get_contents("php://input");
 $input_data = json_decode($raw_input, true);
@@ -10123,6 +10121,11 @@ switch ($action) {
         echo json_encode(['success' => true]);
         break;
 
+    case 'wa_reset_all_takeovers':
+        $conn->query("TRUNCATE TABLE wa_human_takeover");
+        echo json_encode(['success' => true, 'msg' => 'all takeovers cleared — فهد is active for everyone']);
+        break;
+
     case 'wa_takeover_list':
         // قائمة المحادثات المُسلَّمة (للوحة التحكم)
         $res = $conn->query(
@@ -10690,7 +10693,7 @@ KNOWLEDGE;
 
         // ── التحقق من التسليم للموظف — إذا استلم أحد من الفريق هذه المحادثة، لا يرد فهد ──
         $safe_phone_chk = $conn->real_escape_string($from_phone);
-        $takeover_chk   = $conn->query("SELECT id FROM wa_human_takeover WHERE phone = '$safe_phone_chk' AND taken_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) LIMIT 1");
+        $takeover_chk   = $conn->query("SELECT id FROM wa_human_takeover WHERE phone = '$safe_phone_chk' LIMIT 1");
         if ($takeover_chk && $takeover_chk->num_rows > 0) {
             echo json_encode(["ok" => true, "skipped" => "human agent owns this conversation"]);
             break;
