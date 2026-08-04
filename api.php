@@ -10822,14 +10822,12 @@ KNOWLEDGE;
         $safe_msg   = $conn->real_escape_string($user_msg);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'user', '$safe_msg')");
 
-        // ── تحقق: هل أوقف الموظف فهد لهذا العميل؟ ──
-        $paused_q = $conn->query("SELECT paused FROM wa_bot_paused WHERE phone='$safe_phone' LIMIT 1");
-        if ($paused_q && ($pr = $paused_q->fetch_assoc()) && $pr['paused'] == 1) {
-            // البوت موقوف — لا ترد، فقط سجّل
+        // ── تحقق: هل المحادثة مُعيَّنة لموظف في Azeer؟ إذا نعم → فهد يسكت ──
+        if (($payload['chat_status'] ?? '') === 'assigned') {
             file_put_contents($log_file,
-                date('Y-m-d H:i:s') . " | bot PAUSED for $from_phone — skipping Claude\n",
+                date('Y-m-d H:i:s') . " | chat_status=assigned → skipping Claude for $from_phone\n",
                 FILE_APPEND);
-            echo json_encode(["ok" => true, "bot_paused" => true]);
+            echo json_encode(["ok" => true, "bot_paused" => true, "reason" => "agent_assigned"]);
             break;
         }
 
