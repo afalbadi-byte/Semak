@@ -93,14 +93,15 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           timeout: 300000
-          log-level: minimal
+          log-level: standard
           security: loose
+          dangerous-clean-slate: false
           exclude: |
             **/.git*
             **/.git*/**
             **/node_modules/**
 
-      - name: Deploy to server via FTP (retry)
+      - name: Deploy to server via FTP (retry — force full)
         if: steps.ftp1.outcome == 'failure'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
@@ -111,8 +112,9 @@ jobs:
           local-dir: ./dist/
           server-dir: ./
           timeout: 600000
-          log-level: minimal
+          log-level: standard
           security: loose
+          dangerous-clean-slate: false
           exclude: |
             **/.git*
             **/.git*/**

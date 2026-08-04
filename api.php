@@ -1,5 +1,5 @@
 <?php
-// deploy: 2026-06-07-v437
+// deploy: 2026-08-04-v438
 if (function_exists('opcache_reset')) opcache_reset();
 ob_start();
 
@@ -1424,7 +1424,7 @@ switch ($action) {
 
     case 'ver':
         // فحص خفيف لإصدار النشر المُطبَّق (لتأكيد وصول الديبلوي دون GitHub API)
-        echo json_encode(['success'=>true,'version'=>'v426-saas','deployed'=>'2026-06-07'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'version'=>'v438','deployed'=>'2026-08-04'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ═══════════════════════════════════════════════════════════════════════
