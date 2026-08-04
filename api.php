@@ -10631,7 +10631,7 @@ KNOWLEDGE;
             if ($to_raw) {
                 $safe_to = $conn->real_escape_string(preg_replace('/\D/', '', $to_raw));
 
-                if (mb_strpos($out_body, '/استلمت') !== false) {
+                if (mb_strpos($out_body, 'حياك الله') !== false) {
                     // موظف أرسل الكلمة → فهد يصمت 24 ساعة
                     $conn->query("INSERT INTO wa_human_takeover (phone) VALUES ('$safe_to')
                                   ON DUPLICATE KEY UPDATE taken_at = NOW()");
