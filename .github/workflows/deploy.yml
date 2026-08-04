@@ -79,7 +79,7 @@ jobs:
           sed -i "s|__DB_USER__|${{ secrets.DB_USER }}|g"             dist/api.php
           sed -i "s|__DB_PASS__|${{ secrets.DB_PASS }}|g"             dist/api.php
           sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"             dist/api.php
-          sed -i "s|__MOTTASL_TOKEN__|${{ secrets.MOTTASL_TOKEN }}|g" dist/api.php
+          sed -i "s|__MOTTASL_TOKEN__|${{ secrets.VITE_MOTTASL_API_KEY }}|g" dist/api.php
 
       - name: Deploy via rsync over SSH
         run: |
