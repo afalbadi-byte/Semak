@@ -1453,14 +1453,18 @@ switch ($action) {
         break;
 
     case 'wa_raw_log':
-        // تشخيص: آخر N سطر من الـ debug log (كامل بدون فلتر)
+        // تشخيص: آخر N سطر من الـ debug log (fseek — لا يقرأ الملف كله)
         $lf = __DIR__ . '/wa_debug.log';
         if (!file_exists($lf)) { echo json_encode(['lines' => []]); break; }
-        $n     = min((int)($_GET['n'] ?? $input_data['n'] ?? 10), 50);
+        $n  = min((int)($_GET['n'] ?? $input_data['n'] ?? 10), 50);
         if ($n < 1) $n = 10;
-        $lines = array_slice(file($lf, FILE_IGNORE_NEW_LINES), -$n);
-        // تنظيف الترميز لضمان json_encode يعمل
-        $safe  = array_map(fn($l) => mb_convert_encoding(substr($l, 0, 2000), 'UTF-8', 'UTF-8,ISO-8859-1,Windows-1256'), array_values($lines));
+        $fh = fopen($lf, 'r');
+        fseek($fh, max(0, filesize($lf) - 102400)); // آخر 100KB فقط
+        $chunk = fread($fh, 102400);
+        fclose($fh);
+        $all   = array_filter(explode("\n", $chunk));
+        $lines = array_values(array_slice($all, -$n));
+        $safe  = array_map(fn($l) => mb_substr($l, 0, 2000), $lines);
         echo json_encode(['lines' => $safe], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         break;
 
