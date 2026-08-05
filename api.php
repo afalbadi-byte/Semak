@@ -1424,8 +1424,8 @@ switch ($action) {
 
     case 'wa_mottasl_contact':
         // تشخيص: جلب بيانات contact/conversation من Mottasl API
-        $test_phone = preg_replace('/\D/', '', trim($data['phone'] ?? '966500000000'));
-        $conv_id    = trim($data['conv_id'] ?? '');
+        $test_phone = preg_replace('/\D/', '', trim($_GET['phone'] ?? $input_data['phone'] ?? '966500000000'));
+        $conv_id    = trim($_GET['conv_id'] ?? $input_data['conv_id'] ?? '');
         $base       = "https://api.mottasl.ai/v1";
         $hdrs       = ["Authorization: Bearer " . MOTTASL_TOKEN, "Accept: application/json"];
         $endpoints  = array_filter([
