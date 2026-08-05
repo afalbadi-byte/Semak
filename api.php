@@ -1423,26 +1423,42 @@ if ($_jwt_tid && $_jwt_tid !== 1) {
 switch ($action) {
 
     case 'wa_mottasl_contact':
-        // تشخيص: جلب بيانات contact من Mottasl API لمعرفة حقل الـ assignment
-        $test_phone = preg_replace('/\D/', '', trim($data['phone'] ?? ''));
-        $endpoints = [
-            "https://api.mottasl.ai/v1/contacts?search=" . urlencode($test_phone),
-            "https://api.mottasl.ai/v1/contacts/" . urlencode($test_phone),
-            "https://api.mottasl.ai/v1/conversations?contact=" . urlencode($test_phone),
-        ];
+        // تشخيص: جلب بيانات contact/conversation من Mottasl API
+        $test_phone = preg_replace('/\D/', '', trim($data['phone'] ?? '966500000000'));
+        $conv_id    = trim($data['conv_id'] ?? '');
+        $base       = "https://api.mottasl.ai/v1";
+        $hdrs       = ["Authorization: Bearer " . MOTTASL_TOKEN, "Accept: application/json"];
+        $endpoints  = array_filter([
+            "$base/contacts?search=" . urlencode($test_phone),
+            "$base/contacts?phone=" . urlencode($test_phone),
+            "$base/contacts/$test_phone",
+            "$base/chats?contact=$test_phone",
+            "$base/conversations?contact=$test_phone",
+            "$base/conversations?phone=$test_phone",
+            $conv_id ? "$base/conversations/$conv_id" : null,
+            $conv_id ? "$base/chats/$conv_id" : null,
+            "$base/agents",
+            "$base/users",
+        ]);
         $results = [];
         foreach ($endpoints as $ep) {
             $ch = curl_init($ep);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6,
-                CURLOPT_HTTPHEADER => ["Authorization: Bearer " . MOTTASL_TOKEN, "Accept: application/json"],
-            ]);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6, CURLOPT_HTTPHEADER => $hdrs]);
             $body = curl_exec($ch);
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            $results[] = ["url" => $ep, "http" => $code, "body" => json_decode($body, true) ?? $body];
+            $results[] = ["url" => $ep, "http" => $code, "body" => json_decode($body, true) ?? substr($body, 0, 200)];
         }
         echo json_encode($results, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        break;
+
+    case 'wa_raw_log':
+        // تشخيص: آخر N سطر من الـ debug log (كامل بدون فلتر)
+        $lf = __DIR__ . '/wa_debug.log';
+        if (!file_exists($lf)) { echo json_encode(['lines' => []]); break; }
+        $n     = min((int)($data['n'] ?? 20), 100);
+        $lines = array_slice(file($lf), -$n);
+        echo json_encode(['lines' => array_values($lines)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'wa_log_out':
