@@ -10868,44 +10868,16 @@ KNOWLEDGE;
         $safe_msg   = $conn->real_escape_string($user_msg);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'user', '$safe_msg')");
 
-        // ── تحقق ١: host_id في الـ payload (إذا Mottasl بدأت ترسله) ──
-        if (!empty($payload['host_id'])) {
+        // ── تحقق ١: chat_status — إذا المحادثة معيّنة لموظف في Azeer → فهد يسكت ──
+        if (($payload['chat_status'] ?? '') === 'assigned') {
             file_put_contents($log_file,
-                date('Y-m-d H:i:s') . " | host_id={$payload['host_id']} → agent assigned, skipping Claude for $from_phone\n",
+                date('Y-m-d H:i:s') . " | chat_status=assigned → agent handling, skipping Claude for $from_phone\n",
                 FILE_APPEND);
-            echo json_encode(["ok" => true, "bot_paused" => true, "reason" => "agent_assigned"]);
+            echo json_encode(["ok" => true, "bot_paused" => true, "reason" => "chat_assigned"]);
             break;
         }
 
-        // ── تحقق ٢: Mottasl REST API — هل المحادثة مُعيَّنة لموظف؟ ──
-        {
-            $mc = curl_init("https://api.mottasl.ai/v1/contacts?search=" . urlencode($from_phone));
-            curl_setopt_array($mc, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 4,
-                CURLOPT_HTTPHEADER     => ["Authorization: Bearer " . MOTTASL_TOKEN, "Accept: application/json"],
-            ]);
-            $mc_raw  = curl_exec($mc);
-            $mc_err  = curl_errno($mc);
-            curl_close($mc);
-            if (!$mc_err && $mc_raw) {
-                $mc_data = json_decode($mc_raw, true);
-                file_put_contents($log_file,
-                    date('Y-m-d H:i:s') . " | mottasl-contact-api for $from_phone: " . substr($mc_raw, 0, 500) . "\n",
-                    FILE_APPEND);
-                // إذا وُجد host_id أو assigned_to → الموظف استلم
-                $assigned_agent = $mc_data['data'][0]['host_id'] ?? $mc_data['data'][0]['assigned_to'] ?? $mc_data['host_id'] ?? $mc_data['assigned_to'] ?? null;
-                if (!empty($assigned_agent)) {
-                    file_put_contents($log_file,
-                        date('Y-m-d H:i:s') . " | mottasl API: agent=$assigned_agent → skipping Claude for $from_phone\n",
-                        FILE_APPEND);
-                    echo json_encode(["ok" => true, "bot_paused" => true, "reason" => "mottasl_assigned"]);
-                    break;
-                }
-            }
-        }
-
-        // ── تحقق ٣: هل البوت موقوف يدوياً لهذا الرقم؟ ──
+        // ── تحقق ٢: هل البوت موقوف يدوياً لهذا الرقم؟ ──
         $bp_r = $conn->query("SELECT paused FROM wa_bot_paused WHERE phone='$safe_phone' LIMIT 1");
         if ($bp_r && ($bp_row = $bp_r->fetch_assoc()) && $bp_row['paused']) {
             file_put_contents($log_file,
