@@ -10960,7 +10960,7 @@ KNOWLEDGE;
         $brochure_fetched = '';
         $need_fetch = !file_exists($brochure_cache_path) || (time() - filemtime($brochure_cache_path)) > $cache_ttl;
         if ($need_fetch) {
-            $bch = curl_init('https://brochure.semak.sa');
+            $bch = curl_init('https://brochure.semak.sa/view.html');
             curl_setopt_array($bch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT        => 8,
