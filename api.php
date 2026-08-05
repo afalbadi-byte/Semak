@@ -10405,7 +10405,7 @@ switch ($action) {
 
 === قواعد إلزامية ===
 1. ممنوع إطلاقاً استخدام أي إيموجي أو رمز تعبيري (مثل 👋 😊 🏡 ✅).
-2. اللغة عربية فصحى رسمية حصراً. ممنوع: "أهلاً وسهلاً"، "كيف حالك"، "أنا جاهز". استخدم: "السلام عليكم"، "أهلاً بك في سماك"، "تفضل باستفسارك"، "يسعدنا خدمتكم".
+2. تحدّث بلغة العميل: إذا كتب بالعربية أجبه بالعربية الفصحى الرسمية، إذا كتب بالإنجليزية أجبه بالإنجليزية، إذا مزج اللغتين استخدم الغالبة. لا تغيّر لغتك إلا إذا غيّرها العميل. في العربية: ممنوع "أهلاً وسهلاً"، "كيف حالك"، "أنا جاهز" — استخدم: "السلام عليكم"، "أهلاً بك في سماك"، "تفضل باستفسارك".
 3. ممنوع ذكر الأسعار إلا إذا طلب العميل ذلك صراحةً.
 4. لا تخترع معلومات. ما لا تعرفه وجّه فيه إلى الرقم الموحد 920032842.
 5. في أول رسالة يجب أن تذكر صراحةً أنك نظام ذكاء اصطناعي — ممنوع تقديم نفسك كموظف بشري.
@@ -10982,6 +10982,85 @@ KNOWLEDGE;
         }
         if (!empty($brochure_fetched)) {
             $customer_context .= "\n═══ محتوى البروشور الرسمي (مُحدَّث تلقائياً — هذا هو المرجع الأحدث والأدق) ═══\n" . $brochure_fetched . "\n";
+        }
+
+        // ── تحديث يومي: ثقافة السوق العقاري (أخبار + لوائح + أسعار) ──
+        $market_cache_path = __DIR__ . '/market_knowledge.txt';
+        $market_cache_ttl  = 24 * 3600;
+        $market_knowledge  = '';
+        $need_market_fetch = !file_exists($market_cache_path)
+            || (time() - filemtime($market_cache_path)) > $market_cache_ttl;
+
+        if ($need_market_fetch) {
+            $rss_feeds = [
+                'https://www.argaam.com/ar/sectors/sector/24/feed',
+                'https://www.aleqt.com/rss/property.xml',
+            ];
+            $headlines = [];
+            foreach ($rss_feeds as $rss_url) {
+                $mch = curl_init($rss_url);
+                curl_setopt_array($mch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 8,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; SemakBot/1.0)',
+                ]);
+                $rss_raw = curl_exec($mch);
+                curl_close($mch);
+                if (!$rss_raw) continue;
+                preg_match_all('/<title><!\[CDATA\[(.*?)\]\]><\/title>/si', $rss_raw, $m_cdata);
+                preg_match_all('/<title>(.*?)<\/title>/si', $rss_raw, $m_plain);
+                $all_titles = array_unique(array_merge($m_cdata[1] ?? [], $m_plain[1] ?? []));
+                $all_titles = array_slice($all_titles, 1, 12);
+                foreach ($all_titles as $t) {
+                    $t = html_entity_decode(strip_tags(trim($t)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    if (mb_strlen($t) > 10) $headlines[] = $t;
+                }
+            }
+
+            if (count($headlines) >= 3) {
+                $headlines_text = implode("\n- ", array_unique($headlines));
+                $msum_ch = curl_init('https://api.anthropic.com/v1/messages');
+                curl_setopt_array($msum_ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_POST           => true,
+                    CURLOPT_TIMEOUT        => 25,
+                    CURLOPT_HTTPHEADER     => [
+                        'Content-Type: application/json',
+                        'x-api-key: __ANTHROPIC_KEY__',
+                        'anthropic-version: 2023-06-01',
+                    ],
+                    CURLOPT_POSTFIELDS => json_encode([
+                        'model'      => 'claude-haiku-4-5-20251001',
+                        'max_tokens' => 500,
+                        'messages'   => [[
+                            'role'    => 'user',
+                            'content' => "أنت محلل عقاري. لخّص هذه الأخبار العقارية السعودية في 5-7 نقاط مفيدة لمستشار مبيعات عقاري في مكة المكرمة يريد إثراء معرفته بالسوق الحالي. ركّز على: أسعار العقارات، التمويل العقاري، اللوائح الجديدة، الطلب والعرض، الاتجاهات. أجب بالعربية فقط بصيغة نقاط:\n\n- $headlines_text",
+                        ]],
+                    ], JSON_UNESCAPED_UNICODE),
+                ]);
+                $msum_raw = curl_exec($msum_ch);
+                curl_close($msum_ch);
+                $msum_data  = json_decode($msum_raw, true);
+                $mkt_summary = trim($msum_data['content'][0]['text'] ?? '');
+                if ($mkt_summary) {
+                    $mkt_dated = "التحديث: " . date('Y-m-d') . "\n" . $mkt_summary;
+                    file_put_contents($market_cache_path, $mkt_dated);
+                    $market_knowledge = $mkt_dated;
+                }
+            }
+            if (empty($market_knowledge) && file_exists($market_cache_path)) {
+                $market_knowledge = file_get_contents($market_cache_path);
+            }
+            file_put_contents($log_file,
+                date('Y-m-d H:i:s') . " | market_knowledge: " . (empty($market_knowledge) ? "FAILED/EMPTY" : "updated " . strlen($market_knowledge) . " chars") . "\n",
+                FILE_APPEND);
+        } else {
+            $market_knowledge = file_get_contents($market_cache_path);
+        }
+
+        if (!empty($market_knowledge)) {
+            $customer_context .= "\n═══ ثقافة السوق العقاري (مُحدَّث يومياً — للاستئناس لا للاقتباس) ═══\n" . $market_knowledge . "\n";
         }
 
         // ── حالة الوحدات من قاعدة البيانات (حي - يُحدَّث مع كل محادثة) ──
