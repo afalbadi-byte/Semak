@@ -106,7 +106,6 @@ jobs:
           rm -f /tmp/deploy_key
 
       - name: Deploy brochure landing page to brochure.semak.sa
-        if: ${{ secrets.SSH_BROCHURE_TARGET != '' }}
         continue-on-error: true
         run: |
           echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
