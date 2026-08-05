@@ -41,6 +41,11 @@ jobs:
       - name: Copy api.php to dist
         run: cp api.php dist/api.php
 
+      - name: Copy brochure landing page to dist/brochure
+        run: |
+          mkdir -p dist/brochure
+          cp brochure/landing/index.html dist/brochure/index.html
+
       - name: Inject Anthropic API key
         run: sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g" dist/api.php
 
@@ -99,11 +104,8 @@ jobs:
         run: |
           echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          SSH_OPTS="-p ${{ secrets.SSH_PORT }} -i /tmp/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ControlMaster=auto -o ControlPath=/tmp/ssh_mux -o ControlPersist=60"
-          rsync -az --checksum -e "ssh $SSH_OPTS" \
+          rsync -az --checksum \
+            -e "ssh -p ${{ secrets.SSH_PORT }} -i /tmp/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30" \
             dist/ \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_TARGET }}/
-          rsync -az --checksum -e "ssh $SSH_OPTS" \
-            brochure/landing/index.html \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_BROCHURE_TARGET }}/index.html || true
-          rm -f /tmp/deploy_key /tmp/ssh_mux
+          rm -f /tmp/deploy_key
