@@ -104,3 +104,13 @@ jobs:
             dist/ \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_TARGET }}/
           rm -f /tmp/deploy_key
+
+      - name: Deploy brochure landing page to brochure.semak.sa
+        run: |
+          echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          rsync -az --checksum \
+            -e "ssh -p ${{ secrets.SSH_PORT }} -i /tmp/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30" \
+            brochure/landing/index.html \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_BROCHURE_TARGET }}/index.html
+          rm -f /tmp/deploy_key
