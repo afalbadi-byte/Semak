@@ -195,8 +195,10 @@ export default function LeadsManage({ showToast }) {
                 notes: allNotes || primary.notes,
                 merged_ids: sorted.map(x => x.id),
                 merged_count: sorted.length,
+                last_activity: sorted[0].created_at || '', // أحدث سجل في المجموعة = آخر تواصل
             };
-        });
+        // ترتيب المجموعات نفسها: آخر تواصل أولاً (أحدث id في كل مجموعة)
+        }).sort((a, b) => (b.merged_ids[0] || 0) - (a.merged_ids[0] || 0));
     })();
 
     const filteredLeads = groupedLeads.filter(l =>
@@ -305,6 +307,9 @@ export default function LeadsManage({ showToast }) {
                                         )}
                                     </div>
                                     <div className="text-sm text-slate-500 dark:text-brand-400 font-mono mt-1" dir="ltr">{lead.phone}</div>
+                                    {lead.last_activity && (
+                                        <div className="text-[11px] text-slate-400 dark:text-brand-500 mt-1">آخر تواصل: {String(lead.last_activity).slice(0, 16)}</div>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4">
                                     <span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-lg text-sm font-bold border border-teal-200 shadow-sm flex items-center w-max gap-1">
