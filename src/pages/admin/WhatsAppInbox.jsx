@@ -6,10 +6,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { RefreshCw, Send, LayoutTemplate, ChevronDown, ChevronUp } from "lucide-react";
 import {
   getWhatsAppMessages,
-  sendWhatsAppMessage,
   getAzeerTemplates,
   normalizePhone,
 } from "../../services/whatsappService";
+import { apiPost, TENANT } from "../../lib/api/client";
 
 const REFRESH_INTERVAL = 30_000;
 
@@ -42,14 +42,23 @@ export default function WhatsAppInbox() {
   // ─── جلب المحادثات ──────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
     const data = await getWhatsAppMessages({});
-    setConversations(data.conversations || []);
+    // توحيد الحقول مع بيانات الباك-إند (phone/name) + دعم الحقول القديمة
+    setConversations((data.conversations || []).map(c => ({
+      ...c,
+      from_phone: c.phone || c.from_phone,
+      from_name:  c.name  || c.from_name || '',
+    })));
     setLoading(false);
   }, []);
 
   // ─── جلب رسائل محادثة ───────────────────────────────────────
   const fetchMessages = useCallback(async (phone) => {
     const data = await getWhatsAppMessages({ phone });
-    setMessages(data.messages || []);
+    setMessages((data.messages || []).map(m => ({
+      ...m,
+      message_body: m.message ?? m.message_body,
+      role: m.role || (m.direction === 'inbound' ? 'user' : 'assistant'),
+    })));
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   }, []);
 
@@ -128,58 +137,38 @@ export default function WhatsAppInbox() {
     let msgBody = replyText.trim();
     let payload;
 
-    if (selectedTemplate) {
-      // إرسال عبر template
-      payload = {
-        action: "send_whatsapp",
-        phone: targetPhone,
-        message: `[Template: ${selectedTemplate.name}]`,
-        type: "template",
-        template_name: selectedTemplate.name,
-        template_vars: templateVars,
-      };
-    } else {
-      if (!msgBody) return;
-      payload = {
-        action: "send_whatsapp",
-        phone: targetPhone,
-        message: msgBody,
-        type: "custom",
-      };
-    }
-
-    // كشف كلمات الإيقاف/الاستئناف وتحديث حالة فهد تلقائياً
-    if (!selectedTemplate) {
-      if (msgBody.includes("حياك الله")) {
-        await fetch("https://semak.sa/api.php", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "wa_bot_toggle", phone: targetPhone, paused: 1 }),
-        });
-        setBotPaused(true);
-      } else if (msgBody.includes("سعدنا بخدمتك")) {
-        await fetch("https://semak.sa/api.php", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "wa_bot_toggle", phone: targetPhone, paused: 0 }),
-        });
-        setBotPaused(false);
-      }
-    }
-
     setSending(true);
     try {
-      const res = await fetch("https://semak.sa/api.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await res.json();
-      if (result.success) {
+      let result;
+      if (selectedTemplate) {
+        // القوالب المعتمدة عبر المسار القديم (send_whatsapp)
+        const res = await fetch(`https://semak.sa/api.php`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "send_whatsapp",
+            phone: targetPhone,
+            message: `[Template: ${selectedTemplate.name}]`,
+            type: "template",
+            template_name: selectedTemplate.name,
+            template_vars: templateVars,
+          }),
+        });
+        result = await res.json();
+      } else {
+        if (!msgBody) { setSending(false); return; }
+        // رسالة موظف: تُرسل من السيرفر وتُحفظ في المحادثة وتوقف فهد تلقائياً
+        result = await apiPost("wa_agent_send", { phone: targetPhone, message: msgBody }, {}, { tenant: TENANT });
+        if (result?.success) setBotPaused(true);
+      }
+
+      if (result?.success) {
         const displayMsg = selectedTemplate
           ? `[قالب: ${selectedTemplate.name}] ${templateVars.join(" — ")}`
           : msgBody;
         setMessages(prev => [...prev, {
-          id: Date.now(), from_phone: "me", message_body: displayMsg,
-          direction: "outbound", created_at: new Date().toISOString(), status: "sent",
+          id: Date.now(), message_body: displayMsg, role: "agent",
+          created_at: new Date().toISOString(),
         }]);
         setReplyText("");
         handleClearTemplate();
@@ -190,7 +179,7 @@ export default function WhatsAppInbox() {
         }
         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
       } else {
-        alert("فشل الإرسال: " + (result.error || "خطأ غير معروف"));
+        alert("فشل الإرسال: " + (result?.message || result?.error || "خطأ غير معروف"));
       }
     } catch {
       alert("فشل الاتصال بالخادم");
@@ -267,13 +256,22 @@ export default function WhatsAppInbox() {
               <div className="flex-1 min-w-0 text-right">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-gray-800 dark:text-brand-100 text-sm truncate">{conv.from_name || "عميل"}</span>
-                  {conv.unread > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-[#25D366] text-white text-xs flex items-center justify-center flex-shrink-0 mr-1">
-                      {conv.unread}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1 flex-shrink-0 mr-1">
+                    {conv.last_at && (
+                      <span className="text-[10px] text-gray-400">{String(conv.last_at).slice(11, 16)}</span>
+                    )}
+                    {conv.unread > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-[#25D366] text-white text-xs flex items-center justify-center">
+                        {conv.unread}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-xs text-gray-400 font-mono">{conv.from_phone}</span>
+                <div className="text-xs text-gray-500 dark:text-brand-400 truncate mt-0.5">
+                  {conv.last_role === 'assistant' && <span className="text-teal-600">🤖 </span>}
+                  {conv.last_role === 'agent' && <span className="text-blue-600">👤 </span>}
+                  {conv.last_message || <span className="font-mono">{conv.from_phone}</span>}
+                </div>
               </div>
             </button>
           ))}
@@ -291,9 +289,14 @@ export default function WhatsAppInbox() {
                   <div className="w-10 h-10 rounded-full bg-[#25D366] flex items-center justify-center text-white font-bold">
                     {(selectedConv?.from_name || selectedPhone)[0]?.toUpperCase()}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-bold text-gray-800 dark:text-brand-100 text-sm">{selectedConv?.from_name || "عميل"}</p>
                     <p className="text-xs text-gray-500 dark:text-brand-400 font-mono">{selectedPhone}</p>
+                    {selectedConv?.summary && (
+                      <p className="text-[11px] text-teal-700 dark:text-teal-300 mt-0.5 truncate max-w-md" title={selectedConv.summary}>
+                        🤖 {selectedConv.summary}
+                      </p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -402,23 +405,32 @@ export default function WhatsAppInbox() {
               {selectedPhone && messages.length === 0 && (
                 <div className="text-center text-gray-400 text-sm mt-10">لا توجد رسائل بعد</div>
               )}
-              {[...messages].reverse().map(msg => (
-                <div key={msg.id} className={`flex ${msg.direction === "outbound" ? "justify-start" : "justify-end"}`}>
+              {messages.map(msg => {
+                const isCustomer = msg.role === "user";
+                const isAgent    = msg.role === "agent";
+                return (
+                <div key={msg.id} className={`flex ${isCustomer ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl shadow-sm text-sm whitespace-pre-wrap ${
-                    msg.direction === "outbound"
-                      ? "bg-white text-gray-800 rounded-tl-none"
-                      : "bg-[#dcf8c6] text-gray-800 rounded-tr-none"
+                    isCustomer ? "bg-[#dcf8c6] text-gray-800 rounded-tr-none"
+                    : isAgent  ? "bg-blue-50 border border-blue-200 text-gray-800 rounded-tl-none"
+                               : "bg-white text-gray-800 rounded-tl-none"
                   }`}>
+                    {!isCustomer && (
+                      <p className={`text-[10px] font-bold mb-0.5 ${isAgent ? "text-blue-600" : "text-teal-600"}`}>
+                        {isAgent ? "👤 موظف" : "🤖 فهد"}
+                      </p>
+                    )}
                     <p>{msg.message_body}</p>
                     <p className="text-xs text-gray-400 mt-1">
                       {msg.created_at
-                        ? new Date(msg.created_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })
+                        ? new Date(msg.created_at.replace(' ', 'T')).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" })
                         : ""}
-                      {msg.direction === "outbound" && " ✓✓"}
+                      {!isCustomer && " ✓✓"}
                     </p>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               <div ref={chatEndRef} />
             </div>
 

@@ -776,6 +776,13 @@ ensure_column($conn, "leads", "summary", "summary VARCHAR(600) DEFAULT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (8)");
 } // end DDL v8
 
+// ─── DDL v9: صندوق واتساب الموظفين — تتبع القراءة + دور «موظف» في المحادثة ────
+if ($__sv < 9) {
+ensure_column($conn, "wa_bot_conversations", "is_read", "is_read TINYINT(1) NOT NULL DEFAULT 0");
+$conn->query("ALTER TABLE wa_bot_conversations MODIFY COLUMN role ENUM('user','assistant','agent') NOT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (9)");
+} // end DDL v9
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -10596,6 +10603,80 @@ switch ($action) {
     // "حياك الله"      → يوقف فهد لهذا العميل
     // "سعدنا بخدمتك"  → يعيد تفعيل فهد لهذا العميل
     // ════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    // صندوق واتساب الموظفين — محادثات فهد + رسائل الموظفين من قاعدة البيانات
+    // ═══════════════════════════════════════════════════════════════════════
+    case 'get_whatsapp_messages': {
+        $ph = preg_replace('/\D/', '', trim($_GET['phone'] ?? $input_data['phone'] ?? ''));
+        if ($ph !== '') {
+            // رسائل محادثة واحدة + تعليمها كمقروءة
+            $safe = $conn->real_escape_string($ph);
+            $msgs = [];
+            $r = $conn->query("SELECT id, role, message, created_at FROM wa_bot_conversations
+                               WHERE phone='$safe' ORDER BY id ASC LIMIT 500");
+            while ($r && ($x = $r->fetch_assoc())) { $x['id'] = (int)$x['id']; $msgs[] = $x; }
+            $conn->query("UPDATE wa_bot_conversations SET is_read=1 WHERE phone='$safe' AND role='user' AND is_read=0");
+            echo json_encode(['success'=>true, 'messages'=>$msgs], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        // قائمة المحادثات: آخر رسالة + عداد غير مقروء + اسم وملخص العميل من سجل المهتمين
+        $convs = [];
+        $r = $conn->query("SELECT phone, MAX(id) last_id, MAX(created_at) last_at, COUNT(*) cnt,
+                                  SUM(CASE WHEN role='user' AND is_read=0 THEN 1 ELSE 0 END) unread
+                           FROM wa_bot_conversations GROUP BY phone ORDER BY last_at DESC LIMIT 150");
+        $lastIds = [];
+        while ($r && ($x = $r->fetch_assoc())) {
+            $x['cnt'] = (int)$x['cnt']; $x['unread'] = (int)$x['unread']; $x['last_id'] = (int)$x['last_id'];
+            $convs[] = $x; $lastIds[] = $x['last_id'];
+        }
+        // معاينة آخر رسالة
+        $preview = [];
+        if ($lastIds) {
+            $pr = $conn->query("SELECT id, role, message FROM wa_bot_conversations WHERE id IN (" . implode(',', $lastIds) . ")");
+            while ($pr && ($x = $pr->fetch_assoc())) $preview[(int)$x['id']] = $x;
+        }
+        // خريطة المهتمين حسب آخر 9 أرقام من الجوال
+        $leadsMap = [];
+        $lr = $conn->query("SELECT id, name, phone, summary, status FROM leads");
+        while ($lr && ($x = $lr->fetch_assoc())) {
+            $d = preg_replace('/\D/', '', $x['phone'] ?? '');
+            if ($d !== '') $leadsMap[substr($d, -9)] = $x;
+        }
+        foreach ($convs as &$c) {
+            $p = $preview[$c['last_id']] ?? null;
+            $c['last_message'] = $p ? mb_substr($p['message'], 0, 90) : '';
+            $c['last_role']    = $p['role'] ?? '';
+            $lead = $leadsMap[substr($c['phone'], -9)] ?? null;
+            $c['name']        = $lead['name'] ?? '';
+            $c['summary']     = $lead['summary'] ?? '';
+            $c['lead_status'] = $lead['status'] ?? '';
+            $c['lead_id']     = isset($lead['id']) ? (int)$lead['id'] : null;
+        }
+        unset($c);
+        echo json_encode(['success'=>true, 'conversations'=>$convs], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'wa_agent_send': {
+        // إرسال رسالة موظف: عبر متصل من السيرفر + حفظها في المحادثة + إيقاف فهد تلقائياً
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $ph  = preg_replace('/\D/', '', trim($input_data['phone'] ?? ''));
+        $msg = trim((string)($input_data['message'] ?? ''));
+        if ($ph === '' || $msg === '') { echo json_encode(['success'=>false,'message'=>'الرقم والرسالة مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $ph = ltrim($ph, '0');
+        if (substr($ph, 0, 3) !== '966' && strlen($ph) === 9) $ph = '966' . $ph;
+        $sent = wa_send_text($ph, $msg);
+        if (!$sent) { echo json_encode(['success'=>false,'message'=>'فشل الإرسال عبر متصل'], JSON_UNESCAPED_UNICODE); break; }
+        $safe_p = $conn->real_escape_string($ph);
+        $safe_m = $conn->real_escape_string($msg);
+        $conn->query("INSERT INTO wa_bot_conversations (phone, role, message, is_read) VALUES ('$safe_p','agent','$safe_m',1)");
+        // إيقاف فهد تلقائياً — الموظف تدخل بشرياً؛ يعيد تفعيله من الزر عند الانتهاء
+        $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$safe_p', 1)
+                      ON DUPLICATE KEY UPDATE paused=1");
+        echo json_encode(['success'=>true, 'bot_paused'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'wa_bot_status':
         $ph = preg_replace('/\D/', '', trim($data['phone'] ?? ''));
         if (!$ph) { echo json_encode(['paused' => false]); break; }
