@@ -7238,29 +7238,47 @@ switch ($action) {
     case 'qs_extract_drawing': {
         // استخراج الفراغات وأبعادها من مخطط معماري (صورة أو PDF) عبر Claude vision
         if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $cad   = (string)($input_data['cad'] ?? '');
         $b64   = (string)($input_data['file'] ?? '');
         $mtype = (string)($input_data['media_type'] ?? 'image/png');
-        $allowed = ['image/png','image/jpeg','image/webp','image/gif','application/pdf'];
-        if ($b64 === '' || !in_array($mtype, $allowed, true)) { echo json_encode(['success'=>false,'message'=>'ملف غير صالح — ارفع صورة أو PDF'], JSON_UNESCAPED_UNICODE); break; }
-        if (strlen($b64) > 12000000) { echo json_encode(['success'=>false,'message'=>'حجم الملف كبير جداً (الحد 8MB)'], JSON_UNESCAPED_UNICODE); break; }
 
-        $block = $mtype === 'application/pdf'
-            ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>$b64]]
-            : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mtype,'data'=>$b64]];
+        if ($cad !== '') {
+            // بيانات CAD مستخرجة من DWG في المتصفح (نصوص + ديمنشنات بإحداثياتها)
+            if (strlen($cad) > 400000) { echo json_encode(['success'=>false,'message'=>'بيانات المخطط كبيرة جداً'], JSON_UNESCAPED_UNICODE); break; }
+            $prompt = "هذه بيانات مستخرجة من ملف AutoCAD DWG لمخطط معماري: قائمة نصوص (t) وقائمة قياسات ديمنشن (m) مع إحداثيات كل عنصر (x,y) بوحدات الرسم.\n"
+                    . "مهمتك: استخرج قائمة الفراغات (الغرف) مع أبعادها بالمتر.\n"
+                    . "- بعض النصوص العربية مخزّنة بترميز خطوط AutoCAD القديمة فتظهر كحروف لاتينية مشوّهة (مثل: Hglf__k = المطبخ، Hg,H{m = الواجهة). فُكّ هذا الترميز إلى العربية الصحيحة.\n"
+                    . "- اربط اسم كل غرفة بأقرب قياسات إليها إحداثياتياً (الطول والعرض عادة أقرب ديمنشنين متعامدين حول النص).\n"
+                    . "- إذا كانت وحدات الرسم سنتيمتر أو مليمتر (قياسات مثل 520 أو 5200 لغرفة) حوّلها للمتر. أبعاد الغرف المنطقية بين 1 و 15 متراً.\n"
+                    . "- تجاهل نصوص العناوين والأكواد والأرقام التسلسلية — خذ أسماء الفراغات فقط (مجلس، صالة، مطبخ، غرفة نوم، حمام، مدخل، غسيل، خادمة، مستودع، ملحق، درج، ممر...).\n"
+                    . "- إذا تكرر نفس الفراغ في أكثر من شقة/دور اذكره مرة واحدة لكل موضع مختلف الأبعاد.\n"
+                    . "أرجع JSON فقط بلا أي نص آخر بهذا الشكل بالضبط:\n"
+                    . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":""}]}' . "\n\nالبيانات:\n" . $cad;
+            $content = [['type'=>'text','text'=>$prompt]];
+        } else {
+            $allowed = ['image/png','image/jpeg','image/webp','image/gif','application/pdf'];
+            if ($b64 === '' || !in_array($mtype, $allowed, true)) { echo json_encode(['success'=>false,'message'=>'ملف غير صالح — ارفع صورة أو PDF أو DWG'], JSON_UNESCAPED_UNICODE); break; }
+            if (strlen($b64) > 12000000) { echo json_encode(['success'=>false,'message'=>'حجم الملف كبير جداً (الحد 8MB)'], JSON_UNESCAPED_UNICODE); break; }
 
-        $prompt = "هذا مخطط معماري. استخرج جميع الفراغات (الغرف والمساحات) الظاهرة فيه مع أبعادها بالمتر.\n"
-                . "- اقرأ الأبعاد المكتوبة على المخطط (مثل 5.20 × 3.50). إذا كان البعد بالسنتيمتر أو المليمتر حوّله للمتر.\n"
-                . "- أسماء الفراغات بالعربية كما هي في المخطط (المجلس، الصالة، المطبخ، غرفة نوم، حمام، مدخل...).\n"
-                . "- إذا وُجد ارتفاع السقف مكتوباً أضفه في H وإلا اتركه فارغاً.\n"
-                . "أرجع JSON فقط بلا أي نص آخر بهذا الشكل بالضبط:\n"
-                . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":""}]}';
+            $block = $mtype === 'application/pdf'
+                ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>$b64]]
+                : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mtype,'data'=>$b64]];
+
+            $prompt = "هذا مخطط معماري. استخرج جميع الفراغات (الغرف والمساحات) الظاهرة فيه مع أبعادها بالمتر.\n"
+                    . "- اقرأ الأبعاد المكتوبة على المخطط (مثل 5.20 × 3.50). إذا كان البعد بالسنتيمتر أو المليمتر حوّله للمتر.\n"
+                    . "- أسماء الفراغات بالعربية كما هي في المخطط (المجلس، الصالة، المطبخ، غرفة نوم، حمام، مدخل...).\n"
+                    . "- إذا وُجد ارتفاع السقف مكتوباً أضفه في H وإلا اتركه فارغاً.\n"
+                    . "أرجع JSON فقط بلا أي نص آخر بهذا الشكل بالضبط:\n"
+                    . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":""}]}';
+            $content = [$block, ['type'=>'text','text'=>$prompt]];
+        }
 
         $body = [
             'model' => 'claude-sonnet-5',
-            'max_tokens' => 2000,
+            'max_tokens' => 3000,
             'messages' => [[
                 'role' => 'user',
-                'content' => [$block, ['type'=>'text','text'=>$prompt]],
+                'content' => $content,
             ]],
         ];
         $ch = curl_init('https://api.anthropic.com/v1/messages');

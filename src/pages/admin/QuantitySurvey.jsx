@@ -453,41 +453,83 @@ function TradeEditor({ tr, patchTrade, toast }) {
   );
 }
 
-// ─── سحب البيانات من المخطط (صورة / PDF) ─────────────────────────────────────
+// ─── سحب البيانات من المخطط (صورة / PDF / DWG) ───────────────────────────────
+// DWG: يُفكّ في المتصفح عبر WASM (libredwg) → نستخرج النصوص والديمنشنات →
+// نرسلها لـClaude يفكّ الترميز العربي القديم ويرتّبها كفراغات بأبعادها.
+async function parseDwgToCad(file) {
+  const { LibreDwg, Dwg_File_Type } = await import('@mlightcad/libredwg-web');
+  const lib = await LibreDwg.create('/wasm');
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dwg = lib.dwg_read_data(buf, Dwg_File_Type.DWG);
+  if (!dwg) throw new Error('تعذر فك ملف DWG');
+  const db = lib.convert(dwg);
+  try { lib.dwg_free(dwg); } catch { /* تحرير الذاكرة اختياري */ }
+  const r2 = (n) => Math.round((n || 0) * 100) / 100;
+  const texts = [], dims = [];
+  for (const e of db.entities || []) {
+    if ((e.type === 'TEXT' || e.type === 'MTEXT') && e.text && String(e.text).trim().length >= 2) {
+      const p = e.startPoint || e.insertionPoint || {};
+      texts.push({ t: String(e.text).trim().slice(0, 80), x: r2(p.x), y: r2(p.y) });
+      if (texts.length >= 600) break;
+    }
+  }
+  for (const e of db.entities || []) {
+    if (e.type === 'DIMENSION' && e.measurement > 0) {
+      const p = e.textPoint || e.insertionPoint || e.definitionPoint || {};
+      dims.push({ m: Math.round(e.measurement * 1000) / 1000, x: r2(p.x), y: r2(p.y) });
+      if (dims.length >= 600) break;
+    }
+  }
+  if (!texts.length && !dims.length) throw new Error('الملف لا يحتوي نصوصاً أو أبعاداً قابلة للقراءة');
+  return { texts, dims };
+}
+
 function DrawingExtractButton({ onRooms, toast }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState('');
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast?.('تنبيه', 'حجم الملف يتجاوز 5MB — صغّر الصورة', 'error'); return; }
-    const mtype = file.type === 'application/pdf' ? 'application/pdf' : (file.type || 'image/png');
+    const isDwg = /\.dwg$/i.test(file.name);
+    if (!isDwg && file.size > 5 * 1024 * 1024) { toast?.('تنبيه', 'حجم الملف يتجاوز 5MB — صغّر الصورة', 'error'); return; }
+    if (isDwg && file.size > 60 * 1024 * 1024) { toast?.('تنبيه', 'ملف DWG أكبر من 60MB', 'error'); return; }
     setBusy(true);
     try {
-      const b64 = await new Promise((res, rej) => {
-        const rd = new FileReader();
-        rd.onload = () => res(String(rd.result).split(',')[1]);
-        rd.onerror = rej;
-        rd.readAsDataURL(file);
-      });
-      const r = await apiPost('qs_extract_drawing', { file: b64, media_type: mtype }, {}, { tenant: TENANT });
+      let payload;
+      if (isDwg) {
+        setStage('جارٍ فك ملف DWG…');
+        const cad = await parseDwgToCad(file);
+        setStage('جارٍ تحليل البيانات…');
+        payload = { cad: JSON.stringify(cad) };
+      } else {
+        setStage('جارٍ قراءة المخطط…');
+        const b64 = await new Promise((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(String(rd.result).split(',')[1]);
+          rd.onerror = rej;
+          rd.readAsDataURL(file);
+        });
+        payload = { file: b64, media_type: file.type === 'application/pdf' ? 'application/pdf' : (file.type || 'image/png') };
+      }
+      const r = await apiPost('qs_extract_drawing', payload, {}, { tenant: TENANT });
       if (r?.success && r.rooms?.length) {
         onRooms(r.rooms);
         toast?.('نجاح', `تم استخراج ${r.rooms.length} فراغاً من المخطط`);
       } else toast?.('خطأ', r?.message || 'لم يُعثر على فراغات في المخطط', 'error');
-    } catch { toast?.('خطأ', 'فشل رفع المخطط', 'error'); }
-    setBusy(false);
+    } catch (err) { toast?.('خطأ', err?.message || 'فشل قراءة المخطط', 'error'); }
+    setBusy(false); setStage('');
   };
 
   return (
     <>
-      <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={handleFile} />
+      <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.dwg" className="hidden" onChange={handleFile} />
       <button onClick={() => inputRef.current?.click()} disabled={busy}
         className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 disabled:opacity-60">
         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-        {busy ? 'جارٍ قراءة المخطط…' : 'سحب من المخطط'}
+        {busy ? (stage || 'جارٍ قراءة المخطط…') : 'سحب من المخطط (صورة / PDF / DWG)'}
       </button>
     </>
   );
