@@ -3185,10 +3185,16 @@ switch ($action) {
 
     case 'get_users':
         // ─ عزل المستأجرين: كل مستأجر يرى موظفيه فقط ─────────────────────
+        // SELECT * ثم حذف الحساسات — أعمدة اختيارية مفقودة كانت تُفشل الاستعلام بصمت
         $tid  = $_jwt_tid ?? 1;
-        $res  = $conn->query("SELECT id, name, email, role, job, phone, department, permissions, must_change_password FROM users WHERE tenant_id=$tid ORDER BY id DESC");
+        $res  = $conn->query("SELECT * FROM users WHERE tenant_id=$tid ORDER BY id DESC");
+        if (!$res) { echo json_encode(["success" => false, "message" => "خطأ في الاستعلام: " . $conn->error], JSON_UNESCAPED_UNICODE); break; }
         $users = [];
-        if ($res) { while ($row = $res->fetch_assoc()) { $row['id']=(int)$row['id']; $users[] = $row; } }
+        while ($row = $res->fetch_assoc()) {
+            unset($row['password'], $row['twofa'], $row['twofa_channel']);
+            $row['id'] = (int)$row['id'];
+            $users[] = $row;
+        }
         echo json_encode(["success" => true, "data" => $users]);
         break;
 
