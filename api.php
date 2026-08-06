@@ -1388,7 +1388,9 @@ if (isset($_GET['action']))        $action = $_GET['action'];
 elseif (isset($_POST['action']))   $action = $_POST['action'];
 elseif (isset($input_data['action'])) $action = $input_data['action'];
 
-if (isset($input_data['email']) && isset($input_data['password'])) {
+// طلب بلا action صريح يحمل بريداً وكلمة مرور = تسجيل دخول (توافق قديم).
+// لا تخطف الطلبات المعنونة (invite_user/add_user ترسل email+password أيضاً).
+if ($action === '' && isset($input_data['email']) && isset($input_data['password'])) {
     $action = 'login';
 }
 
