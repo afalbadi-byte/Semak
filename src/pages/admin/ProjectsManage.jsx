@@ -103,12 +103,15 @@ export default function ProjectsManage({ showToast }) {
     const handleDeleteUnit = async (unitId) => { if (!window.confirm("هل أنت متأكد من حذف هذه الوحدة؟")) return; setActiveProject(prev => ({ ...prev, units_details: prev.units_details.filter(u => u.id !== unitId) })); try { await fetch(`${API_URL}?action=delete_unit_card`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unit_id: unitId }) }); loadProjects(); } catch (e) {} };
 
     const handlePrintQR = () => {
-        const printContent = document.getElementById('qr-print-area').innerHTML;
-        const originalContent = document.body.innerHTML;
-        document.body.innerHTML = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; text-align:center; font-family:sans-serif;">${printContent}</div>`;
-        window.print();
-        document.body.innerHTML = originalContent;
-        window.location.reload(); 
+        // طباعة في نافذة مستقلة — بدون المساس بصفحة اللوحة أو إعادة تحميلها
+        const printContent = document.getElementById('qr-print-area')?.innerHTML || '';
+        const w = window.open('', '_blank', 'width=500,height=650');
+        if (!w) { showToast?.('تنبيه', 'اسمح بالنوافذ المنبثقة للطباعة', 'error'); return; }
+        w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>رمز الصيانة</title></head>
+            <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;font-family:sans-serif;margin:0;">
+            ${printContent}</body></html>`);
+        w.document.close();
+        w.onload = () => { w.print(); w.close(); };
     };
 
     return (

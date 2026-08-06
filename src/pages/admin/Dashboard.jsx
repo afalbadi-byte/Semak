@@ -53,6 +53,7 @@ const SubscriptionPage  = React.lazy(() => import('./SubscriptionPage'));
 const RegaDevTracker    = React.lazy(() => import('./RegaDevTracker'));
 const WhatsAppCampaign  = React.lazy(() => import('./WhatsAppCampaign'));
 const QuantitySurvey    = React.lazy(() => import('./QuantitySurvey'));
+const UserGuide         = React.lazy(() => import('./UserGuide'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
@@ -984,6 +985,7 @@ function DashboardInner({ onLogout }) {
     );
     const hasPermission = useCallback((key) => {
         if (!dbUser) return false;
+        if (key === 'guide') return true; // دليل الاستخدام متاح لكل الموظفين
         if (dbUser.role === 'admin' || key === 'all') return true;
         return permsArr.includes(key);
     }, [dbUser, permsArr]);
@@ -1108,6 +1110,7 @@ function DashboardInner({ onLogout }) {
                 { id:'activity_log', tabId:'activity_log', label:'سجل النشاط', icon:ScrollText, permKey:'activity_log',  color:'slate'  },
                 { id:'security',     tabId:'security',     label:'الأمان والبريد', icon:ShieldCheck, permKey:'all',       color:'emerald'},
                 { id:'subscription', tabId:'subscription', label:'الاشتراك والباقة', icon:Zap,    permKey:'all',           color:'amber' },
+                { id:'guide',        tabId:'guide',        label:'دليل الاستخدام',   icon:BookOpen, permKey:'guide',       color:'emerald' },
             ],
         },
         {
@@ -1131,7 +1134,7 @@ function DashboardInner({ onLogout }) {
     // ─── العناوين ────────────────────────────────────────────────────────────
     const TAB_LABELS = {
         overview:'لوحة الإدارة', projects:'المشاريع والأبراج', units:'الوحدات والمخطط',
-        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', qs:'التمتير والتكاليف', inspection:'محاضر التسليم',
+        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', qs:'التمتير والتكاليف', guide:'دليل الاستخدام', inspection:'محاضر التسليم',
         snaglist:'تقارير الملاحظات', maintenance:'الصيانة', leads:'العملاء المحتملون',
         bot:'خدمة العملاء الذكية', whatsapp:'صندوق الرسائل', qr:'رموز الوحدات',
         letters:'الوثائق الرسمية', finance:'الإيرادات والمصروفات', daftra_explorer:'التقارير المالية',
@@ -1537,11 +1540,12 @@ function DashboardInner({ onLogout }) {
                         <Loader2 size={32} className="animate-spin text-brand-300 dark:text-brand-500" />
                     </div>
                 }>
-                {activeTab === 'projects'    && hasPermission('projects')    && <ProjectsManage />}
+                {activeTab === 'projects'    && hasPermission('projects')    && <ProjectsManage showToast={showToast} />}
                 {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={showToast} />}
                 {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={showToast} /></div>}
                 {activeTab === 'feasibility' && hasPermission('feasibility') && <div className="animate-fadeIn"><FeasibilityCalc showToast={showToast} /></div>}
                 {activeTab === 'qs'          && hasPermission('qs')          && <div className="animate-fadeIn"><QuantitySurvey showToast={showToast} /></div>}
+                {activeTab === 'guide'       && <div className="animate-fadeIn"><UserGuide /></div>}
                 {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={showToast} /></div>}
                 {activeTab === 'snaglist'    && hasPermission('snaglist')    && <div className="animate-fadeIn p-6 md:p-8"><SnagList /></div>}
                 {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}

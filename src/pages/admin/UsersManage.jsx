@@ -293,7 +293,13 @@ export default function UsersManage({ showToast }) {
                                     {/* زر الصلاحيات يظهر فقط للموظفين وليس للمدير */}
                                     {usr.role !== "admin" && (
                                         <button
-                                            onClick={() => setSelectedUserForPerms(selectedUserForPerms?.id === usr.id ? null : usr)}
+                                            onClick={() => {
+                                                if (selectedUserForPerms?.id === usr.id) { setSelectedUserForPerms(null); return; }
+                                                let current = [];
+                                                try { current = usr.permissions ? JSON.parse(usr.permissions) : []; } catch { /* صلاحيات تالفة */ }
+                                                // نبدأ من الصلاحيات الحالية — الحفظ بدون تغيير ما يمسحها
+                                                setSelectedUserForPerms({ ...usr, tempPerms: current });
+                                            }}
                                             className="flex-1 py-2.5 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-600 hover:text-white transition"
                                         >
                                             <Shield size={14} /> الصلاحيات
