@@ -7235,6 +7235,75 @@ switch ($action) {
         break;
     }
 
+    case 'qs_extract_drawing': {
+        // استخراج الفراغات وأبعادها من مخطط معماري (صورة أو PDF) عبر Claude vision
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $b64   = (string)($input_data['file'] ?? '');
+        $mtype = (string)($input_data['media_type'] ?? 'image/png');
+        $allowed = ['image/png','image/jpeg','image/webp','image/gif','application/pdf'];
+        if ($b64 === '' || !in_array($mtype, $allowed, true)) { echo json_encode(['success'=>false,'message'=>'ملف غير صالح — ارفع صورة أو PDF'], JSON_UNESCAPED_UNICODE); break; }
+        if (strlen($b64) > 12000000) { echo json_encode(['success'=>false,'message'=>'حجم الملف كبير جداً (الحد 8MB)'], JSON_UNESCAPED_UNICODE); break; }
+
+        $block = $mtype === 'application/pdf'
+            ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>$b64]]
+            : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mtype,'data'=>$b64]];
+
+        $prompt = "هذا مخطط معماري. استخرج جميع الفراغات (الغرف والمساحات) الظاهرة فيه مع أبعادها بالمتر.\n"
+                . "- اقرأ الأبعاد المكتوبة على المخطط (مثل 5.20 × 3.50). إذا كان البعد بالسنتيمتر أو المليمتر حوّله للمتر.\n"
+                . "- أسماء الفراغات بالعربية كما هي في المخطط (المجلس، الصالة، المطبخ، غرفة نوم، حمام، مدخل...).\n"
+                . "- إذا وُجد ارتفاع السقف مكتوباً أضفه في H وإلا اتركه فارغاً.\n"
+                . "أرجع JSON فقط بلا أي نص آخر بهذا الشكل بالضبط:\n"
+                . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":""}]}';
+
+        $body = [
+            'model' => 'claude-sonnet-5',
+            'max_tokens' => 2000,
+            'messages' => [[
+                'role' => 'user',
+                'content' => [$block, ['type'=>'text','text'=>$prompt]],
+            ]],
+        ];
+        $ch = curl_init('https://api.anthropic.com/v1/messages');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($body),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+            CURLOPT_TIMEOUT => 90,
+        ]);
+        $res = curl_exec($ch);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($err) { echo json_encode(['success'=>false,'message'=>'فشل الاتصال بالمحرك: '.$err], JSON_UNESCAPED_UNICODE); break; }
+        $j = json_decode($res, true);
+        $txt = $j['content'][0]['text'] ?? '';
+        // التقاط الـ JSON من الرد حتى لو أحاط به نص
+        $rooms = null;
+        if (preg_match('/\{.*\}/s', $txt, $m)) {
+            $parsed = json_decode($m[0], true);
+            if (is_array($parsed) && isset($parsed['rooms']) && is_array($parsed['rooms'])) $rooms = $parsed['rooms'];
+        }
+        if ($rooms === null) {
+            $apiErr = $j['error']['message'] ?? '';
+            echo json_encode(['success'=>false,'message'=>'تعذر قراءة المخطط'.($apiErr ? ' — '.$apiErr : ''), 'raw'=>mb_substr($txt,0,300)], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        // تنظيف وتحديد الحقول
+        $clean = [];
+        foreach ($rooms as $r) {
+            if (!is_array($r)) continue;
+            $clean[] = [
+                'name' => mb_substr(trim((string)($r['name'] ?? '')), 0, 60),
+                'L' => is_numeric($r['L'] ?? null) ? (float)$r['L'] : '',
+                'W' => is_numeric($r['W'] ?? null) ? (float)$r['W'] : '',
+                'H' => is_numeric($r['H'] ?? null) ? (float)$r['H'] : '',
+            ];
+            if (count($clean) >= 80) break;
+        }
+        echo json_encode(['success'=>true, 'rooms'=>$clean], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_settings_get':
         // ملف الشركة (يُستخدم في QR والطباعة) — يعيد المفاتيح المعروفة مع قيم افتراضية فارغة
         $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);

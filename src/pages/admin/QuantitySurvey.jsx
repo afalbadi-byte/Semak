@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Ruler, Plus, Trash2, Save, ArrowRight, Loader2, Download, Copy,
   Calculator, ChevronDown, ChevronUp, FileSpreadsheet, CircleDollarSign,
-  Layers, Sigma, AlertTriangle, Check,
+  Layers, Sigma, AlertTriangle, Check, Wand2,
 } from 'lucide-react';
 import { apiGet, apiPost, TENANT } from '../../lib/api/client';
 
@@ -343,7 +343,7 @@ export default function QuantitySurvey({ showToast }) {
       ) : tr ? (
         tr.type === 'lump'
           ? <LumpEditor tr={tr} patchTrade={patchTrade} />
-          : <TradeEditor tr={tr} patchTrade={patchTrade} />
+          : <TradeEditor tr={tr} patchTrade={patchTrade} toast={toast} />
       ) : null}
     </div>
   );
@@ -419,7 +419,7 @@ function LumpEditor({ tr, patchTrade }) {
 }
 
 // ─── محرر بند ممتّر ───────────────────────────────────────────────────────────
-function TradeEditor({ tr, patchTrade }) {
+function TradeEditor({ tr, patchTrade, toast }) {
   const c = tradeCalc(tr);
   return (
     <div className="space-y-4">
@@ -443,7 +443,7 @@ function TradeEditor({ tr, patchTrade }) {
 
       {/* الأقسام */}
       {(tr.sections || []).map(sec => (
-        <SectionEditor key={sec.id} tr={tr} sec={sec} patchTrade={patchTrade} />
+        <SectionEditor key={sec.id} tr={tr} sec={sec} patchTrade={patchTrade} toast={toast} />
       ))}
       <button onClick={() => patchTrade(tr.id, t => { t.sections.push(newSection()); })}
         className="w-full py-3 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 hover:text-emerald-600 hover:border-emerald-400 font-bold text-sm transition">
@@ -453,8 +453,48 @@ function TradeEditor({ tr, patchTrade }) {
   );
 }
 
+// ─── سحب البيانات من المخطط (صورة / PDF) ─────────────────────────────────────
+function DrawingExtractButton({ onRooms, toast }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast?.('تنبيه', 'حجم الملف يتجاوز 5MB — صغّر الصورة', 'error'); return; }
+    const mtype = file.type === 'application/pdf' ? 'application/pdf' : (file.type || 'image/png');
+    setBusy(true);
+    try {
+      const b64 = await new Promise((res, rej) => {
+        const rd = new FileReader();
+        rd.onload = () => res(String(rd.result).split(',')[1]);
+        rd.onerror = rej;
+        rd.readAsDataURL(file);
+      });
+      const r = await apiPost('qs_extract_drawing', { file: b64, media_type: mtype }, {}, { tenant: TENANT });
+      if (r?.success && r.rooms?.length) {
+        onRooms(r.rooms);
+        toast?.('نجاح', `تم استخراج ${r.rooms.length} فراغاً من المخطط`);
+      } else toast?.('خطأ', r?.message || 'لم يُعثر على فراغات في المخطط', 'error');
+    } catch { toast?.('خطأ', 'فشل رفع المخطط', 'error'); }
+    setBusy(false);
+  };
+
+  return (
+    <>
+      <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={handleFile} />
+      <button onClick={() => inputRef.current?.click()} disabled={busy}
+        className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 disabled:opacity-60">
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+        {busy ? 'جارٍ قراءة المخطط…' : 'سحب من المخطط'}
+      </button>
+    </>
+  );
+}
+
 // ─── محرر قسم ─────────────────────────────────────────────────────────────────
-function SectionEditor({ tr, sec, patchTrade }) {
+function SectionEditor({ tr, sec, patchTrade, toast }) {
   const mode = sec.mode || tr.mode || 'area';
   const sub = (sec.rows || []).reduce((a, r) => a + rowQty(r, mode), 0);
   const total = sub * (num(sec.mult) || 1);
@@ -534,6 +574,10 @@ function SectionEditor({ tr, sec, patchTrade }) {
               className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> سطر</button>
             <button onClick={() => patchSec(s => { const last = s.rows[s.rows.length - 1]; s.rows.push(last ? { ...structuredClone(last), id: uid(), name: '' } : emptyRow()); })}
               className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"><Copy className="w-3.5 h-3.5" /> تكرار الأخير</button>
+            <DrawingExtractButton toast={toast} onRooms={(rooms) => patchSec(s => {
+              s.rows = s.rows.filter(r => r.name || r.L || r.W || r.H || r.manual); // إزالة السطور الفارغة
+              for (const rm of rooms) s.rows.push({ id: uid(), name: rm.name, L: rm.L === '' ? '' : String(rm.L), W: rm.W === '' ? '' : String(rm.W), H: rm.H === '' ? '' : String(rm.H), manual: '' });
+            })} />
             <span className="mr-auto text-[11px] text-slate-400">«يدوي» يتغلب على المعادلة — استخدمه للقيم الجاهزة أو الخصم (بالسالب)</span>
           </div>
         </div>
