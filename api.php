@@ -58,6 +58,17 @@ define('PLATFORM_EMAIL', (strlen($_pe) > 0 && $_pe[0] === '_') ? ''  : $_pe);
 define('PLATFORM_HASH',  (strlen($_ph) > 0 && $_ph[0] === '_') ? ''  : $_ph);
 unset($_ts, $_ps, $_pe, $_ph);
 
+// ─── إضافة عمود متوافقة مع MySQL وMariaDB معاً ────────────────────────────────
+// صيغة ADD COLUMN IF NOT EXISTS تعمل على MariaDB فقط — MySQL يرفضها بصمت.
+// معرّفة قبل بوابات الإصدارات حتى تكون متاحة لأي بوابة تنفذ.
+function ensure_column($conn, $table, $col, $ddl) {
+    $t = $conn->real_escape_string($table);
+    $c = $conn->real_escape_string($col);
+    $r = $conn->query("SELECT 1 FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1");
+    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE `$t` ADD COLUMN $ddl");
+}
+
 // ─── DDL migrations: runs once per schema version (skips on every subsequent request) ──
 $conn->query("CREATE TABLE IF NOT EXISTS db_schema_version (
     id         INT NOT NULL PRIMARY KEY,
@@ -301,16 +312,6 @@ $conn->query("CREATE TABLE IF NOT EXISTS notifications (
     INDEX idx_user (tenant_id, user_id, is_read),
     INDEX idx_created (tenant_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-// ─── إضافة عمود متوافقة مع MySQL وMariaDB معاً ────────────────────────────────
-// صيغة ADD COLUMN IF NOT EXISTS تعمل على MariaDB فقط — MySQL يرفضها بصمت.
-function ensure_column($conn, $table, $col, $ddl) {
-    $t = $conn->real_escape_string($table);
-    $c = $conn->real_escape_string($col);
-    $r = $conn->query("SELECT 1 FROM information_schema.COLUMNS
-                       WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1");
-    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE `$t` ADD COLUMN $ddl");
-}
 
 // ─── التحقق بخطوتين عند دخول الموظفين (OTP) — اختياري لكل مستخدم ──────────────
 // twofa = 0 افتراضيًا ⇒ لا يتغيّر سلوك الدخول لأحد حتى يُفعّله المستخدم بنفسه.
@@ -731,6 +732,43 @@ $conn->query("CREATE TABLE IF NOT EXISTS re_purchase_orders (
 
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (6)");
 } // end DDL v6
+
+// ─── DDL v7: إعادة تنفيذ كل أعمدة الإصدارات السابقة بطريقة متوافقة مع MySQL ──
+// الإصدارات 1-6 استخدمت ADD COLUMN IF NOT EXISTS (MariaDB فقط) ففشلت أعمدتها
+// بصمت على إنتاج MySQL بينما سُجّلت الإصدارات كمنفذة. ensure_column آمنة التكرار.
+if ($__sv < 7) {
+ensure_column($conn, "inspections",       "status",               "status VARCHAR(50) DEFAULT NULL");
+ensure_column($conn, "inspections",       "client_submitted_at",  "client_submitted_at DATETIME DEFAULT NULL");
+ensure_column($conn, "inspections",       "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "acc_lines",         "party_type",           "party_type VARCHAR(12) DEFAULT NULL");
+ensure_column($conn, "acc_lines",         "party_id",             "party_id INT DEFAULT NULL");
+ensure_column($conn, "acc_lines",         "due_date",             "due_date DATE DEFAULT NULL");
+ensure_column($conn, "acc_parties",       "notes",                "notes TEXT DEFAULT NULL");
+ensure_column($conn, "owners",            "national_id",          "national_id VARCHAR(12) DEFAULT NULL");
+ensure_column($conn, "owners",            "party_id",             "party_id INT DEFAULT NULL");
+ensure_column($conn, "owners",            "project_label",        "project_label VARCHAR(200) DEFAULT NULL");
+ensure_column($conn, "owners",            "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "projects",          "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "units",             "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "maintenance",       "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "leads",             "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "users",             "twofa",                "twofa TINYINT(1) DEFAULT 0");
+ensure_column($conn, "users",             "twofa_channel",        "twofa_channel VARCHAR(10) DEFAULT 'email'");
+ensure_column($conn, "users",             "must_change_password", "must_change_password TINYINT(1) NOT NULL DEFAULT 0");
+ensure_column($conn, "users",             "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "acc_audit_log",     "ip_address",           "ip_address VARCHAR(45) DEFAULT NULL AFTER actor");
+ensure_column($conn, "acc_audit_log",     "user_agent",           "user_agent VARCHAR(250) DEFAULT NULL AFTER ip_address");
+ensure_column($conn, "acc_audit_log",     "old_data",             "old_data MEDIUMTEXT DEFAULT NULL AFTER user_agent");
+ensure_column($conn, "acc_audit_log",     "new_data",             "new_data MEDIUMTEXT DEFAULT NULL AFTER old_data");
+ensure_column($conn, "acc_audit_log",     "risk_level",           "risk_level TINYINT UNSIGNED DEFAULT 1 AFTER new_data");
+ensure_column($conn, "acc_audit_log",     "row_hash",             "row_hash VARCHAR(64) DEFAULT NULL AFTER risk_level");
+ensure_column($conn, "sw_clients",        "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_tickets",        "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_ticket_replies", "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_products",       "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_invoices",       "tenant_id",            "tenant_id INT NOT NULL DEFAULT 1");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (7)");
+} // end DDL v7
 
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
