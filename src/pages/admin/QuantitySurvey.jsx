@@ -530,7 +530,10 @@ function DrawingExtractButton({ onRooms, toast, label, className }) {
         onRooms(r.rooms);
         toast?.('نجاح', `تم استخراج ${r.rooms.length} فراغاً من المخطط`);
       } else toast?.('خطأ', r?.message || 'لم يُعثر على فراغات في المخطط', 'error');
-    } catch (err) { toast?.('خطأ', err?.message || 'فشل قراءة المخطط', 'error'); }
+    } catch (err) {
+      console.error('[QS] drawing extract failed:', err);
+      toast?.('خطأ', (err?.message || 'فشل قراءة المخطط').slice(0, 160), 'error');
+    }
     setBusy(false); setStage('');
   };
 

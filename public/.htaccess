@@ -15,6 +15,9 @@
   Header set Expires "0"
 </Files>
 
+# ── نوع MIME الصحيح لملفات WebAssembly (قارئ DWG) ─────────────
+AddType application/wasm .wasm
+
 # ── كاش طويل لملفات الأصول (لها hash في اسمها) ────────────────
 <IfModule mod_expires.c>
   ExpiresActive On
