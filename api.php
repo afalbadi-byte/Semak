@@ -10658,6 +10658,23 @@ switch ($action) {
         break;
     }
 
+    case 'wa_templates': {
+        // جلب قوالب واتساب المعتمدة من متصل (بمفتاح السيرفر — لا يُكشف للمتصفح)
+        if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tch = curl_init('https://api.mottasl.ai/v1/partner/templates');
+        curl_setopt_array($tch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'Authorization: Bearer ' . MOTTASL_TOKEN],
+            CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        $tres = curl_exec($tch);
+        $tcode = curl_getinfo($tch, CURLINFO_HTTP_CODE);
+        curl_close($tch);
+        header('Content-Type: application/json; charset=utf-8');
+        echo $tcode === 200 && $tres ? $tres : json_encode(['success'=>false,'http'=>$tcode], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'wa_agent_send': {
         // إرسال رسالة موظف: عبر متصل من السيرفر + حفظها في المحادثة + إيقاف فهد تلقائياً
         if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
