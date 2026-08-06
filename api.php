@@ -7325,10 +7325,12 @@ switch ($action) {
             if ($txt !== '') break;              // نجح
             continue;                             // فاضي أو خطأ — جرّب النموذج التالي
         }
-        // التقاط الـ JSON من الرد حتى لو أحاط به نص أو انقطع
+        // التقاط الـ JSON من الرد — من أول { إلى آخر } (يتجاوز أسوار ```json والنصوص المحيطة)
         $rooms = null;
-        if (preg_match('/\{.*/s', $txt, $m)) {
-            $frag = $m[0];
+        $jStart = strpos($txt, '{');
+        $jEnd   = strrpos($txt, '}');
+        if ($jStart !== false && $jEnd !== false && $jEnd > $jStart) {
+            $frag = substr($txt, $jStart, $jEnd - $jStart + 1);
             $parsed = json_decode($frag, true);
             if (!is_array($parsed) && preg_match('/^(.*\})\s*,?\s*[^\}]*$/s', $frag, $mm)) {
                 // رد مبتور — قصّه لآخر كائن مكتمل وأغلق المصفوفة
