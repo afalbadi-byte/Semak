@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, UserPlus, Shield, ShieldCheck, Trash2, RefreshCw, Key, Mail, User, X, Edit,
     Wrench, FilePenLine, QrCode, Calculator, ClipboardCheck, CheckSquare,
-    Building, Building2, Edit2, TrendingUp, Bot, MessageCircle, FileWarning
+    Building, Building2, Edit2, TrendingUp, Bot, MessageCircle, FileWarning, Ruler, ScrollText
 } from 'lucide-react';
 
 import { API_URL, getAdminToken } from '../../lib/api/client';
@@ -13,6 +13,7 @@ const APP_MODULES = [
   { id: "units",       label: "بيانات الوحدات",          icon: Building2,       color: "text-sky-600",     bg: "bg-sky-50" },
   { id: "units_edit",  label: "تعديل الوحدات والملاك",   icon: Edit2,           color: "text-cyan-600",    bg: "bg-cyan-50" },
   { id: "feasibility", label: "حاسبة الجدوى والعروض",    icon: TrendingUp,      color: "text-emerald-600", bg: "bg-emerald-50" },
+  { id: "qs",          label: "التمتير والتكاليف",       icon: Ruler,           color: "text-emerald-700", bg: "bg-emerald-50" },
   { id: "inspection",  label: "فحص وتسليم الوحدات",      icon: ClipboardCheck,  color: "text-indigo-600",  bg: "bg-indigo-50" },
   { id: "snaglist",    label: "تقارير الملاحظات",        icon: FileWarning,     color: "text-red-600",     bg: "bg-red-50" },
   { id: "maintenance", label: "إدارة طلبات الصيانة",     icon: Wrench,          color: "text-purple-600",  bg: "bg-purple-50" },
@@ -24,6 +25,7 @@ const APP_MODULES = [
   { id: "letters",     label: "منشئ الخطابات",           icon: FilePenLine,     color: "text-rose-600",    bg: "bg-rose-50" },
   { id: "accounting",  label: "النظام المحاسبي (دفترة)", icon: Calculator,      color: "text-emerald-600", bg: "bg-emerald-50" },
   { id: "users_manage",label: "إدارة الموظفين والصلاحيات", icon: Shield,        color: "text-brand-800",   bg: "bg-blue-50" },
+  { id: "activity_log",label: "سجل النشاط",              icon: ScrollText,      color: "text-slate-600",   bg: "bg-slate-100" },
 ];
 
 export default function UsersManage({ showToast }) {

@@ -1039,7 +1039,7 @@ function DashboardInner({ onLogout }) {
             label:'المشتريات والتعاقدات',
             desc:'أوامر العمل · الموردون · المنتجات · متابعة مراحل التنفيذ',
             tools:[
-                { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'feasibility', color:'emerald'},
+                { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'qs',          color:'emerald'},
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
                 { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
                 { id:'products',    tabId:'products',    label:'المنتجات والخدمات',    icon:Package,        permKey:'finance', color:'cyan'   },
@@ -1541,7 +1541,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={showToast} />}
                 {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={showToast} /></div>}
                 {activeTab === 'feasibility' && hasPermission('feasibility') && <div className="animate-fadeIn"><FeasibilityCalc showToast={showToast} /></div>}
-                {activeTab === 'qs'          && hasPermission('feasibility') && <div className="animate-fadeIn"><QuantitySurvey showToast={showToast} /></div>}
+                {activeTab === 'qs'          && hasPermission('qs')          && <div className="animate-fadeIn"><QuantitySurvey showToast={showToast} /></div>}
                 {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={showToast} /></div>}
                 {activeTab === 'snaglist'    && hasPermission('snaglist')    && <div className="animate-fadeIn p-6 md:p-8"><SnagList /></div>}
                 {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}

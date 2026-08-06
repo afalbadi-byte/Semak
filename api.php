@@ -302,11 +302,21 @@ $conn->query("CREATE TABLE IF NOT EXISTS notifications (
     INDEX idx_created (tenant_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ─── إضافة عمود متوافقة مع MySQL وMariaDB معاً ────────────────────────────────
+// صيغة ADD COLUMN IF NOT EXISTS تعمل على MariaDB فقط — MySQL يرفضها بصمت.
+function ensure_column($conn, $table, $col, $ddl) {
+    $t = $conn->real_escape_string($table);
+    $c = $conn->real_escape_string($col);
+    $r = $conn->query("SELECT 1 FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='$c' LIMIT 1");
+    if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE `$t` ADD COLUMN $ddl");
+}
+
 // ─── التحقق بخطوتين عند دخول الموظفين (OTP) — اختياري لكل مستخدم ──────────────
 // twofa = 0 افتراضيًا ⇒ لا يتغيّر سلوك الدخول لأحد حتى يُفعّله المستخدم بنفسه.
-$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa TINYINT(1) DEFAULT 0");
-$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa_channel VARCHAR(10) DEFAULT 'email'");
-$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password TINYINT(1) NOT NULL DEFAULT 0");
+ensure_column($conn, 'users', 'twofa',                'twofa TINYINT(1) DEFAULT 0');
+ensure_column($conn, 'users', 'twofa_channel',        "twofa_channel VARCHAR(10) DEFAULT 'email'");
+ensure_column($conn, 'users', 'must_change_password', 'must_change_password TINYINT(1) NOT NULL DEFAULT 0');
 $conn->query("CREATE TABLE IF NOT EXISTS login_otp (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     user_id     INT NOT NULL,
