@@ -101,6 +101,8 @@ jobs:
             && echo "✅ PORT OPEN" || echo "❌ PORT CLOSED / TIMEOUT"
 
       - name: Deploy via rsync over SSH (3 attempts)
+        id: rsync
+        continue-on-error: true
         run: |
           echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
@@ -118,3 +120,16 @@ jobs:
           done
           rm -f /tmp/deploy_key
           [ "$ok" = "1" ] || { echo "all rsync attempts failed"; exit 1; }
+
+      # ── مسار بديل عند تعطل SSH: دفع dist لفرع dist → السيرفر يسحبه عبر webhook (deploy.php)
+      - name: Fallback — push dist branch (HTTP webhook deploy)
+        if: steps.rsync.outcome == 'failure'
+        run: |
+          cd dist
+          git init -q -b dist
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
+          git add -A
+          git commit -qm "deploy: $(date -u +'%Y-%m-%d %H:%M') UTC [skip ci]"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" dist:dist
+          echo "pushed dist branch — deploy.php webhook should pull it"
