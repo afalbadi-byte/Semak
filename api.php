@@ -66,8 +66,8 @@ $conn->query("CREATE TABLE IF NOT EXISTS db_schema_version (
 $__sv = (int)((($__r = $conn->query("SELECT id FROM db_schema_version ORDER BY id DESC LIMIT 1")) && ($__row = $__r->fetch_assoc())) ? $__row['id'] : 0);
 if ($__sv < 1) {
 // ─── auto-migrate: status columns on inspections ─────────────────────────────
-$conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT NULL");
-$conn->query("ALTER TABLE inspections ADD COLUMN IF NOT EXISTS client_submitted_at DATETIME DEFAULT NULL");
+ensure_column($conn, "inspections", "status", "status VARCHAR(50) DEFAULT NULL");
+ensure_column($conn, "inspections", "client_submitted_at", "client_submitted_at DATETIME DEFAULT NULL");
 
 // ─── auto-migrate: work cycles (دورات العمل) ───────────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS work_cycles (
@@ -177,9 +177,9 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_lines (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 // ─── أبعاد إضافية على البنود: الطرف (عميل/مورد) وتاريخ الاستحقاق (للذمم والأعمار) ─
-$conn->query("ALTER TABLE acc_lines ADD COLUMN IF NOT EXISTS party_type VARCHAR(12) DEFAULT NULL");
-$conn->query("ALTER TABLE acc_lines ADD COLUMN IF NOT EXISTS party_id   INT DEFAULT NULL");
-$conn->query("ALTER TABLE acc_lines ADD COLUMN IF NOT EXISTS due_date   DATE DEFAULT NULL");
+ensure_column($conn, "acc_lines", "party_type", "party_type VARCHAR(12) DEFAULT NULL");
+ensure_column($conn, "acc_lines", "party_id", "party_id INT DEFAULT NULL");
+ensure_column($conn, "acc_lines", "due_date", "due_date DATE DEFAULT NULL");
 $conn->query("ALTER TABLE acc_lines ADD INDEX IF NOT EXISTS idx_party (tenant_id, party_type, party_id)");
 
 // الأطراف: دفتر مساعد للعملاء والموردين (ذمم مدينة/دائنة)
@@ -205,19 +205,19 @@ if ($__pt && ($__ptr = $__pt->fetch_assoc()) && strpos($__ptr['ct'], "'partner'"
     $conn->query("ALTER TABLE acc_parties MODIFY COLUMN type ENUM('customer','supplier','partner') NOT NULL");
 }
 // إضافة حقل الملاحظات للأطراف (ترحيل تلقائي مرة واحدة)
-$conn->query("ALTER TABLE acc_parties ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT NULL");
+ensure_column($conn, "acc_parties", "notes", "notes TEXT DEFAULT NULL");
 
 // بوابة المشترين: هوية وطنية + معرّف طرف محاسبي على جدول owners
-$conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS national_id VARCHAR(12) DEFAULT NULL");
-$conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS party_id INT DEFAULT NULL");
-$conn->query("ALTER TABLE owners ADD COLUMN IF NOT EXISTS project_label VARCHAR(200) DEFAULT NULL");
+ensure_column($conn, "owners", "national_id", "national_id VARCHAR(12) DEFAULT NULL");
+ensure_column($conn, "owners", "party_id", "party_id INT DEFAULT NULL");
+ensure_column($conn, "owners", "project_label", "project_label VARCHAR(200) DEFAULT NULL");
 // إضافة tenant_id للجداول القديمة (ترحيل آمن — القيم الموجودة تُعيَّن للمستأجر 1)
-$conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE units    ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE owners   ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE maintenance  ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE leads        ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE inspections  ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "projects", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "units", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "owners", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "maintenance", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "leads", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "inspections", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
 $conn->query("CREATE INDEX IF NOT EXISTS idx_projects_tid     ON projects(tenant_id)");
 $conn->query("CREATE INDEX IF NOT EXISTS idx_units_tid        ON units(tenant_id)");
 $conn->query("CREATE INDEX IF NOT EXISTS idx_maintenance_tid  ON maintenance(tenant_id)");
@@ -508,12 +508,12 @@ $conn->query("REPLACE INTO db_schema_version (id) VALUES (1)");
 
 if ($__sv < 2) {
 // ─── v2: عمدة مستوى الخطورة + IP + UA + diff + tamper-hash ──────────────
-$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)      DEFAULT NULL AFTER actor");
-$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS user_agent VARCHAR(250)     DEFAULT NULL AFTER ip_address");
-$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS old_data   MEDIUMTEXT       DEFAULT NULL AFTER user_agent");
-$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS new_data   MEDIUMTEXT       DEFAULT NULL AFTER old_data");
-$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS risk_level TINYINT UNSIGNED DEFAULT 1   AFTER new_data");
-$conn->query("ALTER TABLE acc_audit_log ADD COLUMN IF NOT EXISTS row_hash   VARCHAR(64)      DEFAULT NULL AFTER risk_level");
+ensure_column($conn, "acc_audit_log", "ip_address", "ip_address VARCHAR(45)      DEFAULT NULL AFTER actor");
+ensure_column($conn, "acc_audit_log", "user_agent", "user_agent VARCHAR(250)     DEFAULT NULL AFTER ip_address");
+ensure_column($conn, "acc_audit_log", "old_data", "old_data MEDIUMTEXT       DEFAULT NULL AFTER user_agent");
+ensure_column($conn, "acc_audit_log", "new_data", "new_data MEDIUMTEXT       DEFAULT NULL AFTER old_data");
+ensure_column($conn, "acc_audit_log", "risk_level", "risk_level TINYINT UNSIGNED DEFAULT 1   AFTER new_data");
+ensure_column($conn, "acc_audit_log", "row_hash", "row_hash VARCHAR(64)      DEFAULT NULL AFTER risk_level");
 $conn->query("ALTER TABLE acc_audit_log ADD INDEX IF NOT EXISTS idx_risk (tenant_id, risk_level)");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (2)");
 } // end DDL v2
@@ -546,7 +546,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS tenants (
 $conn->query("INSERT IGNORE INTO tenants (id,slug,name,owner_email,owner_name,status,plan)
               VALUES (1,'semak','سماك العقارية','admin@semak.sa','سماك العقارية','active','enterprise')");
 // ربط المستخدمين بمستأجريهم
-$conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "users", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
 $conn->query("ALTER TABLE users ADD INDEX    IF NOT EXISTS idx_user_tenant (tenant_id)");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (3)");
 } // end DDL v3
@@ -626,11 +626,11 @@ $conn->query("REPLACE INTO db_schema_version (id) VALUES (4)");
 if ($__sv < 5) {
 // ─── v5: tenant_id لجداول بوابة التقنية + جدولا الخطط والاشتراكات ──────────
 // إصلاح أمني حرج: إضافة tenant_id لعزل بيانات المستأجرين في sw_*
-$conn->query("ALTER TABLE sw_clients        ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE sw_tickets        ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE sw_ticket_replies ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE sw_products       ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
-$conn->query("ALTER TABLE sw_invoices       ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_clients", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_tickets", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_ticket_replies", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_products", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
+ensure_column($conn, "sw_invoices", "tenant_id", "tenant_id INT NOT NULL DEFAULT 1");
 $conn->query("CREATE INDEX IF NOT EXISTS idx_swc_tid  ON sw_clients(tenant_id)");
 $conn->query("CREATE INDEX IF NOT EXISTS idx_swt_tid  ON sw_tickets(tenant_id)");
 $conn->query("CREATE INDEX IF NOT EXISTS idx_swtr_tid ON sw_ticket_replies(tenant_id)");
@@ -5923,7 +5923,7 @@ switch ($action) {
         $to   = $conn->real_escape_string($_GET['to']   ?? date('Y-12-31'));
 
         // ─── auto-migrate: cf_section column ─────────────────────────
-        $conn->query("ALTER TABLE acc_accounts ADD COLUMN IF NOT EXISTS cf_section ENUM('none','cash','operating','investing','financing') NOT NULL DEFAULT 'none'");
+        ensure_column($conn, "acc_accounts", "cf_section", "cf_section ENUM('none','cash','operating','investing','financing') NOT NULL DEFAULT 'none'");
 
         // ─── كل الحسابات الفرعية (غير المجمّعة) ──────────────────────
         $accts = [];
@@ -8717,7 +8717,7 @@ switch ($action) {
         $did = ($input_data['daftra_id'] !== '' && $input_data['daftra_id'] !== null)
                ? (int)$input_data['daftra_id'] : 'NULL';
         // auto-migrate: إضافة عمود daftra_id إن لم يكن موجوداً
-        $conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS daftra_id INT DEFAULT NULL");
+        ensure_column($conn, "projects", "daftra_id", "daftra_id INT DEFAULT NULL");
         $conn->query("UPDATE projects SET daftra_id=$did WHERE id=$pid");
         echo json_encode(['success' => true]);
         break;
@@ -8728,7 +8728,7 @@ switch ($action) {
         if (!$pid) { echo json_encode(['success' => false, 'message' => 'id مطلوب']); break; }
 
         // auto-migrate
-        $conn->query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS daftra_id INT DEFAULT NULL");
+        ensure_column($conn, "projects", "daftra_id", "daftra_id INT DEFAULT NULL");
 
         $pq = $conn->query("SELECT p.id, p.name, p.description, p.status, p.daftra_id,
             COUNT(u.id) AS total_units,
