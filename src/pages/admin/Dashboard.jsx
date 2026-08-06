@@ -8,7 +8,7 @@ import {
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
     Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2,
-    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock, Megaphone
+    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock, Megaphone, Ruler
 } from 'lucide-react';
 
 // ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
@@ -52,6 +52,7 @@ const SecuritySettings  = React.lazy(() => import('./SecuritySettings'));
 const SubscriptionPage  = React.lazy(() => import('./SubscriptionPage'));
 const RegaDevTracker    = React.lazy(() => import('./RegaDevTracker'));
 const WhatsAppCampaign  = React.lazy(() => import('./WhatsAppCampaign'));
+const QuantitySurvey    = React.lazy(() => import('./QuantitySurvey'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
@@ -1038,6 +1039,7 @@ function DashboardInner({ onLogout }) {
             label:'المشتريات والتعاقدات',
             desc:'أوامر العمل · الموردون · المنتجات · متابعة مراحل التنفيذ',
             tools:[
+                { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'feasibility', color:'emerald'},
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
                 { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
                 { id:'products',    tabId:'products',    label:'المنتجات والخدمات',    icon:Package,        permKey:'finance', color:'cyan'   },
@@ -1129,7 +1131,7 @@ function DashboardInner({ onLogout }) {
     // ─── العناوين ────────────────────────────────────────────────────────────
     const TAB_LABELS = {
         overview:'لوحة الإدارة', projects:'المشاريع والأبراج', units:'الوحدات والمخطط',
-        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', inspection:'محاضر التسليم',
+        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', qs:'التمتير والتكاليف', inspection:'محاضر التسليم',
         snaglist:'تقارير الملاحظات', maintenance:'الصيانة', leads:'العملاء المحتملون',
         bot:'خدمة العملاء الذكية', whatsapp:'صندوق الرسائل', qr:'رموز الوحدات',
         letters:'الوثائق الرسمية', finance:'الإيرادات والمصروفات', daftra_explorer:'التقارير المالية',
@@ -1539,6 +1541,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'units'       && hasPermission('units')       && <UnitsOverview showToast={showToast} />}
                 {activeTab === 'units_edit'  && hasPermission('units_edit')  && <div className="animate-fadeIn p-6 md:p-8"><UnitsEdit showToast={showToast} /></div>}
                 {activeTab === 'feasibility' && hasPermission('feasibility') && <div className="animate-fadeIn"><FeasibilityCalc showToast={showToast} /></div>}
+                {activeTab === 'qs'          && hasPermission('feasibility') && <div className="animate-fadeIn"><QuantitySurvey showToast={showToast} /></div>}
                 {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={showToast} /></div>}
                 {activeTab === 'snaglist'    && hasPermission('snaglist')    && <div className="animate-fadeIn p-6 md:p-8"><SnagList /></div>}
                 {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}

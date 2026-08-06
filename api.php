@@ -7162,6 +7162,79 @@ switch ($action) {
         break;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // التمتير وتقدير تكلفة التنفيذ — عدة كشوف لكل tenant
+    // كل كشف JSON blob في acc_settings['qs_survey_{id}'] + فهرس في 'qs_index'
+    // ═══════════════════════════════════════════════════════════════════════
+    case 'qs_list': {
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        $raw = acc_setting($conn, $tid, 'qs_index', '');
+        $idx = ($raw !== '' && $raw !== null) ? json_decode($raw, true) : [];
+        echo json_encode(['success'=>true, 'surveys'=>is_array($idx) ? $idx : []], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'qs_get': {
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        $sid = preg_replace('/[^a-z0-9_-]/i', '', (string)($_GET['id'] ?? $input_data['id'] ?? ''));
+        if ($sid === '') { echo json_encode(['success'=>false,'message'=>'معرّف مفقود'], JSON_UNESCAPED_UNICODE); break; }
+        $raw = acc_setting($conn, $tid, 'qs_survey_' . $sid, '');
+        $data = ($raw !== '' && $raw !== null) ? json_decode($raw, true) : null;
+        echo json_encode(['success'=>true, 'data'=>is_array($data) ? $data : null], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'qs_save': {
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        $sid = preg_replace('/[^a-z0-9_-]/i', '', (string)($input_data['id'] ?? ''));
+        $payload = $input_data['data'] ?? null;
+        if ($sid === '' || !is_array($payload)) { echo json_encode(['success'=>false,'message'=>'بيانات غير صالحة'], JSON_UNESCAPED_UNICODE); break; }
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        if (strlen($json) > 60000) { echo json_encode(['success'=>false,'message'=>'حجم الكشف كبير جداً — قسّمه إلى كشفين'], JSON_UNESCAPED_UNICODE); break; }
+        $vv = $conn->real_escape_string($json);
+        $ok = $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'qs_survey_$sid','$vv')
+                            ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        // تحديث الفهرس
+        $raw = acc_setting($conn, $tid, 'qs_index', '');
+        $idx = ($raw !== '' && $raw !== null) ? json_decode($raw, true) : [];
+        if (!is_array($idx)) $idx = [];
+        $entry = [
+            'id'      => $sid,
+            'name'    => mb_substr((string)($payload['name'] ?? 'كشف تمتير'), 0, 120),
+            'total'   => (float)($input_data['total'] ?? 0),
+            'updated' => date('Y-m-d H:i'),
+        ];
+        $found = false;
+        foreach ($idx as $k => $e) { if (($e['id'] ?? '') === $sid) { $idx[$k] = $entry; $found = true; break; } }
+        if (!$found) $idx[] = $entry;
+        $iv = $conn->real_escape_string(json_encode($idx, JSON_UNESCAPED_UNICODE));
+        $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'qs_index','$iv')
+                      ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        echo json_encode(['success'=>(bool)$ok, 'message'=>$ok?'تم الحفظ':$conn->error], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'qs_delete': {
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = $_jwt_tid ?? 1;
+        $sid = preg_replace('/[^a-z0-9_-]/i', '', (string)($input_data['id'] ?? ''));
+        if ($sid === '') { echo json_encode(['success'=>false,'message'=>'معرّف مفقود'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM acc_settings WHERE tenant_id=$tid AND skey='qs_survey_$sid'");
+        $raw = acc_setting($conn, $tid, 'qs_index', '');
+        $idx = ($raw !== '' && $raw !== null) ? json_decode($raw, true) : [];
+        if (is_array($idx)) {
+            $idx = array_values(array_filter($idx, fn($e) => ($e['id'] ?? '') !== $sid));
+            $iv = $conn->real_escape_string(json_encode($idx, JSON_UNESCAPED_UNICODE));
+            $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES ($tid,'qs_index','$iv')
+                          ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        }
+        echo json_encode(['success'=>true, 'message'=>'تم الحذف'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'gl_settings_get':
         // ملف الشركة (يُستخدم في QR والطباعة) — يعيد المفاتيح المعروفة مع قيم افتراضية فارغة
         $tid = $_jwt_tid ?? (int)($_GET['tenant'] ?? 1);
