@@ -10658,6 +10658,37 @@ switch ($action) {
         break;
     }
 
+    case 'wa_tpl_probe_x9': {
+        // مسبار مؤقت لاكتشاف صيغة القوالب الصحيحة — يُحذف بعد التشخيص
+        if (($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false]); break; }
+        $to    = preg_replace('/\D/', '', (string)($_GET['to'] ?? ''));
+        $tname = (string)($_GET['tpl'] ?? 'semak_welcome');
+        $shape = (string)($_GET['shape'] ?? 'azeer');
+        $var   = (string)($_GET['var'] ?? '');
+        if ($shape === 'meta') {
+            $p = ['to'=>$to,'type'=>'template','template'=>['name'=>$tname,'language'=>['code'=>'ar']]];
+            if ($var !== '') $p['template']['components'] = [['type'=>'body','parameters'=>[['type'=>'text','text'=>$var]]]];
+        } elseif ($shape === 'azeer2') {
+            $p = ['channel'=>'whatsapp','to'=>'+'.$to,'template'=>$tname];
+            if ($var !== '') $p['variables'] = ['1'=>$var];
+        } else {
+            $p = ['to'=>$to,'type'=>'template','template'=>['template_id'=>$tname,'language'=>'ar']];
+            if ($var !== '') $p['template']['argument'] = ['BODY'=>[$var]];
+        }
+        $ch = curl_init('https://api.mottasl.ai/v1/message/send?create=true');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($p, JSON_UNESCAPED_UNICODE),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . MOTTASL_TOKEN],
+            CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        echo json_encode(['sent_payload'=>$p, 'http'=>$code, 'response'=>json_decode($res, true) ?: mb_substr((string)$res,0,300)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'wa_hub': {
         // بروكسي موحّد لموارد متصل/Azeer — قائمة مسموحة فقط، المفتاح يبقى في السيرفر
         if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
