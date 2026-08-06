@@ -7315,12 +7315,15 @@ switch ($action) {
             if ($cerr) { $apiErr = 'اتصال: ' . $cerr; @file_put_contents($qs_log, date('c') . " | $mdl | CURL: $cerr\n", FILE_APPEND); continue; }
             $j = json_decode($res, true);
             $apiErr = $j['error']['message'] ?? '';
-            $txt = $j['content'][0]['text'] ?? '';
-            @file_put_contents($qs_log, date('c') . " | $mdl | HTTP $http | err=" . mb_substr($apiErr, 0, 150) . " | txt_len=" . strlen($txt) . "\n", FILE_APPEND);
+            // اجمع كل بلوكات النص — نماذج Claude 5 قد تُرجع بلوك تفكير قبل النص
+            $txt = ''; $btypes = [];
+            foreach (($j['content'] ?? []) as $blk) {
+                $btypes[] = $blk['type'] ?? '?';
+                if (($blk['type'] ?? '') === 'text') $txt .= $blk['text'] ?? '';
+            }
+            @file_put_contents($qs_log, date('c') . " | $mdl | HTTP $http | stop=" . ($j['stop_reason'] ?? '?') . " | blocks=" . implode(',', $btypes) . " | err=" . mb_substr($apiErr, 0, 150) . " | txt_len=" . strlen($txt) . "\n", FILE_APPEND);
             if ($txt !== '') break;              // نجح
-            if ($http === 429 || $http >= 500) continue; // مؤقت — جرّب النموذج التالي
-            if ($apiErr !== '' && stripos($apiErr, 'model') !== false) continue; // نموذج غير متاح
-            break;
+            continue;                             // فاضي أو خطأ — جرّب النموذج التالي
         }
         // التقاط الـ JSON من الرد حتى لو أحاط به نص أو انقطع
         $rooms = null;
