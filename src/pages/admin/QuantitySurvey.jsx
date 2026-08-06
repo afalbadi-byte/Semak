@@ -287,6 +287,17 @@ export default function QuantitySurvey({ showToast }) {
         <input value={survey.name} onChange={e => patch(s => { s.name = e.target.value; })}
           placeholder="اسم الكشف / المشروع…"
           className="flex-1 min-w-[200px] text-xl font-extrabold text-slate-800 bg-transparent border-b-2 border-transparent focus:border-emerald-400 outline-none py-1" />
+        <DrawingExtractButton
+          toast={toast}
+          label="استيراد المشروع من المخطط"
+          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl shadow transition text-sm disabled:opacity-60"
+          onRooms={(rooms) => {
+            const h = window.prompt('ارتفاع السقف الافتراضي بالمتر؟ (يُستخدم لمعادلات الجدران)', '3.3');
+            const defaultH = h && !Number.isNaN(parseFloat(h)) ? parseFloat(h) : '';
+            let filled = 0;
+            patch(s => { filled = distributeRooms(s, rooms, defaultH); });
+            toast?.('نجاح', `وُزّعت ${rooms.length} فراغاً على ${filled} بنداً — راجع الأمتار واضبط الأسعار`);
+          }} />
         <button onClick={exportExcel} className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-4 py-2 rounded-xl transition">
           <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Excel
         </button>
@@ -456,7 +467,35 @@ function TradeEditor({ tr, patchTrade, toast }) {
 // ─── سحب البيانات من المخطط (صورة / PDF / DWG) ───────────────────────────────
 // DWG: يُفكّ في المتصفح عبر WASM (libredwg). إن وُجدت نصوص وديمنشنات حقيقية
 // تُرسل كبيانات CAD؛ وإن كانت النصوص «مفجّرة» تُرسم اللوحات إلى صور وتُقرأ بصرياً.
-function DrawingExtractButton({ onRooms, toast }) {
+// أي البنود يستقبل أي فراغات عند الاستيراد الشامل:
+// أرضيات/جبس/عظم/لياسة/دهان → كل الغرف — كيشاني → الرطبة فقط — بروفايل/مقطوعية → لا شيء
+const WET_RE = /حمام|دورة|مطبخ|غسيل|وضوء|بيارة/;
+function distributeRooms(survey, rooms, defaultH) {
+  let filled = 0;
+  for (const tr of survey.trades) {
+    if (tr.type !== 'metered') continue;
+    if (/بروفايل/.test(tr.name)) continue;
+    const isWetOnly = /كيشاني|سيراميك|بلاط جدران/.test(tr.name);
+    const list = isWetOnly ? rooms.filter(r => WET_RE.test(r.name)) : rooms;
+    if (!list.length) continue;
+    const mode = tr.mode || 'area';
+    const needsH = mode === 'perimeter' || mode === 'lh' || mode === 'volume';
+    const rows = list.map(rm => ({
+      id: uid(), name: rm.name,
+      L: rm.L === '' ? '' : String(rm.L),
+      W: rm.W === '' ? '' : String(rm.W),
+      H: rm.H !== '' ? String(rm.H) : (needsH && defaultH ? String(defaultH) : ''),
+      manual: '',
+    }));
+    // أزل الأقسام الفارغة تماماً ثم أضف قسم «من المخطط»
+    tr.sections = (tr.sections || []).filter(sec => (sec.rows || []).some(r => r.name || r.L || r.W || r.H || r.manual));
+    tr.sections.push({ id: uid(), name: 'من المخطط', mode: null, mult: 1, multLabel: '', rows, open: true });
+    filled++;
+  }
+  return filled;
+}
+
+function DrawingExtractButton({ onRooms, toast, label, className }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState('');
@@ -499,9 +538,9 @@ function DrawingExtractButton({ onRooms, toast }) {
     <>
       <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.dwg" className="hidden" onChange={handleFile} />
       <button onClick={() => inputRef.current?.click()} disabled={busy}
-        className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 disabled:opacity-60">
+        className={className || 'text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 disabled:opacity-60'}>
         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-        {busy ? (stage || 'جارٍ قراءة المخطط…') : 'سحب من المخطط (صورة / PDF / DWG)'}
+        {busy ? (stage || 'جارٍ قراءة المخطط…') : (label || 'سحب من المخطط (صورة / PDF / DWG)')}
       </button>
     </>
   );
