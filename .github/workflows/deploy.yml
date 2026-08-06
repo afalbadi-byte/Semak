@@ -100,12 +100,21 @@ jobs:
           timeout 10 bash -c "echo > /dev/tcp/${{ secrets.SSH_HOST }}/${{ secrets.SSH_PORT }}" \
             && echo "✅ PORT OPEN" || echo "❌ PORT CLOSED / TIMEOUT"
 
-      - name: Deploy via rsync over SSH
+      - name: Deploy via rsync over SSH (3 attempts)
         run: |
           echo "${{ secrets.SSH_KEY }}" | base64 -d > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          rsync -az --checksum \
-            -e "ssh -p ${{ secrets.SSH_PORT }} -i /tmp/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30" \
-            dist/ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_TARGET }}/
+          ok=0
+          for i in 1 2 3; do
+            echo "=== rsync attempt $i ==="
+            if rsync -az --checksum \
+              -e "ssh -p ${{ secrets.SSH_PORT }} -i /tmp/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30" \
+              dist/ \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_TARGET }}/; then
+              ok=1; break
+            fi
+            echo "attempt $i failed — waiting 30s"
+            sleep 30
+          done
           rm -f /tmp/deploy_key
+          [ "$ok" = "1" ] || { echo "all rsync attempts failed"; exit 1; }
