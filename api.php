@@ -10671,6 +10671,10 @@ switch ($action) {
         } elseif ($shape === 'azeer2') {
             $p = ['channel'=>'whatsapp','to'=>'+'.$to,'template'=>$tname];
             if ($var !== '') $p['variables'] = ['1'=>$var];
+        } elseif ($shape === 'azeerimg') {
+            $img = (string)($_GET['img'] ?? '');
+            $p = ['to'=>$to,'type'=>'template','template'=>['template_id'=>$tname,'language'=>'ar','argument'=>['HEADER'=>[$img]]]];
+            if ($var !== '') $p['template']['argument']['BODY'] = [$var];
         } else {
             $p = ['to'=>$to,'type'=>'template','template'=>['template_id'=>$tname,'language'=>'ar']];
             if ($var !== '') $p['template']['argument'] = ['BODY'=>[$var]];
