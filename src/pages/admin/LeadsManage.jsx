@@ -196,6 +196,7 @@ export default function LeadsManage({ showToast }) {
                 merged_ids: sorted.map(x => x.id),
                 merged_count: sorted.length,
                 last_activity: sorted[0].created_at || '', // أحدث سجل في المجموعة = آخر تواصل
+                summary: sorted.map(x => x.summary).find(Boolean) || '', // أحدث ملخص متوفر في المجموعة
             };
         // ترتيب المجموعات نفسها: آخر تواصل أولاً (أحدث id في كل مجموعة)
         }).sort((a, b) => (b.merged_ids[0] || 0) - (a.merged_ids[0] || 0));
@@ -317,8 +318,14 @@ export default function LeadsManage({ showToast }) {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 min-w-[260px]">
+                                    {lead.summary && (
+                                        <div className="mb-2 bg-teal-50/70 dark:bg-teal-900/20 border-r-2 border-teal-400 rounded-l-lg px-3 py-2">
+                                            <div className="text-[10px] font-black text-teal-700 dark:text-teal-300 mb-0.5">🤖 ملخص فهد</div>
+                                            <div className="text-xs text-slate-700 dark:text-brand-200 leading-relaxed">{lead.summary}</div>
+                                        </div>
+                                    )}
                                     {entries.length === 0 ? (
-                                        <span className="text-xs text-slate-300 italic">لا توجد ملاحظات بعد</span>
+                                        !lead.summary && <span className="text-xs text-slate-300 italic">لا توجد ملاحظات بعد</span>
                                     ) : (
                                         <button
                                             onClick={() => setExpandedNotes(p => ({ ...p, [lead.id]: !p[lead.id] }))}

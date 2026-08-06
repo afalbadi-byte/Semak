@@ -770,6 +770,12 @@ ensure_column($conn, "sw_invoices",       "tenant_id",            "tenant_id INT
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (7)");
 } // end DDL v7
 
+// ─── DDL v8: ملخص فهد الذكي لكل عميل مهتم ────────────────────────────────────
+if ($__sv < 8) {
+ensure_column($conn, "leads", "summary", "summary VARCHAR(600) DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (8)");
+} // end DDL v8
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -10731,11 +10737,15 @@ LANGUAGE RULE (MANDATORY — overrides everything): Detect the customer's langua
 === التحليل المخفي في نهاية كل رد (إلزامي) ===
 في نهاية كل رد، أضف سطراً واحداً مخفياً بهذه الصيغة بالضبط (سيتم حذفه قبل إرسال الرد للعميل، فهو لاستخدام فريق المبيعات فقط):
 
-[META]{"unit":"رمز الوحدة المهتم بها أو فارغ","interest":"وصف اهتمامه باختصار","notes":"ملخص فعلي وكامل لما تعرفه عن العميل: الغرض من الشراء، الميزانية، عدد الأفراد، التفضيلات، الاعتراضات، ما تم الاتفاق عليه"}[/META]
+[META]{"unit":"رمز الوحدة المهتم بها أو فارغ","interest":"وصف اهتمامه باختصار","summary":"ملخص شامل محدّث للعميل في سطر أو سطرين","notes":"الجديد في هذه الرسالة فقط"}[/META]
 
 تعليمات تحليل META:
 - "unit": رمز الوحدة من 7 وحدات سماك (SM-A01..SM-A07) أو "غير محدد" أو "متعدد".
 - "interest": وصف موجز جداً (سطر واحد) مثل "سكن عائلي" أو "استثمار موسمي" أو "فيلا روف".
+- "summary": أهم حقل — ملخص كامل محدّث يغني موظف المبيعات عن قراءة المحادثة: من العميل، ماذا يريد (سكن/استثمار)، ميزانيته، الوحدة المفضلة، آخر تطور أو عائق، والخطوة التالية المطلوبة. أعد كتابته كاملاً في كل رد بأحدث المعلومات. أمثلة:
+  • "مستثمر، ميزانيته 650 ألف، معجب بـ SM-A01 لكن يعترض على السعر — يحتاج تواصل من المبيعات لتفاوض"
+  • "باحث عن سكن عائلي (5 أفراد)، طلب البروشور واطلع عليه، لم يحدد وحدة بعد — يُنصح بمتابعته بعد يومين"
+  • "استفسار أولي فقط، لم يتضح غرضه بعد"
 - "notes": اكتب الجديد فقط في هذه الرسالة. النظام سيختم ملاحظتك بالتاريخ والوقت تلقائياً ويضيفها فوق الملاحظات السابقة. لا تكرر ما قلته في رسالة سابقة. أمثلة:
   • "سأل عن سعر المتر، أبدى استغراباً من السعر"
   • "حدد ميزانيته بـ 600 ألف"
@@ -11409,6 +11419,7 @@ KNOWLEDGE;
                 $u_unit     = trim($meta['unit']     ?? '');
                 $u_interest = trim($meta['interest'] ?? '');
                 $u_note     = trim($meta['notes']    ?? '');
+                $u_summary  = trim($meta['summary']  ?? '');
 
                 // اجلب سجل العميل الحالي
                 $cur_res = $conn->query("SELECT id, notes FROM leads WHERE $phone_search ORDER BY id DESC LIMIT 1");
@@ -11440,6 +11451,11 @@ KNOWLEDGE;
                     if ($merged_notes !== $existing_notes) {
                         $safe_n = $conn->real_escape_string($merged_notes);
                         $fields[] = "notes='$safe_n'";
+                    }
+                    // الملخص المحدّث يستبدل السابق دائماً (آخر صورة كاملة للعميل)
+                    if ($u_summary !== '' && !in_array($u_summary, $skip_notes) && mb_strlen($u_summary) > 3) {
+                        $safe_s = $conn->real_escape_string(mb_substr($u_summary, 0, 590));
+                        $fields[] = "summary='$safe_s'";
                     }
                     if (!empty($fields)) {
                         $sql_upd .= implode(', ', $fields) . " WHERE id=$lead_id_upd";
