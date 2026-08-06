@@ -3189,6 +3189,14 @@ switch ($action) {
         if ($r2) while ($x = $r2->fetch_assoc()) $out['matches'][] = $x;
         $r3 = $conn->query("SELECT id, name, status, plan FROM tenants LIMIT 20");
         if ($r3) while ($x = $r3->fetch_assoc()) $out['tenant_rows'][] = $x;
+        // أعمدة جدول users الفعلية + محاولة إضافة العمود الناقص مع الخطأ الحرفي
+        $rc = $conn->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users'");
+        if ($rc) while ($x = $rc->fetch_assoc()) $out['user_cols'][] = $x['COLUMN_NAME'];
+        if (!in_array('must_change_password', $out['user_cols'] ?? [], true)) {
+            $ra = $conn->query("ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0");
+            $out['alter_ok']  = (bool)$ra;
+            $out['alter_err'] = $conn->error;
+        }
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
         break;
     }
