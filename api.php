@@ -10660,7 +10660,7 @@ switch ($action) {
 
     case 'wa_templates': {
         // جلب قوالب واتساب المعتمدة من متصل (بمفتاح السيرفر — لا يُكشف للمتصفح)
-        if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $tch = curl_init('https://api.mottasl.ai/v1/partner/templates');
         curl_setopt_array($tch, [
             CURLOPT_RETURNTRANSFER => true,

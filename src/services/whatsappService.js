@@ -246,13 +246,18 @@ export async function sendWhatsAppMessage(phone, message) {
 
 /** جلب قوالب Azeer المعتمدة */
 export async function getAzeerTemplates() {
-  if (!API_KEY) return [];
+  // عبر السيرفر (مفتاح متصل يبقى هناك) — رد متصل يستخدم template_id لا name
   try {
-    const res = await fetch(`${BASE_URL}/partner/templates`, {
-      headers: { Authorization: `Bearer ${API_KEY}`, Accept: "application/json" },
+    let t = null;
+    try { t = localStorage.getItem('semak_admin_jwt'); } catch { /* بيئة بلا تخزين */ }
+    const res = await fetch(`${API_URL}?action=wa_templates`, {
+      headers: { Accept: "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) },
     });
     const data = await res.json();
-    return data.data || data || [];
+    const list = data.data || (Array.isArray(data) ? data : []);
+    return list
+      .filter(x => !x.is_deleted)
+      .map(x => ({ ...x, id: x.template_id, name: x.template_id }));
   } catch (err) {
     console.error("getAzeerTemplates:", err);
     return [];
