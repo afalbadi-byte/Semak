@@ -7291,37 +7291,55 @@ switch ($action) {
             $content[] = ['type'=>'text','text'=>$prompt];
         }
 
-        $body = [
-            'model' => 'claude-sonnet-5',
-            'max_tokens' => 3000,
-            'messages' => [[
-                'role' => 'user',
-                'content' => $content,
-            ]],
-        ];
-        $ch = curl_init('https://api.anthropic.com/v1/messages');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($body),
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
-            CURLOPT_TIMEOUT => 90,
-        ]);
-        $res = curl_exec($ch);
-        $err = curl_error($ch);
-        curl_close($ch);
-        if ($err) { echo json_encode(['success'=>false,'message'=>'فشل الاتصال بالمحرك: '.$err], JSON_UNESCAPED_UNICODE); break; }
-        $j = json_decode($res, true);
-        $txt = $j['content'][0]['text'] ?? '';
-        // التقاط الـ JSON من الرد حتى لو أحاط به نص
+        $qs_log = __DIR__ . '/qs_extract_log.txt';
+        $models = ['claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5'];
+        $txt = ''; $apiErr = ''; $http = 0;
+        foreach ($models as $mdl) {
+            $body = [
+                'model' => $mdl,
+                'max_tokens' => 8000,
+                'messages' => [[ 'role' => 'user', 'content' => $content ]],
+            ];
+            $ch = curl_init('https://api.anthropic.com/v1/messages');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($body),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+                CURLOPT_TIMEOUT => 120,
+            ]);
+            $res  = curl_exec($ch);
+            $cerr = curl_error($ch);
+            $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($cerr) { $apiErr = 'اتصال: ' . $cerr; @file_put_contents($qs_log, date('c') . " | $mdl | CURL: $cerr\n", FILE_APPEND); continue; }
+            $j = json_decode($res, true);
+            $apiErr = $j['error']['message'] ?? '';
+            $txt = $j['content'][0]['text'] ?? '';
+            @file_put_contents($qs_log, date('c') . " | $mdl | HTTP $http | err=" . mb_substr($apiErr, 0, 150) . " | txt_len=" . strlen($txt) . "\n", FILE_APPEND);
+            if ($txt !== '') break;              // نجح
+            if ($http === 429 || $http >= 500) continue; // مؤقت — جرّب النموذج التالي
+            if ($apiErr !== '' && stripos($apiErr, 'model') !== false) continue; // نموذج غير متاح
+            break;
+        }
+        // التقاط الـ JSON من الرد حتى لو أحاط به نص أو انقطع
         $rooms = null;
-        if (preg_match('/\{.*\}/s', $txt, $m)) {
-            $parsed = json_decode($m[0], true);
+        if (preg_match('/\{.*/s', $txt, $m)) {
+            $frag = $m[0];
+            $parsed = json_decode($frag, true);
+            if (!is_array($parsed) && preg_match('/^(.*\})\s*,?\s*[^\}]*$/s', $frag, $mm)) {
+                // رد مبتور — قصّه لآخر كائن مكتمل وأغلق المصفوفة
+                $try = preg_replace('/,\s*\{[^\}]*$/s', '', $frag);
+                $try = rtrim($try, " \t\n\r,");
+                if (substr_count($try, '[') > substr_count($try, ']')) $try .= ']';
+                if (substr_count($try, '{') > substr_count($try, '}')) $try .= '}';
+                $parsed = json_decode($try, true);
+            }
             if (is_array($parsed) && isset($parsed['rooms']) && is_array($parsed['rooms'])) $rooms = $parsed['rooms'];
         }
         if ($rooms === null) {
-            $apiErr = $j['error']['message'] ?? '';
-            echo json_encode(['success'=>false,'message'=>'تعذر قراءة المخطط'.($apiErr ? ' — '.$apiErr : ''), 'raw'=>mb_substr($txt,0,300)], JSON_UNESCAPED_UNICODE);
+            @file_put_contents($qs_log, date('c') . " | PARSE FAIL | " . mb_substr($txt, 0, 400) . "\n", FILE_APPEND);
+            echo json_encode(['success'=>false,'message'=>'تعذر قراءة المخطط' . ($apiErr ? ' — ' . $apiErr : ($http && $http !== 200 ? " (HTTP $http)" : '')), 'raw'=>mb_substr($txt, 0, 300)], JSON_UNESCAPED_UNICODE);
             break;
         }
         // تنظيف وتحديد الحقول
