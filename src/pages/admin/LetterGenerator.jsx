@@ -6,6 +6,7 @@ import 'react-quill-new/dist/quill.snow.css';
 import { FilePenLine, Printer, RefreshCw, Loader2, ArrowRight } from 'lucide-react';
 import { AppContext } from '../../context/AppContext';
 import { API_URL } from '../../utils/helpers';
+import { getAdminToken } from '../../lib/api/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import PrintableLetterhead, { SEMAK_PRINT_CSS } from '../../components/PrintableLetterhead';
 
@@ -200,7 +201,7 @@ export default function LetterGenerator() {
     try {
       const res = await fetch(`${API_URL}?action=add_template`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(getAdminToken() ? { Authorization: `Bearer ${getAdminToken()}` } : {}) },
         body: JSON.stringify({
           category: newTempMeta.category,
           title: newTempMeta.title,

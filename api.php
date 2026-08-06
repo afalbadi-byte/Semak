@@ -3124,6 +3124,18 @@ switch ($action) {
         echo json_encode(["success" => true]);
         break;
 
+    case 'delete_inspection': {
+        // حذف محضر فحص وحدة (صفحة محاضر التسليم)
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid  = $_jwt_tid ?? 1;
+        $unit = $conn->real_escape_string(trim($input_data['unit'] ?? ''));
+        if ($unit === '') { echo json_encode(['success'=>false,'message'=>'رمز الوحدة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $ok = $conn->query("DELETE FROM inspections WHERE unit='$unit' AND tenant_id=$tid");
+        acc_audit($conn, $tid, 'inspection', null, 'delete', "unit=$unit", 'admin', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>(bool)$ok, 'message'=>$ok?'تم الحذف':$conn->error], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'submit_client_inspection':
         $unit            = $conn->real_escape_string($input_data['unit']);
         $owner_name      = $conn->real_escape_string($input_data['owner_name']);
@@ -10431,6 +10443,19 @@ switch ($action) {
         if ($res) { while ($row = $res->fetch_assoc()) { $templates[] = $row; } }
         echo json_encode($templates);
         break;
+
+    case 'add_template': {
+        // حفظ خطاب كقالب جديد (منشئ الخطابات)
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $cat   = $conn->real_escape_string(trim($input_data['category'] ?? 'عام'));
+        $title = $conn->real_escape_string(trim($input_data['title'] ?? ''));
+        $subj  = $conn->real_escape_string(trim($input_data['subject'] ?? ''));
+        $bodyT = $conn->real_escape_string($input_data['body'] ?? '');
+        if ($title === '' || $bodyT === '') { echo json_encode(['success'=>false,'message'=>'العنوان والنص مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $ok = $conn->query("INSERT INTO templates (category, title, subject, body) VALUES ('$cat','$title','$subj','$bodyT')");
+        echo json_encode(['success'=>(bool)$ok, 'id'=>(int)$conn->insert_id, 'message'=>$ok?'تم الحفظ':$conn->error], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     // ─── قوالب الفحص ────────────────────────────────────────────────────────
 

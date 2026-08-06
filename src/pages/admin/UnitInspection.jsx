@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { ChevronRight, ClipboardCheck, CheckCircle2, Save, RefreshCw, FileWarning, Settings2, ShieldCheck, Trash2, X, AlertTriangle, Hammer, Plus, HardHat, Copy, Link as LinkIcon, Eye } from 'lucide-react';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
 
 export default function UnitInspection({ user, navigateTo, showToast }) {
@@ -201,7 +201,8 @@ export default function UnitInspection({ user, navigateTo, showToast }) {
 
   const handleDeleteTask = async (unitCode) => {
     if(!window.confirm(`تأكيد حذف تقرير الوحدة ${unitCode}؟`)) return;
-    await fetch(`${API_URL}?action=delete_inspection`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unit: unitCode }) });
+    const _t = getAdminToken();
+    await fetch(`${API_URL}?action=delete_inspection`, { method: "POST", headers: { "Content-Type": "application/json", ...(_t ? { Authorization: `Bearer ${_t}` } : {}) }, body: JSON.stringify({ unit: unitCode }) });
     fetchData();
   };
 
