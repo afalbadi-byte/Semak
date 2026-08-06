@@ -10693,6 +10693,44 @@ switch ($action) {
         break;
     }
 
+    case 'wa_hub_stats': {
+        // إحصائيات مركز واتساب — من قاعدة بياناتنا (كل الرسائل تمر عبر الـwebhook)
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $S = [];
+        $q = fn($sql) => (($r = $conn->query($sql)) && ($x = $r->fetch_assoc())) ? $x : [];
+        $S['total_messages']  = (int)($q("SELECT COUNT(*) c FROM wa_bot_conversations")['c'] ?? 0);
+        $S['today_messages']  = (int)($q("SELECT COUNT(*) c FROM wa_bot_conversations WHERE DATE(created_at)=CURDATE()")['c'] ?? 0);
+        $S['week_messages']   = (int)($q("SELECT COUNT(*) c FROM wa_bot_conversations WHERE created_at>=DATE_SUB(NOW(), INTERVAL 7 DAY)")['c'] ?? 0);
+        $S['unique_customers']= (int)($q("SELECT COUNT(DISTINCT phone) c FROM wa_bot_conversations")['c'] ?? 0);
+        $S['week_customers']  = (int)($q("SELECT COUNT(DISTINCT phone) c FROM wa_bot_conversations WHERE created_at>=DATE_SUB(NOW(), INTERVAL 7 DAY)")['c'] ?? 0);
+        $S['paused_bots']     = (int)($q("SELECT COUNT(*) c FROM wa_bot_paused WHERE paused=1")['c'] ?? 0);
+        $S['unread']          = (int)($q("SELECT COUNT(*) c FROM wa_bot_conversations WHERE role='user' AND is_read=0")['c'] ?? 0);
+        // توزيع الأدوار
+        $S['by_role'] = [];
+        $r = $conn->query("SELECT role, COUNT(*) c FROM wa_bot_conversations GROUP BY role");
+        while ($r && ($x = $r->fetch_assoc())) $S['by_role'][$x['role']] = (int)$x['c'];
+        // سلسلة آخر 14 يوماً
+        $S['daily'] = [];
+        $r = $conn->query("SELECT DATE(created_at) d,
+                                  SUM(role='user') u, SUM(role!='user') o
+                           FROM wa_bot_conversations
+                           WHERE created_at>=DATE_SUB(CURDATE(), INTERVAL 13 DAY)
+                           GROUP BY DATE(created_at) ORDER BY d ASC");
+        while ($r && ($x = $r->fetch_assoc())) $S['daily'][] = ['d'=>$x['d'], 'in'=>(int)$x['u'], 'out'=>(int)$x['o']];
+        // أنشط الساعات (آخر 30 يوماً)
+        $S['hours'] = [];
+        $r = $conn->query("SELECT HOUR(created_at) h, COUNT(*) c FROM wa_bot_conversations
+                           WHERE role='user' AND created_at>=DATE_SUB(NOW(), INTERVAL 30 DAY)
+                           GROUP BY HOUR(created_at) ORDER BY c DESC LIMIT 5");
+        while ($r && ($x = $r->fetch_assoc())) $S['hours'][] = ['h'=>(int)$x['h'], 'c'=>(int)$x['c']];
+        // مؤشرات المبيعات من سجل المهتمين
+        $S['leads_total'] = (int)($q("SELECT COUNT(*) c FROM leads")['c'] ?? 0);
+        $S['leads_week']  = (int)($q("SELECT COUNT(*) c FROM leads WHERE created_at>=DATE_SUB(NOW(), INTERVAL 7 DAY)")['c'] ?? 0);
+        $S['leads_sold']  = (int)($q("SELECT COUNT(*) c FROM leads WHERE status='تم البيع'")['c'] ?? 0);
+        echo json_encode(['success'=>true, 'stats'=>$S], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'wa_templates': {
         // جلب قوالب واتساب المعتمدة من متصل (بمفتاح السيرفر — لا يُكشف للمتصفح)
         if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }

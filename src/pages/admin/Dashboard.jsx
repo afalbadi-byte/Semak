@@ -54,6 +54,7 @@ const RegaDevTracker    = React.lazy(() => import('./RegaDevTracker'));
 const WhatsAppCampaign  = React.lazy(() => import('./WhatsAppCampaign'));
 const QuantitySurvey    = React.lazy(() => import('./QuantitySurvey'));
 const UserGuide         = React.lazy(() => import('./UserGuide'));
+const WhatsAppHub       = React.lazy(() => import('./WhatsAppHub'));
 
 import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
@@ -1011,6 +1012,7 @@ function DashboardInner({ onLogout }) {
             desc:'العملاء المحتملون · التواصل المباشر · تحليل الجدوى والتسعير',
             tools:[
                 { id:'leads',       tabId:'leads',       label:'العملاء المحتملون',   icon:Users,         permKey:'leads',       badge:'leads_new',           color:'teal'   },
+                { id:'wa_hub',      tabId:'wa_hub',      label:'مركز واتساب',          icon:MessageCircle, permKey:'whatsapp',    planRequired:'starter',                      color:'green'  },
                 { id:'whatsapp',    tabId:'whatsapp',    label:'صندوق الرسائل',        icon:MessageCircle, permKey:'whatsapp',    planRequired:'starter',                      color:'green'  },
                 { id:'campaign',    tabId:'campaign',    label:'الحملات التسويقية',    icon:Megaphone,     permKey:'whatsapp',    planRequired:'starter',                      color:'green'  },
                 { id:'bot',         tabId:'bot',         label:'خدمة العملاء الذكية', icon:Bot,           permKey:'bot',         badge:'bot_customers_today', color:'amber', badgeLabel:'اليوم', planRequired:'pro' },
@@ -1134,7 +1136,7 @@ function DashboardInner({ onLogout }) {
     // ─── العناوين ────────────────────────────────────────────────────────────
     const TAB_LABELS = {
         overview:'لوحة الإدارة', projects:'المشاريع والأبراج', units:'الوحدات والمخطط',
-        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', qs:'التمتير والتكاليف', guide:'دليل الاستخدام', inspection:'محاضر التسليم',
+        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', qs:'التمتير والتكاليف', guide:'دليل الاستخدام', wa_hub:'مركز واتساب', inspection:'محاضر التسليم',
         snaglist:'تقارير الملاحظات', maintenance:'الصيانة', leads:'العملاء المحتملون',
         bot:'خدمة العملاء الذكية', whatsapp:'صندوق الرسائل', qr:'رموز الوحدات',
         letters:'الوثائق الرسمية', finance:'الإيرادات والمصروفات', daftra_explorer:'التقارير المالية',
@@ -1546,6 +1548,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'feasibility' && hasPermission('feasibility') && <div className="animate-fadeIn"><FeasibilityCalc showToast={showToast} /></div>}
                 {activeTab === 'qs'          && hasPermission('qs')          && <div className="animate-fadeIn"><QuantitySurvey showToast={showToast} /></div>}
                 {activeTab === 'guide'       && <div className="animate-fadeIn"><UserGuide /></div>}
+                {activeTab === 'wa_hub'      && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppHub showToast={showToast} onNavigateTab={setActiveTab} /></div>}
                 {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={showToast} /></div>}
                 {activeTab === 'snaglist'    && hasPermission('snaglist')    && <div className="animate-fadeIn p-6 md:p-8"><SnagList /></div>}
                 {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}
