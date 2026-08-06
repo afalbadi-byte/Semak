@@ -10658,6 +10658,41 @@ switch ($action) {
         break;
     }
 
+    case 'wa_hub': {
+        // بروكسي موحّد لموارد متصل/Azeer — قائمة مسموحة فقط، المفتاح يبقى في السيرفر
+        if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $resources = [
+            'templates' => 'partner/templates',
+            'contacts'  => 'contacts',
+            'messages'  => 'messages',
+            'tags'      => 'tags',
+            'agents'    => 'agents',
+            'teams'     => 'teams',
+            'chats'     => 'chats',
+            'apps'      => 'apps',
+        ];
+        $rkey = (string)($_GET['res'] ?? '');
+        if (!isset($resources[$rkey])) { echo json_encode(['success'=>false,'message'=>'مورد غير مسموح'], JSON_UNESCAPED_UNICODE); break; }
+        $qs = [];
+        foreach (['page','limit','search','status','phone','q','per_page','offset'] as $p) {
+            if (isset($_GET[$p]) && $_GET[$p] !== '') $qs[$p] = $_GET[$p];
+        }
+        $url = 'https://api.mottasl.ai/v1/' . $resources[$rkey] . ($qs ? ('?' . http_build_query($qs)) : '');
+        $hch = curl_init($url);
+        curl_setopt_array($hch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'Authorization: Bearer ' . MOTTASL_TOKEN],
+            CURLOPT_TIMEOUT => 25, CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+        $hres = curl_exec($hch);
+        $hcode = curl_getinfo($hch, CURLINFO_HTTP_CODE);
+        curl_close($hch);
+        header('Content-Type: application/json; charset=utf-8');
+        if ($hcode === 200 && $hres) echo $hres;
+        else echo json_encode(['success'=>false, 'http'=>$hcode, 'raw'=>mb_substr((string)$hres, 0, 300)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'wa_templates': {
         // جلب قوالب واتساب المعتمدة من متصل (بمفتاح السيرفر — لا يُكشف للمتصفح)
         if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
