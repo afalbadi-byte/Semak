@@ -1443,6 +1443,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS wa_human_takeover (
 $raw_input  = file_get_contents("php://input");
 $input_data = json_decode($raw_input, true);
 if (!$input_data) $input_data = [];
+$data = $input_data; // اسم بديل — عدة حالات (واتساب وغيرها) تقرأ $data
 
 $action = '';
 if (isset($_GET['action']))        $action = $_GET['action'];
@@ -10733,13 +10734,39 @@ switch ($action) {
             $bot_paused = false;
         }
 
-        // إرسال الرسالة عبر Mottasl
-        $sent = wa_send_text($to_phone, $msg_body);
+        // إرسال الرسالة عبر Mottasl — نص عادي أو قالب معتمد
+        if (($data['type'] ?? '') === 'template' && !empty($data['template_name'])) {
+            $tpl = [
+                'to'   => $to_phone,
+                'type' => 'template',
+                'template' => [
+                    'template_id' => (string)$data['template_name'],
+                    'language'    => (string)($data['template_lang'] ?? 'ar'),
+                ],
+            ];
+            $vars = array_values(array_map('strval', (array)($data['template_vars'] ?? [])));
+            if ($vars) $tpl['template']['argument'] = ['BODY' => $vars];
+            $tch = curl_init('https://api.mottasl.ai/v1/message/send?create=true');
+            curl_setopt_array($tch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($tpl),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . MOTTASL_TOKEN],
+                CURLOPT_TIMEOUT => 15, CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $tres = curl_exec($tch);
+            $tcode = curl_getinfo($tch, CURLINFO_HTTP_CODE);
+            curl_close($tch);
+            $sent = ($tcode === 200 || $tcode === 201);
+            if (!$sent) { echo json_encode(['success'=>false, 'message'=>'رفض متصل القالب (HTTP ' . $tcode . ')', 'raw'=>mb_substr((string)$tres, 0, 200)], JSON_UNESCAPED_UNICODE); break; }
+            $msg_body = '[قالب] ' . $data['template_name'] . ($vars ? ' — ' . implode('، ', $vars) : '');
+        } else {
+            $sent = wa_send_text($to_phone, $msg_body);
+        }
 
-        // حفظ الرسالة في سجل المحادثات
+        // حفظ الرسالة في سجل المحادثات (بدور موظف)
         $safe_body = $conn->real_escape_string(mb_substr($msg_body, 0, 2000));
-        $conn->query("INSERT INTO wa_bot_conversations (phone, role, message)
-                      VALUES ('$safe_to', 'admin', '$safe_body')");
+        $conn->query("INSERT INTO wa_bot_conversations (phone, role, message, is_read)
+                      VALUES ('$safe_to', 'agent', '$safe_body', 1)");
 
         echo json_encode([
             'success'    => $sent,

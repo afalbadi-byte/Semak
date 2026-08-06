@@ -150,7 +150,8 @@ export default function WhatsAppInbox() {
             phone: targetPhone,
             message: `[Template: ${selectedTemplate.name}]`,
             type: "template",
-            template_name: selectedTemplate.name,
+            template_name: selectedTemplate.id || selectedTemplate.name,
+            template_lang: selectedTemplate.language || "ar",
             template_vars: templateVars,
           }),
         });
