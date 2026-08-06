@@ -454,36 +454,8 @@ function TradeEditor({ tr, patchTrade, toast }) {
 }
 
 // ─── سحب البيانات من المخطط (صورة / PDF / DWG) ───────────────────────────────
-// DWG: يُفكّ في المتصفح عبر WASM (libredwg) → نستخرج النصوص والديمنشنات →
-// نرسلها لـClaude يفكّ الترميز العربي القديم ويرتّبها كفراغات بأبعادها.
-async function parseDwgToCad(file) {
-  const { LibreDwg, Dwg_File_Type } = await import('@mlightcad/libredwg-web');
-  const lib = await LibreDwg.create('/wasm');
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const dwg = lib.dwg_read_data(buf, Dwg_File_Type.DWG);
-  if (!dwg) throw new Error('تعذر فك ملف DWG');
-  const db = lib.convert(dwg);
-  try { lib.dwg_free(dwg); } catch { /* تحرير الذاكرة اختياري */ }
-  const r2 = (n) => Math.round((n || 0) * 100) / 100;
-  const texts = [], dims = [];
-  for (const e of db.entities || []) {
-    if ((e.type === 'TEXT' || e.type === 'MTEXT') && e.text && String(e.text).trim().length >= 2) {
-      const p = e.startPoint || e.insertionPoint || {};
-      texts.push({ t: String(e.text).trim().slice(0, 80), x: r2(p.x), y: r2(p.y) });
-      if (texts.length >= 600) break;
-    }
-  }
-  for (const e of db.entities || []) {
-    if (e.type === 'DIMENSION' && e.measurement > 0) {
-      const p = e.textPoint || e.insertionPoint || e.definitionPoint || {};
-      dims.push({ m: Math.round(e.measurement * 1000) / 1000, x: r2(p.x), y: r2(p.y) });
-      if (dims.length >= 600) break;
-    }
-  }
-  if (!texts.length && !dims.length) throw new Error('الملف لا يحتوي نصوصاً أو أبعاداً قابلة للقراءة');
-  return { texts, dims };
-}
-
+// DWG: يُفكّ في المتصفح عبر WASM (libredwg). إن وُجدت نصوص وديمنشنات حقيقية
+// تُرسل كبيانات CAD؛ وإن كانت النصوص «مفجّرة» تُرسم اللوحات إلى صور وتُقرأ بصرياً.
 function DrawingExtractButton({ onRooms, toast }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -500,10 +472,10 @@ function DrawingExtractButton({ onRooms, toast }) {
     try {
       let payload;
       if (isDwg) {
-        setStage('جارٍ فك ملف DWG…');
-        const cad = await parseDwgToCad(file);
+        const { extractFromDwg } = await import('../../lib/dwgExtract');
+        const ex = await extractFromDwg(file, setStage);
         setStage('جارٍ تحليل البيانات…');
-        payload = { cad: JSON.stringify(cad) };
+        payload = ex.kind === 'cad' ? { cad: ex.cad } : { files: ex.images };
       } else {
         setStage('جارٍ قراءة المخطط…');
         const b64 = await new Promise((res, rej) => {

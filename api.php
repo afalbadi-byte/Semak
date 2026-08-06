@@ -7257,20 +7257,38 @@ switch ($action) {
             $content = [['type'=>'text','text'=>$prompt]];
         } else {
             $allowed = ['image/png','image/jpeg','image/webp','image/gif','application/pdf'];
-            if ($b64 === '' || !in_array($mtype, $allowed, true)) { echo json_encode(['success'=>false,'message'=>'ملف غير صالح — ارفع صورة أو PDF أو DWG'], JSON_UNESCAPED_UNICODE); break; }
-            if (strlen($b64) > 12000000) { echo json_encode(['success'=>false,'message'=>'حجم الملف كبير جداً (الحد 8MB)'], JSON_UNESCAPED_UNICODE); break; }
+            // ملف واحد أو عدة صور (لوحات DWG المرسومة في المتصفح)
+            $files = [];
+            if (is_array($input_data['files'] ?? null)) {
+                foreach ($input_data['files'] as $f) {
+                    if (!is_array($f)) continue;
+                    $fd = (string)($f['data'] ?? ''); $fm = (string)($f['media_type'] ?? 'image/png');
+                    if ($fd !== '' && in_array($fm, $allowed, true)) $files[] = ['data'=>$fd,'media_type'=>$fm];
+                    if (count($files) >= 6) break;
+                }
+            } elseif ($b64 !== '' && in_array($mtype, $allowed, true)) {
+                $files[] = ['data'=>$b64,'media_type'=>$mtype];
+            }
+            if (!$files) { echo json_encode(['success'=>false,'message'=>'ملف غير صالح — ارفع صورة أو PDF أو DWG'], JSON_UNESCAPED_UNICODE); break; }
+            $totalLen = 0; foreach ($files as $f) $totalLen += strlen($f['data']);
+            if ($totalLen > 16000000) { echo json_encode(['success'=>false,'message'=>'حجم الملفات كبير جداً'], JSON_UNESCAPED_UNICODE); break; }
 
-            $block = $mtype === 'application/pdf'
-                ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>$b64]]
-                : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mtype,'data'=>$b64]];
-
+            $content = [];
+            foreach ($files as $f) {
+                $content[] = $f['media_type'] === 'application/pdf'
+                    ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>$f['data']]]
+                    : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$f['media_type'],'data'=>$f['data']]];
+            }
+            $multi = count($files) > 1 ? "المرفق عدة لوحات لنفس المشروع (أدوار مختلفة عادة). استخرج فراغات كل اللوحات، وميّز الأدوار في الاسم إن أمكن (مثل: مطبخ - الدور الأول).\n" : '';
             $prompt = "هذا مخطط معماري. استخرج جميع الفراغات (الغرف والمساحات) الظاهرة فيه مع أبعادها بالمتر.\n"
-                    . "- اقرأ الأبعاد المكتوبة على المخطط (مثل 5.20 × 3.50). إذا كان البعد بالسنتيمتر أو المليمتر حوّله للمتر.\n"
+                    . $multi
+                    . "- اقرأ الأبعاد المكتوبة على المخطط (مثل 5.20 × 3.50 وقد تكون بأرقام عربية ٣٫٨٠). إذا كان البعد بالسنتيمتر أو المليمتر حوّله للمتر.\n"
                     . "- أسماء الفراغات بالعربية كما هي في المخطط (المجلس، الصالة، المطبخ، غرفة نوم، حمام، مدخل...).\n"
+                    . "- إذا لم يُكتب البعد بجوار الغرفة قدّره من مقياس الرسم مقارنة بغرف معلومة الأبعاد.\n"
                     . "- إذا وُجد ارتفاع السقف مكتوباً أضفه في H وإلا اتركه فارغاً.\n"
                     . "أرجع JSON فقط بلا أي نص آخر بهذا الشكل بالضبط:\n"
                     . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":""}]}';
-            $content = [$block, ['type'=>'text','text'=>$prompt]];
+            $content[] = ['type'=>'text','text'=>$prompt];
         }
 
         $body = [
