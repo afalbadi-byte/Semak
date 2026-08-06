@@ -10826,16 +10826,22 @@ switch ($action) {
 
         // إرسال الرسالة عبر Mottasl — نص عادي أو قالب معتمد
         if (($data['type'] ?? '') === 'template' && !empty($data['template_name'])) {
+            // صيغة Meta المعتمدة — نفس المستخدمة في wa_send_otp (مجرّبة في الإنتاج)
             $tpl = [
                 'to'   => $to_phone,
                 'type' => 'template',
                 'template' => [
-                    'template_id' => (string)$data['template_name'],
-                    'language'    => (string)($data['template_lang'] ?? 'ar'),
+                    'name'     => (string)$data['template_name'],
+                    'language' => ['code' => (string)($data['template_lang'] ?? 'ar')],
                 ],
             ];
             $vars = array_values(array_map('strval', (array)($data['template_vars'] ?? [])));
-            if ($vars) $tpl['template']['argument'] = ['BODY' => $vars];
+            if ($vars) {
+                $tpl['template']['components'] = [[
+                    'type' => 'body',
+                    'parameters' => array_map(fn($v) => ['type' => 'text', 'text' => $v], $vars),
+                ]];
+            }
             $tch = curl_init('https://api.mottasl.ai/v1/message/send?create=true');
             curl_setopt_array($tch, [
                 CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
