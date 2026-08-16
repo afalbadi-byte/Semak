@@ -529,7 +529,7 @@ function PlanViewer({ plan, images, dwgFile, onPickDwg, toast, surveyName, onRoo
     try {
       const mod = await import('../../lib/ifcExport');
       const name = (surveyName || 'semak').replace(/[\\/:*?"<>|]/g, '_');
-      const common = { projectName: surveyName || 'مشروع سماك', defaultH: Number(ifcOpts.wallH) || 3.3, slabT: Number(ifcOpts.slabT) || 0.30, wallT: Number(ifcOpts.wallT) || 0.20, groundElev: Number(ifcOpts.groundElev) || 0, mergedWalls: !!ifcOpts.merged, includeSlabs: !!ifcOpts.slabs, includeColumns: !!ifcOpts.columns };
+      const common = { projectName: surveyName || 'مشروع سماك', defaultH: Number(ifcOpts.wallH) || 3.3, slabT: Number(ifcOpts.slabT) || 0.30, wallT: Number(ifcOpts.wallT) || 0.20, groundElev: Number(ifcOpts.groundElev) || 0, mergedWalls: !!ifcOpts.merged, includeSlabs: !!ifcOpts.slabs, includeColumns: !!ifcOpts.columns, keepDiagonal: !!ifcOpts.diagonal };
       if (ifcDlg.sheets.length) {
         let sheets = ifcDlg.sheets;
         if (ifcOpts.floors !== 'all') { const n = parseInt(ifcOpts.floors, 10); if (n >= 0 && n < sheets.length) sheets = [sheets[n]]; }
@@ -721,11 +721,12 @@ function PlanViewer({ plan, images, dwgFile, onPickDwg, toast, surveyName, onRoo
               </div>
             )}
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="mt-4 grid grid-cols-2 gap-2">
               {[
                 ['merged', 'مجسم واحد لكل دور', 'كل جدران الدور عنصر واحد'],
                 ['slabs', 'بلاطات الأسقف', 'بلاطة فوق كل دور'],
                 ['columns', 'الأعمدة الإنشائية', 'من طبقة مقاطع الأعمدة'],
+                ['diagonal', 'الجدران المائلة', 'فعّلها فقط إن كان المشروع فيه جدران مشطوفة فعلاً — وإلا تدخل رموز الدرج'],
               ].map(([k, label, hint]) => (
                 <label key={k} className={`cursor-pointer rounded-xl border px-3 py-2 text-xs transition ${ifcOpts[k] ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 text-slate-600'}`}>
                   <input type="checkbox" className="hidden" checked={!!ifcOpts[k]} onChange={e => setIfcOpts(o => ({ ...o, [k]: e.target.checked }))} />

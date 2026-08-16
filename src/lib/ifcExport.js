@@ -292,10 +292,17 @@ function cleanOrthoWalls(segs, opts = {}) {
   h = h.filter(s => keep(s, v));
   v = v.filter(s => keep(s, h));
   h = h.filter(s => s.b - s.a >= 0.2); v = v.filter(s => s.b - s.a >= 0.2);
+  // الجدران المائلة: تبقى فقط إن كان طرفاها ينتهيان عند جدران متعامدة (جدار حقيقي مشطوف).
+  // رموز الدرج/الأسهم/التهشير القاطع تمر عبر الفراغ بلا اتصال → تُحذف.
+  const nearWall = (x, y) => h.some(s => Math.abs(s.pos - y) <= 0.12 && x >= s.a - 0.12 && x <= s.b + 0.12)
+                          || v.some(s => Math.abs(s.pos - x) <= 0.12 && y >= s.a - 0.12 && y <= s.b + 0.12);
+  // افتراضياً لا نُصدّر المائل إطلاقاً (رمز الدرج يمتد جداراً-لجدار داخل بيت الدرج فيخدع اختبار الاتصال).
+  // opts.keepDiagonal = true يبقي المائل الطويل المتصل من طرفيه (لمشاريع فيها جدران مشطوفة فعلاً).
+  const diag = opts.keepDiagonal ? other.filter(g => nearWall(g.x1, g.y1) && nearWall(g.x2, g.y2) && Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= 1.5) : [];
   return [
     ...h.map(s => ({ x1: s.a, y1: s.pos, x2: s.b, y2: s.pos, t: s.t, rc: s.rc })),
     ...v.map(s => ({ x1: s.pos, y1: s.a, x2: s.pos, y2: s.b, t: s.t, rc: s.rc })),
-    ...other,
+    ...diag,
   ];
 }
 
@@ -336,7 +343,7 @@ export function findStoreyOffset(baseWalls, upWalls, baseBox, upBox) {
 // نمط الإخراج:
 //  - mergedWalls: كل جدران الدور في عنصر IfcWall واحد (مجسم واحد لكل دور) — افتراضي
 //  - محاذاة الأدوار: بمطابقة الجدران المشتركة مع الدور الأرضي (فوق بعض بالضبط)
-export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false, mergedWalls = true, slabT = SLAB_T, wallT = 0.20, includeSlabs = true, includeColumns = true, groundElev = 0 }) {
+export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false, mergedWalls = true, slabT = SLAB_T, wallT = 0.20, includeSlabs = true, includeColumns = true, groundElev = 0, keepDiagonal = false }) {
   const H = Number(defaultH) > 0 ? Number(defaultH) : H_DEFAULT;
   const ST = Number(slabT) > 0 ? Number(slabT) : SLAB_T;
   WALL_T = Number(wallT) > 0 ? Number(wallT) : 0.20;
@@ -377,7 +384,7 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
   const cleanedPer = sheets.map(sh => {
     const merged = mergeCollinear(sh.segs.map(g => ({ ...g })));
     const paired = pairParallelFaces(merged);
-    return cleanOrthoWalls(mergeCollinear(paired).filter(g => Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= 0.35));
+    return cleanOrthoWalls(mergeCollinear(paired).filter(g => Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= 0.35), { keepDiagonal });
   });
   // ── محاذاة: الأرضي يبدأ من الأصل، وكل دور أعلى يُزاح بمطابقة جدرانه على الأرضي ──
   const base = sheets[0];
