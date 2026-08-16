@@ -522,7 +522,7 @@ function PlanViewer({ plan, images, dwgFile, onPickDwg, toast, surveyName, onRoo
         }
         const { text, stats } = mod.buildIfcFromSheets({ sheets, projectName: surveyName || 'مشروع سماك', defaultH: H, rooms });
         mod.downloadIfc(text, `${name}.ifc`);
-        toast?.('تم التصدير', `${stats.storeys} دور · ${stats.walls} جداراً (${stats.rcWalls || 0} خرسانة مسلحة) · ${stats.columns || 0} عموداً · ${stats.openings} فتحة — افتحه في Revit: Open → IFC`);
+        toast?.('تم التصدير', `${stats.storeys} دور · ${stats.walls} جداراً (${stats.rcWalls || 0} خرسانة مسلحة) · ${stats.columns || 0} عموداً — فتحات الأبواب محفوظة كفجوات في الجدران. افتحه في Revit: Open → IFC`);
       } else {
         const { text, stats } = mod.buildIfcFromRooms({ rooms, projectName: surveyName || 'مشروع سماك', defaultH: H });
         mod.downloadIfc(text, `${name}.ifc`);

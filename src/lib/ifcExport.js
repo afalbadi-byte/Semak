@@ -288,7 +288,7 @@ function cleanOrthoWalls(segs, opts = {}) {
 }
 
 // ─── الملف الكامل ─────────────────────────────────────────────────────────────
-export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [] }) {
+export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false }) {
   const H = Number(defaultH) > 0 ? Number(defaultH) : H_DEFAULT;
   const L = []; let id = 100;
   const add = (line) => { L.push(`#${id}=${line};`); return id++; };
@@ -365,9 +365,10 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     const colIds = (sh.columns || []).map((c, i) => columnFromRect(add, ctxIds, { ...c, x: c.x - ox, y: c.y - oy }, H, i + 1));
     stats.columns = (stats.columns || 0) + colIds.length;
 
-    // الفتحات كعناصر مرجعية (IfcBuildingElementProxy) — الأبواب بارتفاع 2.1 والنوافذ 1.2 على منسوب 1.0
+    // الفتحات كعناصر مرجعية (اختياري — افتراضياً مطفأ: فجوات الجدران تحدد الفتحات بدقة
+    // والمهندس يضع الأبواب من مكتبة Revit؛ الرسم الخام للأبواب يعطي عناصر مشوّشة)
     const openIds = [];
-    for (const o of mergeCollinear((sh.openings || []).map(g => ({ ...g, x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy })))) {
+    for (const o of includeOpenings ? mergeCollinear((sh.openings || []).map(g => ({ ...g, x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy }))) : []) {
       const len = Math.hypot(o.x2 - o.x1, o.y2 - o.y1);
       if (len < 0.5 || len > 4) continue; // فتحات منطقية فقط
       const isWin = /win/i.test(o.kind || '');
