@@ -80,6 +80,7 @@ export async function extractWallSheets(file) {
 // ─── تحويل قطع الخطوط لجدران IFC: كل قطعة = بثق مستطيل بسماكة WALL_T ─────────
 function wallFromSeg(add, ctxIds, g, H, idx) {
   const { zDir, subCtx, wcs, stP } = ctxIds;
+  const T = g.t > 0 ? g.t : WALL_T;
   const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
   const dx = (g.x2 - g.x1) / len, dy = (g.y2 - g.y1) / len;
   const p   = add(`IFCCARTESIANPOINT((${f(g.x1)},${f(g.y1)},0.))`);
@@ -88,11 +89,11 @@ function wallFromSeg(add, ctxIds, g, H, idx) {
   const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
   const c2  = add(`IFCCARTESIANPOINT((${f(len / 2)},0.))`);
   const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
-  const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(len)},${f(WALL_T)})`);
+  const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(len)},${f(T)})`);
   const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(H)})`);
   const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
   const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
-  return add(`IFCWALL('${guid()}',#${ctxIds.ownId},'Wall ${idx}',$,$,#${pl},#${pds},$,.STANDARD.)`);
+  return add(`IFCWALL('${guid()}',#${ctxIds.ownId},'Wall ${idx} (${Math.round(T * 100)}cm)',$,$,#${pl},#${pds},$,.STANDARD.)`);
 }
 
 // دمج القطع المتتالية على نفس الاستقامة (يقلل عدد الجدران في Revit)
@@ -117,6 +118,7 @@ function mergeCollinear(segs, tol = 0.03) {
           const g = segs[j];
           const [dx1, dy1] = dir(cur), [dx2, dy2] = dir(g);
           if (Math.abs(dx1 * dx2 + dy1 * dy2) < 0.995) continue; // ليس على استقامة
+          if (cur.t && g.t && Math.abs(cur.t - g.t) > 0.03) continue; // سماكات مختلفة — لا تدمج
           // الطرف الآخر من g
           const touchesEnd = Math.hypot(g.x1 - ex, g.y1 - ey) < tol * 2;
           const other = touchesEnd ? [g.x2, g.y2] : [g.x1, g.y1];
@@ -127,6 +129,50 @@ function mergeCollinear(segs, tol = 0.03) {
       }
     }
     out.push(cur);
+  }
+  return out;
+}
+
+// ─── دمج الوجهين المتوازيين لجدار واحد بسماكته الحقيقية ─────────────────────
+// رسومات CAD تمثل الجدار بخطين (وجه داخلي/خارجي). نبحث لكل قطعة عن قرين موازٍ
+// قريب (0.08–0.45 م) متراكب طولياً ≥60% → نستبدلهما بجدار واحد على خط الوسط.
+function pairParallelFaces(segs, minT = 0.08, maxT = 0.45) {
+  const n = segs.length, used = new Array(n).fill(false), out = [];
+  const info = segs.map(g => {
+    const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+    const dx = (g.x2 - g.x1) / len, dy = (g.y2 - g.y1) / len;
+    return { g, len, dx, dy, nx: -dy, ny: dx };
+  });
+  // إسقاط نقطة على محور القطعة (t) وبعدها العمودي (d)
+  const proj = (a, x, y) => ({ t: (x - a.g.x1) * a.dx + (y - a.g.y1) * a.dy, d: (x - a.g.x1) * a.nx + (y - a.g.y1) * a.ny });
+  for (let i = 0; i < n; i++) {
+    if (used[i]) continue;
+    const a = info[i];
+    let best = -1, bestScore = 0, bestT = 0;
+    for (let j = i + 1; j < n; j++) {
+      if (used[j]) continue;
+      const b = info[j];
+      if (Math.abs(a.dx * b.dx + a.dy * b.dy) < 0.995) continue;          // ليس موازياً
+      const p1 = proj(a, b.g.x1, b.g.y1), p2 = proj(a, b.g.x2, b.g.y2);
+      const d = (p1.d + p2.d) / 2;
+      if (Math.abs(p1.d - p2.d) > 0.05) continue;                          // ليس موازياً فعلاً
+      const t = Math.abs(d);
+      if (t < minT || t > maxT) continue;                                   // ليس بسماكة جدار
+      const lo = Math.max(0, Math.min(p1.t, p2.t)), hi = Math.min(a.len, Math.max(p1.t, p2.t));
+      const overlap = hi - lo;
+      if (overlap < 0.6 * Math.min(a.len, b.len)) continue;                 // تراكب طولي غير كافٍ
+      const score = overlap / (1 + t);
+      if (score > bestScore) { bestScore = score; best = j; bestT = t; }
+    }
+    if (best >= 0) {
+      const b = info[best]; used[i] = used[best] = true;
+      // خط الوسط: امتداد اتحاد القطعتين على محور a، مُزاح بنصف السماكة نحو b
+      const p1 = proj(a, b.g.x1, b.g.y1), p2 = proj(a, b.g.x2, b.g.y2);
+      const sgn = Math.sign((p1.d + p2.d) / 2) || 1;
+      const lo = Math.min(0, p1.t, p2.t), hi = Math.max(a.len, p1.t, p2.t);
+      const ox = a.nx * sgn * bestT / 2, oy = a.ny * sgn * bestT / 2;
+      out.push({ x1: a.g.x1 + a.dx * lo + ox, y1: a.g.y1 + a.dy * lo + oy, x2: a.g.x1 + a.dx * hi + ox, y2: a.g.y1 + a.dy * hi + oy, t: bestT });
+    } else { used[i] = true; out.push({ ...a.g, t: WALL_T }); }
   }
   return out;
 }
@@ -177,7 +223,11 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     storeyIds.push(storey);
     const ctxIds = { zDir, subCtx, wcs, stP, ownId };
 
-    const segs = mergeCollinear(sh.segs.map(g => ({ x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy })));
+    // 1) دمج القطع المتتالية على استقامة  2) دمج الوجهين المتوازيين لجدار واحد
+    // 3) استبعاد القطع القصيرة جداً (زوايا وأطراف الرسم)
+    const merged = mergeCollinear(sh.segs.map(g => ({ x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy })));
+    const paired = pairParallelFaces(merged);
+    const segs = mergeCollinear(paired).filter(g => Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= 0.35);
     const wallIds = segs.map((g, i) => wallFromSeg(add, ctxIds, g, H, i + 1));
     stats.walls += wallIds.length;
 
