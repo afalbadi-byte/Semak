@@ -276,10 +276,21 @@ function cleanOrthoWalls(segs, opts = {}) {
   };
   extend(h, v); extend(v, h);
   h = mergeLine(h); v = mergeLine(v);
-  // حذف القطع القصيرة العائمة
-  const touches = (s, cross) => cross.some(c => c.a - 0.05 <= s.pos && c.b + 0.05 >= s.pos && (Math.abs(c.pos - s.a) <= 0.05 || Math.abs(c.pos - s.b) <= 0.05));
-  h = h.filter(s => s.b - s.a >= minLen || touches(s, v));
-  v = v.filter(s => s.b - s.a >= minLen || touches(s, h));
+  // حذف القطع القصيرة العائمة:
+  // اتصال حقيقي = أحد طرفي القطعة ينتهي عند جدار عمودي يمر بذلك الطرف (وصلة T أو L)
+  const endsOn = (s, cross) => cross.some(c => c.a - 0.05 <= s.pos && c.b + 0.05 >= s.pos && (Math.abs(c.pos - s.a) <= 0.05 || Math.abs(c.pos - s.b) <= 0.05));
+  // اتصال من الطرفين = قطعة تربط جدارين (وصلة حقيقية) — نبقيها مهما قصرت
+  const bothEnds = (s, cross) => cross.some(c => c.a - 0.05 <= s.pos && c.b + 0.05 >= s.pos && Math.abs(c.pos - s.a) <= 0.05)
+                              && cross.some(c => c.a - 0.05 <= s.pos && c.b + 0.05 >= s.pos && Math.abs(c.pos - s.b) <= 0.05);
+  const keep = (s, cross) => {
+    const len = s.b - s.a;
+    if (len >= 1.2) return true;                 // جدار طويل — يبقى
+    if (bothEnds(s, cross)) return true;         // يربط جدارين — يبقى
+    if (len >= minLen && endsOn(s, cross)) return true; // متوسط ومتصل من طرف — يبقى
+    return false;                                // قصير معزول أو متصل من طرف فقط — يُحذف
+  };
+  h = h.filter(s => keep(s, v));
+  v = v.filter(s => keep(s, h));
   h = h.filter(s => s.b - s.a >= 0.2); v = v.filter(s => s.b - s.a >= 0.2);
   return [
     ...h.map(s => ({ x1: s.a, y1: s.pos, x2: s.b, y2: s.pos, t: s.t, rc: s.rc })),
