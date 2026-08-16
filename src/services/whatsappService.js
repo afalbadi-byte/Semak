@@ -265,30 +265,24 @@ export async function getAzeerTemplates() {
 }
 
 /** إرسال رسالة عبر قالب معتمد */
-export async function sendWhatsAppTemplate(phone, templateName, vars = []) {
-  if (!API_KEY) return { success: false, error: "API key غير مضبوط" };
+export async function sendWhatsAppTemplate(phone, templateName, vars = [], lang = TEMPLATE_LANG) {
+  // عبر السيرفر: يحدد صورة الرأس تلقائياً للقوالب المصوّرة ويحفظ الرسالة في المحادثة ويخفي المفتاح
   const to = normalizePhone(phone);
   try {
-    const res = await fetch(`${BASE_URL}/message/send?create=true`, {
+    const res = await fetch(`${API_URL}?action=send_whatsapp`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        to,
-        type: "template",
-        template: {
-          template_id: templateName,
-          language: TEMPLATE_LANG,
-          ...(vars.length > 0 && { argument: { BODY: vars.map(String) } }),
-        },
+        phone: to, type: "template",
+        message: `[Template: ${templateName}]`,
+        template_name: templateName, template_lang: lang || "ar",
+        template_vars: vars.map(String),
       }),
     });
     const data = await res.json();
-    return res.ok
-      ? { success: true, message_id: data.id || data.message_id || "" }
-      : { success: false, error: data.message || data.error || `HTTP ${res.status}` };
+    return data?.success
+      ? { success: true }
+      : { success: false, error: data?.message || data?.error || `HTTP ${res.status}` };
   } catch (err) {
     return { success: false, error: err.message };
   }
