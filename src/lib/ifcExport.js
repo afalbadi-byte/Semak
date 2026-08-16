@@ -6,8 +6,9 @@
 //   B) من الفراغات فقط (صورة/PDF): مستطيلات الغرف تقريبية — احتياطي.
 // ════════════════════════════════════════════════════════════════════════════
 
-const WALL_T = 0.20;
+let WALL_T = 0.20;     // سماكة الجدار الافتراضية للخطوط المفردة (تُضبط من الخيارات)
 const H_DEFAULT = 3.3;
+const SLAB_T = 0.30;   // سماكة بلاطة السقف (م)
 
 // ─── مساعدات كتابة IFC ────────────────────────────────────────────────────────
 function guid() {
@@ -324,8 +325,12 @@ export function findStoreyOffset(baseWalls, upWalls, baseBox, upBox) {
 // نمط الإخراج:
 //  - mergedWalls: كل جدران الدور في عنصر IfcWall واحد (مجسم واحد لكل دور) — افتراضي
 //  - محاذاة الأدوار: بمطابقة الجدران المشتركة مع الدور الأرضي (فوق بعض بالضبط)
-export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false, mergedWalls = true }) {
+export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false, mergedWalls = true, slabT = SLAB_T, wallT = 0.20, includeSlabs = true, includeColumns = true, groundElev = 0 }) {
   const H = Number(defaultH) > 0 ? Number(defaultH) : H_DEFAULT;
+  const ST = Number(slabT) > 0 ? Number(slabT) : SLAB_T;
+  WALL_T = Number(wallT) > 0 ? Number(wallT) : 0.20;
+  const FLOOR_H = H + (includeSlabs ? ST : 0); // ارتفاع الدور الكامل: جدران + بلاطة
+  const G0 = Number(groundElev) || 0;           // منسوب الدور الأرضي
   const L = []; let id = 100;
   const add = (line) => { L.push(`#${id}=${line};`); return id++; };
 
@@ -379,9 +384,9 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
   stats.alignment = offsets.map((o, i) => i === 0 ? 'base' : (o.weak ? `weak(${o.score.toFixed(1)}m)` : `matched(${o.score.toFixed(1)}m)`));
 
   sheets.forEach((sh, si) => {
-    // كل لوحة = طابق بمنسوب si*H. الإزاحة المحسوبة تجعل الجدران المشتركة تنطبق
+    // كل لوحة = طابق بمنسوب si*(H+بلاطة). الإزاحة المحسوبة تجعل الجدران المشتركة تنطبق
     const ox = -offsets[si].dx, oy = -offsets[si].dy;
-    const elev = si * H;
+    const elev = G0 + si * FLOOR_H;
     const stOrigin = add(`IFCCARTESIANPOINT((0.,0.,${f(elev)}))`);
     const stAx  = add(`IFCAXIS2PLACEMENT3D(#${stOrigin},#${zDir},#${xDir})`);
     const stP   = add(`IFCLOCALPLACEMENT(#${bldgP},#${stAx})`);
@@ -440,8 +445,34 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     }
 
     // الأعمدة الخرسانية من طبقة مقاطع الأعمدة
-    const colIds = (sh.columns || []).map((c, i) => columnFromRect(add, ctxIds, { ...c, x: c.x - ox, y: c.y - oy }, H, i + 1));
+    const colIds = includeColumns ? (sh.columns || []).map((c, i) => columnFromRect(add, ctxIds, { ...c, x: c.x - ox, y: c.y - oy }, H, i + 1)) : [];
     stats.columns = (stats.columns || 0) + colIds.length;
+
+    // بلاطة سقف الدور: مستطيل يغطي كل جدران الدور (+10 سم حافة) على أعلى الجدران بسماكة ST
+    let slabId = null;
+    if (includeSlabs && cleaned.length) {
+      let sMinX = 1e18, sMinY = 1e18, sMaxX = -1e18, sMaxY = -1e18;
+      for (const g of cleaned) {
+        const t = (g.t || WALL_T) / 2;
+        sMinX = Math.min(sMinX, g.x1 - t, g.x2 - t); sMaxX = Math.max(sMaxX, g.x1 + t, g.x2 + t);
+        sMinY = Math.min(sMinY, g.y1 - t, g.y2 - t); sMaxY = Math.max(sMaxY, g.y1 + t, g.y2 + t);
+      }
+      const edge = 0.10;
+      const sw = (sMaxX - sMinX) + 2 * edge, sd = (sMaxY - sMinY) + 2 * edge;
+      const p   = add(`IFCCARTESIANPOINT((${f(sMinX - edge)},${f(sMinY - edge)},${f(H)}))`);
+      const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${xDir})`);
+      const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
+      const c2  = add(`IFCCARTESIANPOINT((${f(sw / 2)},${f(sd / 2)}))`);
+      const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
+      const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(sw)},${f(sd)})`);
+      const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(ST)})`);
+      const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
+      const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
+      const label = `${name} — بلاطة السقف ${Math.round(ST * 100)} سم (${sw.toFixed(1)}×${sd.toFixed(1)} م)`;
+      slabId = add(`IFCSLAB('${guid()}',#${ownId},'${ifcText(label)}',$,'RC Slab',#${pl},#${pds},$,.FLOOR.)`);
+      stats.slabs = (stats.slabs || 0) + 1;
+      stats.slabArea = (stats.slabArea || 0) + sw * sd;
+    }
 
     // الفتحات كعناصر مرجعية (اختياري — افتراضياً مطفأ: فجوات الجدران تحدد الفتحات بدقة
     // والمهندس يضع الأبواب من مكتبة Revit؛ الرسم الخام للأبواب يعطي عناصر مشوّشة)
@@ -473,7 +504,7 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
       spaceIds.push(add(`IFCSPACE('${guid()}',#${ownId},'${ifcText(label)}','${ifcText(`${r.L || ''}×${r.W || ''} م`)}',$,#${stP},$,$,.ELEMENT.,.INTERNAL.,$)`));
     }
 
-    const contained = [...wallIds, ...colIds, ...openIds];
+    const contained = [...wallIds, ...colIds, ...(slabId ? [slabId] : []), ...openIds];
     if (contained.length) add(`IFCRELCONTAINEDINSPATIALSTRUCTURE('${guid()}',#${ownId},$,$,(${contained.map(i => '#' + i).join(',')}),#${storey})`);
     if (spaceIds.length) add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${storey},(${spaceIds.map(i => '#' + i).join(',')}))`);
     stats.storeys++;

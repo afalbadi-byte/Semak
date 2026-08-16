@@ -504,33 +504,50 @@ function PlanViewer({ plan, images, dwgFile, onPickDwg, toast, surveyName, onRoo
   const dwgPickRef = useRef(null);
   const imgs = images || [];
 
-  // تصدير Revit: من DWG (جدران حقيقية) إن توفر، وإلا من الفراغات (تقريبي)
-  const exportIfc = async (file) => {
+  // تصدير Revit: نافذة خيارات المهندس ثم التوليد — من DWG (جدران حقيقية) إن توفر
+  const [ifcDlg, setIfcDlg] = useState(null); // { file, sheets }
+  const [ifcOpts, setIfcOpts] = useState({ wallH: 3.3, slabT: 0.30, wallT: 0.20, groundElev: 0, floors: 'all', merged: true, slabs: true, columns: true, floorNames: '' });
+
+  const openIfcDialog = async (file) => {
     setIfcBusy(true);
     try {
       const mod = await import('../../lib/ifcExport');
-      const H = plan?.defaultH || 3.3;
-      const name = (surveyName || 'semak').replace(/[\\/:*?"<>|]/g, '_');
+      let sheets = [];
       if (file) {
-        let sheets = await mod.extractWallSheets(file);
-        if (!sheets.length) throw new Error('لم أجد طبقة جدران في هذا الـDWG (WALL / A-WALL) — سيُصدَّر تقريبياً من الفراغات');
-        if (sheets.length > 1) {
-          const list = sheets.map((s, i) => `${i + 1}) ${(s.bbox.maxX - s.bbox.minX).toFixed(0)}×${(s.bbox.maxY - s.bbox.minY).toFixed(0)} م — ${s.segs.length} خط`).join('\n');
-          const pick = window.prompt(`وجدت ${sheets.length} لوحات/أدوار:\n${list}\n\nاكتب رقم الدور لتصديره وحده، أو اتركه فارغاً لتصدير الكل كأدوار متراكبة:`, '');
-          const n = parseInt(pick, 10);
-          if (pick && n >= 1 && n <= sheets.length) sheets = [sheets[n - 1]];
-        }
-        const { text, stats } = mod.buildIfcFromSheets({ sheets, projectName: surveyName || 'مشروع سماك', defaultH: H, rooms });
+        sheets = await mod.extractWallSheets(file);
+        if (!sheets.length) toast?.('تنبيه', 'لم أجد طبقة جدران (WALL / A-WALL) في هذا الـDWG — سيُصدَّر تقريبياً من الفراغات', 'error');
+      }
+      setIfcOpts(o => ({ ...o, wallH: plan?.defaultH || o.wallH, floors: 'all', floorNames: sheets.map((_, i) => ['الدور الأرضي', 'الدور الأول', 'الدور الثاني', 'الملحق العلوي', 'السطح'][i] || `الدور ${i + 1}`).join('، ') }));
+      setIfcDlg({ file, sheets });
+    } catch (e) { toast?.('خطأ', e?.message || 'فشل قراءة الملف', 'error'); }
+    setIfcBusy(false);
+  };
+
+  const runIfcExport = async () => {
+    if (!ifcDlg) return;
+    setIfcBusy(true);
+    try {
+      const mod = await import('../../lib/ifcExport');
+      const name = (surveyName || 'semak').replace(/[\\/:*?"<>|]/g, '_');
+      const common = { projectName: surveyName || 'مشروع سماك', defaultH: Number(ifcOpts.wallH) || 3.3, slabT: Number(ifcOpts.slabT) || 0.30, wallT: Number(ifcOpts.wallT) || 0.20, groundElev: Number(ifcOpts.groundElev) || 0, mergedWalls: !!ifcOpts.merged, includeSlabs: !!ifcOpts.slabs, includeColumns: !!ifcOpts.columns };
+      if (ifcDlg.sheets.length) {
+        let sheets = ifcDlg.sheets;
+        if (ifcOpts.floors !== 'all') { const n = parseInt(ifcOpts.floors, 10); if (n >= 0 && n < sheets.length) sheets = [sheets[n]]; }
+        const floorNames = String(ifcOpts.floorNames || '').split(/[،,]/).map(s => s.trim()).filter(Boolean);
+        const { text, stats } = mod.buildIfcFromSheets({ ...common, sheets, rooms, floorNames: ifcOpts.floors === 'all' ? floorNames : [floorNames[parseInt(ifcOpts.floors, 10)] || floorNames[0]] });
         mod.downloadIfc(text, `${name}.ifc`);
-        toast?.('تم التصدير', `${stats.storeys} دور · ${stats.walls} جداراً (${stats.rcWalls || 0} خرسانة مسلحة) · ${stats.columns || 0} عموداً — فتحات الأبواب محفوظة كفجوات في الجدران. افتحه في Revit: Open → IFC`);
+        const align = (stats.alignment || []).filter(a => a !== 'base').map(a => a.startsWith('weak') ? '⚠️ ' + a : a).join(' · ');
+        toast?.('تم التصدير', `${stats.storeys} دور · ${stats.walls} جداراً (${stats.rcWalls || 0} خرسانة) · ${stats.columns || 0} عموداً · ${stats.slabs || 0} بلاطة${align ? ' — محاذاة: ' + align : ''}. افتحه في Revit: Open → IFC`);
       } else {
-        const { text, stats } = mod.buildIfcFromRooms({ rooms, projectName: surveyName || 'مشروع سماك', defaultH: H });
+        const { text, stats } = mod.buildIfcFromRooms({ rooms, projectName: common.projectName, defaultH: common.defaultH });
         mod.downloadIfc(text, `${name}.ifc`);
         toast?.('تم التصدير (تقريبي)', `${stats.walls} جداراً من مستطيلات الفراغات — لدقة حقيقية ارفع ملف DWG المشروع`);
       }
+      setIfcDlg(null);
     } catch (e) { toast?.('خطأ', e?.message || 'فشل توليد IFC', 'error'); }
     setIfcBusy(false);
   };
+  const exportIfc = openIfcDialog;
 
   const revise = async () => {
     if (!instr.trim()) return;
@@ -660,6 +677,74 @@ function PlanViewer({ plan, images, dwgFile, onPickDwg, toast, surveyName, onRoo
           {plan?.lastSummary && <p className="text-[11px] text-emerald-700 mt-2 bg-emerald-50 rounded-lg px-3 py-1.5">آخر تعديل: {plan.lastSummary}</p>}
         </div>
       </div>
+
+      {/* نافذة خيارات تصدير Revit */}
+      {ifcDlg && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !ifcBusy && setIfcDlg(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-lg w-full" onClick={e => e.stopPropagation()} dir="rtl">
+            <h3 className="font-extrabold text-slate-800 flex items-center gap-2 mb-1"><Layers className="w-5 h-5 text-slate-700" /> خيارات تصدير Revit (IFC)</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              {ifcDlg.sheets.length
+                ? `${ifcDlg.file?.name} — وُجد ${ifcDlg.sheets.length} ${ifcDlg.sheets.length > 1 ? 'أدوار' : 'دور'} بجدران حقيقية`
+                : 'بدون DWG — تصدير تقريبي من مستطيلات الفراغات'}
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['wallH', 'ارتفاع الجدران (م)', 0.1],
+                ['slabT', 'سماكة بلاطة السقف (م)', 0.01],
+                ['wallT', 'سماكة الجدار الافتراضية (م)', 0.01],
+                ['groundElev', 'منسوب الدور الأرضي (م)', 0.01],
+              ].map(([k, label, step]) => (
+                <label key={k} className="text-xs font-bold text-slate-500">
+                  {label}
+                  <input type="number" step={step} value={ifcOpts[k]} onChange={e => setIfcOpts(o => ({ ...o, [k]: e.target.value }))} dir="ltr"
+                    className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-slate-300" />
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">سماكة الجدار الافتراضية تُستخدم فقط للجدران المرسومة بخط واحد — الجدران المرسومة بوجهين تأخذ سماكتها الحقيقية من الرسم.</p>
+
+            {ifcDlg.sheets.length > 1 && (
+              <div className="mt-3">
+                <label className="text-xs font-bold text-slate-500">الأدوار المُصدَّرة</label>
+                <select value={ifcOpts.floors} onChange={e => setIfcOpts(o => ({ ...o, floors: e.target.value }))}
+                  className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none bg-white">
+                  <option value="all">كل الأدوار متراكبة ({ifcDlg.sheets.length})</option>
+                  {ifcDlg.sheets.map((s, i) => (
+                    <option key={i} value={String(i)}>دور {i + 1} فقط — {(s.bbox.maxX - s.bbox.minX).toFixed(0)}×{(s.bbox.maxY - s.bbox.minY).toFixed(0)} م ({s.segs.length} خط)</option>
+                  ))}
+                </select>
+                <label className="text-xs font-bold text-slate-500 block mt-3">أسماء الأدوار (بالترتيب، مفصولة بفاصلة)</label>
+                <input value={ifcOpts.floorNames} onChange={e => setIfcOpts(o => ({ ...o, floorNames: e.target.value }))}
+                  className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-300" />
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {[
+                ['merged', 'مجسم واحد لكل دور', 'كل جدران الدور عنصر واحد'],
+                ['slabs', 'بلاطات الأسقف', 'بلاطة فوق كل دور'],
+                ['columns', 'الأعمدة الإنشائية', 'من طبقة مقاطع الأعمدة'],
+              ].map(([k, label, hint]) => (
+                <label key={k} className={`cursor-pointer rounded-xl border px-3 py-2 text-xs transition ${ifcOpts[k] ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 text-slate-600'}`}>
+                  <input type="checkbox" className="hidden" checked={!!ifcOpts[k]} onChange={e => setIfcOpts(o => ({ ...o, [k]: e.target.checked }))} />
+                  <div className="font-bold">{label}</div>
+                  <div className={`text-[10px] ${ifcOpts[k] ? 'text-slate-300' : 'text-slate-400'}`}>{hint}</div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <button onClick={runIfcExport} disabled={ifcBusy}
+                className="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-60">
+                {ifcBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} تنزيل ملف IFC
+              </button>
+              <button onClick={() => setIfcDlg(null)} disabled={ifcBusy} className="px-5 border border-slate-200 rounded-xl text-sm font-bold text-slate-500">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
