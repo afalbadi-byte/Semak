@@ -1,82 +1,13 @@
 // ════════════════════════════════════════════════════════════════════════════
-//  مولّد IFC4 من فراغات التمتير — نقطة بداية BIM للمهندس (يفتحه Revit مباشرة)
-//  المدخل: قائمة فراغات {n,name,L,W,H,px,py,floor} + ارتفاع افتراضي + اسم المشروع
-//  المخرج: نص ملف .ifc فيه: مشروع → موقع → مبنى → طابق → جدران (IfcWall) + فراغات (IfcSpace)
-//  ملاحظة صريحة: يبني الجدران الرئيسية للفراغات المستطيلة فقط — الأبواب والنوافذ
-//  والتشطيبات يكملها المهندس في Revit.
+//  مولّد IFC4 — نقطة بداية BIM للمهندس (يفتحه Revit مباشرة)
+//  مساران:
+//   A) من DWG: يقرأ خطوط الجدران الحقيقية من طبقات الجدران (A-WALL / WALL...)
+//      لكل لوحة/دور → جدران بمواضعها الهندسية الفعلية (بلا تخمين). الأدق.
+//   B) من الفراغات فقط (صورة/PDF): مستطيلات الغرف تقريبية — احتياطي.
 // ════════════════════════════════════════════════════════════════════════════
 
-const WALL_T = 0.20;   // سماكة الجدار (م)
-const SNAP   = 0.15;   // تسامح دمج الجدران المشتركة (م)
-
-// ─── تحويل مواضع الصورة (px/py %) إلى أمتار: نقدّر مقياس المخطط من الغرف نفسها ─
-// الفكرة: مجموع مساحات الغرف ≈ مساحة الصندوق المحيط بمراكزها موسّعاً بمتوسط الأبعاد.
-function layoutRooms(rooms) {
-  const withPos = rooms.filter(r => r.px != null && r.py != null && r.L > 0 && r.W > 0);
-  if (withPos.length < 2) return gridLayout(rooms);
-  const xs = withPos.map(r => r.px), ys = withPos.map(r => r.py);
-  const spanX = Math.max(...xs) - Math.min(...xs) || 1;
-  const spanY = Math.max(...ys) - Math.min(...ys) || 1;
-  // مقياس: عرض المسقط ≈ مجموع أطوال الغرف على صف "افتراضي" — نأخذ الجذر التربيعي للمساحة الكلية كتقدير للبعد
-  const totalArea = withPos.reduce((a, r) => a + r.L * r.W, 0);
-  const side = Math.sqrt(totalArea) * 1.15;             // بعد المسقط التقريبي بالمتر
-  const sx = side / spanX, sy = side / spanY;           // متر لكل 1% (تقريبي)
-  const minX = Math.min(...xs), maxY = Math.max(...ys);
-  return rooms.map(r => {
-    if (r.px == null || r.py == null || !(r.L > 0) || !(r.W > 0)) return null;
-    // مركز الغرفة بالمتر (py يزيد للأسفل في الصورة → نقلبه)
-    const cx = (r.px - minX) * sx;
-    const cy = (maxY - r.py) * sy;
-    return { ...r, x0: cx - r.L / 2, y0: cy - r.W / 2 };
-  }).filter(Boolean);
-}
-
-// ترتيب شبكي احتياطي لو لا مواضع
-function gridLayout(rooms) {
-  const out = []; let x = 0, y = 0, rowH = 0; const maxW = 20;
-  for (const r of rooms) {
-    if (!(r.L > 0) || !(r.W > 0)) continue;
-    if (x + r.L > maxW) { x = 0; y += rowH + WALL_T; rowH = 0; }
-    out.push({ ...r, x0: x, y0: y });
-    x += r.L + WALL_T; rowH = Math.max(rowH, r.W);
-  }
-  return out;
-}
-
-// ─── استخراج قطع الجدران من مستطيلات الغرف مع دمج المشتركة ───────────────────
-function wallSegments(rooms) {
-  const segs = []; // {x1,y1,x2,y2,axis:'h'|'v',pos}
-  const push = (x1, y1, x2, y2) => segs.push({ x1, y1, x2, y2, axis: y1 === y2 ? 'h' : 'v', pos: y1 === y2 ? y1 : x1 });
-  for (const r of rooms) {
-    const { x0, y0, L, W } = r;
-    push(x0, y0, x0 + L, y0);           // أسفل
-    push(x0, y0 + W, x0 + L, y0 + W);   // أعلى
-    push(x0, y0, x0, y0 + W);           // يسار
-    push(x0 + L, y0, x0 + L, y0 + W);   // يمين
-  }
-  // دمج القطع المتراكبة على نفس الخط (جدار مشترك بين غرفتين)
-  const merged = [];
-  for (const axis of ['h', 'v']) {
-    const lines = segs.filter(s => s.axis === axis).sort((a, b) => a.pos - b.pos);
-    const groups = [];
-    for (const s of lines) {
-      const g = groups.find(gg => Math.abs(gg.pos - s.pos) <= SNAP);
-      if (g) g.items.push(s); else groups.push({ pos: s.pos, items: [s] });
-    }
-    for (const g of groups) {
-      // اتحاد الفترات على المحور
-      const iv = g.items.map(s => axis === 'h' ? [Math.min(s.x1, s.x2), Math.max(s.x1, s.x2)] : [Math.min(s.y1, s.y2), Math.max(s.y1, s.y2)])
-        .sort((a, b) => a[0] - b[0]);
-      let cur = null;
-      for (const [a, b] of iv) {
-        if (!cur || a > cur[1] + SNAP) { if (cur) merged.push({ axis, pos: g.pos, a: cur[0], b: cur[1] }); cur = [a, b]; }
-        else cur[1] = Math.max(cur[1], b);
-      }
-      if (cur) merged.push({ axis, pos: g.pos, a: cur[0], b: cur[1] });
-    }
-  }
-  return merged.filter(m => m.b - m.a > 0.3);
-}
+const WALL_T = 0.20;
+const H_DEFAULT = 3.3;
 
 // ─── مساعدات كتابة IFC ────────────────────────────────────────────────────────
 function guid() {
@@ -84,9 +15,8 @@ function guid() {
   let s = ''; for (let i = 0; i < 22; i++) s += chars[Math.floor(Math.random() * 64)];
   return s;
 }
-const f = (n) => Number(n).toFixed(4).replace(/\.?0+$/, '') || '0';
+const f = (n) => { const s = Number(n).toFixed(4).replace(/\.?0+$/, ''); return s === '' || s === '-0' ? '0' : s; };
 const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "''");
-// نص عربي بترميز IFC (X2 unicode)
 function ifcText(s) {
   let out = '', run = '';
   const flush = () => { if (run) { out += `\\X2\\${run}\\X0\\`; run = ''; } };
@@ -98,17 +28,117 @@ function ifcText(s) {
   flush(); return out;
 }
 
-export function buildIfc({ rooms, projectName = 'مشروع سماك', defaultH = 3.3, floorName = 'الدور الأرضي' }) {
-  const laid = layoutRooms(rooms);
-  const walls = wallSegments(laid);
-  const H = Number(defaultH) > 0 ? Number(defaultH) : 3.3;
+// ─── A) قراءة قطع الجدران من DWG لكل لوحة ────────────────────────────────────
+// يرجع: [{ name, segs:[{x1,y1,x2,y2}], openings:[{x1,y1,x2,y2,kind}], bbox }]
+export async function extractWallSheets(file) {
+  const { LibreDwg, Dwg_File_Type } = await import('@mlightcad/libredwg-web');
+  const lib = await LibreDwg.create('/wasm');
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const dwg = lib.dwg_read_data(buf, Dwg_File_Type.DWG);
+  if (!dwg) throw new Error('تعذر فك ملف DWG');
+  const db = lib.convert(dwg);
+  try { lib.dwg_free(dwg); } catch { /* اختياري */ }
+  const ents = db.entities || [];
 
+  const isWall = (l) => /(^|[_-])(A-)?WALL(S)?($|[_-])|HATCH\s*-\s*WALLS/i.test(l || '') && !/LOW|TEXT|DIM/i.test(l || '');
+  const isDoor = (l) => /DOOR/i.test(l || '');
+  const isWin  = (l) => /WINDOW|WIN($|[_-])/i.test(l || '');
+  const prefixOf = (l) => { const m = String(l || '').match(/^([A-Za-z0-9]+)_/); return m ? m[1] : 'MAIN'; };
+
+  const sheets = {};
+  const seg = (arr, x1, y1, x2, y2, extra = {}) => { if (Math.hypot(x2 - x1, y2 - y1) > 0.05) arr.push({ x1, y1, x2, y2, ...extra }); };
+  for (const e of ents) {
+    const layer = e.layer || '';
+    const kind = isWall(layer) ? 'wall' : isDoor(layer) ? 'door' : isWin(layer) ? 'window' : null;
+    if (!kind) continue;
+    const key = prefixOf(layer);
+    sheets[key] = sheets[key] || { name: key, segs: [], openings: [] };
+    const target = kind === 'wall' ? sheets[key].segs : sheets[key].openings;
+    if (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') {
+      const v = e.vertices || [];
+      for (let i = 1; i < v.length; i++) seg(target, v[i - 1].x, v[i - 1].y, v[i].x, v[i].y, kind === 'wall' ? {} : { kind });
+      const closed = (e.flag & 1) === 1 || (e.flag & 512) === 512;
+      if (closed && v.length > 2) seg(target, v[v.length - 1].x, v[v.length - 1].y, v[0].x, v[0].y, kind === 'wall' ? {} : { kind });
+    } else if (e.type === 'LINE') {
+      seg(target, e.startPoint?.x, e.startPoint?.y, e.endPoint?.x, e.endPoint?.y, kind === 'wall' ? {} : { kind });
+    }
+  }
+  // تصفية اللوحات الفارغة/التالفة + حساب الصندوق
+  const out = [];
+  for (const s of Object.values(sheets)) {
+    if (s.segs.length < 8) continue;
+    let minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
+    for (const g of s.segs) { minX = Math.min(minX, g.x1, g.x2); maxX = Math.max(maxX, g.x1, g.x2); minY = Math.min(minY, g.y1, g.y2); maxY = Math.max(maxY, g.y1, g.y2); }
+    if (maxX - minX < 2 || maxY - minY < 2) continue; // لوحة بلا مقاييس حقيقية
+    out.push({ ...s, bbox: { minX, minY, maxX, maxY } });
+  }
+  // ترتيب من الأعلى للأسفل في اللوحة (الأرضي غالباً أعلى) — ثم نعكس ليصير الأرضي أولاً
+  out.sort((a, b) => b.bbox.maxY - a.bbox.maxY);
+  return out;
+}
+
+// ─── تحويل قطع الخطوط لجدران IFC: كل قطعة = بثق مستطيل بسماكة WALL_T ─────────
+function wallFromSeg(add, ctxIds, g, H, idx) {
+  const { zDir, subCtx, wcs, stP } = ctxIds;
+  const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+  const dx = (g.x2 - g.x1) / len, dy = (g.y2 - g.y1) / len;
+  const p   = add(`IFCCARTESIANPOINT((${f(g.x1)},${f(g.y1)},0.))`);
+  const d   = add(`IFCDIRECTION((${f(dx)},${f(dy)},0.))`);
+  const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${d})`);
+  const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
+  const c2  = add(`IFCCARTESIANPOINT((${f(len / 2)},0.))`);
+  const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
+  const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(len)},${f(WALL_T)})`);
+  const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(H)})`);
+  const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
+  const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
+  return add(`IFCWALL('${guid()}',#${ctxIds.ownId},'Wall ${idx}',$,$,#${pl},#${pds},$,.STANDARD.)`);
+}
+
+// دمج القطع المتتالية على نفس الاستقامة (يقلل عدد الجدران في Revit)
+function mergeCollinear(segs, tol = 0.03) {
+  const out = [];
+  const used = new Array(segs.length).fill(false);
+  const key = (x, y) => `${Math.round(x / tol)}_${Math.round(y / tol)}`;
+  const byEnd = new Map();
+  segs.forEach((g, i) => { for (const k of [key(g.x1, g.y1), key(g.x2, g.y2)]) { if (!byEnd.has(k)) byEnd.set(k, []); byEnd.get(k).push(i); } });
+  const dir = (g) => { const l = Math.hypot(g.x2 - g.x1, g.y2 - g.y1); return [(g.x2 - g.x1) / l, (g.y2 - g.y1) / l]; };
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    used[i] = true;
+    let cur = { ...segs[i] };
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const [ex, ey, endIsStart] of [[cur.x2, cur.y2, false], [cur.x1, cur.y1, true]]) {
+        const cands = byEnd.get(key(ex, ey)) || [];
+        for (const j of cands) {
+          if (used[j]) continue;
+          const g = segs[j];
+          const [dx1, dy1] = dir(cur), [dx2, dy2] = dir(g);
+          if (Math.abs(dx1 * dx2 + dy1 * dy2) < 0.995) continue; // ليس على استقامة
+          // الطرف الآخر من g
+          const touchesEnd = Math.hypot(g.x1 - ex, g.y1 - ey) < tol * 2;
+          const other = touchesEnd ? [g.x2, g.y2] : [g.x1, g.y1];
+          if (endIsStart) { cur.x1 = other[0]; cur.y1 = other[1]; } else { cur.x2 = other[0]; cur.y2 = other[1]; }
+          used[j] = true; grew = true; break;
+        }
+        if (grew) break;
+      }
+    }
+    out.push(cur);
+  }
+  return out;
+}
+
+// ─── الملف الكامل ─────────────────────────────────────────────────────────────
+export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [] }) {
+  const H = Number(defaultH) > 0 ? Number(defaultH) : H_DEFAULT;
   const L = []; let id = 100;
   const add = (line) => { L.push(`#${id}=${line};`); return id++; };
 
-  // ── رأس + سياق ──
   const orgId  = add(`IFCORGANIZATION($,'Semak Real Estate',$,$,$)`);
-  const appId  = add(`IFCAPPLICATION(#${orgId},'1.0','Semak QS BIM Export','SEMAK_QS')`);
+  const appId  = add(`IFCAPPLICATION(#${orgId},'2.0','Semak QS BIM Export','SEMAK_QS')`);
   const perId  = add(`IFCPERSON($,'Semak',$,$,$,$,$,$)`);
   const poId   = add(`IFCPERSONANDORGANIZATION(#${perId},#${orgId},$)`);
   const ownId  = add(`IFCOWNERHISTORY(#${poId},#${appId},$,.ADDED.,$,$,$,${Math.floor(Date.now() / 1000)})`);
@@ -124,75 +154,96 @@ export function buildIfc({ rooms, projectName = 'مشروع سماك', defaultH 
   const ctx    = add(`IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#${wcs},$)`);
   const subCtx = add(`IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,#${ctx},$,.MODEL_VIEW.,$)`);
   const proj   = add(`IFCPROJECT('${guid()}',#${ownId},'${ifcText(projectName)}',$,$,$,$,(#${ctx}),#${units})`);
-
-  // ── التسلسل المكاني ──
   const siteP  = add(`IFCLOCALPLACEMENT($,#${wcs})`);
   const site   = add(`IFCSITE('${guid()}',#${ownId},'Site',$,$,#${siteP},$,$,.ELEMENT.,$,$,$,$,$)`);
   const bldgP  = add(`IFCLOCALPLACEMENT(#${siteP},#${wcs})`);
   const bldg   = add(`IFCBUILDING('${guid()}',#${ownId},'${ifcText(projectName)}',$,$,#${bldgP},$,$,.ELEMENT.,$,$,$)`);
-  const stP    = add(`IFCLOCALPLACEMENT(#${bldgP},#${wcs})`);
-  const storey = add(`IFCBUILDINGSTOREY('${guid()}',#${ownId},'${ifcText(floorName)}',$,$,#${stP},$,$,.ELEMENT.,0.)`);
   add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${proj},(#${site}))`);
   add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${site},(#${bldg}))`);
-  add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${bldg},(#${storey}))`);
 
-  // ── الجدران: كل قطعة = بثق مستطيل (طول × سماكة) بارتفاع H ──
-  const wallIds = [];
-  walls.forEach((w, i) => {
-    const len = w.b - w.a;
-    // نقطة البداية واتجاه الجدار
-    const px = w.axis === 'h' ? w.a : w.pos;
-    const py = w.axis === 'h' ? w.pos : w.a;
-    const dirX = w.axis === 'h' ? 1 : 0, dirY = w.axis === 'h' ? 0 : 1;
-    const p   = add(`IFCCARTESIANPOINT((${f(px)},${f(py)},0.))`);
-    const d   = add(`IFCDIRECTION((${f(dirX)},${f(dirY)},0.))`);
-    const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${d})`);
-    const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
-    // مقطع مستطيل متمركز على المحور: الطول على X المحلي، السماكة على Y
-    const c2  = add(`IFCCARTESIANPOINT((${f(len / 2)},0.))`);
-    const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
-    const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(len)},${f(WALL_T)})`);
-    const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(H)})`);
-    const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
-    const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
-    const wid = add(`IFCWALL('${guid()}',#${ownId},'Wall ${i + 1}',$,$,#${pl},#${pds},$,.STANDARD.)`);
-    wallIds.push(wid);
+  const storeyIds = [];
+  const stats = { storeys: 0, walls: 0, openings: 0, height: H };
+  const defaultNames = ['الدور الأرضي', 'الدور الأول', 'الدور الثاني', 'الملحق العلوي', 'السطح'];
+
+  sheets.forEach((sh, si) => {
+    // كل لوحة تصير طابقاً بارتفاع منسوب si*H، وننقل إحداثياتها ليبدأ الصندوق من الأصل
+    const ox = sh.bbox.minX, oy = sh.bbox.minY;
+    const elev = si * H;
+    const stOrigin = add(`IFCCARTESIANPOINT((0.,0.,${f(elev)}))`);
+    const stAx  = add(`IFCAXIS2PLACEMENT3D(#${stOrigin},#${zDir},#${xDir})`);
+    const stP   = add(`IFCLOCALPLACEMENT(#${bldgP},#${stAx})`);
+    const name  = floorNames[si] || sh.floorName || defaultNames[si] || `الدور ${si + 1}`;
+    const storey = add(`IFCBUILDINGSTOREY('${guid()}',#${ownId},'${ifcText(name)}',$,$,#${stP},$,$,.ELEMENT.,${f(elev)})`);
+    storeyIds.push(storey);
+    const ctxIds = { zDir, subCtx, wcs, stP, ownId };
+
+    const segs = mergeCollinear(sh.segs.map(g => ({ x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy })));
+    const wallIds = segs.map((g, i) => wallFromSeg(add, ctxIds, g, H, i + 1));
+    stats.walls += wallIds.length;
+
+    // الفتحات كعناصر مرجعية (IfcBuildingElementProxy) — الأبواب بارتفاع 2.1 والنوافذ 1.2 على منسوب 1.0
+    const openIds = [];
+    for (const o of mergeCollinear((sh.openings || []).map(g => ({ ...g, x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy })))) {
+      const len = Math.hypot(o.x2 - o.x1, o.y2 - o.y1);
+      if (len < 0.5 || len > 4) continue; // فتحات منطقية فقط
+      const isWin = /win/i.test(o.kind || '');
+      const zBase = isWin ? 1.0 : 0.0, hh = isWin ? 1.2 : 2.1;
+      const dx = (o.x2 - o.x1) / len, dy = (o.y2 - o.y1) / len;
+      const p   = add(`IFCCARTESIANPOINT((${f(o.x1)},${f(o.y1)},${f(zBase)}))`);
+      const d   = add(`IFCDIRECTION((${f(dx)},${f(dy)},0.))`);
+      const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${d})`);
+      const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
+      const c2  = add(`IFCCARTESIANPOINT((${f(len / 2)},0.))`);
+      const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
+      const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(len)},${f(0.05)})`);
+      const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(hh)})`);
+      const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
+      const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
+      openIds.push(add(`IFCBUILDINGELEMENTPROXY('${guid()}',#${ownId},'${isWin ? 'Window' : 'Door'} ref',$,$,#${pl},#${pds},$,$)`));
+    }
+    stats.openings += openIds.length;
+
+    // الفراغات المسماة (من التمتير) كـIfcSpace بلا هندسة — تظهر في جدول Rooms للمهندس
+    const spaceIds = [];
+    for (const r of rooms.filter(r => (r.img || 1) === si + 1)) {
+      const label = `${r.n ? '#' + r.n + ' ' : ''}${r.name}`;
+      spaceIds.push(add(`IFCSPACE('${guid()}',#${ownId},'${ifcText(label)}','${ifcText(`${r.L || ''}×${r.W || ''} م`)}',$,#${stP},$,$,.ELEMENT.,.INTERNAL.,$)`));
+    }
+
+    const contained = [...wallIds, ...openIds];
+    if (contained.length) add(`IFCRELCONTAINEDINSPATIALSTRUCTURE('${guid()}',#${ownId},$,$,(${contained.map(i => '#' + i).join(',')}),#${storey})`);
+    if (spaceIds.length) add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${storey},(${spaceIds.map(i => '#' + i).join(',')}))`);
+    stats.storeys++;
   });
-
-  // ── الفراغات (IfcSpace) بأسمائها العربية وأبعادها ──
-  const spaceIds = [];
-  laid.forEach((r) => {
-    const p   = add(`IFCCARTESIANPOINT((${f(r.x0)},${f(r.y0)},0.))`);
-    const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${xDir})`);
-    const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
-    const c2  = add(`IFCCARTESIANPOINT((${f(r.L / 2)},${f(r.W / 2)}))`);
-    const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
-    const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(r.L)},${f(r.W)})`);
-    const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(H)})`);
-    const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
-    const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
-    const label = `${r.n ? '#' + r.n + ' ' : ''}${r.name}`;
-    const sid = add(`IFCSPACE('${guid()}',#${ownId},'${ifcText(label)}','${ifcText(`${r.L}×${r.W} م`)}',$,#${pl},#${pds},$,.ELEMENT.,.INTERNAL.,$)`);
-    spaceIds.push(sid);
-  });
-
-  if (wallIds.length) add(`IFCRELCONTAINEDINSPATIALSTRUCTURE('${guid()}',#${ownId},$,$,(${wallIds.map(i => '#' + i).join(',')}),#${storey})`);
-  if (spaceIds.length) add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${storey},(${spaceIds.map(i => '#' + i).join(',')}))`);
+  add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${bldg},(${storeyIds.map(i => '#' + i).join(',')}))`);
 
   const ts = new Date().toISOString().slice(0, 19);
   const header = [
-    'ISO-10303-21;',
-    'HEADER;',
+    'ISO-10303-21;', 'HEADER;',
     `FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');`,
     `FILE_NAME('${esc(projectName)}.ifc','${ts}',('Semak'),('Semak Real Estate'),'Semak QS','Semak QS BIM Export','');`,
-    `FILE_SCHEMA(('IFC4'));`,
-    'ENDSEC;',
-    'DATA;',
+    `FILE_SCHEMA(('IFC4'));`, 'ENDSEC;', 'DATA;',
   ];
-  return {
-    text: [...header, ...L, 'ENDSEC;', 'END-ISO-10303-21;'].join('\n'),
-    stats: { walls: walls.length, spaces: laid.length, height: H },
-  };
+  return { text: [...header, ...L, 'ENDSEC;', 'END-ISO-10303-21;'].join('\n'), stats };
+}
+
+// ─── B) احتياطي: من مستطيلات الفراغات فقط (بلا DWG) ──────────────────────────
+export function buildIfcFromRooms({ rooms, projectName = 'مشروع سماك', defaultH = H_DEFAULT }) {
+  // ترتيب شبكي بسيط — تقريبي، للمهندس كمرجع أبعاد فقط
+  const laid = []; let x = 0, y = 0, rowH = 0;
+  for (const r of rooms) {
+    if (!(r.L > 0) || !(r.W > 0)) continue;
+    if (x + r.L > 24) { x = 0; y += rowH + 1; rowH = 0; }
+    laid.push({ ...r, x0: x, y0: y }); x += r.L + 1; rowH = Math.max(rowH, r.W);
+  }
+  const segs = [];
+  for (const r of laid) {
+    segs.push({ x1: r.x0, y1: r.y0, x2: r.x0 + r.L, y2: r.y0 }, { x1: r.x0, y1: r.y0 + r.W, x2: r.x0 + r.L, y2: r.y0 + r.W },
+              { x1: r.x0, y1: r.y0, x2: r.x0, y2: r.y0 + r.W }, { x1: r.x0 + r.L, y1: r.y0, x2: r.x0 + r.L, y2: r.y0 + r.W });
+  }
+  let minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
+  for (const g of segs) { minX = Math.min(minX, g.x1, g.x2); maxX = Math.max(maxX, g.x1, g.x2); minY = Math.min(minY, g.y1, g.y2); maxY = Math.max(maxY, g.y1, g.y2); }
+  return buildIfcFromSheets({ sheets: [{ name: 'MAIN', segs, openings: [], bbox: { minX, minY, maxX, maxY } }], projectName, defaultH, rooms: rooms.map(r => ({ ...r, img: 1 })) });
 }
 
 export function downloadIfc(ifcText, filename = 'semak-project.ifc') {

@@ -104,6 +104,7 @@ export default function QuantitySurvey({ showToast }) {
   const [surveyId, setSurveyId] = useState(null);
   const [activeTrade, setActiveTrade] = useState('summary');
   const [planImages, setPlanImages] = useState([]); // صور المخطط (ذاكرة فقط — لا تُحفظ لحجمها)
+  const [dwgFile, setDwgFile] = useState(null);       // ملف DWG الأصلي في الجلسة — لتصدير جدران Revit الحقيقية
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -292,16 +293,17 @@ export default function QuantitySurvey({ showToast }) {
           toast={toast}
           label="استيراد المشروع من المخطط"
           className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl shadow transition text-sm disabled:opacity-60"
-          onRooms={(rooms, planImages) => {
+          onRooms={(rooms, planImages, dwgFile) => {
             const h = window.prompt('ارتفاع السقف الافتراضي بالمتر؟ (يُستخدم لمعادلات الجدران)', '3.3');
             const defaultH = h && !Number.isNaN(parseFloat(h)) ? parseFloat(h) : '';
             let filled = 0;
             patch(s => {
               filled = distributeRooms(s, rooms, defaultH);
               // احفظ الفراغات والمخطط للتبويب البصري (الصور تُبقى في الذاكرة فقط لحجمها)
-              s.plan = { rooms, defaultH, importedAt: new Date().toISOString() };
+              s.plan = { rooms, defaultH, importedAt: new Date().toISOString(), fromDwg: !!dwgFile, dwgName: dwgFile?.name || '' };
             });
             setPlanImages(planImages || []);
+            setDwgFile(dwgFile || null);
             setActiveTrade('plan');
             toast?.('نجاح', `وُزّعت ${rooms.length} فراغاً على ${filled} بنداً — راجع المخطط المرقّم ثم اضبط الأسعار`);
           }} />
@@ -366,7 +368,7 @@ export default function QuantitySurvey({ showToast }) {
         <SummaryTable totals={totals} onOpen={setActiveTrade} onDeleteTrade={(tid) => { if (window.confirm('حذف هذا البند بكامل تمتيره؟')) patch(s => { s.trades = s.trades.filter(x => x.id !== tid); }); }} />
       ) : activeTrade === 'plan' ? (
         <PlanViewer
-          plan={survey.plan} images={planImages} toast={toast} surveyName={survey.name}
+          plan={survey.plan} images={planImages} dwgFile={dwgFile} onPickDwg={setDwgFile} toast={toast} surveyName={survey.name}
           onRoomsChange={(rooms, summary) => {
             patch(s => {
               s.plan = { ...(s.plan || {}), rooms, revisedAt: new Date().toISOString(), lastSummary: summary || '' };
@@ -492,14 +494,37 @@ function TradeEditor({ tr, patchTrade, toast }) {
 // DWG: يُفكّ في المتصفح عبر WASM (libredwg). إن وُجدت نصوص وديمنشنات حقيقية
 // تُرسل كبيانات CAD؛ وإن كانت النصوص «مفجّرة» تُرسم اللوحات إلى صور وتُقرأ بصرياً.
 // ─── عارض المخطط المرقّم + توجيه الذكاء الاصطناعي ─────────────────────────────
-function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
+function PlanViewer({ plan, images, dwgFile, onPickDwg, toast, surveyName, onRoomsChange }) {
   const rooms = plan?.rooms || [];
   const [instr, setInstr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ifcBusy, setIfcBusy] = useState(false);
   const [hover, setHover] = useState(null);
   const [selImg, setSelImg] = useState(0);
-  const printRef = useRef(null);
+  const dwgPickRef = useRef(null);
   const imgs = images || [];
+
+  // تصدير Revit: من DWG (جدران حقيقية) إن توفر، وإلا من الفراغات (تقريبي)
+  const exportIfc = async (file) => {
+    setIfcBusy(true);
+    try {
+      const mod = await import('../../lib/ifcExport');
+      const H = plan?.defaultH || 3.3;
+      const name = (surveyName || 'semak').replace(/[\\/:*?"<>|]/g, '_');
+      if (file) {
+        const sheets = await mod.extractWallSheets(file);
+        if (!sheets.length) throw new Error('لم أجد طبقة جدران في هذا الـDWG (WALL / A-WALL) — سيُصدَّر تقريبياً من الفراغات');
+        const { text, stats } = mod.buildIfcFromSheets({ sheets, projectName: surveyName || 'مشروع سماك', defaultH: H, rooms });
+        mod.downloadIfc(text, `${name}.ifc`);
+        toast?.('تم التصدير', `${stats.storeys} أدوار · ${stats.walls} جداراً حقيقياً من الرسم · ${stats.openings} فتحة مرجعية — افتحه في Revit: Open → IFC`);
+      } else {
+        const { text, stats } = mod.buildIfcFromRooms({ rooms, projectName: surveyName || 'مشروع سماك', defaultH: H });
+        mod.downloadIfc(text, `${name}.ifc`);
+        toast?.('تم التصدير (تقريبي)', `${stats.walls} جداراً من مستطيلات الفراغات — لدقة حقيقية ارفع ملف DWG المشروع`);
+      }
+    } catch (e) { toast?.('خطأ', e?.message || 'فشل توليد IFC', 'error'); }
+    setIfcBusy(false);
+  };
 
   const revise = async () => {
     if (!instr.trim()) return;
@@ -553,17 +578,18 @@ function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
             <button onClick={printPdf} className="text-xs font-bold text-slate-600 hover:text-purple-700 flex items-center gap-1 bg-slate-100 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition">
               <Download className="w-3.5 h-3.5" /> PDF
             </button>
-            <button onClick={async () => {
-              try {
-                const { buildIfc, downloadIfc } = await import('../../lib/ifcExport');
-                const { text, stats } = buildIfc({ rooms, projectName: surveyName || 'مشروع سماك', defaultH: plan?.defaultH || 3.3, floorName: rooms[0]?.floor || 'الدور الأرضي' });
-                downloadIfc(text, `${(surveyName || 'semak').replace(/[\\/:*?"<>|]/g, '_')}.ifc`);
-                toast?.('تم التصدير', `ملف IFC: ${stats.walls} جداراً و${stats.spaces} فراغاً بارتفاع ${stats.height} م — افتحه في Revit (Open → IFC)`);
-              } catch (e) { toast?.('خطأ', e?.message || 'فشل توليد IFC', 'error'); }
-            }} title="ملف BIM يفتحه Revit بجدران حقيقية — نقطة بداية للمهندس"
-              className="text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 flex items-center gap-1 px-3 py-1.5 rounded-lg transition">
-              <Layers className="w-3.5 h-3.5" /> Revit (IFC)
-            </button>
+            <input ref={dwgPickRef} type="file" accept=".dwg" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { onPickDwg?.(f); exportIfc(f); } }} />
+            {dwgFile ? (
+              <button onClick={() => exportIfc(dwgFile)} disabled={ifcBusy} title={`جدران حقيقية من ${dwgFile.name}`}
+                className="text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 flex items-center gap-1 px-3 py-1.5 rounded-lg transition disabled:opacity-60">
+                {ifcBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} Revit (IFC)
+              </button>
+            ) : (
+              <button onClick={() => dwgPickRef.current?.click()} disabled={ifcBusy} title="ارفع DWG المشروع لتصدير جدرانه الحقيقية إلى Revit"
+                className="text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 flex items-center gap-1 px-3 py-1.5 rounded-lg transition disabled:opacity-60">
+                {ifcBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} Revit من DWG
+              </button>
+            )}
           </div>
         </div>
         {imgs.length ? (
@@ -705,7 +731,7 @@ function DrawingExtractButton({ onRooms, toast, label, className }) {
       }
       const r = await apiPost('qs_extract_drawing', payload, {}, { tenant: TENANT });
       if (r?.success && r.rooms?.length) {
-        onRooms(r.rooms, planImages);
+        onRooms(r.rooms, planImages, isDwg ? file : null);
         toast?.('نجاح', `تم استخراج ${r.rooms.length} فراغاً من المخطط`);
       } else toast?.('خطأ', r?.message || 'لم يُعثر على فراغات في المخطط', 'error');
     } catch (err) {
