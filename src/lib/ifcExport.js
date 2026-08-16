@@ -306,6 +306,126 @@ function cleanOrthoWalls(segs, opts = {}) {
   ];
 }
 
+// ─── الغلاف الخارجي للجدران (مضلع متعامد) لبلاطة السقف ─────────────────────
+// شبكة خلايا صغيرة: نُظلّل الجدران (بسماكتها + تسامح يغلق فتحات الأبواب/النوافذ)،
+// نفيض من الخارج، فكل ما ليس «خارجاً» = مسقط الدور. ثم نتتبع حدود هذه المنطقة
+// كمضلع متعامد ونبسّطه. يرجع مصفوفة نقاط [x,y] أو null.
+// ─── سور الأرض: جدران طويلة على حافة صندوق المخطط، خلفها (للداخل) جدار موازٍ آخر على
+// بعد 1–6 م = الجدار الخارجي للمبنى. بدون هذا القرين الداخلي، الجدار الحافّي هو جدار
+// المبنى نفسه (كما في الأدوار العليا) ويبقى.
+export function splitFenceWalls(walls) {
+  let minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
+  for (const g of walls) { minX = Math.min(minX, g.x1, g.x2); maxX = Math.max(maxX, g.x1, g.x2); minY = Math.min(minY, g.y1, g.y2); maxY = Math.max(maxY, g.y1, g.y2); }
+  const edge = 0.45;
+  const H = walls.filter(g => Math.abs(g.y1 - g.y2) < 0.02), V = walls.filter(g => Math.abs(g.x1 - g.x2) < 0.02);
+  const hasInnerParallel = (g, isH) => {
+    const arr = isH ? H : V; const pos = isH ? g.y1 : g.x1;
+    const a = isH ? Math.min(g.x1, g.x2) : Math.min(g.y1, g.y2), b = isH ? Math.max(g.x1, g.x2) : Math.max(g.y1, g.y2);
+    return arr.some(o => {
+      const op = isH ? o.y1 : o.x1; const d = Math.abs(op - pos);
+      if (d < 0.8 || d > 6) return false;
+      const oa = isH ? Math.min(o.x1, o.x2) : Math.min(o.y1, o.y2), ob = isH ? Math.max(o.x1, o.x2) : Math.max(o.y1, o.y2);
+      return Math.min(b, ob) - Math.max(a, oa) >= 3; // تراكب طولي ≥ 3 م
+    });
+  };
+  const fence = [], inner = [];
+  for (const g of walls) {
+    const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+    const isH = Math.abs(g.y1 - g.y2) < 0.02, isV = Math.abs(g.x1 - g.x2) < 0.02;
+    const onEdge = (isH && (Math.abs(g.y1 - minY) < edge || Math.abs(g.y1 - maxY) < edge))
+                || (isV && (Math.abs(g.x1 - minX) < edge || Math.abs(g.x1 - maxX) < edge));
+    (onEdge && len >= 5 && hasInnerParallel(g, isH) ? fence : inner).push(g);
+  }
+  return fence.length >= 2 ? { fence, inner } : { fence: [], inner: walls };
+}
+
+function outerEnvelope(wallsAll, cell = 0.10, closeGap = 1.6, excludeFence = true) {
+  if (!wallsAll.length) return null;
+  // استبعاد سور الأرض: البلاطة تتبع كتلة المبنى لا حدود الأرض (الحوش مكشوف)
+  const { inner } = excludeFence ? splitFenceWalls(wallsAll) : { inner: wallsAll };
+  const walls = inner.length >= 4 ? inner : wallsAll;
+  let minX = 1e18, minY = 1e18, maxX = -1e18, maxY = -1e18;
+  for (const g of walls) { minX = Math.min(minX, g.x1, g.x2); maxX = Math.max(maxX, g.x1, g.x2); minY = Math.min(minY, g.y1, g.y2); maxY = Math.max(maxY, g.y1, g.y2); }
+  const pad = 2 * cell + 0.3;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const W = Math.ceil((maxX - minX) / cell), Hh = Math.ceil((maxY - minY) / cell);
+  if (W * Hh > 4e6) return null;
+  const solid = new Uint8Array(W * Hh);
+  const mark = (x1, y1, x2, y2) => {
+    const i1 = Math.max(0, Math.floor((x1 - minX) / cell)), i2 = Math.min(W - 1, Math.floor((x2 - minX) / cell));
+    const j1 = Math.max(0, Math.floor((y1 - minY) / cell)), j2 = Math.min(Hh - 1, Math.floor((y2 - minY) / cell));
+    for (let j = j1; j <= j2; j++) for (let i = i1; i <= i2; i++) solid[j * W + i] = 1;
+  };
+  // الجدران بسماكتها
+  for (const g of walls) {
+    const t = (g.t || WALL_T) / 2;
+    mark(Math.min(g.x1, g.x2) - t, Math.min(g.y1, g.y2) - t, Math.max(g.x1, g.x2) + t, Math.max(g.y1, g.y2) + t);
+  }
+  // إغلاق الفتحات في الغلاف: تمديد كل جدار من طرفيه بـ closeGap/2 على استقامته
+  // (يسدّ الأبواب والنوافذ ≤ closeGap فلا يتسرب الفيض للداخل، ولا يغيّر الحدود الخارجية)
+  for (const g of walls) {
+    const t = (g.t || WALL_T) / 2, e = closeGap / 2;
+    if (Math.abs(g.y1 - g.y2) < 0.02) mark(Math.min(g.x1, g.x2) - e, g.y1 - t, Math.max(g.x1, g.x2) + e, g.y1 + t);
+    else if (Math.abs(g.x1 - g.x2) < 0.02) mark(g.x1 - t, Math.min(g.y1, g.y2) - e, g.x1 + t, Math.max(g.y1, g.y2) + e);
+  }
+  // فيض من الخارج
+  const outside = new Uint8Array(W * Hh);
+  const stack = [0]; outside[0] = 1;
+  while (stack.length) {
+    const k = stack.pop(); const i = k % W, j = (k / W) | 0;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= W || b >= Hh) continue;
+      const kk = b * W + a; if (outside[kk] || solid[kk]) continue;
+      outside[kk] = 1; stack.push(kk);
+    }
+  }
+  // بعد استبعاد السور: كل ما تحيطه جدران المبنى (مع سدّ فتحات الأبواب) = مسقوف.
+  // الحوش والسطح المكشوف يقعان خارج جدران المبنى بطبيعتهما فيسقطان تلقائياً.
+  const inside = (i, j) => i >= 0 && j >= 0 && i < W && j < Hh && !outside[j * W + i];
+  // اجمع أضلاع الحدود كقطع أفقية/رأسية بين خلية داخل وخلية خارج
+  const edges = new Map(); // key "x,y" -> [next points]
+  const addEdge = (ax, ay, bx, by) => { const k = `${ax},${ay}`; if (!edges.has(k)) edges.set(k, []); edges.get(k).push([bx, by]); };
+  for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+    if (!inside(i, j)) continue;
+    // اتجاه عكس عقارب الساعة حول الداخل: الحافة السفلية من اليسار لليمين... إلخ
+    if (!inside(i, j - 1)) addEdge(i, j, i + 1, j);         // أسفل
+    if (!inside(i + 1, j)) addEdge(i + 1, j, i + 1, j + 1); // يمين
+    if (!inside(i, j + 1)) addEdge(i + 1, j + 1, i, j + 1); // أعلى
+    if (!inside(i - 1, j)) addEdge(i, j + 1, i, j);         // يسار
+  }
+  if (!edges.size) return null;
+  // تتبع أكبر حلقة (الغلاف الخارجي)
+  const visited = new Set(); let best = null;
+  for (const start of edges.keys()) {
+    if (visited.has(start)) continue;
+    const loop = []; let cur = start;
+    while (cur && !visited.has(cur)) {
+      visited.add(cur); loop.push(cur.split(',').map(Number));
+      const nxt = edges.get(cur); if (!nxt || !nxt.length) break;
+      cur = `${nxt[0][0]},${nxt[0][1]}`;
+    }
+    if (loop.length > 3 && (!best || loop.length > best.length)) best = loop;
+  }
+  if (!best) return null;
+  // تبسيط: إزالة النقاط الواقعة على استقامة
+  const pts = [];
+  for (let k = 0; k < best.length; k++) {
+    const p = best[k], q = best[(k + 1) % best.length], r = best[(k + 2) % best.length];
+    const collinear = (p[0] === q[0] && q[0] === r[0]) || (p[1] === q[1] && q[1] === r[1]);
+    if (!collinear) pts.push(q);
+  }
+  // إلى إحداثيات المتر
+  const poly = pts.map(([i, j]) => [minX + i * cell, minY + j * cell]);
+  // إزالة الزوايا الصغيرة (أقل من خليتين) لتنعيم درج الشبكة
+  const simp = [];
+  for (let k = 0; k < poly.length; k++) {
+    const p = poly[(k - 1 + poly.length) % poly.length], q = poly[k], r = poly[(k + 1) % poly.length];
+    if (Math.hypot(q[0] - p[0], q[1] - p[1]) < cell * 2.5 && Math.hypot(r[0] - q[0], r[1] - q[1]) < cell * 2.5) continue;
+    simp.push(q);
+  }
+  return simp.length >= 4 ? simp : poly;
+}
+
 // ─── الملف الكامل ─────────────────────────────────────────────────────────────
 // ─── محاذاة الأدوار بمطابقة الجدران ──────────────────────────────────────────
 // الجدران الإنشائية (الخارجية، الأعمدة، الدرج) تستمر بين الأدوار. نبحث عن الإزاحة
@@ -466,30 +586,41 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     const colIds = includeColumns ? (sh.columns || []).map((c, i) => columnFromRect(add, ctxIds, { ...c, x: c.x - ox, y: c.y - oy }, H, i + 1)) : [];
     stats.columns = (stats.columns || 0) + colIds.length;
 
-    // بلاطة سقف الدور: مستطيل يغطي كل جدران الدور (+10 سم حافة) على أعلى الجدران بسماكة ST
+    // بلاطة سقف الدور: مضلع الغلاف الخارجي لكتلة المبنى (بلا الحوش/السطح المكشوف)
+    // على أعلى الجدران بسماكة ST. احتياطي: مستطيل الجدران إن تعذر الغلاف.
     let slabId = null;
     if (includeSlabs && cleaned.length) {
-      let sMinX = 1e18, sMinY = 1e18, sMaxX = -1e18, sMaxY = -1e18;
-      for (const g of cleaned) {
-        const t = (g.t || WALL_T) / 2;
-        sMinX = Math.min(sMinX, g.x1 - t, g.x2 - t); sMaxX = Math.max(sMaxX, g.x1 + t, g.x2 + t);
-        sMinY = Math.min(sMinY, g.y1 - t, g.y2 - t); sMaxY = Math.max(sMaxY, g.y1 + t, g.y2 + t);
-      }
-      const edge = 0.10;
-      const sw = (sMaxX - sMinX) + 2 * edge, sd = (sMaxY - sMinY) + 2 * edge;
-      const p   = add(`IFCCARTESIANPOINT((${f(sMinX - edge)},${f(sMinY - edge)},${f(H)}))`);
-      const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${xDir})`);
+      let poly = null;
+      try { poly = outerEnvelope(cleaned); } catch { poly = null; }
+      let area = 0;
+      const p0  = add(`IFCCARTESIANPOINT((0.,0.,${f(H)}))`);
+      const ax  = add(`IFCAXIS2PLACEMENT3D(#${p0},#${zDir},#${xDir})`);
       const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
-      const c2  = add(`IFCCARTESIANPOINT((${f(sw / 2)},${f(sd / 2)}))`);
-      const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
-      const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(sw)},${f(sd)})`);
+      let prof;
+      if (poly && poly.length >= 4) {
+        // مساحة المضلع (شولاس) — لو صغيرة جداً نسقط للمستطيل
+        for (let k = 0; k < poly.length; k++) { const a = poly[k], b = poly[(k + 1) % poly.length]; area += a[0] * b[1] - b[0] * a[1]; }
+        area = Math.abs(area) / 2;
+      }
+      if (poly && poly.length >= 4 && area > 10) {
+        const ptIds = poly.map(([x, y]) => add(`IFCCARTESIANPOINT((${f(x)},${f(y)}))`));
+        const pline = add(`IFCPOLYLINE((${[...ptIds, ptIds[0]].map(i => '#' + i).join(',')}))`);
+        prof = add(`IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#${pline})`);
+      } else {
+        let sMinX = 1e18, sMinY = 1e18, sMaxX = -1e18, sMaxY = -1e18;
+        for (const g of cleaned) { const t = (g.t || WALL_T) / 2; sMinX = Math.min(sMinX, g.x1 - t, g.x2 - t); sMaxX = Math.max(sMaxX, g.x1 + t, g.x2 + t); sMinY = Math.min(sMinY, g.y1 - t, g.y2 - t); sMaxY = Math.max(sMaxY, g.y1 + t, g.y2 + t); }
+        const sw = sMaxX - sMinX, sd = sMaxY - sMinY; area = sw * sd;
+        const c2  = add(`IFCCARTESIANPOINT((${f(sMinX + sw / 2)},${f(sMinY + sd / 2)}))`);
+        const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
+        prof = add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(sw)},${f(sd)})`);
+      }
       const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(ST)})`);
       const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
       const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
-      const label = `${name} — بلاطة السقف ${Math.round(ST * 100)} سم (${sw.toFixed(1)}×${sd.toFixed(1)} م)`;
+      const label = `${name} — بلاطة السقف ${Math.round(ST * 100)} سم (${area.toFixed(0)} م²)`;
       slabId = add(`IFCSLAB('${guid()}',#${ownId},'${ifcText(label)}',$,'RC Slab',#${pl},#${pds},$,.FLOOR.)`);
       stats.slabs = (stats.slabs || 0) + 1;
-      stats.slabArea = (stats.slabArea || 0) + sw * sd;
+      stats.slabArea = (stats.slabArea || 0) + area;
     }
 
     // الفتحات كعناصر مرجعية (اختياري — افتراضياً مطفأ: فجوات الجدران تحدد الفتحات بدقة
