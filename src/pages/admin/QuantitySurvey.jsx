@@ -553,6 +553,17 @@ function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
             <button onClick={printPdf} className="text-xs font-bold text-slate-600 hover:text-purple-700 flex items-center gap-1 bg-slate-100 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition">
               <Download className="w-3.5 h-3.5" /> PDF
             </button>
+            <button onClick={async () => {
+              try {
+                const { buildIfc, downloadIfc } = await import('../../lib/ifcExport');
+                const { text, stats } = buildIfc({ rooms, projectName: surveyName || 'مشروع سماك', defaultH: plan?.defaultH || 3.3, floorName: rooms[0]?.floor || 'الدور الأرضي' });
+                downloadIfc(text, `${(surveyName || 'semak').replace(/[\\/:*?"<>|]/g, '_')}.ifc`);
+                toast?.('تم التصدير', `ملف IFC: ${stats.walls} جداراً و${stats.spaces} فراغاً بارتفاع ${stats.height} م — افتحه في Revit (Open → IFC)`);
+              } catch (e) { toast?.('خطأ', e?.message || 'فشل توليد IFC', 'error'); }
+            }} title="ملف BIM يفتحه Revit بجدران حقيقية — نقطة بداية للمهندس"
+              className="text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 flex items-center gap-1 px-3 py-1.5 rounded-lg transition">
+              <Layers className="w-3.5 h-3.5" /> Revit (IFC)
+            </button>
           </div>
         </div>
         {imgs.length ? (
