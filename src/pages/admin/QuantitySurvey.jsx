@@ -512,8 +512,14 @@ function PlanViewer({ plan, images, dwgFile, onPickDwg, toast, surveyName, onRoo
       const H = plan?.defaultH || 3.3;
       const name = (surveyName || 'semak').replace(/[\\/:*?"<>|]/g, '_');
       if (file) {
-        const sheets = await mod.extractWallSheets(file);
+        let sheets = await mod.extractWallSheets(file);
         if (!sheets.length) throw new Error('لم أجد طبقة جدران في هذا الـDWG (WALL / A-WALL) — سيُصدَّر تقريبياً من الفراغات');
+        if (sheets.length > 1) {
+          const list = sheets.map((s, i) => `${i + 1}) ${(s.bbox.maxX - s.bbox.minX).toFixed(0)}×${(s.bbox.maxY - s.bbox.minY).toFixed(0)} م — ${s.segs.length} خط`).join('\n');
+          const pick = window.prompt(`وجدت ${sheets.length} لوحات/أدوار:\n${list}\n\nاكتب رقم الدور لتصديره وحده، أو اتركه فارغاً لتصدير الكل كأدوار متراكبة:`, '');
+          const n = parseInt(pick, 10);
+          if (pick && n >= 1 && n <= sheets.length) sheets = [sheets[n - 1]];
+        }
         const { text, stats } = mod.buildIfcFromSheets({ sheets, projectName: surveyName || 'مشروع سماك', defaultH: H, rooms });
         mod.downloadIfc(text, `${name}.ifc`);
         toast?.('تم التصدير', `${stats.storeys} أدوار · ${stats.walls} جداراً حقيقياً من الرسم · ${stats.openings} فتحة مرجعية — افتحه في Revit: Open → IFC`);

@@ -40,13 +40,26 @@ export async function extractWallSheets(file) {
   try { lib.dwg_free(dwg); } catch { /* اختياري */ }
   const ents = db.entities || [];
 
-  const isWall = (l) => /(^|[_-])(A-)?WALL(S)?($|[_-])|HATCH\s*-\s*WALLS/i.test(l || '') && !/LOW|TEXT|DIM/i.test(l || '');
+  // طبقات الجدران — نستبعد طبقات التهشير (HATCH) لأنها خطوط تزيينية مائلة قصيرة لا جدران
+  const isWall = (l) => /(^|[_-])(A-)?WALL(S)?($|[_-])/i.test(l || '') && !/HATCH|LOW|TEXT|DIM|PATT/i.test(l || '');
+  // خط تهشير: قصير ومائل (ليس أفقياً/رأسياً) — يُستبعد حتى لو جاء داخل طبقة الجدران
+  const isHatchLike = (x1, y1, x2, y2) => {
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    if (len >= 0.6) return false;
+    const ang = Math.abs(Math.atan2(y2 - y1, x2 - x1)) * 180 / Math.PI;
+    const ortho = ang < 6 || ang > 174 || Math.abs(ang - 90) < 6;
+    return !ortho;
+  };
   const isDoor = (l) => /DOOR/i.test(l || '');
   const isWin  = (l) => /WINDOW|WIN($|[_-])/i.test(l || '');
   const prefixOf = (l) => { const m = String(l || '').match(/^([A-Za-z0-9]+)_/); return m ? m[1] : 'MAIN'; };
 
   const sheets = {};
-  const seg = (arr, x1, y1, x2, y2, extra = {}) => { if (Math.hypot(x2 - x1, y2 - y1) > 0.05) arr.push({ x1, y1, x2, y2, ...extra }); };
+  const seg = (arr, x1, y1, x2, y2, extra = {}) => {
+    if (Math.hypot(x2 - x1, y2 - y1) <= 0.05) return;
+    if (!extra.kind && isHatchLike(x1, y1, x2, y2)) return; // جدار: تجاهل خطوط التهشير
+    arr.push({ x1, y1, x2, y2, ...extra });
+  };
   for (const e of ents) {
     const layer = e.layer || '';
     const kind = isWall(layer) ? 'wall' : isDoor(layer) ? 'door' : isWin(layer) ? 'window' : null;
