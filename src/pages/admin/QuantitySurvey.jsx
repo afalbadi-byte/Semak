@@ -520,7 +520,7 @@ function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
     if (!w) { toast?.('تنبيه', 'اسمح بالنوافذ المنبثقة للطباعة', 'error'); return; }
     const imgHtml = imgs.map((src, i) => {
       const dots = rooms.filter(r => (r.img || 1) === i + 1 && r.px != null && r.py != null)
-        .map(r => `<div style="position:absolute;left:${r.px}%;top:${r.py}%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:#7c3aed;color:#fff;font:bold 12px/26px sans-serif;text-align:center;box-shadow:0 0 0 2px #fff">${r.n}</div>`).join('');
+        .map(r => `<div style="position:absolute;left:${r.px}%;top:${r.py}%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:rgba(139,92,246,.35);border:2px solid #7c3aed;color:#3b0764;font:bold 12px/22px sans-serif;text-align:center;text-shadow:0 0 3px #fff">${r.n}</div>`).join('');
       return `<div style="position:relative;display:inline-block;max-width:100%;page-break-inside:avoid;margin:8px 0"><img src="${src}" style="max-width:100%;display:block;border:1px solid #ddd"/>${dots}</div>`;
     }).join('');
     const rowsHtml = rooms.map(r => `<tr><td style="text-align:center;font-weight:bold;color:#7c3aed">${r.n}</td><td>${r.name}</td><td>${r.floor || ''}</td><td dir="ltr">${r.L || '—'}</td><td dir="ltr">${r.W || '—'}</td><td dir="ltr">${(r.L && r.W) ? (r.L * r.W).toFixed(2) : '—'}</td><td>${r.note || ''}</td></tr>`).join('');
@@ -541,9 +541,9 @@ function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
   const totalArea = rooms.reduce((a, r) => a + ((r.L && r.W) ? r.L * r.W : 0), 0);
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-      {/* المخطط المرقّم */}
-      <div className="xl:col-span-3 bg-white rounded-2xl border border-slate-200 p-4">
+    <div className="space-y-4">
+      {/* المخطط المرقّم — بعرض الصفحة */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h4 className="font-extrabold text-slate-700 flex items-center gap-2"><Layers className="w-4 h-4 text-purple-600" /> المخطط المرقّم</h4>
           <div className="flex items-center gap-2">
@@ -556,12 +556,15 @@ function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
           </div>
         </div>
         {imgs.length ? (
-          <div className="relative inline-block max-w-full border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
-            <img src={imgs[selImg]} alt="المخطط" className="max-w-full block" />
+          <div className="relative block w-full border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+            <img src={imgs[selImg]} alt="المخطط" className="w-full block" />
             {rooms.filter(r => (r.img || 1) === selImg + 1 && r.px != null && r.py != null).map(r => (
               <div key={r.n} onMouseEnter={() => setHover(r.n)} onMouseLeave={() => setHover(null)}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-white text-xs font-black flex items-center justify-center shadow-md ring-2 ring-white cursor-default transition ${hover === r.n ? 'bg-emerald-600 scale-125 z-10' : 'bg-purple-600'}`}
-                style={{ left: `${r.px}%`, top: `${r.py}%` }} title={`${r.name} — ${r.L}×${r.W}`}>
+                className={`absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-xs font-black flex items-center justify-center cursor-default transition ${
+                  hover === r.n
+                    ? 'bg-emerald-500/70 text-white ring-2 ring-emerald-600 scale-125 z-10'
+                    : 'bg-purple-500/35 text-purple-900 ring-2 ring-purple-600/80'}`}
+                style={{ left: `${r.px}%`, top: `${r.py}%`, textShadow: '0 0 3px #fff, 0 0 3px #fff' }} title={`${r.name} — ${r.L}×${r.W}`}>
                 {r.n}
               </div>
             ))}
@@ -574,9 +577,9 @@ function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
         <p className="text-[11px] text-slate-400 mt-2">مرّر على الرقم لإبراز الفراغ · الأرقام نفسها في أسطر التمتير (#1، #2…) للمطابقة</p>
       </div>
 
-      {/* الجدول + التوجيه */}
-      <div className="xl:col-span-2 space-y-4">
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      {/* الجدول + التوجيه — تحت المخطط جنباً إلى جنب */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 bg-slate-50/70 flex items-center justify-between">
             <span className="font-extrabold text-slate-700 text-sm">الفراغات ({rooms.length})</span>
             <span className="text-xs font-bold text-slate-500">إجمالي {totalArea.toFixed(1)} م²</span>
