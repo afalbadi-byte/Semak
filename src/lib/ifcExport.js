@@ -339,7 +339,8 @@ export function splitFenceWalls(walls) {
   return fence.length >= 2 ? { fence, inner } : { fence: [], inner: walls };
 }
 
-function outerEnvelope(wallsAll, cell = 0.10, closeGap = 1.6, excludeFence = true) {
+function outerEnvelope(wallsAll, opts = {}) {
+  const cell = opts.cell ?? 0.10, closeGap = opts.closeGap ?? 1.6, excludeFence = opts.excludeFence ?? false;
   if (!wallsAll.length) return null;
   // استبعاد سور الأرض: البلاطة تتبع كتلة المبنى لا حدود الأرض (الحوش مكشوف)
   const { inner } = excludeFence ? splitFenceWalls(wallsAll) : { inner: wallsAll };
@@ -379,9 +380,32 @@ function outerEnvelope(wallsAll, cell = 0.10, closeGap = 1.6, excludeFence = tru
       outside[kk] = 1; stack.push(kk);
     }
   }
-  // بعد استبعاد السور: كل ما تحيطه جدران المبنى (مع سدّ فتحات الأبواب) = مسقوف.
-  // الحوش والسطح المكشوف يقعان خارج جدران المبنى بطبيعتهما فيسقطان تلقائياً.
-  const inside = (i, j) => i >= 0 && j >= 0 && i < W && j < Hh && !outside[j * W + i];
+  // ── قناع اختياري لكتلة المبنى (mask): مضلعات مسقوفة معروفة (مثل غلاف الدور الأعلى) ──
+  // إن مُرّر mask: مسقوف = داخل الغلاف ∩ (داخل القناع موسّعاً بـ maskGrow) — الحوش خارجه.
+  // بلا mask: كل ما تحيطه الجدران = مسقوف.
+  let roofed = null;
+  if (opts.mask && opts.mask.length) {
+    roofed = new Uint8Array(W * Hh);
+    const grow = opts.maskGrow ?? 0.6;
+    const inPoly = (x, y, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + 1e-12) + xi)) c = !c; } return c; };
+    // توسيع القناع: نعتبر الخلية داخله إن كانت هي أو أي خلية ضمن grow داخل أحد المضلعات
+    const gcell = Math.max(1, Math.round(grow / cell));
+    const base = new Uint8Array(W * Hh);
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      const x = minX + (i + 0.5) * cell, y = minY + (j + 0.5) * cell;
+      if (opts.mask.some(p => inPoly(x, y, p))) base[j * W + i] = 1;
+    }
+    for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i; if (outside[k]) continue;
+      let hit = base[k] === 1;
+      for (let dj = -gcell; dj <= gcell && !hit; dj++) for (let di = -gcell; di <= gcell; di++) {
+        const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= W || b >= Hh) continue;
+        if (base[b * W + a]) { hit = true; break; }
+      }
+      if (hit) roofed[k] = 1;
+    }
+  }
+  const inside = (i, j) => i >= 0 && j >= 0 && i < W && j < Hh && !outside[j * W + i] && (!roofed || roofed[j * W + i] === 1);
   // اجمع أضلاع الحدود كقطع أفقية/رأسية بين خلية داخل وخلية خارج
   const edges = new Map(); // key "x,y" -> [next points]
   const addEdge = (ax, ay, bx, by) => { const k = `${ax},${ay}`; if (!edges.has(k)) edges.set(k, []); edges.get(k).push([bx, by]); };
@@ -521,6 +545,17 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
   });
   stats.alignment = offsets.map((o, i) => i === 0 ? 'base' : (o.weak ? `weak(${o.score.toFixed(1)}m)` : `matched(${o.score.toFixed(1)}m)`));
 
+  // ── أغلفة البلاطات: الأدوار العليا أولاً (كتلتها = مسقوفها)، ثم الأرضي مقيّداً بما فوقه ──
+  // منطق الفيلا: ما تحت الدور الأعلى مسقوف حتماً؛ ما عداه في الأرضي (حوش، مواقف) مكشوف.
+  // إن كان الدور الوحيد (بلا أدوار عليا) نستخدم غلافه كاملاً.
+  const translated = cleanedPer.map((c, si) => c.map(g => ({ ...g, x1: g.x1 + offsets[si].dx, y1: g.y1 + offsets[si].dy, x2: g.x2 + offsets[si].dx, y2: g.y2 + offsets[si].dy })));
+  const envelopes = new Array(sheets.length).fill(null);
+  for (let si = sheets.length - 1; si >= 1; si--) { try { envelopes[si] = outerEnvelope(translated[si]); } catch { envelopes[si] = null; } }
+  try {
+    const upper = envelopes.slice(1).filter(Boolean);
+    envelopes[0] = outerEnvelope(translated[0], sheets.length > 1 && upper.length ? { mask: upper, maskGrow: 0.35 } : {});
+  } catch { envelopes[0] = null; }
+
   sheets.forEach((sh, si) => {
     // كل لوحة = طابق بمنسوب si*(H+بلاطة). الإزاحة المحسوبة تجعل الجدران المشتركة تنطبق
     const ox = -offsets[si].dx, oy = -offsets[si].dy;
@@ -590,8 +625,8 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     // على أعلى الجدران بسماكة ST. احتياطي: مستطيل الجدران إن تعذر الغلاف.
     let slabId = null;
     if (includeSlabs && cleaned.length) {
-      let poly = null;
-      try { poly = outerEnvelope(cleaned); } catch { poly = null; }
+      // الغلاف محسوب مسبقاً بإحداثيات الأرضي؛ نحوّله لإحداثيات هذا الدور المحلية (نفس الإزاحة — كلها منقولة على مرجع الأرضي)
+      let poly = envelopes[si] || null;
       let area = 0;
       const p0  = add(`IFCCARTESIANPOINT((0.,0.,${f(H)}))`);
       const ax  = add(`IFCAXIS2PLACEMENT3D(#${p0},#${zDir},#${xDir})`);
