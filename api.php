@@ -10711,41 +10711,6 @@ switch ($action) {
         break;
     }
 
-    case 'wa_tpl_probe_x9': {
-        // مسبار مؤقت لاكتشاف صيغة القوالب الصحيحة — يُحذف بعد التشخيص
-        if (($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false]); break; }
-        $to    = preg_replace('/\D/', '', (string)($_GET['to'] ?? ''));
-        $tname = (string)($_GET['tpl'] ?? 'semak_welcome');
-        $shape = (string)($_GET['shape'] ?? 'azeer');
-        $var   = (string)($_GET['var'] ?? '');
-        if ($shape === 'meta') {
-            $p = ['to'=>$to,'type'=>'template','template'=>['name'=>$tname,'language'=>['code'=>'ar']]];
-            if ($var !== '') $p['template']['components'] = [['type'=>'body','parameters'=>[['type'=>'text','text'=>$var]]]];
-        } elseif ($shape === 'azeer2') {
-            $p = ['channel'=>'whatsapp','to'=>'+'.$to,'template'=>$tname];
-            if ($var !== '') $p['variables'] = ['1'=>$var];
-        } elseif ($shape === 'azeerimg') {
-            $img = (string)($_GET['img'] ?? '');
-            $p = ['to'=>$to,'type'=>'template','template'=>['template_id'=>$tname,'language'=>'ar','argument'=>['HEADER'=>[$img]]]];
-            if ($var !== '') $p['template']['argument']['BODY'] = [$var];
-        } else {
-            $p = ['to'=>$to,'type'=>'template','template'=>['template_id'=>$tname,'language'=>'ar']];
-            if ($var !== '') $p['template']['argument'] = ['BODY'=>[$var]];
-        }
-        $ch = curl_init('https://api.mottasl.ai/v1/message/send?create=true');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($p, JSON_UNESCAPED_UNICODE),
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . MOTTASL_TOKEN],
-            CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYPEER => false,
-        ]);
-        $res = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        echo json_encode(['sent_payload'=>$p, 'http'=>$code, 'response'=>json_decode($res, true) ?: mb_substr((string)$res,0,300)], JSON_UNESCAPED_UNICODE);
-        break;
-    }
-
     case 'wa_hub': {
         // بروكسي موحّد لموارد متصل/Azeer — قائمة مسموحة فقط، المفتاح يبقى في السيرفر
         if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
@@ -10914,26 +10879,40 @@ switch ($action) {
 
         // إرسال الرسالة عبر Mottasl — نص عادي أو قالب معتمد
         if (($data['type'] ?? '') === 'template' && !empty($data['template_name'])) {
-            // صيغة Meta المعتمدة — نفس المستخدمة في wa_send_otp (مجرّبة في الإنتاج)
+            // صيغة متصل المؤكدة بالتجربة: template_id + language + argument{BODY:[..], HEADER:[url]}
             $tpl = [
                 'to'   => $to_phone,
                 'type' => 'template',
                 'template' => [
-                    'name'     => (string)$data['template_name'],
-                    'language' => ['code' => (string)($data['template_lang'] ?? 'ar')],
+                    'template_id' => (string)$data['template_name'],
+                    'language'    => (string)($data['template_lang'] ?? 'ar'),
                 ],
             ];
             $vars = array_values(array_map('strval', (array)($data['template_vars'] ?? [])));
-            if ($vars) {
-                $tpl['template']['components'] = [[
-                    'type' => 'body',
-                    'parameters' => array_map(fn($v) => ['type' => 'text', 'text' => $v], $vars),
-                ]];
+            $arg = [];
+            if ($vars) $arg['BODY'] = $vars;
+            // صورة الرأس: المرسلة صراحة، وإلا صورة مثال القالب من متصل (القوالب المصوّرة ترفض الإرسال بدونها)
+            $hdr = trim((string)($data['template_header'] ?? ''));
+            if ($hdr === '') {
+                $tl = curl_init('https://api.mottasl.ai/v1/partner/templates');
+                curl_setopt_array($tl, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>['Accept: application/json','Authorization: Bearer '.MOTTASL_TOKEN], CURLOPT_TIMEOUT=>15, CURLOPT_SSL_VERIFYPEER=>false]);
+                $tlr = json_decode((string)curl_exec($tl), true); curl_close($tl);
+                foreach (($tlr['data'] ?? []) as $t) {
+                    if (($t['template_id'] ?? '') !== (string)$data['template_name']) continue;
+                    foreach (($t['components'] ?? []) as $c) {
+                        if (($c['type'] ?? '') === 'HEADER' && in_array(($c['format'] ?? ''), ['IMAGE','VIDEO','DOCUMENT'], true)) {
+                            $hdr = (string)($c['example']['header_handle'][0] ?? '');
+                        }
+                    }
+                    break;
+                }
             }
+            if ($hdr !== '') $arg['HEADER'] = [$hdr];
+            if ($arg) $tpl['template']['argument'] = $arg;
             $tch = curl_init('https://api.mottasl.ai/v1/message/send?create=true');
             curl_setopt_array($tch, [
                 CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode($tpl),
+                CURLOPT_POSTFIELDS => json_encode($tpl, JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . MOTTASL_TOKEN],
                 CURLOPT_TIMEOUT => 15, CURLOPT_SSL_VERIFYPEER => false,
             ]);
