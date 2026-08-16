@@ -52,9 +52,14 @@ export async function extractWallSheets(file) {
   };
   const isDoor = (l) => /DOOR/i.test(l || '');
   const isWin  = (l) => /WINDOW|WIN($|[_-])/i.test(l || '');
+  // أعمدة إنشائية: مقاطع مغلقة على طبقات COL / COLUMN / ST-*-COL
+  const isColSec = (l) => /COL(UMN)?[-_ ]?SEC|(^|[_-])COL(UMN)?S?($|[_-])/i.test(l || '') && !/HATCH/i.test(l || '');
+  // تهشير الجدران/الأعمدة: يدل على خرسانة مسلحة — نستخدمه كتصنيف لا كهندسة
+  const isHatchLayer = (l) => /HATCH/i.test(l || '');
   const prefixOf = (l) => { const m = String(l || '').match(/^([A-Za-z0-9]+)_/); return m ? m[1] : 'MAIN'; };
 
   const sheets = {};
+  const ensure = (key) => (sheets[key] = sheets[key] || { name: key, segs: [], openings: [], columns: [], hatchPts: [] });
   const seg = (arr, x1, y1, x2, y2, extra = {}) => {
     if (Math.hypot(x2 - x1, y2 - y1) <= 0.05) return;
     if (!extra.kind && isHatchLike(x1, y1, x2, y2)) return; // جدار: تجاهل خطوط التهشير
@@ -62,10 +67,27 @@ export async function extractWallSheets(file) {
   };
   for (const e of ents) {
     const layer = e.layer || '';
+    const key = prefixOf(layer);
+    // أعمدة: مضلعات مغلقة صغيرة (≤ 3 م) على طبقة مقاطع الأعمدة
+    if (isColSec(layer) && (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE')) {
+      const v = e.vertices || [];
+      const closed = ((e.flag & 1) === 1 || (e.flag & 512) === 512) && v.length >= 4;
+      if (closed) {
+        const xs = v.map(p => p.x), ys = v.map(p => p.y);
+        const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+        if (w > 0.1 && h > 0.1 && w <= 3 && h <= 3) ensure(key).columns.push({ x: Math.min(...xs), y: Math.min(...ys), w, h });
+      }
+      continue;
+    }
+    // تهشير: نحتفظ بمراكز خطوطه لتصنيف الجدران القريبة كخرسانة مسلحة
+    if (isHatchLayer(layer) && (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE')) {
+      const v = e.vertices || [];
+      if (v.length >= 2) ensure(key).hatchPts.push([(v[0].x + v[v.length - 1].x) / 2, (v[0].y + v[v.length - 1].y) / 2]);
+      continue;
+    }
     const kind = isWall(layer) ? 'wall' : isDoor(layer) ? 'door' : isWin(layer) ? 'window' : null;
     if (!kind) continue;
-    const key = prefixOf(layer);
-    sheets[key] = sheets[key] || { name: key, segs: [], openings: [] };
+    ensure(key);
     const target = kind === 'wall' ? sheets[key].segs : sheets[key].openings;
     if (e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') {
       const v = e.vertices || [];
@@ -94,6 +116,7 @@ export async function extractWallSheets(file) {
 function wallFromSeg(add, ctxIds, g, H, idx) {
   const { zDir, subCtx, wcs, stP } = ctxIds;
   const T = g.t > 0 ? g.t : WALL_T;
+  const label = g.rc ? `RC Wall ${idx} (${Math.round(T * 100)}cm) — خرسانة مسلحة` : `Wall ${idx} (${Math.round(T * 100)}cm) — بلوك`;
   const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
   const dx = (g.x2 - g.x1) / len, dy = (g.y2 - g.y1) / len;
   const p   = add(`IFCCARTESIANPOINT((${f(g.x1)},${f(g.y1)},0.))`);
@@ -106,7 +129,23 @@ function wallFromSeg(add, ctxIds, g, H, idx) {
   const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(H)})`);
   const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
   const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
-  return add(`IFCWALL('${guid()}',#${ctxIds.ownId},'Wall ${idx} (${Math.round(T * 100)}cm)',$,$,#${pl},#${pds},$,.STANDARD.)`);
+  return add(`IFCWALL('${guid()}',#${ctxIds.ownId},'${ifcText(label)}',$,'${g.rc ? 'RC' : 'Block'}',#${pl},#${pds},$,${g.rc ? '.SHEAR.' : '.STANDARD.'})`);
+}
+
+// عمود خرساني: بثق مستطيل من ركنه السفلي الأيسر
+function columnFromRect(add, ctxIds, c, H, idx) {
+  const { zDir, xDir, subCtx, wcs, stP, ownId } = ctxIds;
+  const p   = add(`IFCCARTESIANPOINT((${f(c.x)},${f(c.y)},0.))`);
+  const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${xDir})`);
+  const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${ax})`);
+  const c2  = add(`IFCCARTESIANPOINT((${f(c.w / 2)},${f(c.h / 2)}))`);
+  const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
+  const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(c.w)},${f(c.h)})`);
+  const ext = add(`IFCEXTRUDEDAREASOLID(#${prof},#${wcs},#${zDir},${f(H)})`);
+  const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(#${ext}))`);
+  const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
+  const label = `Column ${idx} (${Math.round(c.w * 100)}×${Math.round(c.h * 100)}cm) — عمود خرساني`;
+  return add(`IFCCOLUMN('${guid()}',#${ownId},'${ifcText(label)}',$,'RC',#${pl},#${pds},$,.COLUMN.)`);
 }
 
 // دمج القطع المتتالية على نفس الاستقامة (يقلل عدد الجدران في Revit)
@@ -234,15 +273,37 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     const name  = floorNames[si] || sh.floorName || defaultNames[si] || `الدور ${si + 1}`;
     const storey = add(`IFCBUILDINGSTOREY('${guid()}',#${ownId},'${ifcText(name)}',$,$,#${stP},$,$,.ELEMENT.,${f(elev)})`);
     storeyIds.push(storey);
-    const ctxIds = { zDir, subCtx, wcs, stP, ownId };
+    const ctxIds = { zDir, xDir, subCtx, wcs, stP, ownId };
 
     // 1) دمج القطع المتتالية على استقامة  2) دمج الوجهين المتوازيين لجدار واحد
     // 3) استبعاد القطع القصيرة جداً (زوايا وأطراف الرسم)
     const merged = mergeCollinear(sh.segs.map(g => ({ x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy })));
     const paired = pairParallelFaces(merged);
     const segs = mergeCollinear(paired).filter(g => Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= 0.35);
+
+    // تصنيف: جدار قريب من كثافة تهشير (≥ 3 خطوط تهشير ضمن نصف سماكته + 10 سم) = خرسانة مسلحة
+    const hp = (sh.hatchPts || []).map(([x, y]) => [x - ox, y - oy]);
+    if (hp.length) {
+      for (const g of segs) {
+        const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+        const dx = (g.x2 - g.x1) / len, dy = (g.y2 - g.y1) / len;
+        const tol = (g.t || WALL_T) / 2 + 0.10;
+        let hits = 0;
+        for (const [x, y] of hp) {
+          const t = (x - g.x1) * dx + (y - g.y1) * dy;
+          if (t < -0.05 || t > len + 0.05) continue;
+          const d = Math.abs((x - g.x1) * -dy + (y - g.y1) * dx);
+          if (d <= tol && ++hits >= 3) { g.rc = true; break; }
+        }
+      }
+    }
     const wallIds = segs.map((g, i) => wallFromSeg(add, ctxIds, g, H, i + 1));
     stats.walls += wallIds.length;
+    stats.rcWalls = (stats.rcWalls || 0) + segs.filter(g => g.rc).length;
+
+    // الأعمدة الخرسانية من طبقة مقاطع الأعمدة
+    const colIds = (sh.columns || []).map((c, i) => columnFromRect(add, ctxIds, { ...c, x: c.x - ox, y: c.y - oy }, H, i + 1));
+    stats.columns = (stats.columns || 0) + colIds.length;
 
     // الفتحات كعناصر مرجعية (IfcBuildingElementProxy) — الأبواب بارتفاع 2.1 والنوافذ 1.2 على منسوب 1.0
     const openIds = [];
@@ -273,7 +334,7 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
       spaceIds.push(add(`IFCSPACE('${guid()}',#${ownId},'${ifcText(label)}','${ifcText(`${r.L || ''}×${r.W || ''} م`)}',$,#${stP},$,$,.ELEMENT.,.INTERNAL.,$)`));
     }
 
-    const contained = [...wallIds, ...openIds];
+    const contained = [...wallIds, ...colIds, ...openIds];
     if (contained.length) add(`IFCRELCONTAINEDINSPATIALSTRUCTURE('${guid()}',#${ownId},$,$,(${contained.map(i => '#' + i).join(',')}),#${storey})`);
     if (spaceIds.length) add(`IFCRELAGGREGATES('${guid()}',#${ownId},$,$,#${storey},(${spaceIds.map(i => '#' + i).join(',')}))`);
     stats.storeys++;
