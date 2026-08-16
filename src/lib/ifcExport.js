@@ -229,6 +229,64 @@ function pairParallelFaces(segs, minT = 0.08, maxT = 0.45) {
   return out;
 }
 
+// ─── تنظيف شبكي للجدران المتعامدة (أغلب المخططات السكنية) ───────────────────
+// 1) قصر (snap) الإحداثيات على شبكة 2 سم  2) دمج كل ما يقع على نفس الخط ولو بينها
+// فجوات ≤ 25 سم  3) تمديد الأطراف لتلتقي بالجدار العمودي القريب (زوايا مغلقة)
+// 4) حذف القطع القصيرة العائمة التي لا تلامس أي جدار آخر
+function cleanOrthoWalls(segs, opts = {}) {
+  const grid = opts.grid ?? 0.02, gap = opts.gap ?? 0.25, reach = opts.reach ?? 0.35, minLen = opts.minLen ?? 0.6;
+  const sn = (v) => Math.round(v / grid) * grid;
+  const H = [], V = [], other = [];
+  for (const g of segs) {
+    const dx = Math.abs(g.x2 - g.x1), dy = Math.abs(g.y2 - g.y1);
+    if (dx >= dy * 8) H.push({ pos: sn((g.y1 + g.y2) / 2), a: sn(Math.min(g.x1, g.x2)), b: sn(Math.max(g.x1, g.x2)), t: g.t, rc: g.rc });
+    else if (dy >= dx * 8) V.push({ pos: sn((g.x1 + g.x2) / 2), a: sn(Math.min(g.y1, g.y2)), b: sn(Math.max(g.y1, g.y2)), t: g.t, rc: g.rc });
+    else other.push(g); // مائل — يبقى كما هو
+  }
+  // دمج على نفس الخط (نفس pos ضمن سماكة) مع تجسير الفجوات
+  const mergeLine = (arr) => {
+    arr.sort((p, q) => p.pos - q.pos || p.a - q.a);
+    const out = [];
+    for (const s of arr) {
+      const last = out[out.length - 1];
+      if (last && Math.abs(last.pos - s.pos) <= 0.06 && s.a <= last.b + gap) {
+        last.b = Math.max(last.b, s.b); last.rc = last.rc || s.rc; last.t = Math.max(last.t || 0, s.t || 0) || last.t;
+      } else out.push({ ...s });
+    }
+    return out;
+  };
+  let h = mergeLine(H), v = mergeLine(V);
+  // تمديد الأطراف للالتقاء بالعمودي القريب
+  const extend = (lines, cross) => {
+    for (const s of lines) {
+      for (const end of ['a', 'b']) {
+        const x = s[end];
+        // أقرب جدار عمودي يمر قرب هذا الطرف ويغطي pos
+        let best = null, bd = reach + 1;
+        for (const c of cross) {
+          if (c.a - reach > s.pos || c.b + reach < s.pos) continue;
+          const d = Math.abs(c.pos - x);
+          if (d <= reach && d < bd) { bd = d; best = c; }
+        }
+        // نمدّ حتى محور الجدار العمودي بالضبط — Revit يوصل الزاوية تلقائياً
+        if (best) s[end] = best.pos;
+      }
+    }
+  };
+  extend(h, v); extend(v, h);
+  h = mergeLine(h); v = mergeLine(v);
+  // حذف القطع القصيرة العائمة
+  const touches = (s, cross) => cross.some(c => c.a - 0.05 <= s.pos && c.b + 0.05 >= s.pos && (Math.abs(c.pos - s.a) <= 0.05 || Math.abs(c.pos - s.b) <= 0.05));
+  h = h.filter(s => s.b - s.a >= minLen || touches(s, v));
+  v = v.filter(s => s.b - s.a >= minLen || touches(s, h));
+  h = h.filter(s => s.b - s.a >= 0.2); v = v.filter(s => s.b - s.a >= 0.2);
+  return [
+    ...h.map(s => ({ x1: s.a, y1: s.pos, x2: s.b, y2: s.pos, t: s.t, rc: s.rc })),
+    ...v.map(s => ({ x1: s.pos, y1: s.a, x2: s.pos, y2: s.b, t: s.t, rc: s.rc })),
+    ...other,
+  ];
+}
+
 // ─── الملف الكامل ─────────────────────────────────────────────────────────────
 export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [] }) {
   const H = Number(defaultH) > 0 ? Number(defaultH) : H_DEFAULT;
@@ -297,9 +355,11 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
         }
       }
     }
-    const wallIds = segs.map((g, i) => wallFromSeg(add, ctxIds, g, H, i + 1));
+    // 4) تنظيف شبكي: تجسير الفجوات، إغلاق الزوايا، حذف القطع العائمة
+    const cleaned = cleanOrthoWalls(segs);
+    const wallIds = cleaned.map((g, i) => wallFromSeg(add, ctxIds, g, H, i + 1));
     stats.walls += wallIds.length;
-    stats.rcWalls = (stats.rcWalls || 0) + segs.filter(g => g.rc).length;
+    stats.rcWalls = (stats.rcWalls || 0) + cleaned.filter(g => g.rc).length;
 
     // الأعمدة الخرسانية من طبقة مقاطع الأعمدة
     const colIds = (sh.columns || []).map((c, i) => columnFromRect(add, ctxIds, { ...c, x: c.x - ox, y: c.y - oy }, H, i + 1));
