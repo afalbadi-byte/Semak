@@ -288,7 +288,10 @@ function cleanOrthoWalls(segs, opts = {}) {
 }
 
 // ─── الملف الكامل ─────────────────────────────────────────────────────────────
-export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false }) {
+// نمط الإخراج:
+//  - mergedWalls: كل جدران الدور في عنصر IfcWall واحد (مجسم واحد لكل دور) — افتراضي
+//  - محاذاة الأدوار: كل دور يُنقل ليتطابق مركز صندوقه مع مركز الدور الأرضي (فوق بعض بالضبط)
+export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false, mergedWalls = true }) {
   const H = Number(defaultH) > 0 ? Number(defaultH) : H_DEFAULT;
   const L = []; let id = 100;
   const add = (line) => { L.push(`#${id}=${line};`); return id++; };
@@ -321,9 +324,15 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
   const stats = { storeys: 0, walls: 0, openings: 0, height: H };
   const defaultNames = ['الدور الأرضي', 'الدور الأول', 'الدور الثاني', 'الملحق العلوي', 'السطح'];
 
+  // مرجع موحّد: مركز الدور الأرضي (أول لوحة) — كل دور يُحاذى عليه فتتراكب الأدوار بالضبط
+  const base = sheets[0];
+  const baseCx = (base.bbox.minX + base.bbox.maxX) / 2, baseCy = (base.bbox.minY + base.bbox.maxY) / 2;
+  const baseHalfW = (base.bbox.maxX - base.bbox.minX) / 2, baseHalfH = (base.bbox.maxY - base.bbox.minY) / 2;
+
   sheets.forEach((sh, si) => {
-    // كل لوحة تصير طابقاً بارتفاع منسوب si*H، وننقل إحداثياتها ليبدأ الصندوق من الأصل
-    const ox = sh.bbox.minX, oy = sh.bbox.minY;
+    // كل لوحة = طابق بمنسوب si*H. الإزاحة: مركز هذه اللوحة → مركز الأرضي، ثم الأرضي يبدأ من الأصل
+    const cx = (sh.bbox.minX + sh.bbox.maxX) / 2, cy = (sh.bbox.minY + sh.bbox.maxY) / 2;
+    const ox = cx - baseHalfW, oy = cy - baseHalfH;   // بعد الطرح: مركز كل دور عند (baseHalfW, baseHalfH)
     const elev = si * H;
     const stOrigin = add(`IFCCARTESIANPOINT((0.,0.,${f(elev)}))`);
     const stAx  = add(`IFCAXIS2PLACEMENT3D(#${stOrigin},#${zDir},#${xDir})`);
@@ -357,9 +366,34 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     }
     // 4) تنظيف شبكي: تجسير الفجوات، إغلاق الزوايا، حذف القطع العائمة
     const cleaned = cleanOrthoWalls(segs);
-    const wallIds = cleaned.map((g, i) => wallFromSeg(add, ctxIds, g, H, i + 1));
-    stats.walls += wallIds.length;
-    stats.rcWalls = (stats.rcWalls || 0) + cleaned.filter(g => g.rc).length;
+    let wallIds;
+    if (mergedWalls) {
+      // مجسم واحد لكل دور: كل الجدران صلبات داخل IfcWall واحد (تمثيل مركّب)
+      const solids = cleaned.map(g => {
+        const T = g.t > 0 ? g.t : WALL_T;
+        const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+        const dx = (g.x2 - g.x1) / len, dy = (g.y2 - g.y1) / len;
+        const p   = add(`IFCCARTESIANPOINT((${f(g.x1)},${f(g.y1)},0.))`);
+        const d   = add(`IFCDIRECTION((${f(dx)},${f(dy)},0.))`);
+        const ax  = add(`IFCAXIS2PLACEMENT3D(#${p},#${zDir},#${d})`);
+        const c2  = add(`IFCCARTESIANPOINT((${f(len / 2)},0.))`);
+        const ax2 = add(`IFCAXIS2PLACEMENT2D(#${c2},$)`);
+        const prof= add(`IFCRECTANGLEPROFILEDEF(.AREA.,$,#${ax2},${f(len)},${f(T)})`);
+        return add(`IFCEXTRUDEDAREASOLID(#${prof},#${ax},#${zDir},${f(H)})`);
+      });
+      const rcCount = cleaned.filter(g => g.rc).length;
+      const pl  = add(`IFCLOCALPLACEMENT(#${stP},#${wcs})`);
+      const shp = add(`IFCSHAPEREPRESENTATION(#${subCtx},'Body','SweptSolid',(${solids.map(i => '#' + i).join(',')}))`);
+      const pds = add(`IFCPRODUCTDEFINITIONSHAPE($,$,(#${shp}))`);
+      const label = `${name} — شبكة الجدران (${cleaned.length} قطعة، ${rcCount} خرسانة مسلحة)`;
+      wallIds = solids.length ? [add(`IFCWALL('${guid()}',#${ownId},'${ifcText(label)}',$,'WallGrid',#${pl},#${pds},$,.STANDARD.)`)] : [];
+      stats.walls += cleaned.length;
+      stats.rcWalls = (stats.rcWalls || 0) + rcCount;
+    } else {
+      wallIds = cleaned.map((g, i) => wallFromSeg(add, ctxIds, g, H, i + 1));
+      stats.walls += wallIds.length;
+      stats.rcWalls = (stats.rcWalls || 0) + cleaned.filter(g => g.rc).length;
+    }
 
     // الأعمدة الخرسانية من طبقة مقاطع الأعمدة
     const colIds = (sh.columns || []).map((c, i) => columnFromRect(add, ctxIds, { ...c, x: c.x - ox, y: c.y - oy }, H, i + 1));
