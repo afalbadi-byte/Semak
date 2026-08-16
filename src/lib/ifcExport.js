@@ -288,9 +288,42 @@ function cleanOrthoWalls(segs, opts = {}) {
 }
 
 // ─── الملف الكامل ─────────────────────────────────────────────────────────────
+// ─── محاذاة الأدوار بمطابقة الجدران ──────────────────────────────────────────
+// الجدران الإنشائية (الخارجية، الأعمدة، الدرج) تستمر بين الأدوار. نبحث عن الإزاحة
+// (dx,dy) التي تجعل أكبر طول من جدران الدور العلوي ينطبق على جدران الأرضي.
+// بحث خشن (10 سم) ثم دقيق (1 سم) حول الأفضل. يعيد الإزاحة ودرجة التطابق بالمتر.
+function orthoLines(walls) {
+  const h = [], v = [];
+  for (const g of walls) {
+    if (Math.abs(g.y1 - g.y2) < 0.02) h.push({ pos: g.y1, a: Math.min(g.x1, g.x2), b: Math.max(g.x1, g.x2) });
+    else if (Math.abs(g.x1 - g.x2) < 0.02) v.push({ pos: g.x1, a: Math.min(g.y1, g.y2), b: Math.max(g.y1, g.y2) });
+  }
+  return { h, v };
+}
+function overlapScore(base, up, dx, dy, tol = 0.06) {
+  let s = 0;
+  for (const g of up.h) for (const b of base.h) if (Math.abs(b.pos - (g.pos + dy)) <= tol) { const ov = Math.min(b.b, g.b + dx) - Math.max(b.a, g.a + dx); if (ov > 0.3) s += ov; }
+  for (const g of up.v) for (const b of base.v) if (Math.abs(b.pos - (g.pos + dx)) <= tol) { const ov = Math.min(b.b, g.b + dy) - Math.max(b.a, g.a + dy); if (ov > 0.3) s += ov; }
+  return s;
+}
+export function findStoreyOffset(baseWalls, upWalls, baseBox, upBox) {
+  const B = orthoLines(baseWalls), U = orthoLines(upWalls);
+  const dxMin = baseBox.minX - upBox.maxX - 1, dxMax = baseBox.maxX - upBox.minX + 1;
+  const dyMin = baseBox.minY - upBox.maxY - 1, dyMax = baseBox.maxY - upBox.minY + 1;
+  let best = { s: -1, dx: 0, dy: 0 };
+  for (let dx = dxMin; dx <= dxMax; dx += 0.10) for (let dy = dyMin; dy <= dyMax; dy += 0.10) {
+    const s = overlapScore(B, U, dx, dy, 0.08); if (s > best.s) best = { s, dx, dy };
+  }
+  const c = { ...best };
+  for (let dx = c.dx - 0.12; dx <= c.dx + 0.12; dx += 0.01) for (let dy = c.dy - 0.12; dy <= c.dy + 0.12; dy += 0.01) {
+    const s = overlapScore(B, U, dx, dy, 0.04); if (s > best.s) best = { s, dx, dy };
+  }
+  return best;
+}
+
 // نمط الإخراج:
 //  - mergedWalls: كل جدران الدور في عنصر IfcWall واحد (مجسم واحد لكل دور) — افتراضي
-//  - محاذاة الأدوار: كل دور يُنقل ليتطابق مركز صندوقه مع مركز الدور الأرضي (فوق بعض بالضبط)
+//  - محاذاة الأدوار: بمطابقة الجدران المشتركة مع الدور الأرضي (فوق بعض بالضبط)
 export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك', defaultH = H_DEFAULT, floorNames = [], rooms = [], includeOpenings = false, mergedWalls = true }) {
   const H = Number(defaultH) > 0 ? Number(defaultH) : H_DEFAULT;
   const L = []; let id = 100;
@@ -324,15 +357,30 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
   const stats = { storeys: 0, walls: 0, openings: 0, height: H };
   const defaultNames = ['الدور الأرضي', 'الدور الأول', 'الدور الثاني', 'الملحق العلوي', 'السطح'];
 
-  // مرجع موحّد: مركز الدور الأرضي (أول لوحة) — كل دور يُحاذى عليه فتتراكب الأدوار بالضبط
+  // ── تنظيف جدران كل دور أولاً (بإحداثيات الرسم الأصلية) ──
+  const cleanedPer = sheets.map(sh => {
+    const merged = mergeCollinear(sh.segs.map(g => ({ ...g })));
+    const paired = pairParallelFaces(merged);
+    return cleanOrthoWalls(mergeCollinear(paired).filter(g => Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= 0.35));
+  });
+  // ── محاذاة: الأرضي يبدأ من الأصل، وكل دور أعلى يُزاح بمطابقة جدرانه على الأرضي ──
   const base = sheets[0];
-  const baseCx = (base.bbox.minX + base.bbox.maxX) / 2, baseCy = (base.bbox.minY + base.bbox.maxY) / 2;
-  const baseHalfW = (base.bbox.maxX - base.bbox.minX) / 2, baseHalfH = (base.bbox.maxY - base.bbox.minY) / 2;
+  const offsets = sheets.map((sh, si) => {
+    if (si === 0) return { dx: -base.bbox.minX, dy: -base.bbox.minY, score: null };
+    const r = findStoreyOffset(cleanedPer[0], cleanedPer[si], base.bbox, sh.bbox);
+    // إن كان التطابق ضعيفاً (< 8 م) نسقط لمحاذاة المركز ونعلّم ذلك
+    if (r.s < 8) {
+      const cdx = (base.bbox.minX + base.bbox.maxX) / 2 - (sh.bbox.minX + sh.bbox.maxX) / 2;
+      const cdy = (base.bbox.minY + base.bbox.maxY) / 2 - (sh.bbox.minY + sh.bbox.maxY) / 2;
+      return { dx: cdx - base.bbox.minX, dy: cdy - base.bbox.minY, score: r.s, weak: true };
+    }
+    return { dx: r.dx - base.bbox.minX, dy: r.dy - base.bbox.minY, score: r.s };
+  });
+  stats.alignment = offsets.map((o, i) => i === 0 ? 'base' : (o.weak ? `weak(${o.score.toFixed(1)}m)` : `matched(${o.score.toFixed(1)}m)`));
 
   sheets.forEach((sh, si) => {
-    // كل لوحة = طابق بمنسوب si*H. الإزاحة: مركز هذه اللوحة → مركز الأرضي، ثم الأرضي يبدأ من الأصل
-    const cx = (sh.bbox.minX + sh.bbox.maxX) / 2, cy = (sh.bbox.minY + sh.bbox.maxY) / 2;
-    const ox = cx - baseHalfW, oy = cy - baseHalfH;   // بعد الطرح: مركز كل دور عند (baseHalfW, baseHalfH)
+    // كل لوحة = طابق بمنسوب si*H. الإزاحة المحسوبة تجعل الجدران المشتركة تنطبق
+    const ox = -offsets[si].dx, oy = -offsets[si].dy;
     const elev = si * H;
     const stOrigin = add(`IFCCARTESIANPOINT((0.,0.,${f(elev)}))`);
     const stAx  = add(`IFCAXIS2PLACEMENT3D(#${stOrigin},#${zDir},#${xDir})`);
@@ -342,11 +390,8 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
     storeyIds.push(storey);
     const ctxIds = { zDir, xDir, subCtx, wcs, stP, ownId };
 
-    // 1) دمج القطع المتتالية على استقامة  2) دمج الوجهين المتوازيين لجدار واحد
-    // 3) استبعاد القطع القصيرة جداً (زوايا وأطراف الرسم)
-    const merged = mergeCollinear(sh.segs.map(g => ({ x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy })));
-    const paired = pairParallelFaces(merged);
-    const segs = mergeCollinear(paired).filter(g => Math.hypot(g.x2 - g.x1, g.y2 - g.y1) >= 0.35);
+    // الجدران المنظفة مسبقاً، منقولة بإزاحة المحاذاة
+    const segs = cleanedPer[si].map(g => ({ ...g, x1: g.x1 - ox, y1: g.y1 - oy, x2: g.x2 - ox, y2: g.y2 - oy }));
 
     // تصنيف: جدار قريب من كثافة تهشير (≥ 3 خطوط تهشير ضمن نصف سماكته + 10 سم) = خرسانة مسلحة
     const hp = (sh.hatchPts || []).map(([x, y]) => [x - ox, y - oy]);
@@ -364,8 +409,7 @@ export function buildIfcFromSheets({ sheets, projectName = 'مشروع سماك'
         }
       }
     }
-    // 4) تنظيف شبكي: تجسير الفجوات، إغلاق الزوايا، حذف القطع العائمة
-    const cleaned = cleanOrthoWalls(segs);
+    const cleaned = segs;
     let wallIds;
     if (mergedWalls) {
       // مجسم واحد لكل دور: كل الجدران صلبات داخل IfcWall واحد (تمثيل مركّب)
