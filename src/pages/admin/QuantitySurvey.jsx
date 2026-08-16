@@ -103,6 +103,7 @@ export default function QuantitySurvey({ showToast }) {
   const [survey, setSurvey] = useState(null);
   const [surveyId, setSurveyId] = useState(null);
   const [activeTrade, setActiveTrade] = useState('summary');
+  const [planImages, setPlanImages] = useState([]); // صور المخطط (ذاكرة فقط — لا تُحفظ لحجمها)
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -291,12 +292,18 @@ export default function QuantitySurvey({ showToast }) {
           toast={toast}
           label="استيراد المشروع من المخطط"
           className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2 rounded-xl shadow transition text-sm disabled:opacity-60"
-          onRooms={(rooms) => {
+          onRooms={(rooms, planImages) => {
             const h = window.prompt('ارتفاع السقف الافتراضي بالمتر؟ (يُستخدم لمعادلات الجدران)', '3.3');
             const defaultH = h && !Number.isNaN(parseFloat(h)) ? parseFloat(h) : '';
             let filled = 0;
-            patch(s => { filled = distributeRooms(s, rooms, defaultH); });
-            toast?.('نجاح', `وُزّعت ${rooms.length} فراغاً على ${filled} بنداً — راجع الأمتار واضبط الأسعار`);
+            patch(s => {
+              filled = distributeRooms(s, rooms, defaultH);
+              // احفظ الفراغات والمخطط للتبويب البصري (الصور تُبقى في الذاكرة فقط لحجمها)
+              s.plan = { rooms, defaultH, importedAt: new Date().toISOString() };
+            });
+            setPlanImages(planImages || []);
+            setActiveTrade('plan');
+            toast?.('نجاح', `وُزّعت ${rooms.length} فراغاً على ${filled} بنداً — راجع المخطط المرقّم ثم اضبط الأسعار`);
           }} />
         <button onClick={exportExcel} className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-4 py-2 rounded-xl transition">
           <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Excel
@@ -329,6 +336,12 @@ export default function QuantitySurvey({ showToast }) {
           className={`px-4 py-2 rounded-xl font-bold text-sm transition ${activeTrade === 'summary' ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
           <Sigma className="w-4 h-4 inline ml-1" /> الاجماليات
         </button>
+        {(survey.plan?.rooms?.length > 0) && (
+          <button onClick={() => setActiveTrade('plan')}
+            className={`px-4 py-2 rounded-xl font-bold text-sm transition ${activeTrade === 'plan' ? 'bg-purple-600 text-white' : 'bg-white border border-purple-200 text-purple-700 hover:bg-purple-50'}`}>
+            <Layers className="w-4 h-4 inline ml-1" /> المخطط ({survey.plan.rooms.length})
+          </button>
+        )}
         {survey.trades.map(t => {
           const c = tradeCalc(t);
           return (
@@ -351,6 +364,17 @@ export default function QuantitySurvey({ showToast }) {
       {/* ─── محتوى التبويب ─── */}
       {activeTrade === 'summary' ? (
         <SummaryTable totals={totals} onOpen={setActiveTrade} onDeleteTrade={(tid) => { if (window.confirm('حذف هذا البند بكامل تمتيره؟')) patch(s => { s.trades = s.trades.filter(x => x.id !== tid); }); }} />
+      ) : activeTrade === 'plan' ? (
+        <PlanViewer
+          plan={survey.plan} images={planImages} toast={toast} surveyName={survey.name}
+          onRoomsChange={(rooms, summary) => {
+            patch(s => {
+              s.plan = { ...(s.plan || {}), rooms, revisedAt: new Date().toISOString(), lastSummary: summary || '' };
+              // أعد بناء أقسام «من المخطط» في كل البنود بالتقسيم الجديد
+              for (const t of s.trades) if (t.sections) t.sections = t.sections.filter(sec => sec.name !== 'من المخطط');
+              distributeRooms(s, rooms, s.plan.defaultH || '');
+            });
+          }} />
       ) : tr ? (
         tr.type === 'lump'
           ? <LumpEditor tr={tr} patchTrade={patchTrade} />
@@ -467,6 +491,133 @@ function TradeEditor({ tr, patchTrade, toast }) {
 // ─── سحب البيانات من المخطط (صورة / PDF / DWG) ───────────────────────────────
 // DWG: يُفكّ في المتصفح عبر WASM (libredwg). إن وُجدت نصوص وديمنشنات حقيقية
 // تُرسل كبيانات CAD؛ وإن كانت النصوص «مفجّرة» تُرسم اللوحات إلى صور وتُقرأ بصرياً.
+// ─── عارض المخطط المرقّم + توجيه الذكاء الاصطناعي ─────────────────────────────
+function PlanViewer({ plan, images, toast, surveyName, onRoomsChange }) {
+  const rooms = plan?.rooms || [];
+  const [instr, setInstr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [hover, setHover] = useState(null);
+  const [selImg, setSelImg] = useState(0);
+  const printRef = useRef(null);
+  const imgs = images || [];
+
+  const revise = async () => {
+    if (!instr.trim()) return;
+    setBusy(true);
+    try {
+      const r = await apiPost('qs_revise_layout', { rooms, instruction: instr.trim() }, {}, { tenant: TENANT });
+      if (r?.success && r.rooms?.length) {
+        onRoomsChange(r.rooms, r.summary);
+        toast?.('تم التعديل', r.summary || 'طُبّق التوجيه على التقسيم');
+        setInstr('');
+      } else toast?.('خطأ', r?.message || 'تعذر تطبيق التوجيه', 'error');
+    } catch { toast?.('خطأ', 'تعذر الاتصال بالخادم', 'error'); }
+    setBusy(false);
+  };
+
+  const printPdf = () => {
+    const w = window.open('', '_blank');
+    if (!w) { toast?.('تنبيه', 'اسمح بالنوافذ المنبثقة للطباعة', 'error'); return; }
+    const imgHtml = imgs.map((src, i) => {
+      const dots = rooms.filter(r => (r.img || 1) === i + 1 && r.px != null && r.py != null)
+        .map(r => `<div style="position:absolute;left:${r.px}%;top:${r.py}%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:#7c3aed;color:#fff;font:bold 12px/26px sans-serif;text-align:center;box-shadow:0 0 0 2px #fff">${r.n}</div>`).join('');
+      return `<div style="position:relative;display:inline-block;max-width:100%;page-break-inside:avoid;margin:8px 0"><img src="${src}" style="max-width:100%;display:block;border:1px solid #ddd"/>${dots}</div>`;
+    }).join('');
+    const rowsHtml = rooms.map(r => `<tr><td style="text-align:center;font-weight:bold;color:#7c3aed">${r.n}</td><td>${r.name}</td><td>${r.floor || ''}</td><td dir="ltr">${r.L || '—'}</td><td dir="ltr">${r.W || '—'}</td><td dir="ltr">${(r.L && r.W) ? (r.L * r.W).toFixed(2) : '—'}</td><td>${r.note || ''}</td></tr>`).join('');
+    const totalArea = rooms.reduce((a, r) => a + ((r.L && r.W) ? r.L * r.W : 0), 0);
+    w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>مخطط ${surveyName || ''}</title>
+      <style>body{font-family:Tahoma,Arial,sans-serif;padding:20px;color:#1e293b}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;color:#64748b;margin:0 0 14px}
+      table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}th,td{border:1px solid #cbd5e1;padding:6px 8px}th{background:#f1f5f9}
+      tfoot td{font-weight:bold;background:#f8fafc}@media print{@page{margin:12mm}}</style></head><body>
+      <h1>مخطط الفراغات المرقّم — ${surveyName || 'كشف تمتير'}</h1><h2>سماك العقارية · ${new Date().toLocaleDateString('ar-SA')} · ${rooms.length} فراغاً</h2>
+      ${imgHtml || '<p style="color:#94a3b8">لا توجد صورة مخطط (تُحفظ صور المخطط في جلسة الاستيراد فقط)</p>'}
+      <table><thead><tr><th>#</th><th>الفراغ</th><th>الدور</th><th>الطول (م)</th><th>العرض (م)</th><th>المساحة (م²)</th><th>ملاحظة</th></tr></thead>
+      <tbody>${rowsHtml}</tbody><tfoot><tr><td colspan="5">إجمالي المساحة</td><td dir="ltr">${totalArea.toFixed(2)}</td><td></td></tr></tfoot></table>
+      </body></html>`);
+    w.document.close();
+    w.onload = () => { w.print(); };
+  };
+
+  const totalArea = rooms.reduce((a, r) => a + ((r.L && r.W) ? r.L * r.W : 0), 0);
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+      {/* المخطط المرقّم */}
+      <div className="xl:col-span-3 bg-white rounded-2xl border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h4 className="font-extrabold text-slate-700 flex items-center gap-2"><Layers className="w-4 h-4 text-purple-600" /> المخطط المرقّم</h4>
+          <div className="flex items-center gap-2">
+            {imgs.length > 1 && imgs.map((_, i) => (
+              <button key={i} onClick={() => setSelImg(i)} className={`text-xs font-bold px-2.5 py-1 rounded-lg ${selImg === i ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-500'}`}>لوحة {i + 1}</button>
+            ))}
+            <button onClick={printPdf} className="text-xs font-bold text-slate-600 hover:text-purple-700 flex items-center gap-1 bg-slate-100 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition">
+              <Download className="w-3.5 h-3.5" /> PDF
+            </button>
+          </div>
+        </div>
+        {imgs.length ? (
+          <div className="relative inline-block max-w-full border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+            <img src={imgs[selImg]} alt="المخطط" className="max-w-full block" />
+            {rooms.filter(r => (r.img || 1) === selImg + 1 && r.px != null && r.py != null).map(r => (
+              <div key={r.n} onMouseEnter={() => setHover(r.n)} onMouseLeave={() => setHover(null)}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-white text-xs font-black flex items-center justify-center shadow-md ring-2 ring-white cursor-default transition ${hover === r.n ? 'bg-emerald-600 scale-125 z-10' : 'bg-purple-600'}`}
+                style={{ left: `${r.px}%`, top: `${r.py}%` }} title={`${r.name} — ${r.L}×${r.W}`}>
+                {r.n}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="border-2 border-dashed border-slate-200 rounded-xl p-10 text-center text-slate-400 text-sm">
+            صورة المخطط تظهر في جلسة الاستيراد نفسها (لا تُحفظ لحجمها) — أعد الاستيراد لعرضها، والجدول والأرقام محفوظة.
+          </div>
+        )}
+        <p className="text-[11px] text-slate-400 mt-2">مرّر على الرقم لإبراز الفراغ · الأرقام نفسها في أسطر التمتير (#1، #2…) للمطابقة</p>
+      </div>
+
+      {/* الجدول + التوجيه */}
+      <div className="xl:col-span-2 space-y-4">
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50/70 flex items-center justify-between">
+            <span className="font-extrabold text-slate-700 text-sm">الفراغات ({rooms.length})</span>
+            <span className="text-xs font-bold text-slate-500">إجمالي {totalArea.toFixed(1)} م²</span>
+          </div>
+          <div className="max-h-[420px] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-white"><tr className="text-slate-400 font-bold border-b">
+                <th className="py-2 px-2 w-8">#</th><th className="text-right py-2 px-2">الفراغ</th><th className="py-2 px-1">ط</th><th className="py-2 px-1">ع</th><th className="py-2 px-1">م²</th></tr></thead>
+              <tbody>
+                {rooms.map(r => (
+                  <tr key={r.n} onMouseEnter={() => setHover(r.n)} onMouseLeave={() => setHover(null)}
+                    className={`border-b border-slate-50 transition ${hover === r.n ? 'bg-emerald-50' : ''} ${r.note ? 'bg-amber-50/40' : ''}`}>
+                    <td className="py-1.5 px-2 text-center"><span className="inline-flex w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] font-black items-center justify-center">{r.n}</span></td>
+                    <td className="py-1.5 px-2 font-bold text-slate-700">{r.name}{r.floor ? <span className="text-slate-400 font-normal"> · {r.floor}</span> : ''}{r.note && <div className="text-[10px] text-amber-700 font-normal">↳ {r.note}</div>}</td>
+                    <td className="py-1.5 px-1 text-center font-mono" dir="ltr">{r.L || '—'}</td>
+                    <td className="py-1.5 px-1 text-center font-mono" dir="ltr">{r.W || '—'}</td>
+                    <td className="py-1.5 px-1 text-center font-mono text-emerald-700 font-bold" dir="ltr">{(r.L && r.W) ? (r.L * r.W).toFixed(1) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-purple-50 to-white rounded-2xl border border-purple-200 p-4">
+          <h4 className="font-extrabold text-purple-800 text-sm flex items-center gap-2 mb-2"><Wand2 className="w-4 h-4" /> توجيه الذكاء الاصطناعي</h4>
+          <p className="text-[11px] text-purple-600/80 mb-2">اكتب التعديل المطلوب على التقسيمات وسيُطبَّق على الجدول وكل بنود التمتير — مثال: «ادمج غرفة الغسيل مع المطبخ»، «قسّم المجلس لغرفتي نوم»، «الفراغ #4 اسمه غرفة طعام وطوله 4.5»</p>
+          <textarea value={instr} onChange={e => setInstr(e.target.value)} rows={3}
+            placeholder="اكتب توجيهك هنا…"
+            className="w-full border border-purple-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-300 bg-white resize-none" />
+          <button onClick={revise} disabled={busy || !instr.trim()}
+            className="mt-2 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} {busy ? 'جارٍ التطبيق…' : 'تطبيق على التقسيمات'}
+          </button>
+          {plan?.lastSummary && <p className="text-[11px] text-emerald-700 mt-2 bg-emerald-50 rounded-lg px-3 py-1.5">آخر تعديل: {plan.lastSummary}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // أي البنود يستقبل أي فراغات عند الاستيراد الشامل:
 // أرضيات/جبس/عظم/لياسة/دهان → كل الغرف — كيشاني → الرطبة فقط — بروفايل/مقطوعية → لا شيء
 const WET_RE = /حمام|دورة|مطبخ|غسيل|وضوء|بيارة/;
@@ -481,7 +632,7 @@ function distributeRooms(survey, rooms, defaultH) {
     const mode = tr.mode || 'area';
     const needsH = mode === 'perimeter' || mode === 'lh' || mode === 'volume';
     const rows = list.map(rm => ({
-      id: uid(), name: rm.name,
+      id: uid(), name: rm.n ? `#${rm.n} ${rm.name}` : rm.name, roomNo: rm.n || null,
       L: rm.L === '' ? '' : String(rm.L),
       W: rm.W === '' ? '' : String(rm.W),
       H: rm.H !== '' ? String(rm.H) : (needsH && defaultH ? String(defaultH) : ''),
@@ -510,11 +661,22 @@ function DrawingExtractButton({ onRooms, toast, label, className }) {
     setBusy(true);
     try {
       let payload;
+      let planImages = []; // صور المخطط للعرض في تبويب «المخطط» (data URLs)
       if (isDwg) {
         const { extractFromDwg } = await import('../../lib/dwgExtract');
         const ex = await extractFromDwg(file, setStage);
         setStage('جارٍ تحليل البيانات…');
-        payload = ex.kind === 'cad' ? { cad: ex.cad } : { files: ex.images };
+        if (ex.kind === 'cad') {
+          // نصوص حقيقية → للتحليل؛ ونرسم اللوحات أيضاً لعرضها بصرياً
+          payload = { cad: ex.cad };
+          try {
+            const { renderDwgSheets } = await import('../../lib/dwgExtract');
+            planImages = await renderDwgSheets(file, setStage);
+          } catch { /* الرسم اختياري */ }
+        } else {
+          payload = { files: ex.images };
+          planImages = ex.images.map(i => `data:${i.media_type};base64,${i.data}`);
+        }
       } else {
         setStage('جارٍ قراءة المخطط…');
         const b64 = await new Promise((res, rej) => {
@@ -523,11 +685,13 @@ function DrawingExtractButton({ onRooms, toast, label, className }) {
           rd.onerror = rej;
           rd.readAsDataURL(file);
         });
-        payload = { file: b64, media_type: file.type === 'application/pdf' ? 'application/pdf' : (file.type || 'image/png') };
+        const mt = file.type === 'application/pdf' ? 'application/pdf' : (file.type || 'image/png');
+        payload = { file: b64, media_type: mt };
+        if (mt !== 'application/pdf') planImages = [`data:${mt};base64,${b64}`];
       }
       const r = await apiPost('qs_extract_drawing', payload, {}, { tenant: TENANT });
       if (r?.success && r.rooms?.length) {
-        onRooms(r.rooms);
+        onRooms(r.rooms, planImages);
         toast?.('نجاح', `تم استخراج ${r.rooms.length} فراغاً من المخطط`);
       } else toast?.('خطأ', r?.message || 'لم يُعثر على فراغات في المخطط', 'error');
     } catch (err) {

@@ -212,6 +212,27 @@ export function renderRegionToBlob(entities, region, maxPx = 2000) {
   return new Promise((res) => canvas.toBlob(res, 'image/png'));
 }
 
+// ─── رسم لوحات DWG إلى صور (للعرض البصري في الأداة) ──────────────────────────
+export async function renderDwgSheets(file, onStage, maxSheets = 4) {
+  const { db } = await parseDwg(file);
+  const ents = db.entities || [];
+  const islands = findIslands(ents);
+  const out = [];
+  for (let i = 0; i < islands.length && out.length < maxSheets; i++) {
+    onStage?.(`جارٍ رسم اللوحة ${i + 1}…`);
+    const blob = await renderRegionToBlob(ents, islands[i], 1800);
+    if (!blob || blob.size < 4000) continue;
+    const url = await new Promise((res, rej) => {
+      const rd = new FileReader();
+      rd.onload = () => res(String(rd.result));
+      rd.onerror = rej;
+      rd.readAsDataURL(blob);
+    });
+    out.push(url);
+  }
+  return out;
+}
+
 // ─── المسار الكامل: DWG → إما بيانات CAD أو صور لوحات ────────────────────────
 export async function extractFromDwg(file, onStage) {
   onStage?.('جارٍ فك ملف DWG…');

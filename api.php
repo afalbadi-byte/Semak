@@ -69,6 +69,30 @@ function ensure_column($conn, $table, $col, $ddl) {
     if ($r && $r->num_rows === 0) $conn->query("ALTER TABLE `$t` ADD COLUMN $ddl");
 }
 
+// ─── تنظيف قائمة فراغات التمتير القادمة من الذكاء الاصطناعي ────────────────
+function qs_clean_rooms($rooms) {
+    $clean = []; $i = 0;
+    foreach ((array)$rooms as $r) {
+        if (!is_array($r)) continue;
+        $i++;
+        $num = is_numeric($r['n'] ?? null) ? (int)$r['n'] : $i;
+        $clean[] = [
+            'n'     => $num,
+            'name'  => mb_substr(trim((string)($r['name'] ?? '')), 0, 60),
+            'L'     => is_numeric($r['L'] ?? null) ? (float)$r['L'] : '',
+            'W'     => is_numeric($r['W'] ?? null) ? (float)$r['W'] : '',
+            'H'     => is_numeric($r['H'] ?? null) ? (float)$r['H'] : '',
+            'px'    => is_numeric($r['px'] ?? null) ? max(0, min(100, (float)$r['px'])) : null,
+            'py'    => is_numeric($r['py'] ?? null) ? max(0, min(100, (float)$r['py'])) : null,
+            'img'   => is_numeric($r['img'] ?? null) ? max(1, (int)$r['img']) : 1,
+            'floor' => mb_substr(trim((string)($r['floor'] ?? '')), 0, 40),
+            'note'  => mb_substr(trim((string)($r['note'] ?? '')), 0, 200),
+        ];
+        if (count($clean) >= 80) break;
+    }
+    return $clean;
+}
+
 // ─── DDL migrations: runs once per schema version (skips on every subsequent request) ──
 $conn->query("CREATE TABLE IF NOT EXISTS db_schema_version (
     id         INT NOT NULL PRIMARY KEY,
@@ -7334,8 +7358,9 @@ switch ($action) {
                     . "- إذا كانت وحدات الرسم سنتيمتر أو مليمتر (قياسات مثل 520 أو 5200 لغرفة) حوّلها للمتر. أبعاد الغرف المنطقية بين 1 و 15 متراً.\n"
                     . "- تجاهل نصوص العناوين والأكواد والأرقام التسلسلية — خذ أسماء الفراغات فقط (مجلس، صالة، مطبخ، غرفة نوم، حمام، مدخل، غسيل، خادمة، مستودع، ملحق، درج، ممر...).\n"
                     . "- إذا تكرر نفس الفراغ في أكثر من شقة/دور اذكره مرة واحدة لكل موضع مختلف الأبعاد.\n"
+                    . "- حقل floor لاسم الدور إن تعددت الأدوار.\n"
                     . "أرجع JSON فقط بلا أي نص آخر بهذا الشكل بالضبط:\n"
-                    . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":""}]}' . "\n\nالبيانات:\n" . $cad;
+                    . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":"","floor":"الأرضي"}]}' . "\n\nالبيانات:\n" . $cad;
             $content = [['type'=>'text','text'=>$prompt]];
         } else {
             $allowed = ['image/png','image/jpeg','image/webp','image/gif','application/pdf'];
@@ -7368,8 +7393,9 @@ switch ($action) {
                     . "- أسماء الفراغات بالعربية كما هي في المخطط (المجلس، الصالة، المطبخ، غرفة نوم، حمام، مدخل...).\n"
                     . "- إذا لم يُكتب البعد بجوار الغرفة قدّره من مقياس الرسم مقارنة بغرف معلومة الأبعاد.\n"
                     . "- إذا وُجد ارتفاع السقف مكتوباً أضفه في H وإلا اتركه فارغاً.\n"
+                    . "- لكل فراغ أضف موضع مركزه على الصورة كنسبة مئوية: px (0 = أقصى اليسار، 100 = أقصى اليمين) و py (0 = أعلى الصورة، 100 = أسفلها) — يُستخدم لوضع رقم الفراغ فوق المخطط. وحقل img لرقم الصورة (1 للأولى) إن تعددت، وfloor لاسم الدور.\n"
                     . "أرجع JSON فقط بلا أي نص آخر بهذا الشكل بالضبط:\n"
-                    . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":""}]}';
+                    . '{"rooms":[{"name":"المجلس","L":5.2,"W":3.5,"H":"","px":35,"py":60,"img":1,"floor":"الأرضي"}]}';
             $content[] = ['type'=>'text','text'=>$prompt];
         }
 
@@ -7430,18 +7456,45 @@ switch ($action) {
             break;
         }
         // تنظيف وتحديد الحقول
-        $clean = [];
-        foreach ($rooms as $r) {
-            if (!is_array($r)) continue;
-            $clean[] = [
-                'name' => mb_substr(trim((string)($r['name'] ?? '')), 0, 60),
-                'L' => is_numeric($r['L'] ?? null) ? (float)$r['L'] : '',
-                'W' => is_numeric($r['W'] ?? null) ? (float)$r['W'] : '',
-                'H' => is_numeric($r['H'] ?? null) ? (float)$r['H'] : '',
-            ];
-            if (count($clean) >= 80) break;
-        }
+        $clean = qs_clean_rooms($rooms);
         echo json_encode(['success'=>true, 'rooms'=>$clean], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'qs_revise_layout': {
+        // إعادة تقسيم الفراغات بتوجيه نصي من الموظف (مثل: «ادمج غرفة الغسيل مع المطبخ»، «قسم المجلس لغرفتين»)
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $rooms_in = is_array($input_data['rooms'] ?? null) ? $input_data['rooms'] : [];
+        $instr    = trim((string)($input_data['instruction'] ?? ''));
+        if (!$rooms_in || $instr === '') { echo json_encode(['success'=>false,'message'=>'الفراغات والتوجيه مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $cur = json_encode(array_slice(qs_clean_rooms($rooms_in), 0, 80), JSON_UNESCAPED_UNICODE);
+        $prompt = "أنت مهندس معماري. لديك قائمة فراغات مشروع مرقّمة (n) بأبعادها بالمتر ومواضع أرقامها على صورة المخطط (px,py نسب مئوية).\n"
+                . "طبّق تعليمات الموظف على التقسيم وأعد القائمة الكاملة بعد التعديل:\n"
+                . "- حافظ على الفراغات غير المذكورة كما هي بأرقامها ومواضعها.\n"
+                . "- عند الدمج: فراغ واحد بمساحة المجموع (يأخذ موضع أحدهما). عند التقسيم: فراغان بمجموع نفس المساحة (المواضع متقاربة). عند تغيير الأبعاد: احسبها منطقياً.\n"
+                . "- الفراغات الجديدة تأخذ أرقاماً تالية لأكبر رقم موجود. الأسماء بالعربية، الأبعاد بالمتر (1-15 م).\n"
+                . "- أضف حقل note موجزاً في الفراغات التي غيّرتها يشرح ما فعلت.\n"
+                . "أرجع JSON فقط بلا أي نص آخر: {\"rooms\":[{\"n\":1,\"name\":\"..\",\"L\":0,\"W\":0,\"H\":\"\",\"px\":0,\"py\":0,\"img\":1,\"floor\":\"..\",\"note\":\"..\"}],\"summary\":\"سطر يلخص التعديل\"}\n\n"
+                . "التقسيم الحالي:\n$cur\n\nتعليمات الموظف:\n$instr";
+        $body = ['model'=>'claude-sonnet-5','max_tokens'=>6000,'messages'=>[['role'=>'user','content'=>$prompt]]];
+        $ch = curl_init('https://api.anthropic.com/v1/messages');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($body),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+            CURLOPT_TIMEOUT => 90,
+        ]);
+        $res = curl_exec($ch); curl_close($ch);
+        $j = json_decode($res, true);
+        $txt = '';
+        foreach (($j['content'] ?? []) as $blk) if (($blk['type'] ?? '') === 'text') $txt .= $blk['text'] ?? '';
+        $s = strpos($txt, '{'); $e = strrpos($txt, '}');
+        $parsed = ($s !== false && $e !== false && $e > $s) ? json_decode(substr($txt, $s, $e - $s + 1), true) : null;
+        if (!is_array($parsed) || !isset($parsed['rooms']) || !is_array($parsed['rooms'])) {
+            echo json_encode(['success'=>false,'message'=>'تعذر تطبيق التوجيه' . (($j['error']['message'] ?? '') ? ' — ' . $j['error']['message'] : ''), 'raw'=>mb_substr($txt,0,300)], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+        echo json_encode(['success'=>true, 'rooms'=>qs_clean_rooms($parsed['rooms']), 'summary'=>mb_substr((string)($parsed['summary'] ?? ''), 0, 300)], JSON_UNESCAPED_UNICODE);
         break;
     }
 
