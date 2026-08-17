@@ -4485,6 +4485,26 @@ switch ($action) {
         echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_purchase_items': {
+        // بنود فاتورة شراء (المواد والكميات) — للمواصفات المرجعية
+        if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $dk = "__DAFTRA_KEY__"; $pid = (int)($_GET['id'] ?? 0);
+        if (!$pid) { echo json_encode(['success'=>false]); break; }
+        // v2 entity API يرجع البنود كاملة
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/purchase_invoice/$pid");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        if ($code !== 200) {
+            // احتياط: api2 مع include للبنود
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json?include=items");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        }
+        header('Content-Type: application/json; charset=utf-8');
+        echo $code === 200 && $res ? $res : json_encode(['success'=>false,'http'=>$code]);
+        break;
+    }
+
     case 'daftra_purchase_get':
         // جلب تفاصيل مشتراة واحدة (بما في ذلك المرفقات والبنود)
         $dk = "__DAFTRA_KEY__"; $pur_id = (int)($_GET['id'] ?? 0);
