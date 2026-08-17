@@ -4487,7 +4487,7 @@ switch ($action) {
 
     case 'daftra_purchase_items': {
         // بنود فاتورة شراء (المواد والكميات) — للمواصفات المرجعية
-        if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $dk = "__DAFTRA_KEY__"; $pid = (int)($_GET['id'] ?? 0);
         if (!$pid) { echo json_encode(['success'=>false]); break; }
         // v2 entity API يرجع البنود كاملة
@@ -10733,7 +10733,7 @@ switch ($action) {
 
     case 'wa_hub': {
         // بروكسي موحّد لموارد متصل/Azeer — قائمة مسموحة فقط، المفتاح يبقى في السيرفر
-        if (!$_jwt_claims && ($_GET['k'] ?? '') !== 'semak-diag-8891') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $resources = [
             'templates' => 'partner/templates',
             'contacts'  => 'contacts',
