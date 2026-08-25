@@ -4573,12 +4573,15 @@ switch ($action) {
             curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
             $res = curl_exec($ch); curl_close($ch);
             $d = json_decode($res, true) ?: [];
-            $inv = $d['data']['PurchaseInvoice'] ?? $d['PurchaseInvoice'] ?? (is_array($d['data'] ?? null) ? $d['data'] : []);
-            $itemsArr = $inv['PurchaseInvoiceItem'] ?? $inv['purchase_invoice_items'] ?? $inv['items'] ?? [];
+            // دفترة تغلف الرد: data.data.PurchaseOrder (والأقدم PurchaseInvoice)
+            $dd = is_array($d['data'] ?? null) ? $d['data'] : [];
+            $inner = is_array($dd['data'] ?? null) ? $dd['data'] : $dd;
+            $inv = $inner['PurchaseOrder'] ?? $inner['PurchaseInvoice'] ?? (is_array($inner) ? $inner : []);
+            $itemsArr = $inv['PurchaseOrderItem'] ?? $inv['PurchaseInvoiceItem'] ?? $inv['items'] ?? [];
 
             $wt = [];
             foreach ((array)$itemsArr as $it) {
-                $it = $it['PurchaseInvoiceItem'] ?? $it;
+                $it = $it['PurchaseOrderItem'] ?? $it['PurchaseInvoiceItem'] ?? $it;
                 if (!is_array($it)) continue;
                 $prid = (int)($it['product_id'] ?? 0);
                 if (!$prid || !isset($prodClass[$prid])) continue;
