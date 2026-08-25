@@ -4709,7 +4709,11 @@ switch ($action) {
                 $wt[$prodClass[$prid]] = ($wt[$prodClass[$prid]] ?? 0) + max($val, 0.01);
             }
             // مشتريات كل منتج داخل الفاتورة (لتقرير أصناف البند وحركة الصنف)
-            $invDate = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($inv['date'] ?? '')) ? "'" . substr($inv['date'], 0, 10) . "'" : "NULL";
+            // دفترة ترجع التاريخ بصيغة العرض dd/mm/yyyy أحياناً — نطبّعه إلى Y-m-d
+            $rawDate = (string)($inv['date'] ?? '');
+            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $rawDate, $dm))      $invDate = "'{$dm[1]}-{$dm[2]}-{$dm[3]}'";
+            elseif (preg_match('#^(\d{2})/(\d{2})/(\d{4})#', $rawDate, $dm))  $invDate = "'{$dm[3]}-{$dm[2]}-{$dm[1]}'";
+            else $invDate = "NULL";
             $invSid  = (int)($inv['supplier_id'] ?? 0); $invSidSql = $invSid > 0 ? $invSid : "NULL";
             $invSup  = $conn->real_escape_string(mb_substr((string)($inv['supplier_business_name'] ?? ''), 0, 250));
             $conn->query("DELETE FROM purchase_product_items WHERE ref_id=$pid");
