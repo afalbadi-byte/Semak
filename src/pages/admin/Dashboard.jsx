@@ -1043,6 +1043,7 @@ function DashboardInner({ onLogout }) {
             label:'المشتريات والتعاقدات',
             desc:'أوامر العمل · الموردون · المنتجات · متابعة مراحل التنفيذ',
             tools:[
+                { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',        icon:ShoppingCart,   permKey:'finance', color:'amber'  },
                 { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'qs',          color:'emerald'},
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
                 { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
