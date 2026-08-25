@@ -867,6 +867,13 @@ ensure_column($conn, "purchase_product_items", "supplier", "supplier VARCHAR(255
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (15)");
 } // end DDL v15
 
+// ─── DDL v16: إعادة زرع شجرة التصنيف لإضافة فرع «5000 التدفقات النقدية» ─────────
+// (الشجرة تُزرع في pur_class_tree عند غيابها — الحذف يعيد الزرع بالنسخة المحدثة)
+if ($__sv < 16) {
+$conn->query("DELETE FROM acc_settings WHERE skey='purchase_class_tree'");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (16)");
+} // end DDL v16
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -4538,6 +4545,10 @@ switch ($action) {
                 ["code"=>"4100","level"=>2,"name"=>"ضريبة القيمة المضافة"],
                 ["code"=>"4200","level"=>2,"name"=>"زكاة وضريبة الدخل"],
                 ["code"=>"4300","level"=>2,"name"=>"ضريبة التصرفات العقارية"],
+                ["code"=>"5000","level"=>1,"name"=>"التدفقات النقدية (ليست تكلفة)"],
+                ["code"=>"5100","level"=>2,"name"=>"دفعات مقدمة للموردين"],
+                ["code"=>"5200","level"=>2,"name"=>"سداد أقساط والتزامات"],
+                ["code"=>"5300","level"=>2,"name"=>"سداد إيجارات وتحويلات"],
             ];
             $tj  = json_encode($tree, JSON_UNESCAPED_UNICODE);
             $esc = $conn->real_escape_string($tj);

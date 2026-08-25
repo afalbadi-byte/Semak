@@ -227,7 +227,9 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   const sumByPrefix = (prefix) => reportRows
     .filter(r => r.code.startsWith(prefix))
     .reduce((a, r) => ({ total: a.total + parseFloat(r.total || 0), invoices: a.invoices + parseInt(r.invoices || 0, 10) }), { total: 0, invoices: 0 });
-  const reportGrand = reportRows.reduce((s, r) => s + parseFloat(r.total || 0), 0);
+  // التدفقات النقدية (5xxx) ليست تكلفة — تُعرض منفصلة ولا تدخل الإجمالي والنسب
+  const reportGrand = reportRows.filter(r => r.code[0] !== '5').reduce((s, r) => s + parseFloat(r.total || 0), 0);
+  const cashflowTotal = reportRows.filter(r => r.code[0] === '5').reduce((s, r) => s + parseFloat(r.total || 0), 0);
 
   // ─── ملخص مالي ───────────────────────────────────────────────
   const totalAmount      = displayed.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
@@ -399,6 +401,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                 </thead>
                 <tbody>
                   {classTree.map(t => {
+                    if (t.code[0] === '5') return null; // التدفقات النقدية في قسمها أدناه
                     const s = sumByPrefix(classPrefix(t.code));
                     if (s.total <= 0) return null;
                     const pct = reportGrand > 0 ? (s.total / reportGrand) * 100 : 0;
@@ -554,11 +557,32 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 dark:bg-brand-800/60">
-                    <td className="px-4 py-3 font-black text-brand-800 dark:text-brand-100 text-sm">الإجمالي</td>
+                    <td className="px-4 py-3 font-black text-brand-800 dark:text-brand-100 text-sm">إجمالي التكلفة</td>
                     <td></td>
                     <td className="px-4 py-3 text-left font-black text-brand-800 dark:text-brand-100 text-sm whitespace-nowrap">{fmt(reportGrand)}</td>
-                    <td className="px-4 py-3 text-[10px] text-slate-400 font-bold">يشمل المشتريات (صافي قبل الضريبة) + المصروفات المصنفة (تأمينات، رسوم، نثرية...)</td>
+                    <td className="px-4 py-3 text-[10px] text-slate-400 font-bold">يشمل المشتريات (صافي قبل الضريبة) + المصروفات المصنفة — بدون التدفقات النقدية</td>
                   </tr>
+                  {cashflowTotal > 0 && (
+                    <>
+                      <tr className="bg-amber-50/60 dark:bg-brand-800/20 border-t-2 border-gold-500/40">
+                        <td colSpan={4} className="px-4 pt-3 pb-1 text-[11px] font-black text-gold-600">تدفقات نقدية — ليست ضمن التكلفة (دفعات مقدمة، سداد أقساط والتزامات...)</td>
+                      </tr>
+                      {classTree.filter(t => t.code[0] === '5').map(t => {
+                        const s = sumByPrefix(classPrefix(t.code));
+                        if (s.total <= 0) return null;
+                        return (
+                          <tr key={t.code} onClick={() => toggleCat(t.code)} className="bg-amber-50/40 dark:bg-brand-800/10 cursor-pointer hover:bg-amber-50">
+                            <td className={`px-4 py-2 text-xs ${t.level === 1 ? 'font-black text-amber-800' : 'font-bold text-amber-700 pr-8'}`}>
+                              <span className="text-slate-300 font-mono text-[10px] ml-2">{t.code}</span>{t.name}
+                            </td>
+                            <td className="px-4 py-2 text-center text-xs font-bold text-amber-700">{s.invoices}</td>
+                            <td className="px-4 py-2 text-left text-xs font-black text-amber-800 whitespace-nowrap">{fmt(s.total)}</td>
+                            <td className="px-4 py-2 text-[10px] text-amber-600 font-bold">تدفق نقدي</td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
                 </tfoot>
               </table>
             </div>
