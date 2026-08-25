@@ -846,6 +846,19 @@ $conn->query("CREATE TABLE IF NOT EXISTS purchase_class_items (
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (13)");
 } // end DDL v13
 
+// ─── DDL v14: مشتريات كل منتج (صنف) داخل كل فاتورة — يغذي تقرير «أصناف البند» ──
+if ($__sv < 14) {
+$conn->query("CREATE TABLE IF NOT EXISTS purchase_product_items (
+    ref_id     INT NOT NULL,
+    product_id INT NOT NULL,
+    amount     DECIMAL(15,2) NOT NULL DEFAULT 0,
+    qty        DECIMAL(15,3) NOT NULL DEFAULT 0,
+    PRIMARY KEY (ref_id, product_id),
+    INDEX idx_ppi_product (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (14)");
+} // end DDL v14
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -4571,6 +4584,33 @@ switch ($action) {
         break;
     }
 
+    case 'pur_class_products': {
+        // أصناف (منتجات) بند معين بمجاميع مشترياتها — code مثل 1320 أو 1300 أو 1000
+        $code = preg_replace('/[^0-9]/', '', (string)($_GET['code'] ?? ''));
+        if ($code === '') { echo json_encode(['success'=>false,'message'=>'code مطلوب']); break; }
+        $prefix = rtrim($code, '0'); if ($prefix === '') $prefix = $code[0];
+        $prefEsc = $conn->real_escape_string($prefix);
+        $out = [];
+        $r = $conn->query("SELECT ppi.product_id,
+                                  COALESCE(ap.name, CONCAT('منتج #', ppi.product_id)) AS name,
+                                  COALESCE(ap.unit, '') AS unit,
+                                  pc.code,
+                                  ROUND(SUM(ppi.amount),2) AS total,
+                                  ROUND(SUM(ppi.qty),3)    AS qty,
+                                  COUNT(DISTINCT ppi.ref_id) AS invoices
+                           FROM purchase_product_items ppi
+                           JOIN purchase_classification pc
+                                ON pc.kind='product' AND pc.ref_id = ppi.product_id
+                           LEFT JOIN acc_products ap
+                                ON ap.tenant_id = 1 AND ap.daftra_id = ppi.product_id
+                           WHERE pc.code LIKE '$prefEsc%'
+                           GROUP BY ppi.product_id, ap.name, ap.unit, pc.code
+                           ORDER BY SUM(ppi.amount) DESC");
+        if ($r) while ($row = $r->fetch_assoc()) $out[] = $row;
+        echo json_encode(['success'=>true, 'data'=>$out], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pur_class_rebuild_items': {
         // إعادة اشتقاق تصنيف الفواتير من بنودها: كل بند يتبع تصنيف منتجه،
         // والفاتورة تأخذ البند الغالب قيمةً. لا يمس التصنيف اليدوي أبداً.
@@ -4602,15 +4642,25 @@ switch ($action) {
             $inv = $inner['PurchaseOrder'] ?? $inner['PurchaseInvoice'] ?? (is_array($inner) ? $inner : []);
             $itemsArr = $inv['PurchaseOrderItem'] ?? $inv['PurchaseInvoiceItem'] ?? $inv['items'] ?? [];
 
-            $wt = [];
+            $wt = []; $pv = [];
             foreach ((array)$itemsArr as $it) {
                 $it = $it['PurchaseOrderItem'] ?? $it['PurchaseInvoiceItem'] ?? $it;
                 if (!is_array($it)) continue;
                 $prid = (int)($it['product_id'] ?? 0);
-                if (!$prid || !isset($prodClass[$prid])) continue;
+                if (!$prid) continue;
                 $val = (float)($it['subtotal'] ?? 0);
                 if ($val <= 0) $val = (float)($it['unit_price'] ?? 0) * (float)($it['quantity'] ?? 1);
+                $qty = (float)($it['quantity'] ?? 0);
+                if (!isset($pv[$prid])) $pv[$prid] = ['amt' => 0, 'qty' => 0];
+                $pv[$prid]['amt'] += $val; $pv[$prid]['qty'] += $qty;
+                if (!isset($prodClass[$prid])) continue;
                 $wt[$prodClass[$prid]] = ($wt[$prodClass[$prid]] ?? 0) + max($val, 0.01);
+            }
+            // مشتريات كل منتج داخل الفاتورة (لتقرير أصناف البند)
+            $conn->query("DELETE FROM purchase_product_items WHERE ref_id=$pid");
+            foreach ($pv as $prid => $v) {
+                $conn->query("INSERT INTO purchase_product_items (ref_id, product_id, amount, qty)
+                              VALUES ($pid, $prid, " . round($v['amt'], 2) . ", " . round($v['qty'], 3) . ")");
             }
             // حفظ تفصيل الأصناف داخل الفاتورة (حتى لو ما اكتمل التصنيف)
             $conn->query("DELETE FROM purchase_class_items WHERE ref_id=$pid");

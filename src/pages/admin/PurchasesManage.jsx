@@ -195,6 +195,20 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   }, []);
   useEffect(() => { if (viewMode === 'categories') loadReport(); }, [viewMode, loadReport]);
 
+  // أصناف (منتجات) البند المختار
+  const [openCat, setOpenCat]     = useState('');
+  const [catProds, setCatProds]   = useState([]);
+  const [catLoading, setCatLoading] = useState(false);
+  const toggleCat = async (code) => {
+    if (openCat === code) { setOpenCat(''); return; }
+    setOpenCat(code); setCatProds([]); setCatLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=pur_class_products&code=${code}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) setCatProds(data.data);
+    } catch { /* تجاهل */ } finally { setCatLoading(false); }
+  };
+
   // مجموع بند بكل فروعه (بادئة الكود)
   const sumByPrefix = (prefix) => reportRows
     .filter(r => r.code.startsWith(prefix))
@@ -375,8 +389,11 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                     if (s.total <= 0) return null;
                     const pct = reportGrand > 0 ? (s.total / reportGrand) * 100 : 0;
                     return (
-                      <tr key={t.code} className={`border-b border-slate-50 dark:border-brand-700 ${t.level === 1 ? 'bg-[#1a365d]/[0.04] dark:bg-brand-800/40' : ''}`}>
+                      <React.Fragment key={t.code}>
+                      <tr onClick={() => toggleCat(t.code)}
+                        className={`border-b border-slate-50 dark:border-brand-700 cursor-pointer hover:bg-amber-50/40 dark:hover:bg-brand-800/60 transition-colors ${t.level === 1 ? 'bg-[#1a365d]/[0.04] dark:bg-brand-800/40' : ''} ${openCat === t.code ? 'bg-amber-50/60 dark:bg-brand-800/70' : ''}`}>
                         <td className={`px-4 py-2.5 ${t.level === 1 ? 'font-black text-brand-800 dark:text-brand-100 text-sm' : t.level === 2 ? 'font-bold text-slate-700 dark:text-brand-200 text-xs pr-8' : 'font-medium text-slate-500 dark:text-brand-400 text-xs pr-14'}`}>
+                          <span className="text-gold-500 font-black ml-1">{openCat === t.code ? '▾' : '◂'}</span>
                           <span className="text-slate-300 dark:text-brand-500 font-mono text-[10px] ml-2">{t.code}</span>{t.name}
                         </td>
                         <td className="px-4 py-2.5 text-center text-xs font-bold text-slate-500 dark:text-brand-400">{s.invoices}</td>
@@ -390,6 +407,43 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                           </div>
                         </td>
                       </tr>
+                      {openCat === t.code && (
+                        <tr className="border-b border-slate-100 dark:border-brand-700">
+                          <td colSpan={4} className="px-6 py-3 bg-slate-50/60 dark:bg-brand-800/30">
+                            {catLoading ? (
+                              <div className="flex items-center gap-2 text-slate-400 text-xs font-bold py-2"><RefreshCw size={14} className="animate-spin" /> جاري تحميل أصناف البند...</div>
+                            ) : catProds.length === 0 ? (
+                              <div className="text-xs text-slate-400 font-bold py-2">لا توجد أصناف مسجلة تحت هذا البند (فواتيره مقطوعيات بلا منتجات مربوطة)</div>
+                            ) : (
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="text-[10px] font-black text-slate-400 dark:text-brand-400">
+                                    <th className="text-right pb-1.5">الصنف</th>
+                                    <th className="text-center pb-1.5">الكمية</th>
+                                    <th className="text-center pb-1.5">الفواتير</th>
+                                    <th className="text-left pb-1.5">إجمالي المشتريات</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {catProds.map(pr => (
+                                    <tr key={pr.product_id} className="border-t border-slate-100 dark:border-brand-700/50">
+                                      <td className="py-1.5 text-xs font-bold text-slate-700 dark:text-brand-200">
+                                        {pr.name}
+                                        {pr.unit ? <span className="text-slate-400 font-medium"> · {pr.unit}</span> : null}
+                                        <span className="text-slate-300 dark:text-brand-500 font-mono text-[9px] mr-2">{pr.code}</span>
+                                      </td>
+                                      <td className="py-1.5 text-center text-xs font-bold text-slate-500 dark:text-brand-400 tabular-nums" dir="ltr">{Number(pr.qty).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                                      <td className="py-1.5 text-center text-xs font-bold text-slate-500 dark:text-brand-400">{pr.invoices}</td>
+                                      <td className="py-1.5 text-left text-xs font-black text-brand-800 dark:text-brand-100 whitespace-nowrap">{fmt(pr.total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
