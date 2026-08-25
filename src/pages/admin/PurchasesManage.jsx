@@ -183,6 +183,24 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   const unclassifiedCount = purchases.filter(p => !classMap[String(p.id)]).length;
   const extraCodesOf = (p) => codesOf(p).filter(c => c !== (classMap[String(p.id)] || ''));
 
+  // ─── عرض «حسب الأصناف»: مجموع مشتريات كل بند من قاعدة البيانات ──
+  const [viewMode, setViewMode]   = useState('invoices'); // invoices | categories
+  const [reportRows, setReportRows] = useState([]);
+  const loadReport = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}?action=pur_class_report`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) setReportRows(data.data);
+    } catch { /* تجاهل */ }
+  }, []);
+  useEffect(() => { if (viewMode === 'categories') loadReport(); }, [viewMode, loadReport]);
+
+  // مجموع بند بكل فروعه (بادئة الكود)
+  const sumByPrefix = (prefix) => reportRows
+    .filter(r => r.code.startsWith(prefix))
+    .reduce((a, r) => ({ total: a.total + parseFloat(r.total || 0), invoices: a.invoices + parseInt(r.invoices || 0, 10) }), { total: 0, invoices: 0 });
+  const reportGrand = reportRows.reduce((s, r) => s + parseFloat(r.total || 0), 0);
+
   // ─── ملخص مالي ───────────────────────────────────────────────
   const totalAmount      = displayed.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
   const totalPaid        = displayed.reduce((s, p) => s + (parseFloat(p.paid)  || 0), 0);
@@ -301,6 +319,16 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex bg-slate-100 dark:bg-brand-800 rounded-xl p-1">
+            <button onClick={() => setViewMode('invoices')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-black transition-colors ${viewMode === 'invoices' ? 'bg-white dark:bg-brand-900 text-brand-800 dark:text-brand-100 shadow-sm' : 'text-slate-500 dark:text-brand-400'}`}>
+              الفواتير
+            </button>
+            <button onClick={() => setViewMode('categories')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-black transition-colors ${viewMode === 'categories' ? 'bg-white dark:bg-brand-900 text-brand-800 dark:text-brand-100 shadow-sm' : 'text-slate-500 dark:text-brand-400'}`}>
+              حسب الأصناف
+            </button>
+          </div>
           <ExportButton
             rows={displayed}
             columns={[
@@ -323,6 +351,62 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
         </div>
       </div>
 
+      {/* ── عرض حسب الأصناف: مجموع مشتريات كل بند ── */}
+      {viewMode === 'categories' ? (
+        <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 overflow-hidden">
+          {reportRows.length === 0 ? (
+            <div className="flex items-center justify-center py-16 text-slate-400 dark:text-brand-400 gap-3">
+              <RefreshCw size={22} className="animate-spin" /><span className="text-sm font-bold">جاري تحميل تقرير الأصناف...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-brand-800/60 border-b border-slate-100 dark:border-brand-700">
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400">الصنف</th>
+                    <th className="px-4 py-3 text-center text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">عدد الفواتير</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">إجمالي المشتريات</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 w-[220px]">النسبة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classTree.map(t => {
+                    const s = sumByPrefix(classPrefix(t.code));
+                    if (s.total <= 0) return null;
+                    const pct = reportGrand > 0 ? (s.total / reportGrand) * 100 : 0;
+                    return (
+                      <tr key={t.code} className={`border-b border-slate-50 dark:border-brand-700 ${t.level === 1 ? 'bg-[#1a365d]/[0.04] dark:bg-brand-800/40' : ''}`}>
+                        <td className={`px-4 py-2.5 ${t.level === 1 ? 'font-black text-brand-800 dark:text-brand-100 text-sm' : t.level === 2 ? 'font-bold text-slate-700 dark:text-brand-200 text-xs pr-8' : 'font-medium text-slate-500 dark:text-brand-400 text-xs pr-14'}`}>
+                          <span className="text-slate-300 dark:text-brand-500 font-mono text-[10px] ml-2">{t.code}</span>{t.name}
+                        </td>
+                        <td className="px-4 py-2.5 text-center text-xs font-bold text-slate-500 dark:text-brand-400">{s.invoices}</td>
+                        <td className={`px-4 py-2.5 text-left whitespace-nowrap ${t.level === 1 ? 'font-black text-brand-800 dark:text-brand-100 text-sm' : 'font-bold text-slate-600 dark:text-brand-300 text-xs'}`}>{fmt(s.total)}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-slate-100 dark:bg-brand-800 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${Math.max(pct, 1)}%`, background: t.level === 1 ? '#1a365d' : '#c5a059' }} />
+                            </div>
+                            <span className="text-[10px] font-black text-slate-500 dark:text-brand-400 w-11 text-left" dir="ltr">{pct.toFixed(1)}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-50 dark:bg-brand-800/60">
+                    <td className="px-4 py-3 font-black text-brand-800 dark:text-brand-100 text-sm">الإجمالي</td>
+                    <td></td>
+                    <td className="px-4 py-3 text-left font-black text-brand-800 dark:text-brand-100 text-sm whitespace-nowrap">{fmt(reportGrand)}</td>
+                    <td className="px-4 py-3 text-[10px] text-slate-400 font-bold">القيم صافية قبل الضريبة — من بنود الفواتير المصنفة</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
       {/* شريط الفلاتر */}
       <div className="bg-white dark:bg-brand-900 rounded-2xl shadow-sm border border-slate-100 dark:border-brand-700 p-4 mb-4">
         <div className="flex flex-wrap gap-3 items-end">
@@ -538,6 +622,8 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
             </div>
           )}
         </div>
+      )}
+      </>
       )}
     </div>
   );

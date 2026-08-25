@@ -4561,6 +4561,16 @@ switch ($action) {
         break;
     }
 
+    case 'pur_class_report': {
+        // تقرير الأصناف: مجموع مشتريات كل بند + عدد الفواتير (من تفصيل بنود الفواتير)
+        $out = [];
+        $r = $conn->query("SELECT code, ROUND(SUM(amount),2) AS total, COUNT(DISTINCT ref_id) AS invoices
+                           FROM purchase_class_items GROUP BY code");
+        if ($r) while ($row = $r->fetch_assoc()) $out[] = $row;
+        echo json_encode(['success'=>true, 'data'=>$out], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pur_class_rebuild_items': {
         // إعادة اشتقاق تصنيف الفواتير من بنودها: كل بند يتبع تصنيف منتجه،
         // والفاتورة تأخذ البند الغالب قيمةً. لا يمس التصنيف اليدوي أبداً.
@@ -4577,9 +4587,10 @@ switch ($action) {
 
         $out = [];
         foreach ($ids as $pid) {
-            $chk = $conn->query("SELECT source FROM purchase_classification WHERE kind='purchase' AND ref_id=$pid LIMIT 1");
-            $src = ($chk && ($cr = $chk->fetch_assoc())) ? ($cr['source'] ?? '') : '';
-            if ($src === 'manual') { $out[$pid] = 'skipped_manual'; continue; }
+            $chk = $conn->query("SELECT source, code FROM purchase_classification WHERE kind='purchase' AND ref_id=$pid LIMIT 1");
+            $chkRow = ($chk && ($cr = $chk->fetch_assoc())) ? $cr : [];
+            $src = $chkRow['source'] ?? '';
+            $curCode = $chkRow['code'] ?? '';
 
             $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
             curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
@@ -4607,8 +4618,18 @@ switch ($action) {
                 $wcEsc = $conn->real_escape_string($wc);
                 $conn->query("INSERT INTO purchase_class_items (ref_id, code, amount) VALUES ($pid, '$wcEsc', " . round($wv, 2) . ")");
             }
-            if (!$wt) { $out[$pid] = 'no_product_class'; continue; }
+            if (!$wt) {
+                // فاتورة بلا بنود منتجات مصنفة: خزّن بندها الحالي (مورد/يدوي) بقيمة الفاتورة الصافية
+                if ($curCode !== '') {
+                    $amt = (float)($inv['summary_subtotal'] ?? $inv['summary_total'] ?? 0);
+                    $ccEsc = $conn->real_escape_string($curCode);
+                    $conn->query("INSERT INTO purchase_class_items (ref_id, code, amount) VALUES ($pid, '$ccEsc', " . round($amt, 2) . ")
+                                  ON DUPLICATE KEY UPDATE amount=VALUES(amount)");
+                }
+                $out[$pid] = 'no_product_class'; continue;
+            }
             arsort($wt);
+            if ($src === 'manual') { $out[$pid] = 'kept_manual'; continue; }
             $code = $conn->real_escape_string((string)array_key_first($wt));
             $sid = (int)($inv['supplier_id'] ?? 0); $sidSql = $sid > 0 ? $sid : "NULL";
             $conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id, source) VALUES ('purchase', $pid, '$code', $sidSql, 'items')
