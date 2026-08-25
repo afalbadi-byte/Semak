@@ -53,6 +53,9 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   const [purchases, setPurchases]   = useState([]);
   const [suppliers, setSuppliers]   = useState([]);
   const [workCycles, setWorkCycles] = useState([]);
+  const [classTree, setClassTree]   = useState([]);   // شجرة التصنيف [{code,level,name}]
+  const [classMap, setClassMap]     = useState({});   // { [purchase_id]: code }
+  const [classFilter, setClassFilter] = useState(''); // '' الكل · 'none' غير مصنف · بادئة كود
   const [loading, setLoading]       = useState(false);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
@@ -79,15 +82,43 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   // ─── جلب القوائم المنسدلة ─────────────────────────────────────
   const loadDropdowns = useCallback(async () => {
     try {
-      const [sRes, wRes] = await Promise.all([
+      const [sRes, wRes, tRes, cRes] = await Promise.all([
         fetch(`${API_URL}?action=daftra_suppliers_list`),
         fetch(`${API_URL}?action=daftra_v2_work_cycles`),
+        fetch(`${API_URL}?action=pur_class_tree`),
+        fetch(`${API_URL}?action=pur_class_get`),
       ]);
-      const [sData, wData] = await Promise.all([sRes.json(), wRes.json()]);
+      const [sData, wData, tData, cData] = await Promise.all([sRes.json(), wRes.json(), tRes.json(), cRes.json()]);
       if (sData.success && Array.isArray(sData.data)) setSuppliers(sData.data);
       if (wData.success && Array.isArray(wData.data)) setWorkCycles(wData.data);
+      if (tData.success && Array.isArray(tData.tree)) setClassTree(tData.tree);
+      if (cData.success && Array.isArray(cData.data)) {
+        const m = {};
+        cData.data.forEach(r => { if (r.kind === 'purchase') m[String(r.ref_id)] = r.code; });
+        setClassMap(m);
+      }
     } catch { /* تجاهل */ }
   }, []);
+
+  // ─── حفظ تصنيف فاتورة (تفاؤلي + تراجع عند الفشل) ─────────────
+  const setClass = async (purchaseId, code) => {
+    const prev = classMap[String(purchaseId)] || '';
+    setClassMap(m => ({ ...m, [String(purchaseId)]: code }));
+    try {
+      const res = await fetch(`${API_URL}?action=pur_class_set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'purchase', ref_id: purchaseId, code }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error();
+    } catch {
+      setClassMap(m => ({ ...m, [String(purchaseId)]: prev }));
+      notify('تعذر حفظ التصنيف — أعد المحاولة', 'error');
+    }
+  };
+
+  const classNameOf = (code) => (classTree.find(t => t.code === code) || {}).name || code;
 
   // ─── جلب قائمة المشتريات ─────────────────────────────────────
   const loadPurchases = useCallback(async (f = appliedFilters) => {
@@ -119,6 +150,9 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
 
   // ─── فلترة العرض ─────────────────────────────────────────────
   const displayed = purchases.filter(p => {
+    const code = classMap[String(p.id)] || '';
+    if (classFilter === 'none' && code) return false;
+    if (classFilter && classFilter !== 'none' && !code.startsWith(classFilter[0])) return false;
     if (!appliedFilters.search) return true;
     const q = appliedFilters.search.toLowerCase();
     return (
@@ -126,6 +160,8 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       String(p.supplier || '').toLowerCase().includes(q)
     );
   });
+
+  const unclassifiedCount = purchases.filter(p => !classMap[String(p.id)]).length;
 
   // ─── ملخص مالي ───────────────────────────────────────────────
   const totalAmount      = displayed.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
@@ -253,6 +289,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
               { key: 'supplier', label: 'المورد' },
               { key: 'total', label: 'الإجمالي', format: fmtExport.money },
               { key: 'paid', label: 'المدفوع', format: fmtExport.money },
+              { key: 'id', label: 'التصنيف', format: (v) => { const c = classMap[String(v)] || ''; return c ? `${c} - ${classNameOf(c)}` : 'غير مصنف'; } },
             ]}
             filename="فواتير_الشراء"
           />
@@ -306,6 +343,20 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
               />
             </div>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-400 dark:text-brand-400 font-bold">التصنيف</label>
+            <select
+              value={classFilter}
+              onChange={e => setClassFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-200 dark:border-brand-700 rounded-xl text-sm font-medium text-slate-600 dark:text-brand-50 dark:bg-brand-900 focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 focus:border-[#1a365d]"
+            >
+              <option value="">كل البنود</option>
+              <option value="none">غير مصنف</option>
+              {classTree.filter(t => t.level === 1).map(t => (
+                <option key={t.code} value={t.code}>{t.code} — {t.name}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={() => setAppliedFilters({ ...filters })}
             className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 text-white px-4 py-2 rounded-xl font-bold text-sm transition-colors"
@@ -322,6 +373,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
         <SummaryChip icon={DollarSign}   label="إجمالي المشتريات" value={fmt(totalAmount)}        color="bg-indigo-500" />
         <SummaryChip icon={CheckCircle2} label="المدفوع"           value={fmt(totalPaid)}          color="bg-green-500" />
         <SummaryChip icon={AlertTriangle} label="المتبقي"          value={fmt(totalOutstanding)}   color="bg-amber-500" />
+        <SummaryChip icon={Package}      label="غير مصنف"          value={unclassifiedCount}       color={unclassifiedCount > 0 ? 'bg-red-500' : 'bg-emerald-600'} />
       </div>
 
       {/* حالة التحميل / الخطأ */}
@@ -362,6 +414,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                     <SortHeader label="المورد"   sortKey="supplier" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="الإجمالي" sortKey="total"    activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المتبقي</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">التصنيف</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المشروع</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">إجراءات</th>
                   </tr>
@@ -400,6 +453,26 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                           <span className={remaining > 0 ? 'text-amber-600' : 'text-green-600'}>
                             {fmt(remaining)}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={classMap[String(p.id)] || ''}
+                            onChange={e => setClass(p.id, e.target.value)}
+                            className={`max-w-[180px] px-2 py-1.5 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 dark:bg-brand-900 dark:text-brand-50 ${classMap[String(p.id)] ? 'border-slate-200 dark:border-brand-700 text-slate-600' : 'border-red-300 text-red-500 bg-red-50/50'}`}
+                          >
+                            <option value="">— غير مصنف —</option>
+                            {classTree.filter(t => t.level === 1).map(main => (
+                              <optgroup key={main.code} label={`${main.code} — ${main.name}`}>
+                                {classTree
+                                  .filter(t => t.level > 1 && t.code[0] === main.code[0])
+                                  .map(t => (
+                                    <option key={t.code} value={t.code}>
+                                      {t.level === 3 ? `  ${t.code} ${t.name}` : `${t.code} ${t.name}`}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            ))}
+                          </select>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium">
                           {project

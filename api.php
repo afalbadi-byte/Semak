@@ -510,6 +510,16 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_settings (
     PRIMARY KEY (tenant_id, skey)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// تصنيف المشتريات والمصاريف — ربط كل مستند دفترة ببند من شجرة التصنيف
+// (الشجرة نفسها تُخزَّن في acc_settings بمفتاح purchase_class_tree كـ JSON)
+$conn->query("CREATE TABLE IF NOT EXISTS purchase_classification (
+    kind       VARCHAR(10) NOT NULL DEFAULT 'purchase',
+    ref_id     INT NOT NULL,
+    code       VARCHAR(6) NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (kind, ref_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // اعتماد هيئة الزكاة (ZATCA) وحالة الفوترة لكل منشأة — مفتاح/شهادة/عدّاد ICV/سلسلة PIH
 // ملاحظة أمنية: المفتاح الخاص يُخزَّن هنا للتشغيل الذاتي؛ نقل ذلك لتخزين مُشفّر منفصل لاحقًا قبل الإنتاج.
 $conn->query("CREATE TABLE IF NOT EXISTS acc_zatca (
@@ -4426,6 +4436,97 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
     // وحدة المشتريات — CRUD كامل
     // ══════════════════════════════════════════════════════════════════════
+
+    // ─── تصنيف المشتريات والمصاريف: الشجرة + الربط ─────────────────────────
+    case 'pur_class_tree': {
+        $tj = acc_setting($conn, 1, 'purchase_class_tree', '');
+        if ($tj === '' || $tj === null) {
+            $tree = [
+                ["code"=>"1000","level"=>1,"name"=>"المشتريات — التكاليف المباشرة للمشروع"],
+                ["code"=>"1100","level"=>2,"name"=>"الأعمال الإنشائية (العظم)"],
+                ["code"=>"1110","level"=>3,"name"=>"مقاولة العظم"],
+                ["code"=>"1120","level"=>3,"name"=>"خرسانة وحديد التسليح"],
+                ["code"=>"1130","level"=>3,"name"=>"بلوك وطابوق ومنتجات أسمنتية"],
+                ["code"=>"1140","level"=>3,"name"=>"ردميات ونقل وتشوينات"],
+                ["code"=>"1200","level"=>2,"name"=>"أعمال التشطيب الداخلي"],
+                ["code"=>"1210","level"=>3,"name"=>"لياسة وجبس وأسقف"],
+                ["code"=>"1220","level"=>3,"name"=>"بلاط ورخام وبورسلان وجلي"],
+                ["code"=>"1230","level"=>3,"name"=>"دهانات"],
+                ["code"=>"1240","level"=>3,"name"=>"أبواب وألمنيوم وزجاج"],
+                ["code"=>"1250","level"=>3,"name"=>"مطابخ وخزائن ودواليب"],
+                ["code"=>"1300","level"=>2,"name"=>"الأنظمة الكهروميكانيكية (MEP)"],
+                ["code"=>"1310","level"=>3,"name"=>"كهرباء — تمديدات ولوحات وإنارة"],
+                ["code"=>"1320","level"=>3,"name"=>"سباكة وصرف وأدوات صحية"],
+                ["code"=>"1330","level"=>3,"name"=>"تكييف"],
+                ["code"=>"1340","level"=>3,"name"=>"مصاعد"],
+                ["code"=>"1350","level"=>3,"name"=>"أنظمة ذكية وأمنية"],
+                ["code"=>"1360","level"=>3,"name"=>"خزانات ومضخات"],
+                ["code"=>"1400","level"=>2,"name"=>"الواجهات والأعمال الخارجية"],
+                ["code"=>"1410","level"=>3,"name"=>"واجهات وكسوة خارجية"],
+                ["code"=>"1420","level"=>3,"name"=>"عزل مائي وحراري وكيماويات بناء"],
+                ["code"=>"1430","level"=>3,"name"=>"أسطح وأحواش وأسوار وحدادة"],
+                ["code"=>"1440","level"=>3,"name"=>"مواقف وتنسيق موقع"],
+                ["code"=>"1500","level"=>2,"name"=>"توريدات عامة ومستلزمات موقع"],
+                ["code"=>"1510","level"=>3,"name"=>"مواد بناء متنوعة"],
+                ["code"=>"1520","level"=>3,"name"=>"عدد وأدوات ومستهلكات"],
+                ["code"=>"1530","level"=>3,"name"=>"إيجار معدات وسقالات"],
+                ["code"=>"2000","level"=>1,"name"=>"أجور العمالة والمقاولون من الباطن"],
+                ["code"=>"2100","level"=>2,"name"=>"عمالة يومية (مياومة)"],
+                ["code"=>"2200","level"=>2,"name"=>"مقاولون من الباطن (مصنعيات)"],
+                ["code"=>"2300","level"=>2,"name"=>"عهد الموقع"],
+                ["code"=>"3000","level"=>1,"name"=>"المصاريف التشغيلية والإدارية"],
+                ["code"=>"3100","level"=>2,"name"=>"رسوم حكومية وتراخيص"],
+                ["code"=>"3200","level"=>2,"name"=>"تأمينات"],
+                ["code"=>"3300","level"=>2,"name"=>"أتعاب مهنية واستشارية"],
+                ["code"=>"3400","level"=>2,"name"=>"تسويق ومبيعات"],
+                ["code"=>"3410","level"=>3,"name"=>"إعلانات ومنصات رقمية"],
+                ["code"=>"3420","level"=>3,"name"=>"هدايا وعروض العملاء"],
+                ["code"=>"3500","level"=>2,"name"=>"مصاريف بنكية وتمويلية"],
+                ["code"=>"3600","level"=>2,"name"=>"نثرية وضيافة ومواصلات"],
+                ["code"=>"3700","level"=>2,"name"=>"خدمات ومرافق"],
+                ["code"=>"4000","level"=>1,"name"=>"الضرائب والزكاة"],
+                ["code"=>"4100","level"=>2,"name"=>"ضريبة القيمة المضافة"],
+                ["code"=>"4200","level"=>2,"name"=>"زكاة وضريبة الدخل"],
+                ["code"=>"4300","level"=>2,"name"=>"ضريبة التصرفات العقارية"],
+            ];
+            $tj  = json_encode($tree, JSON_UNESCAPED_UNICODE);
+            $esc = $conn->real_escape_string($tj);
+            $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES (1,'purchase_class_tree','$esc')
+                          ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        }
+        echo json_encode(["success"=>true, "tree"=>json_decode($tj, true)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pur_class_get': {
+        $out = [];
+        $r = $conn->query("SELECT kind, ref_id, code FROM purchase_classification");
+        if ($r) while ($row = $r->fetch_assoc()) $out[] = $row;
+        echo json_encode(["success"=>true, "data"=>$out]);
+        break;
+    }
+
+    case 'pur_class_set': {
+        // يقبل عنصراً واحداً {kind, ref_id, code} أو دفعة {items:[...]}. code فارغ = حذف التصنيف.
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $items = (isset($b['items']) && is_array($b['items'])) ? $b['items'] : [$b];
+        $n = 0;
+        foreach ($items as $it) {
+            $kind = (($it['kind'] ?? '') === 'expense') ? 'expense' : 'purchase';
+            $rid  = (int)($it['ref_id'] ?? 0);
+            $code = preg_replace('/[^0-9]/', '', (string)($it['code'] ?? ''));
+            if ($rid <= 0) continue;
+            if ($code === '') {
+                $conn->query("DELETE FROM purchase_classification WHERE kind='$kind' AND ref_id=$rid");
+            } else {
+                $conn->query("INSERT INTO purchase_classification (kind, ref_id, code) VALUES ('$kind', $rid, '$code')
+                              ON DUPLICATE KEY UPDATE code=VALUES(code)");
+            }
+            $n++;
+        }
+        echo json_encode(["success"=>true, "saved"=>$n]);
+        break;
+    }
 
     case 'daftra_purchases_list':
         set_time_limit(30);
