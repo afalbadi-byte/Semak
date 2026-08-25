@@ -118,6 +118,8 @@ export default function ExpensesManage({ user, navigateTo }) {
     search: '',
   });
   const [appliedFilters, setAppliedFilters] = useState({ ...filters });
+  const [classTree, setClassTree] = useState([]);  // شجرة تصنيف المشتريات والمصاريف
+  const [classMap, setClassMap]   = useState({});  // { [expense_id]: code }
 
   const defaultForm = {
     date: today(),
@@ -136,12 +138,20 @@ export default function ExpensesManage({ user, navigateTo }) {
   // ─── جلب القوائم المنسدلة ────────────────────────────────────
   const loadDropdowns = useCallback(async () => {
     try {
-      const [catRes, supRes, wRes] = await Promise.all([
+      const [catRes, supRes, wRes, tRes, cRes] = await Promise.all([
         fetch(`${API_URL}?action=daftra_expense_categories`),
         fetch(`${API_URL}?action=daftra_suppliers_list`),
         fetch(`${API_URL}?action=daftra_v2_work_cycles`),
+        fetch(`${API_URL}?action=pur_class_tree`),
+        fetch(`${API_URL}?action=pur_class_get`),
       ]);
-      const [catData, supData, wData] = await Promise.all([catRes.json(), supRes.json(), wRes.json()]);
+      const [catData, supData, wData, tData, cData] = await Promise.all([catRes.json(), supRes.json(), wRes.json(), tRes.json(), cRes.json()]);
+      if (tData.success && Array.isArray(tData.tree)) setClassTree(tData.tree);
+      if (cData.success && Array.isArray(cData.data)) {
+        const m = {};
+        cData.data.forEach(r => { if (r.kind === 'expense') m[String(r.ref_id)] = r.code; });
+        setClassMap(m);
+      }
 
       if (catData.success && Array.isArray(catData.data)) {
         setCategories(catData.data.map(r => {
@@ -227,6 +237,26 @@ export default function ExpensesManage({ user, navigateTo }) {
     const wc = workCycles.find(w => String(w.id) === String(id));
     return wc ? (wc.title || `مشروع #${wc.number || wc.id}`) : id ? `مشروع #${id}` : '—';
   };
+
+  // ─── تصنيف المصروف على شجرة البنود (حفظ فوري بقاعدة البيانات) ──
+  const setClass = async (exp, code) => {
+    const prev = classMap[String(exp.id)] || '';
+    setClassMap(m => ({ ...m, [String(exp.id)]: code }));
+    try {
+      const res = await fetch(`${API_URL}?action=pur_class_set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'expense', ref_id: exp.id, supplier_id: exp.supplier_id || 0, code }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error();
+    } catch {
+      setClassMap(m => ({ ...m, [String(exp.id)]: prev }));
+      notify('تعذر حفظ التصنيف — أعد المحاولة', 'error');
+    }
+  };
+  const classNameOf = (code) => (classTree.find(t => t.code === code) || {}).name || code;
+  const unclassifiedCount = expenses.filter(e => !classMap[String(e.id)]).length;
 
   // ─── إجراءات الإنشاء / التعديل ───────────────────────────────
   const openCreate = () => {
@@ -330,6 +360,7 @@ export default function ExpensesManage({ user, navigateTo }) {
               { key: 'category', label: 'الفئة', format: (v, r) => v || r.category_name || getCategoryName(r.category_id || r.expense_category_id) },
               { key: 'supplier', label: 'المورد', format: (v, r) => v || getSupplierName(r.supplier_id) },
               { key: 'amount', label: 'المبلغ', format: fmtExport.money },
+              { key: 'id', label: 'التصنيف', format: (v) => { const c = classMap[String(v)] || ''; return c ? `${c} - ${classNameOf(c)}` : 'غير مصنف'; } },
               { key: 'notes', label: 'ملاحظات' },
             ]}
             filename="المصروفات"
@@ -414,6 +445,12 @@ export default function ExpensesManage({ user, navigateTo }) {
           value={fmt(thisMonthAmount)}
           color="bg-amber-500"
         />
+        <SummaryChip
+          icon={Receipt}
+          label="غير مصنف"
+          value={unclassifiedCount}
+          color={unclassifiedCount > 0 ? 'bg-red-500' : 'bg-emerald-600'}
+        />
       </div>
 
       {/* حالة التحميل / الخطأ */}
@@ -453,6 +490,7 @@ export default function ExpensesManage({ user, navigateTo }) {
                     <SortHeader label="الفئة"   sortKey="category" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="المورد"  sortKey="supplier" activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <SortHeader label="المبلغ"  sortKey="amount"   activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">التصنيف</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المشروع</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">ملاحظات</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">إجراءات</th>
@@ -481,6 +519,26 @@ export default function ExpensesManage({ user, navigateTo }) {
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600 dark:text-brand-300 font-medium">{supName || '—'}</td>
                         <td className="px-4 py-3 text-xs font-black text-red-600 whitespace-nowrap">{fmt(exp.amount, exp.currency)}</td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={classMap[String(exp.id)] || ''}
+                            onChange={e => setClass(exp, e.target.value)}
+                            className={`max-w-[180px] px-2 py-1.5 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 dark:bg-brand-900 dark:text-brand-50 ${classMap[String(exp.id)] ? 'border-slate-200 dark:border-brand-700 text-slate-600' : 'border-red-300 text-red-500 bg-red-50/50'}`}
+                          >
+                            <option value="">— غير مصنف —</option>
+                            {classTree.filter(t => t.level === 1).map(main => (
+                              <optgroup key={main.code} label={`${main.code} — ${main.name}`}>
+                                {classTree
+                                  .filter(t => t.level > 1 && t.code[0] === main.code[0])
+                                  .map(t => (
+                                    <option key={t.code} value={t.code}>
+                                      {t.level === 3 ? `  ${t.code} ${t.name}` : `${t.code} ${t.name}`}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium">
                           {wcName && wcName !== '—' ? (
                             <span className="bg-brand-800/10 dark:bg-brand-800/40 text-brand-800 dark:text-brand-300 px-2 py-0.5 rounded-lg text-xs font-bold">

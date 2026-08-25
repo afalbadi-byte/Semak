@@ -820,6 +820,12 @@ $conn->query("CREATE TABLE IF NOT EXISTS purchase_classification (
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (10)");
 } // end DDL v10
 
+// ─── DDL v11: supplier_id في تصنيف المشتريات — أساس التصنيف التلقائي للفواتير الجديدة ──
+if ($__sv < 11) {
+ensure_column($conn, "purchase_classification", "supplier_id", "supplier_id INT DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (11)");
+} // end DDL v11
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -4517,13 +4523,15 @@ switch ($action) {
         foreach ($items as $it) {
             $kind = (($it['kind'] ?? '') === 'expense') ? 'expense' : 'purchase';
             $rid  = (int)($it['ref_id'] ?? 0);
+            $sid  = (int)($it['supplier_id'] ?? 0);
             $code = preg_replace('/[^0-9]/', '', (string)($it['code'] ?? ''));
             if ($rid <= 0) continue;
             if ($code === '') {
                 $ok = $conn->query("DELETE FROM purchase_classification WHERE kind='$kind' AND ref_id=$rid");
             } else {
-                $ok = $conn->query("INSERT INTO purchase_classification (kind, ref_id, code) VALUES ('$kind', $rid, '$code')
-                              ON DUPLICATE KEY UPDATE code=VALUES(code)");
+                $sidSql = $sid > 0 ? $sid : "NULL";
+                $ok = $conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id) VALUES ('$kind', $rid, '$code', $sidSql)
+                              ON DUPLICATE KEY UPDATE code=VALUES(code), supplier_id=COALESCE(VALUES(supplier_id), supplier_id)");
             }
             if ($ok) $n++;
         }
@@ -4559,6 +4567,39 @@ switch ($action) {
                 'paid'         => (float)($p['summary_paid']  ?? 0),
                 'work_order_id'=> $p['work_order_id'] ?? null,
             ];
+        }
+
+        // ─── تصنيف تلقائي: الفاتورة الجديدة ترث البند الغالب لموردها ──────────
+        // (البوابة تبقى محدثة: أي فاتورة تدخل دفترة تُصنَّف فور أول عرض للقائمة،
+        //  والمورد الجديد كلياً يبقى «غير مصنف» بانتظار قرار يدوي)
+        if ($rows) {
+            $ids = implode(',', array_map('intval', array_column($rows, 'id')));
+            $classified = [];
+            $cr = $conn->query("SELECT ref_id, code FROM purchase_classification WHERE kind='purchase' AND ref_id IN ($ids)");
+            if ($cr) while ($c = $cr->fetch_assoc()) $classified[(int)$c['ref_id']] = $c['code'];
+
+            // البند الغالب لكل مورد (من التصنيفات القائمة)
+            $supCode = [];
+            $sr = $conn->query("SELECT supplier_id, code, COUNT(*) AS n FROM purchase_classification
+                                WHERE kind='purchase' AND supplier_id IS NOT NULL
+                                GROUP BY supplier_id, code ORDER BY supplier_id, n ASC");
+            if ($sr) while ($s = $sr->fetch_assoc()) $supCode[(int)$s['supplier_id']] = $s['code']; // الأخير = الأكثر تكراراً
+
+            foreach ($rows as $i => $row) {
+                $rid = (int)$row['id'];
+                if (isset($classified[$rid])) { $rows[$i]['class_code'] = $classified[$rid]; continue; }
+                $sid = (int)$row['supplier_id'];
+                if ($sid > 0 && isset($supCode[$sid])) {
+                    $code = $conn->real_escape_string($supCode[$sid]);
+                    if ($conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id)
+                                      VALUES ('purchase', $rid, '$code', $sid)
+                                      ON DUPLICATE KEY UPDATE code=code")) {
+                        $rows[$i]['class_code'] = $supCode[$sid];
+                        continue;
+                    }
+                }
+                $rows[$i]['class_code'] = '';
+            }
         }
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;

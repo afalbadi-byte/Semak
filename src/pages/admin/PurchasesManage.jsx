@@ -101,14 +101,15 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   }, []);
 
   // ─── حفظ تصنيف فاتورة (تفاؤلي + تراجع عند الفشل) ─────────────
-  const setClass = async (purchaseId, code) => {
+  const setClass = async (purchase, code) => {
+    const purchaseId = purchase.id;
     const prev = classMap[String(purchaseId)] || '';
     setClassMap(m => ({ ...m, [String(purchaseId)]: code }));
     try {
       const res = await fetch(`${API_URL}?action=pur_class_set`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'purchase', ref_id: purchaseId, code }),
+        body: JSON.stringify({ kind: 'purchase', ref_id: purchaseId, supplier_id: purchase.supplier_id || 0, code }),
       });
       const data = await res.json();
       if (!data.success) throw new Error();
@@ -131,6 +132,12 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setPurchases(data.data);
+        // دمج التصنيفات القادمة مع القائمة (تشمل المصنفة تلقائياً حسب المورد)
+        setClassMap(m => {
+          const merged = { ...m };
+          data.data.forEach(r => { if (r.class_code) merged[String(r.id)] = r.class_code; });
+          return merged;
+        });
       } else {
         setPurchases([]);
         setError(data.message || 'فشل تحميل فواتير الشراء');
@@ -457,7 +464,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                         <td className="px-4 py-3">
                           <select
                             value={classMap[String(p.id)] || ''}
-                            onChange={e => setClass(p.id, e.target.value)}
+                            onChange={e => setClass(p, e.target.value)}
                             className={`max-w-[180px] px-2 py-1.5 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 dark:bg-brand-900 dark:text-brand-50 ${classMap[String(p.id)] ? 'border-slate-200 dark:border-brand-700 text-slate-600' : 'border-red-300 text-red-500 bg-red-50/50'}`}
                           >
                             <option value="">— غير مصنف —</option>
