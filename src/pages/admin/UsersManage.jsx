@@ -24,6 +24,7 @@ const APP_MODULES = [
   { id: "qr",          label: "رموز الوحدات (QR)",       icon: QrCode,          color: "text-slate-700",   bg: "bg-slate-100" },
   { id: "letters",     label: "منشئ الخطابات",           icon: FilePenLine,     color: "text-rose-600",    bg: "bg-rose-50" },
   { id: "accounting",  label: "النظام المحاسبي (دفترة)", icon: Calculator,      color: "text-emerald-600", bg: "bg-emerald-50" },
+  { id: "ai_assistant",label: "مساعد سماك الذكي (نافذة عائمة)", icon: Bot,      color: "text-gold-600",    bg: "bg-amber-50" },
   { id: "users_manage",label: "إدارة الموظفين والصلاحيات", icon: Shield,        color: "text-brand-800",   bg: "bg-blue-50" },
   { id: "activity_log",label: "سجل النشاط",              icon: ScrollText,      color: "text-slate-600",   bg: "bg-slate-100" },
 ];

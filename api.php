@@ -4619,6 +4619,83 @@ switch ($action) {
         break;
     }
 
+    case 'ai_assistant_chat': {
+        // مساعد سماك الذكي — نافذة عائمة للموظفين المصرح لهم (صلاحية ai_assistant تُفحص بالواجهة)
+        // السياق يُجمع حياً من قاعدة البيانات: الوحدات، تقرير الأصناف، أسعار الشراء
+        if (($_SERVER['HTTP_AUTHORIZATION'] ?? '') === '') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول']); break; }
+        set_time_limit(60);
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $msgs = array_slice((array)($b['messages'] ?? []), -14);
+        $clean = [];
+        foreach ($msgs as $m) {
+            $role = ($m['role'] ?? '') === 'assistant' ? 'assistant' : 'user';
+            $txt  = mb_substr(trim((string)($m['content'] ?? '')), 0, 2000);
+            if ($txt !== '') $clean[] = ['role'=>$role, 'content'=>$txt];
+        }
+        if (!$clean || end($clean)['role'] !== 'user') { echo json_encode(['success'=>false,'message'=>'رسالة فارغة']); break; }
+
+        // ─ سياق حي: الوحدات المباعة ─
+        $soldUnits = [];
+        $ur = $conn->query("SELECT unit_code FROM owners WHERE tenant_id=1");
+        if ($ur) while ($u = $ur->fetch_assoc()) $soldUnits[] = $u['unit_code'];
+
+        // ─ سياق حي: تقرير الأصناف (مجموع كل بند) ─
+        $treeNames = [];
+        $tj = acc_setting($conn, 1, 'purchase_class_tree', '');
+        foreach ((array)json_decode($tj, true) as $tn) $treeNames[$tn['code']] = $tn['name'];
+        $catLines = [];
+        $cr2 = $conn->query("SELECT code, ROUND(SUM(amount),0) t, COUNT(DISTINCT ref_id) n FROM purchase_class_items GROUP BY code ORDER BY t DESC");
+        if ($cr2) while ($c2 = $cr2->fetch_assoc()) $catLines[] = $c2['code'] . ' ' . ($treeNames[$c2['code']] ?? '') . ': ' . number_format((float)$c2['t']) . ' ريال (' . $c2['n'] . ' فاتورة)';
+
+        // ─ سياق حي: أعلى 45 صنفاً بمتوسط وآخر سعر شراء ─
+        $prodLines = [];
+        $pr2 = $conn->query("SELECT ppi.product_id, COALESCE(ap.name, CONCAT('منتج #', ppi.product_id)) nm,
+                                    ROUND(SUM(ppi.amount),0) t, ROUND(SUM(ppi.qty),1) q,
+                                    ROUND(SUM(ppi.amount)/NULLIF(SUM(ppi.qty),0),2) avgp
+                             FROM purchase_product_items ppi
+                             LEFT JOIN acc_products ap ON ap.tenant_id=1 AND ap.daftra_id=ppi.product_id
+                             GROUP BY ppi.product_id, ap.name ORDER BY t DESC LIMIT 45");
+        if ($pr2) while ($p2 = $pr2->fetch_assoc()) $prodLines[] = $p2['nm'] . ': إجمالي ' . number_format((float)$p2['t']) . ' ر.س، كمية ' . $p2['q'] . '، متوسط سعر ' . $p2['avgp'];
+
+        $sys = "أنت «مساعد سماك الذكي» — مساعد داخلي لموظفي شركة سماك العقارية (سماك العقارية للتسويق، ومؤسسة سمك العمارة للتطوير العقاري س.ت 7051031099، الرقم الموحد 920032842، semak.sa، مكة المكرمة).\n\n"
+             . "مشروع الشركة الحالي: «سماك البوابة السكني» بحي البوابة بمكة داخل حدود الحرم — مبنى مكتمل: دور أرضي مواقف + 3 أدوار سكنية (كل دور: وحدة زاوية بواجهتين + وحدة أمامية) + فيلا روف. الوحدات: SM-A01 وSM-A03 وSM-A05 زوايا (720,000)، SM-A02 وSM-A04 وSM-A06 أمامية (700,000)، SM-A07 روف. كل وحدة عادية 197م²: 5 غرف، غرفة خادمة، غرفة غسيل، 4 دورات مياه، مستودع، موقف خاص، منزل ذكي، دخول ذكي، خزانات. الضمانات: سباكة 50 سنة، قواطع كهربائية 25 سنة، هيكل إنشائي 10 سنوات، إنارة وأدوات صحية 3 سنوات.\n"
+             . "العرض الترويجي القائم (لأول وحدتين تُباعان فقط): أمامية 650,000 وزاوية 668,500 شاملة السعي + هدية 6 مكيفات سبليت Gree. الحجز بعربون 2.5% يُخصم من السعر. البيع كاش أو تمويل بنكي (القسط التقريبي من ~3,300 شهرياً للمؤهلين لدعم سكني على 20 سنة).\n"
+             . "الوحدات المباعة حالياً: " . ($soldUnits ? implode('، ', $soldUnits) : 'لا يوجد') . "\n\n"
+             . "مشتريات المشروع حسب البنود (صافي قبل الضريبة):\n- " . implode("\n- ", array_slice($catLines, 0, 30)) . "\n\n"
+             . "أعلى الأصناف شراءً (الاسم: الإجمالي، الكمية، متوسط سعر الوحدة):\n- " . implode("\n- ", $prodLines) . "\n\n"
+             . "قواعدك: أجب بالعربية باختصار مهني ودقة. اعتمد على البيانات أعلاه فقط في الأرقام — وإن سُئلت عن رقم غير موجود عندك فقل إنه غير متاح لديك ووجّه الموظف للصفحة المناسبة في لوحة الإدارة (فواتير الشراء ← حسب الأصناف لحركة الأصناف، المنتجات والخدمات للكتالوج، المصروفات...). "
+             . "ممنوع منعاً باتاً: ذكر أو تقدير تكاليف الوحدات الداخلية أو هوامش الربح أو أي بيانات مستثمرين أو حصص — هذه ليست ضمن بياناتك أصلاً؛ إن سُئلت عنها فأجب أنها بيانات إدارية تُطلب من الإدارة مباشرة. لا تخترع أرقاماً أبداً.";
+
+        $payload = json_encode([
+            'model' => 'claude-sonnet-5',
+            'max_tokens' => 1200,
+            'system' => $sys,
+            'messages' => $clean,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $reply = ''; $ok = false;
+        foreach (['claude-sonnet-5', 'claude-haiku-4-5'] as $mdl) {
+            $pl = json_decode($payload, true); $pl['model'] = $mdl;
+            $ch = curl_init('https://api.anthropic.com/v1/messages');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($pl, JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+                CURLOPT_TIMEOUT => 45,
+            ]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            if ($code === 200) {
+                $d = json_decode($res, true);
+                $reply = $d['content'][0]['text'] ?? '';
+                if ($reply !== '') { $ok = true; break; }
+            }
+        }
+        echo json_encode($ok
+            ? ['success'=>true, 'reply'=>$reply]
+            : ['success'=>false, 'message'=>'تعذر الاتصال بالمساعد — أعد المحاولة'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pur_product_movement': {
         // حركة صنف: كل توريداته + آخر سعر + متوسط السعر + أسعار الموردين
         $prid = (int)($_GET['product_id'] ?? 0);

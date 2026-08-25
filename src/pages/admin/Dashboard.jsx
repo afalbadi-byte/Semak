@@ -60,6 +60,7 @@ import { API_URL, apiGet, apiPost, TENANT } from '../../lib/api/client';
 import { AppContext } from '../../context/AppContext';
 import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
 import ErrorBoundary from '../../components/ErrorBoundary';
+import AiAssistant from '../../components/AiAssistant';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
 const DEPT_PALETTE = {
@@ -1592,6 +1593,9 @@ function DashboardInner({ onLogout }) {
 
             </main>
             </div>
+
+            {/* مساعد سماك الذكي — نافذة عائمة للموظفين المصرح لهم */}
+            {hasPermission('ai_assistant') && <AiAssistant userName={dbUser?.name || ''} />}
         </div>
     );
 }
