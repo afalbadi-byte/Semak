@@ -874,6 +874,19 @@ $conn->query("DELETE FROM acc_settings WHERE skey='purchase_class_tree'");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (16)");
 } // end DDL v16
 
+// ─── DDL v17: القفلة الشهرية المحاسبية — حالة كل شهر + لقطة تقريره وملاحظاته ────
+if ($__sv < 17) {
+$conn->query("CREATE TABLE IF NOT EXISTS monthly_closings (
+    ym        CHAR(7) PRIMARY KEY,
+    status    VARCHAR(10) NOT NULL DEFAULT 'open',
+    notes     TEXT,
+    report    MEDIUMTEXT,
+    closed_by VARCHAR(120) DEFAULT NULL,
+    closed_at DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (17)");
+} // end DDL v17
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -4650,6 +4663,123 @@ switch ($action) {
                            ORDER BY SUM(ppi.amount) DESC");
         if ($r) while ($row = $r->fetch_assoc()) $out[] = $row;
         echo json_encode(['success'=>true, 'data'=>$out], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'month_close_report': {
+        // تقرير القفلة الشهرية: فواتير ومصاريف الشهر + بنود التكلفة + التدفقات + العجوزات (غير مصنف/ذمم)
+        set_time_limit(60);
+        $ym = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['ym'] ?? '')) ? $_GET['ym'] : date('Y-m');
+        $from = "$ym-01"; $to = date('Y-m-t', strtotime($from));
+        $dk3 = "__DAFTRA_KEY__";
+
+        // فواتير الشهر من دفترة
+        $invRows = [];
+        for ($pg = 1; $pg <= 4; $pg++) {
+            $ch3 = curl_init("https://semak.daftra.com/api2/purchase_invoices.json?page=$pg&limit=100&from_date=$from&to_date=$to");
+            curl_setopt_array($ch3, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk3","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+            $r3 = curl_exec($ch3); curl_close($ch3);
+            $d3 = json_decode($r3, true) ?: [];
+            $batch3 = $d3['data'] ?? [];
+            if (!$batch3) break;
+            foreach ($batch3 as $b3) {
+                $p3 = $b3['PurchaseInvoice'] ?? $b3['PurchaseOrder'] ?? $b3;
+                $invRows[(int)$p3['id']] = [
+                    'id'=>(int)$p3['id'], 'no'=>$p3['no'] ?? '', 'date'=>$p3['date'] ?? '',
+                    'supplier'=>$p3['supplier_business_name'] ?? '',
+                    'total'=>(float)($p3['summary_total'] ?? 0), 'paid'=>(float)($p3['summary_paid'] ?? 0),
+                ];
+            }
+            if (count($batch3) < 100) break;
+        }
+        $invIds = array_keys($invRows);
+        $classMapM = [];
+        if ($invIds) {
+            $idsSql = implode(',', $invIds);
+            $cm = $conn->query("SELECT ref_id, code FROM purchase_classification WHERE kind='purchase' AND ref_id IN ($idsSql)");
+            if ($cm) while ($c = $cm->fetch_assoc()) $classMapM[(int)$c['ref_id']] = $c['code'];
+        }
+        $totAll = 0; $totPaid = 0; $unpaid = []; $unclassified = [];
+        foreach ($invRows as $iv) {
+            $totAll += $iv['total']; $totPaid += $iv['paid'];
+            $rem = $iv['total'] - $iv['paid'];
+            if ($rem > 0.5) $unpaid[] = ['no'=>$iv['no'], 'supplier'=>$iv['supplier'], 'remaining'=>round($rem,2), 'date'=>$iv['date']];
+            if (!isset($classMapM[$iv['id']])) $unclassified[] = ['no'=>$iv['no'], 'supplier'=>$iv['supplier'], 'total'=>$iv['total'], 'date'=>$iv['date']];
+        }
+        usort($unpaid, function($a,$b){ return $b['remaining'] <=> $a['remaining']; });
+
+        // بنود التكلفة والتدفقات للشهر (من تفصيل الأصناف بالتاريخ)
+        $treeNames2 = [];
+        foreach ((array)json_decode(acc_setting($conn, 1, 'purchase_class_tree', '[]'), true) as $tn2) $treeNames2[$tn2['code']] = $tn2['name'];
+        $catCost = []; $catCash = [];
+        $cq = $conn->query("SELECT code, ROUND(SUM(amount),2) t, COUNT(DISTINCT ref_id) n FROM purchase_class_items
+                            WHERE inv_date >= '$from' AND inv_date <= '$to' GROUP BY code ORDER BY t DESC");
+        if ($cq) while ($cw = $cq->fetch_assoc()) {
+            $row3 = ['code'=>$cw['code'], 'name'=>$treeNames2[$cw['code']] ?? '', 'total'=>(float)$cw['t'], 'docs'=>(int)$cw['n']];
+            if ($cw['code'][0] === '5') $catCash[] = $row3; else $catCost[] = $row3;
+        }
+
+        // مصاريف الشهر
+        $expRows = []; $expTotal = 0; $expUnclassified = 0;
+        $expClass2 = [];
+        $eq = $conn->query("SELECT ref_id, code FROM purchase_classification WHERE kind='expense'");
+        if ($eq) while ($e2 = $eq->fetch_assoc()) $expClass2[(int)$e2['ref_id']] = $e2['code'];
+        $ch4 = curl_init("https://semak.daftra.com/api2/expenses.json?page=1&limit=100&from_date=$from&to_date=$to");
+        curl_setopt_array($ch4, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk3","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $r4 = curl_exec($ch4); curl_close($ch4);
+        $d4 = json_decode($r4, true) ?: [];
+        foreach ($d4['data'] ?? [] as $e4) {
+            $ex4 = $e4['Expense'] ?? $e4;
+            $eid4 = (int)($ex4['id'] ?? 0); $amt4 = (float)($ex4['amount'] ?? 0);
+            $code4 = $expClass2[$eid4] ?? '';
+            $expTotal += $amt4;
+            if ($code4 === '') $expUnclassified++;
+            $expRows[] = ['id'=>$eid4, 'date'=>$ex4['date'] ?? '', 'amount'=>$amt4, 'code'=>$code4, 'name'=>$treeNames2[$code4] ?? ($code4 === '' ? 'غير مصنف' : $code4)];
+        }
+
+        // حالة القفلة المحفوظة
+        $ymEsc = $conn->real_escape_string($ym);
+        $st = ['status'=>'open', 'notes'=>'', 'closed_by'=>null, 'closed_at'=>null];
+        $sq2 = $conn->query("SELECT status, notes, closed_by, closed_at FROM monthly_closings WHERE ym='$ymEsc' LIMIT 1");
+        if ($sq2 && ($sr2 = $sq2->fetch_assoc())) $st = $sr2;
+
+        $costSum = array_sum(array_column($catCost, 'total'));
+        $cashSum = array_sum(array_column($catCash, 'total'));
+        echo json_encode(['success'=>true, 'ym'=>$ym, 'from'=>$from, 'to'=>$to,
+            'summary'=>[
+                'invoices_count'=>count($invRows), 'invoices_total'=>round($totAll,2), 'invoices_paid'=>round($totPaid,2),
+                'outstanding'=>round($totAll-$totPaid,2), 'cost_total'=>round($costSum,2), 'cashflow_total'=>round($cashSum,2),
+                'expenses_count'=>count($expRows), 'expenses_total'=>round($expTotal,2),
+                'unclassified_count'=>count($unclassified), 'expenses_unclassified'=>$expUnclassified,
+            ],
+            'categories'=>$catCost, 'cashflow'=>$catCash,
+            'unpaid'=>array_slice($unpaid,0,25), 'unclassified'=>array_slice($unclassified,0,25),
+            'expenses'=>$expRows, 'closing'=>$st,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'month_close_save': {
+        // إقفال الشهر: حفظ اللقطة والملاحظات وتغيير الحالة (أو إعادة فتح)
+        $b5 = json_decode(file_get_contents('php://input'), true) ?: [];
+        $ym5 = preg_match('/^\d{4}-\d{2}$/', (string)($b5['ym'] ?? '')) ? $b5['ym'] : '';
+        if ($ym5 === '') { echo json_encode(['success'=>false,'message'=>'ym مطلوب']); break; }
+        $ymE = $conn->real_escape_string($ym5);
+        $status5 = (($b5['status'] ?? '') === 'open') ? 'open' : 'closed';
+        $notes5  = $conn->real_escape_string(mb_substr((string)($b5['notes'] ?? ''), 0, 8000));
+        $report5 = $conn->real_escape_string(mb_substr((string)json_encode($b5['report'] ?? null, JSON_UNESCAPED_UNICODE), 0, 500000));
+        $by5     = $conn->real_escape_string(mb_substr((string)($b5['closed_by'] ?? ''), 0, 100));
+        $ok5 = $conn->query("REPLACE INTO monthly_closings (ym, status, notes, report, closed_by, closed_at)
+                             VALUES ('$ymE', '$status5', '$notes5', '$report5', '$by5', " . ($status5 === 'closed' ? "NOW()" : "NULL") . ")");
+        echo json_encode(['success'=>(bool)$ok5]);
+        break;
+    }
+
+    case 'month_close_list': {
+        $out5 = [];
+        $lq = $conn->query("SELECT ym, status, notes, closed_by, closed_at FROM monthly_closings ORDER BY ym DESC LIMIT 36");
+        if ($lq) while ($lr = $lq->fetch_assoc()) $out5[] = $lr;
+        echo json_encode(['success'=>true, 'data'=>$out5], JSON_UNESCAPED_UNICODE);
         break;
     }
 
