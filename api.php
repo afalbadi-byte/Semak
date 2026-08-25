@@ -510,16 +510,6 @@ $conn->query("CREATE TABLE IF NOT EXISTS acc_settings (
     PRIMARY KEY (tenant_id, skey)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-// تصنيف المشتريات والمصاريف — ربط كل مستند دفترة ببند من شجرة التصنيف
-// (الشجرة نفسها تُخزَّن في acc_settings بمفتاح purchase_class_tree كـ JSON)
-$conn->query("CREATE TABLE IF NOT EXISTS purchase_classification (
-    kind       VARCHAR(10) NOT NULL DEFAULT 'purchase',
-    ref_id     INT NOT NULL,
-    code       VARCHAR(6) NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (kind, ref_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
 // اعتماد هيئة الزكاة (ZATCA) وحالة الفوترة لكل منشأة — مفتاح/شهادة/عدّاد ICV/سلسلة PIH
 // ملاحظة أمنية: المفتاح الخاص يُخزَّن هنا للتشغيل الذاتي؛ نقل ذلك لتخزين مُشفّر منفصل لاحقًا قبل الإنتاج.
 $conn->query("CREATE TABLE IF NOT EXISTS acc_zatca (
@@ -816,6 +806,19 @@ ensure_column($conn, "wa_bot_conversations", "is_read", "is_read TINYINT(1) NOT 
 $conn->query("ALTER TABLE wa_bot_conversations MODIFY COLUMN role ENUM('user','assistant','agent') NOT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (9)");
 } // end DDL v9
+
+// ─── DDL v10: تصنيف المشتريات والمصاريف — ربط كل مستند دفترة ببند من شجرة التصنيف ──
+// (الشجرة نفسها تُخزَّن في acc_settings بمفتاح purchase_class_tree كـ JSON)
+if ($__sv < 10) {
+$conn->query("CREATE TABLE IF NOT EXISTS purchase_classification (
+    kind       VARCHAR(10) NOT NULL DEFAULT 'purchase',
+    ref_id     INT NOT NULL,
+    code       VARCHAR(6) NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (kind, ref_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (10)");
+} // end DDL v10
 
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
@@ -4517,12 +4520,12 @@ switch ($action) {
             $code = preg_replace('/[^0-9]/', '', (string)($it['code'] ?? ''));
             if ($rid <= 0) continue;
             if ($code === '') {
-                $conn->query("DELETE FROM purchase_classification WHERE kind='$kind' AND ref_id=$rid");
+                $ok = $conn->query("DELETE FROM purchase_classification WHERE kind='$kind' AND ref_id=$rid");
             } else {
-                $conn->query("INSERT INTO purchase_classification (kind, ref_id, code) VALUES ('$kind', $rid, '$code')
+                $ok = $conn->query("INSERT INTO purchase_classification (kind, ref_id, code) VALUES ('$kind', $rid, '$code')
                               ON DUPLICATE KEY UPDATE code=VALUES(code)");
             }
-            $n++;
+            if ($ok) $n++;
         }
         echo json_encode(["success"=>true, "saved"=>$n]);
         break;
