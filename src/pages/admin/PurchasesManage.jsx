@@ -156,10 +156,12 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   }, [view, appliedFilters]); // eslint-disable-line
 
   // ─── فلترة العرض ─────────────────────────────────────────────
+  // بادئة المطابقة: البند الرئيسي يشمل كل فروعه (1000→1)، والفرعي فروعه (1300→13)، والتفصيلي نفسه
+  const classPrefix = (c) => c.replace(/0+$/, '') || c[0];
   const displayed = purchases.filter(p => {
     const code = classMap[String(p.id)] || '';
     if (classFilter === 'none' && code) return false;
-    if (classFilter && classFilter !== 'none' && !code.startsWith(classFilter[0])) return false;
+    if (classFilter && classFilter !== 'none' && !code.startsWith(classPrefix(classFilter))) return false;
     if (!appliedFilters.search) return true;
     const q = appliedFilters.search.toLowerCase();
     return (
@@ -359,8 +361,17 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
             >
               <option value="">كل البنود</option>
               <option value="none">غير مصنف</option>
-              {classTree.filter(t => t.level === 1).map(t => (
-                <option key={t.code} value={t.code}>{t.code} — {t.name}</option>
+              {classTree.filter(t => t.level === 1).map(main => (
+                <optgroup key={main.code} label={`${main.code} — ${main.name}`}>
+                  <option value={main.code}>{main.code} — {main.name} (كامل الفرع)</option>
+                  {classTree
+                    .filter(t => t.level > 1 && t.code[0] === main.code[0])
+                    .map(t => (
+                      <option key={t.code} value={t.code}>
+                        {t.level === 3 ? `　${t.code} ${t.name}` : `${t.code} ${t.name}`}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
           </div>
