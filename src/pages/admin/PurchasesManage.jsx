@@ -158,10 +158,20 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   // ─── فلترة العرض ─────────────────────────────────────────────
   // بادئة المطابقة: البند الرئيسي يشمل كل فروعه (1000→1)، والفرعي فروعه (1300→13)، والتفصيلي نفسه
   const classPrefix = (c) => c.replace(/0+$/, '') || c[0];
+  // أصناف الفاتورة كلها (من بنودها) — الفلتر يطلع أي فاتورة «تحتوي» الصنف لا الغالب فقط
+  const codesOf = (p) => {
+    const set = new Set(Array.isArray(p.class_codes) ? p.class_codes : []);
+    const dom = classMap[String(p.id)];
+    if (dom) set.add(dom);
+    return [...set];
+  };
   const displayed = purchases.filter(p => {
-    const code = classMap[String(p.id)] || '';
-    if (classFilter === 'none' && code) return false;
-    if (classFilter && classFilter !== 'none' && !code.startsWith(classPrefix(classFilter))) return false;
+    const codes = codesOf(p);
+    if (classFilter === 'none' && codes.length) return false;
+    if (classFilter && classFilter !== 'none') {
+      const pre = classPrefix(classFilter);
+      if (!codes.some(c => c.startsWith(pre))) return false;
+    }
     if (!appliedFilters.search) return true;
     const q = appliedFilters.search.toLowerCase();
     return (
@@ -171,6 +181,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   });
 
   const unclassifiedCount = purchases.filter(p => !classMap[String(p.id)]).length;
+  const extraCodesOf = (p) => codesOf(p).filter(c => c !== (classMap[String(p.id)] || ''));
 
   // ─── ملخص مالي ───────────────────────────────────────────────
   const totalAmount      = displayed.reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
@@ -491,6 +502,14 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                               </optgroup>
                             ))}
                           </select>
+                          {extraCodesOf(p).length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1" title={extraCodesOf(p).map(c => `${c} ${classNameOf(c)}`).join(' · ')}>
+                              {extraCodesOf(p).slice(0, 3).map(c => (
+                                <span key={c} className="bg-slate-100 dark:bg-brand-800 text-slate-500 dark:text-brand-300 px-1.5 py-0.5 rounded text-[10px] font-bold">{c}</span>
+                              ))}
+                              {extraCodesOf(p).length > 3 && <span className="text-[10px] text-slate-400 font-bold">+{extraCodesOf(p).length - 3}</span>}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium">
                           {project

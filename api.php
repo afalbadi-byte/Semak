@@ -834,6 +834,18 @@ $conn->query("UPDATE purchase_classification SET source='supplier' WHERE kind='p
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (12)");
 } // end DDL v12
 
+// ─── DDL v13: تفصيل بنود الفاتورة — كل الأصناف داخل الفاتورة بمبالغها ──────────
+// يغذي فلترة «الفواتير التي تحتوي الصنف» وتقارير الإنفاق حسب البند
+if ($__sv < 13) {
+$conn->query("CREATE TABLE IF NOT EXISTS purchase_class_items (
+    ref_id INT NOT NULL,
+    code   VARCHAR(6) NOT NULL,
+    amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    PRIMARY KEY (ref_id, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (13)");
+} // end DDL v13
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -4589,6 +4601,12 @@ switch ($action) {
                 if ($val <= 0) $val = (float)($it['unit_price'] ?? 0) * (float)($it['quantity'] ?? 1);
                 $wt[$prodClass[$prid]] = ($wt[$prodClass[$prid]] ?? 0) + max($val, 0.01);
             }
+            // حفظ تفصيل الأصناف داخل الفاتورة (حتى لو ما اكتمل التصنيف)
+            $conn->query("DELETE FROM purchase_class_items WHERE ref_id=$pid");
+            foreach ($wt as $wc => $wv) {
+                $wcEsc = $conn->real_escape_string($wc);
+                $conn->query("INSERT INTO purchase_class_items (ref_id, code, amount) VALUES ($pid, '$wcEsc', " . round($wv, 2) . ")");
+            }
             if (!$wt) { $out[$pid] = 'no_product_class'; continue; }
             arsort($wt);
             $code = $conn->real_escape_string((string)array_key_first($wt));
@@ -4640,6 +4658,11 @@ switch ($action) {
             $cr = $conn->query("SELECT ref_id, code FROM purchase_classification WHERE kind='purchase' AND ref_id IN ($ids)");
             if ($cr) while ($c = $cr->fetch_assoc()) $classified[(int)$c['ref_id']] = $c['code'];
 
+            // تفصيل أصناف كل فاتورة (لفلترة «تحتوي الصنف»)
+            $itemCodes = [];
+            $ir = $conn->query("SELECT ref_id, code FROM purchase_class_items WHERE ref_id IN ($ids)");
+            if ($ir) while ($ic = $ir->fetch_assoc()) $itemCodes[(int)$ic['ref_id']][] = $ic['code'];
+
             // البند الغالب لكل مورد (من التصنيفات القائمة)
             $supCode = [];
             $sr = $conn->query("SELECT supplier_id, code, COUNT(*) AS n FROM purchase_classification
@@ -4649,6 +4672,10 @@ switch ($action) {
 
             foreach ($rows as $i => $row) {
                 $rid = (int)$row['id'];
+                $rows[$i]['class_codes'] = array_values(array_unique(array_merge(
+                    $itemCodes[$rid] ?? [],
+                    isset($classified[$rid]) ? [$classified[$rid]] : []
+                )));
                 if (isset($classified[$rid])) { $rows[$i]['class_code'] = $classified[$rid]; continue; }
                 $sid = (int)$row['supplier_id'];
                 if ($sid > 0 && isset($supCode[$sid])) {
@@ -4657,6 +4684,7 @@ switch ($action) {
                                       VALUES ('purchase', $rid, '$code', $sid, 'supplier')
                                       ON DUPLICATE KEY UPDATE code=code")) {
                         $rows[$i]['class_code'] = $supCode[$sid];
+                        $rows[$i]['class_codes'][] = $supCode[$sid];
                         continue;
                     }
                 }
