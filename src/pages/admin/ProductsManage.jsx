@@ -88,8 +88,53 @@ export default function ProductsManage({ user, navigateTo }) {
   const [confirmId, setConfirmId] = useState(null);
   const [toast, setToast]         = useState(null);
   const [form, setForm]           = useState(defaultForm());
+  const [classTree, setClassTree] = useState([]);  // شجرة تصنيف البنود
+  const [classMap, setClassMap]   = useState({});  // { 'product:daftraId' | 'product_local:id' : code }
 
   const notify = (msg, type = 'success') => setToast({ msg, type });
+
+  // ─── تصنيف المنتجات: المفتاح daftra_id إن وجد (لربط بنود فواتير دفترة) ──
+  const classKeyOf = (p) => p.daftra_id ? `product:${p.daftra_id}` : `product_local:${p.id}`;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [tRes, cRes] = await Promise.all([
+          fetch(`${API_URL}?action=pur_class_tree`),
+          fetch(`${API_URL}?action=pur_class_get`),
+        ]);
+        const [tData, cData] = await Promise.all([tRes.json(), cRes.json()]);
+        if (tData.success && Array.isArray(tData.tree)) setClassTree(tData.tree);
+        if (cData.success && Array.isArray(cData.data)) {
+          const m = {};
+          cData.data.forEach(r => {
+            if (r.kind === 'product' || r.kind === 'product_local') m[`${r.kind}:${r.ref_id}`] = r.code;
+          });
+          setClassMap(m);
+        }
+      } catch { /* تجاهل */ }
+    })();
+  }, []);
+
+  const setProdClass = async (p, code) => {
+    const key = classKeyOf(p);
+    const prev = classMap[key] || '';
+    setClassMap(m => ({ ...m, [key]: code }));
+    try {
+      const [kind, ref] = key.split(':');
+      const res = await fetch(`${API_URL}?action=pur_class_set`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, ref_id: Number(ref), code }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error();
+    } catch {
+      setClassMap(m => ({ ...m, [key]: prev }));
+      notify('تعذر حفظ التصنيف — أعد المحاولة', 'error');
+    }
+  };
+  const classNameOf = (code) => (classTree.find(t => t.code === code) || {}).name || code;
 
   // ─── جلب القائمة من acc_products ─────────────────────────────
   const loadProducts = useCallback(async (pg = 1, q = '') => {
@@ -328,6 +373,7 @@ export default function ProductsManage({ user, navigateTo }) {
               { key: 'buy_price',   label: 'سعر الشراء',  format: (_v, r) => fmtExport.money(r.buy_price) },
               { key: 'unit',        label: 'الوحدة',      format: (_v, r) => r.unit || '' },
               { key: 'stock_balance', label: 'المخزون',   format: (_v, r) => fmtExport.int(r.stock_balance) },
+              { key: 'id',          label: 'التصنيف',     format: (_v, r) => { const c = classMap[classKeyOf(r)] || ''; return c ? `${c} - ${classNameOf(c)}` : 'غير مصنف'; } },
             ]}
             filename="المنتجات"
           />
@@ -346,6 +392,7 @@ export default function ProductsManage({ user, navigateTo }) {
       <div className="flex flex-wrap gap-3 mb-6">
         <SummaryChip icon={Package}    label="إجمالي البنود"      value={`${totalCount} بند`}  color="bg-brand-800" />
         <SummaryChip icon={DollarSign} label="متوسط سعر البيع"    value={fmtPrice(avgPrice)}   color="bg-gold-500" />
+        <SummaryChip icon={Tag}        label="غير مصنف"           value={products.filter(p => !classMap[classKeyOf(p)]).length} color={products.some(p => !classMap[classKeyOf(p)]) ? 'bg-red-500' : 'bg-emerald-600'} />
       </div>
 
       {/* Search */}
@@ -378,6 +425,7 @@ export default function ProductsManage({ user, navigateTo }) {
                     <SortHeader label="سعر الشراء" sortKey="buy_price"  activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
                     <th className="px-5 py-4">الوحدة</th>
                     <SortHeader label="المخزون"    sortKey="stock"      activeKey={tc.sortKey} dir={tc.sortDir} onSort={tc.toggleSort} />
+                    <th className="px-5 py-4">التصنيف</th>
                     <th className="px-5 py-4 text-center">إجراءات</th>
                   </tr>
                 </thead>
@@ -407,6 +455,26 @@ export default function ProductsManage({ user, navigateTo }) {
                         </td>
                         <td className="px-5 py-3.5 text-slate-600 dark:text-brand-300 text-xs tabular-nums" dir="ltr">
                           {p.stock_balance != null ? Number(p.stock_balance).toLocaleString('en-US', { maximumFractionDigits: 3 }) : '—'}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <select
+                            value={classMap[classKeyOf(p)] || ''}
+                            onChange={e => setProdClass(p, e.target.value)}
+                            className={`max-w-[170px] px-2 py-1.5 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#1a365d]/20 dark:bg-brand-900 dark:text-brand-50 ${classMap[classKeyOf(p)] ? 'border-slate-200 dark:border-brand-700 text-slate-600' : 'border-red-300 text-red-500 bg-red-50/50'}`}
+                          >
+                            <option value="">— غير مصنف —</option>
+                            {classTree.filter(t => t.level === 1).map(main => (
+                              <optgroup key={main.code} label={`${main.code} — ${main.name}`}>
+                                {classTree
+                                  .filter(t => t.level > 1 && t.code[0] === main.code[0])
+                                  .map(t => (
+                                    <option key={t.code} value={t.code}>
+                                      {t.level === 3 ? `  ${t.code} ${t.name}` : `${t.code} ${t.name}`}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            ))}
+                          </select>
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-center gap-2">

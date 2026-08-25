@@ -826,6 +826,14 @@ ensure_column($conn, "purchase_classification", "supplier_id", "supplier_id INT 
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (11)");
 } // end DDL v11
 
+// ─── DDL v12: مصدر التصنيف (manual/supplier/items) — «اليدوي لا يُداس» ─────────
+// items = مشتق من بنود الفاتورة عبر تصنيف المنتجات (الأدق) · supplier = وراثة المورد (احتياط)
+if ($__sv < 12) {
+ensure_column($conn, "purchase_classification", "source", "source VARCHAR(10) NOT NULL DEFAULT 'manual'");
+$conn->query("UPDATE purchase_classification SET source='supplier' WHERE kind='purchase'");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (12)");
+} // end DDL v12
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -4509,7 +4517,7 @@ switch ($action) {
 
     case 'pur_class_get': {
         $out = [];
-        $r = $conn->query("SELECT kind, ref_id, code FROM purchase_classification");
+        $r = $conn->query("SELECT kind, ref_id, code, source FROM purchase_classification");
         if ($r) while ($row = $r->fetch_assoc()) $out[] = $row;
         echo json_encode(["success"=>true, "data"=>$out]);
         break;
@@ -4521,21 +4529,72 @@ switch ($action) {
         $items = (isset($b['items']) && is_array($b['items'])) ? $b['items'] : [$b];
         $n = 0;
         foreach ($items as $it) {
-            $kind = (($it['kind'] ?? '') === 'expense') ? 'expense' : 'purchase';
+            $kindIn = (string)($it['kind'] ?? '');
+            $kind = in_array($kindIn, ['expense','product','product_local'], true) ? $kindIn : 'purchase';
             $rid  = (int)($it['ref_id'] ?? 0);
             $sid  = (int)($it['supplier_id'] ?? 0);
+            $src  = in_array(($it['source'] ?? ''), ['manual','supplier','items'], true) ? $it['source'] : 'manual';
             $code = preg_replace('/[^0-9]/', '', (string)($it['code'] ?? ''));
             if ($rid <= 0) continue;
             if ($code === '') {
                 $ok = $conn->query("DELETE FROM purchase_classification WHERE kind='$kind' AND ref_id=$rid");
             } else {
                 $sidSql = $sid > 0 ? $sid : "NULL";
-                $ok = $conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id) VALUES ('$kind', $rid, '$code', $sidSql)
-                              ON DUPLICATE KEY UPDATE code=VALUES(code), supplier_id=COALESCE(VALUES(supplier_id), supplier_id)");
+                $ok = $conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id, source) VALUES ('$kind', $rid, '$code', $sidSql, '$src')
+                              ON DUPLICATE KEY UPDATE code=VALUES(code), source=VALUES(source), supplier_id=COALESCE(VALUES(supplier_id), supplier_id)");
             }
             if ($ok) $n++;
         }
         echo json_encode(["success"=>true, "saved"=>$n]);
+        break;
+    }
+
+    case 'pur_class_rebuild_items': {
+        // إعادة اشتقاق تصنيف الفواتير من بنودها: كل بند يتبع تصنيف منتجه،
+        // والفاتورة تأخذ البند الغالب قيمةً. لا يمس التصنيف اليدوي أبداً.
+        set_time_limit(120);
+        $dk = "__DAFTRA_KEY__";
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $ids = array_map('intval', (array)($b['ids'] ?? []));
+        $ids = array_slice(array_filter($ids), 0, 20);
+        if (!$ids) { echo json_encode(['success'=>false,'message'=>'ids مطلوبة (حتى 20)']); break; }
+
+        $prodClass = [];
+        $r = $conn->query("SELECT ref_id, code FROM purchase_classification WHERE kind='product'");
+        if ($r) while ($row = $r->fetch_assoc()) $prodClass[(int)$row['ref_id']] = $row['code'];
+
+        $out = [];
+        foreach ($ids as $pid) {
+            $chk = $conn->query("SELECT source FROM purchase_classification WHERE kind='purchase' AND ref_id=$pid LIMIT 1");
+            $src = ($chk && ($cr = $chk->fetch_assoc())) ? ($cr['source'] ?? '') : '';
+            if ($src === 'manual') { $out[$pid] = 'skipped_manual'; continue; }
+
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
+            $res = curl_exec($ch); curl_close($ch);
+            $d = json_decode($res, true) ?: [];
+            $inv = $d['data']['PurchaseInvoice'] ?? $d['PurchaseInvoice'] ?? (is_array($d['data'] ?? null) ? $d['data'] : []);
+            $itemsArr = $inv['PurchaseInvoiceItem'] ?? $inv['purchase_invoice_items'] ?? $inv['items'] ?? [];
+
+            $wt = [];
+            foreach ((array)$itemsArr as $it) {
+                $it = $it['PurchaseInvoiceItem'] ?? $it;
+                if (!is_array($it)) continue;
+                $prid = (int)($it['product_id'] ?? 0);
+                if (!$prid || !isset($prodClass[$prid])) continue;
+                $val = (float)($it['subtotal'] ?? 0);
+                if ($val <= 0) $val = (float)($it['unit_price'] ?? 0) * (float)($it['quantity'] ?? 1);
+                $wt[$prodClass[$prid]] = ($wt[$prodClass[$prid]] ?? 0) + max($val, 0.01);
+            }
+            if (!$wt) { $out[$pid] = 'no_product_class'; continue; }
+            arsort($wt);
+            $code = $conn->real_escape_string((string)array_key_first($wt));
+            $sid = (int)($inv['supplier_id'] ?? 0); $sidSql = $sid > 0 ? $sid : "NULL";
+            $conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id, source) VALUES ('purchase', $pid, '$code', $sidSql, 'items')
+                          ON DUPLICATE KEY UPDATE code=VALUES(code), source='items', supplier_id=COALESCE(VALUES(supplier_id), supplier_id)");
+            $out[$pid] = $code;
+        }
+        echo json_encode(['success'=>true, 'results'=>$out], JSON_UNESCAPED_UNICODE);
         break;
     }
 
@@ -4591,8 +4650,8 @@ switch ($action) {
                 $sid = (int)$row['supplier_id'];
                 if ($sid > 0 && isset($supCode[$sid])) {
                     $code = $conn->real_escape_string($supCode[$sid]);
-                    if ($conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id)
-                                      VALUES ('purchase', $rid, '$code', $sid)
+                    if ($conn->query("INSERT INTO purchase_classification (kind, ref_id, code, supplier_id, source)
+                                      VALUES ('purchase', $rid, '$code', $sid, 'supplier')
                                       ON DUPLICATE KEY UPDATE code=code")) {
                         $rows[$i]['class_code'] = $supCode[$sid];
                         continue;
