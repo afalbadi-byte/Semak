@@ -859,6 +859,14 @@ $conn->query("CREATE TABLE IF NOT EXISTS purchase_product_items (
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (14)");
 } // end DDL v14
 
+// ─── DDL v15: تاريخ ومورد كل حركة صنف — يغذي «حركة الصنف» وأسعار الموردين ──────
+if ($__sv < 15) {
+ensure_column($conn, "purchase_product_items", "inv_date", "inv_date DATE DEFAULT NULL");
+ensure_column($conn, "purchase_product_items", "supplier_id", "supplier_id INT DEFAULT NULL");
+ensure_column($conn, "purchase_product_items", "supplier", "supplier VARCHAR(255) DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (15)");
+} // end DDL v15
+
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
 // مُولّد رقم تسلسلي آمن للتزامن (نمط LAST_INSERT_ID الذرّي)
 function acc_next_no($conn, $tid, $kind, $yr) {
@@ -4611,6 +4619,50 @@ switch ($action) {
         break;
     }
 
+    case 'pur_product_movement': {
+        // حركة صنف: كل توريداته + آخر سعر + متوسط السعر + أسعار الموردين
+        $prid = (int)($_GET['product_id'] ?? 0);
+        if (!$prid) { echo json_encode(['success'=>false,'message'=>'product_id مطلوب']); break; }
+        $lines = [];
+        $r = $conn->query("SELECT ref_id, inv_date, supplier_id, COALESCE(supplier,'') AS supplier, qty, amount,
+                                  ROUND(amount/NULLIF(qty,0),2) AS unit_price
+                           FROM purchase_product_items WHERE product_id=$prid
+                           ORDER BY inv_date DESC, ref_id DESC");
+        if ($r) while ($row = $r->fetch_assoc()) $lines[] = $row;
+
+        $totQty = 0; $totAmt = 0; $last = null; $sup = [];
+        foreach ($lines as $l) {
+            $q = (float)$l['qty']; $a = (float)$l['amount'];
+            $totQty += $q; $totAmt += $a;
+            if ($last === null && $q > 0) $last = $l; // الأحدث تاريخاً (القائمة مرتبة تنازلياً)
+            $sn = $l['supplier'] !== '' ? $l['supplier'] : 'غير محدد';
+            if (!isset($sup[$sn])) $sup[$sn] = ['supplier'=>$sn, 'qty'=>0, 'amount'=>0, 'invoices'=>0, 'last_price'=>null, 'last_date'=>null];
+            $sup[$sn]['qty'] += $q; $sup[$sn]['amount'] += $a; $sup[$sn]['invoices']++;
+            if ($sup[$sn]['last_price'] === null && $q > 0) { $sup[$sn]['last_price'] = round($a / $q, 2); $sup[$sn]['last_date'] = $l['inv_date']; }
+        }
+        $suppliers = array_values(array_map(function($s){
+            $s['avg_price'] = $s['qty'] > 0 ? round($s['amount'] / $s['qty'], 2) : null;
+            $s['qty'] = round($s['qty'], 3); $s['amount'] = round($s['amount'], 2);
+            return $s;
+        }, $sup));
+        usort($suppliers, function($a, $b){ return $b['amount'] <=> $a['amount']; });
+
+        echo json_encode(['success'=>true,
+            'stats'=>[
+                'total_qty'   => round($totQty, 3),
+                'total_amount'=> round($totAmt, 2),
+                'avg_price'   => $totQty > 0 ? round($totAmt / $totQty, 2) : null,
+                'last_price'  => $last ? (float)$last['unit_price'] : null,
+                'last_date'   => $last['inv_date'] ?? null,
+                'last_supplier'=> $last['supplier'] ?? null,
+                'suppliers_count'=> count($suppliers),
+            ],
+            'suppliers'=>$suppliers,
+            'lines'=>$lines,
+        ], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pur_class_rebuild_items': {
         // إعادة اشتقاق تصنيف الفواتير من بنودها: كل بند يتبع تصنيف منتجه،
         // والفاتورة تأخذ البند الغالب قيمةً. لا يمس التصنيف اليدوي أبداً.
@@ -4656,11 +4708,14 @@ switch ($action) {
                 if (!isset($prodClass[$prid])) continue;
                 $wt[$prodClass[$prid]] = ($wt[$prodClass[$prid]] ?? 0) + max($val, 0.01);
             }
-            // مشتريات كل منتج داخل الفاتورة (لتقرير أصناف البند)
+            // مشتريات كل منتج داخل الفاتورة (لتقرير أصناف البند وحركة الصنف)
+            $invDate = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($inv['date'] ?? '')) ? "'" . substr($inv['date'], 0, 10) . "'" : "NULL";
+            $invSid  = (int)($inv['supplier_id'] ?? 0); $invSidSql = $invSid > 0 ? $invSid : "NULL";
+            $invSup  = $conn->real_escape_string(mb_substr((string)($inv['supplier_business_name'] ?? ''), 0, 250));
             $conn->query("DELETE FROM purchase_product_items WHERE ref_id=$pid");
             foreach ($pv as $prid => $v) {
-                $conn->query("INSERT INTO purchase_product_items (ref_id, product_id, amount, qty)
-                              VALUES ($pid, $prid, " . round($v['amt'], 2) . ", " . round($v['qty'], 3) . ")");
+                $conn->query("INSERT INTO purchase_product_items (ref_id, product_id, amount, qty, inv_date, supplier_id, supplier)
+                              VALUES ($pid, $prid, " . round($v['amt'], 2) . ", " . round($v['qty'], 3) . ", $invDate, $invSidSql, '$invSup')");
             }
             // حفظ تفصيل الأصناف داخل الفاتورة (حتى لو ما اكتمل التصنيف)
             $conn->query("DELETE FROM purchase_class_items WHERE ref_id=$pid");

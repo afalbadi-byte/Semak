@@ -209,6 +209,20 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
     } catch { /* تجاهل */ } finally { setCatLoading(false); }
   };
 
+  // حركة الصنف المختار (أسعار وموردون وسجل توريد)
+  const [openProd, setOpenProd]   = useState(0);
+  const [prodMove, setProdMove]   = useState(null);
+  const [moveLoading, setMoveLoading] = useState(false);
+  const toggleProd = async (productId) => {
+    if (openProd === productId) { setOpenProd(0); return; }
+    setOpenProd(productId); setProdMove(null); setMoveLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=pur_product_movement&product_id=${productId}`);
+      const data = await res.json();
+      if (data.success) setProdMove(data);
+    } catch { /* تجاهل */ } finally { setMoveLoading(false); }
+  };
+
   // مجموع بند بكل فروعه (بادئة الكود)
   const sumByPrefix = (prefix) => reportRows
     .filter(r => r.code.startsWith(prefix))
@@ -426,8 +440,11 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                                 </thead>
                                 <tbody>
                                   {catProds.map(pr => (
-                                    <tr key={pr.product_id} className="border-t border-slate-100 dark:border-brand-700/50">
+                                    <React.Fragment key={pr.product_id}>
+                                    <tr onClick={() => toggleProd(Number(pr.product_id))}
+                                      className={`border-t border-slate-100 dark:border-brand-700/50 cursor-pointer hover:bg-white dark:hover:bg-brand-800 transition-colors ${openProd === Number(pr.product_id) ? 'bg-white dark:bg-brand-800' : ''}`}>
                                       <td className="py-1.5 text-xs font-bold text-slate-700 dark:text-brand-200">
+                                        <span className="text-gold-500 font-black ml-1">{openProd === Number(pr.product_id) ? '▾' : '◂'}</span>
                                         {pr.name}
                                         {pr.unit ? <span className="text-slate-400 font-medium"> · {pr.unit}</span> : null}
                                         <span className="text-slate-300 dark:text-brand-500 font-mono text-[9px] mr-2">{pr.code}</span>
@@ -436,6 +453,94 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                                       <td className="py-1.5 text-center text-xs font-bold text-slate-500 dark:text-brand-400">{pr.invoices}</td>
                                       <td className="py-1.5 text-left text-xs font-black text-brand-800 dark:text-brand-100 whitespace-nowrap">{fmt(pr.total)}</td>
                                     </tr>
+                                    {openProd === Number(pr.product_id) && (
+                                      <tr>
+                                        <td colSpan={4} className="py-3 px-3 bg-white dark:bg-brand-900 border-t border-b border-gold-500/30">
+                                          {moveLoading || !prodMove ? (
+                                            <div className="flex items-center gap-2 text-slate-400 text-xs font-bold py-2"><RefreshCw size={13} className="animate-spin" /> جاري تحميل حركة الصنف...</div>
+                                          ) : (
+                                            <div className="space-y-3">
+                                              {/* مؤشرات السعر */}
+                                              <div className="flex flex-wrap gap-2">
+                                                <div className="bg-[#1a365d] text-white rounded-xl px-4 py-2">
+                                                  <div className="text-[9px] text-white/60 font-bold">آخر سعر شراء</div>
+                                                  <div className="text-sm font-black text-gold-500">{prodMove.stats.last_price != null ? fmt(prodMove.stats.last_price) : '—'}</div>
+                                                  <div className="text-[9px] text-white/70 font-medium">{prodMove.stats.last_date || ''} · {prodMove.stats.last_supplier || ''}</div>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-brand-800 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-2">
+                                                  <div className="text-[9px] text-slate-400 font-bold">متوسط سعر الشراء</div>
+                                                  <div className="text-sm font-black text-brand-800 dark:text-brand-100">{prodMove.stats.avg_price != null ? fmt(prodMove.stats.avg_price) : '—'}</div>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-brand-800 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-2">
+                                                  <div className="text-[9px] text-slate-400 font-bold">إجمالي الكمية / المبلغ</div>
+                                                  <div className="text-sm font-black text-brand-800 dark:text-brand-100" dir="ltr">{Number(prodMove.stats.total_qty).toLocaleString('en-US')} · {fmt(prodMove.stats.total_amount)}</div>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-brand-800 border border-slate-200 dark:border-brand-700 rounded-xl px-4 py-2">
+                                                  <div className="text-[9px] text-slate-400 font-bold">عدد الموردين</div>
+                                                  <div className="text-sm font-black text-brand-800 dark:text-brand-100">{prodMove.stats.suppliers_count}</div>
+                                                </div>
+                                              </div>
+                                              {/* أسعار الموردين */}
+                                              <div>
+                                                <div className="text-[10px] font-black text-gold-600 mb-1">من وين نشتريه — سعر كل مورد</div>
+                                                <table className="w-full">
+                                                  <thead>
+                                                    <tr className="text-[9px] font-black text-slate-400">
+                                                      <th className="text-right pb-1">المورد</th>
+                                                      <th className="text-center pb-1">الكمية</th>
+                                                      <th className="text-center pb-1">متوسط السعر</th>
+                                                      <th className="text-center pb-1">آخر سعر</th>
+                                                      <th className="text-center pb-1">آخر توريد</th>
+                                                      <th className="text-left pb-1">الإجمالي</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {prodMove.suppliers.map(s => (
+                                                      <tr key={s.supplier} className="border-t border-slate-100 dark:border-brand-700/40">
+                                                        <td className="py-1 text-[11px] font-bold text-slate-700 dark:text-brand-200">{s.supplier}</td>
+                                                        <td className="py-1 text-center text-[11px] font-bold text-slate-500 tabular-nums" dir="ltr">{Number(s.qty).toLocaleString('en-US')}</td>
+                                                        <td className="py-1 text-center text-[11px] font-bold text-slate-600 dark:text-brand-300">{s.avg_price != null ? fmt(s.avg_price) : '—'}</td>
+                                                        <td className="py-1 text-center text-[11px] font-black text-brand-800 dark:text-brand-100">{s.last_price != null ? fmt(s.last_price) : '—'}</td>
+                                                        <td className="py-1 text-center text-[10px] font-medium text-slate-400">{s.last_date || '—'}</td>
+                                                        <td className="py-1 text-left text-[11px] font-black text-brand-800 dark:text-brand-100 whitespace-nowrap">{fmt(s.amount)}</td>
+                                                      </tr>
+                                                    ))}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                              {/* سجل الحركة */}
+                                              <div>
+                                                <div className="text-[10px] font-black text-gold-600 mb-1">حركة الصنف — آخر التوريدات</div>
+                                                <table className="w-full">
+                                                  <thead>
+                                                    <tr className="text-[9px] font-black text-slate-400">
+                                                      <th className="text-right pb-1">التاريخ</th>
+                                                      <th className="text-right pb-1">المورد</th>
+                                                      <th className="text-center pb-1">الكمية</th>
+                                                      <th className="text-center pb-1">سعر الوحدة</th>
+                                                      <th className="text-left pb-1">الإجمالي</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {prodMove.lines.slice(0, 12).map((l, li) => (
+                                                      <tr key={li} className="border-t border-slate-100 dark:border-brand-700/40">
+                                                        <td className="py-1 text-[10px] font-medium text-slate-500">{l.inv_date || '—'}</td>
+                                                        <td className="py-1 text-[11px] font-bold text-slate-700 dark:text-brand-200">{l.supplier || '—'}</td>
+                                                        <td className="py-1 text-center text-[11px] font-bold text-slate-500 tabular-nums" dir="ltr">{Number(l.qty).toLocaleString('en-US')}</td>
+                                                        <td className="py-1 text-center text-[11px] font-bold text-slate-600 dark:text-brand-300">{l.unit_price != null ? fmt(l.unit_price) : '—'}</td>
+                                                        <td className="py-1 text-left text-[11px] font-black text-brand-800 dark:text-brand-100 whitespace-nowrap">{fmt(l.amount)}</td>
+                                                      </tr>
+                                                    ))}
+                                                  </tbody>
+                                                </table>
+                                                {prodMove.lines.length > 12 && <div className="text-[9px] text-slate-400 font-bold mt-1">+ {prodMove.lines.length - 12} حركة أقدم</div>}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    )}
+                                    </React.Fragment>
                                   ))}
                                 </tbody>
                               </table>
