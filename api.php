@@ -4583,11 +4583,34 @@ switch ($action) {
     }
 
     case 'pur_class_report': {
-        // تقرير الأصناف: مجموع مشتريات كل بند + عدد الفواتير (من تفصيل بنود الفواتير)
-        $out = [];
+        // تقرير الأصناف: مجموع كل بند = المشتريات (تفصيل بنود الفواتير) + المصروفات المصنفة (من دفترة حياً)
+        $agg = [];
         $r = $conn->query("SELECT code, ROUND(SUM(amount),2) AS total, COUNT(DISTINCT ref_id) AS invoices
                            FROM purchase_class_items GROUP BY code");
-        if ($r) while ($row = $r->fetch_assoc()) $out[] = $row;
+        if ($r) while ($row = $r->fetch_assoc()) $agg[$row['code']] = ['total'=>(float)$row['total'], 'invoices'=>(int)$row['invoices']];
+
+        // المصروفات المصنفة: التصنيف محلي والمبالغ من دفترة
+        $expClass = [];
+        $er = $conn->query("SELECT ref_id, code FROM purchase_classification WHERE kind='expense'");
+        if ($er) while ($e = $er->fetch_assoc()) $expClass[(int)$e['ref_id']] = $e['code'];
+        if ($expClass) {
+            $dk2 = "__DAFTRA_KEY__";
+            $ch2 = curl_init("https://semak.daftra.com/api2/expenses.json?page=1&limit=100");
+            curl_setopt_array($ch2, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk2","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+            $eres = curl_exec($ch2); curl_close($ch2);
+            $ed = json_decode($eres, true) ?: [];
+            foreach ($ed['data'] ?? [] as $erow) {
+                $ex = $erow['Expense'] ?? $erow;
+                $eid = (int)($ex['id'] ?? 0);
+                if (!$eid || !isset($expClass[$eid])) continue;
+                $c = $expClass[$eid];
+                if (!isset($agg[$c])) $agg[$c] = ['total'=>0, 'invoices'=>0];
+                $agg[$c]['total'] += (float)($ex['amount'] ?? 0);
+                $agg[$c]['invoices']++;
+            }
+        }
+        $out = [];
+        foreach ($agg as $code => $v) $out[] = ['code'=>$code, 'total'=>round($v['total'], 2), 'invoices'=>$v['invoices']];
         echo json_encode(['success'=>true, 'data'=>$out], JSON_UNESCAPED_UNICODE);
         break;
     }

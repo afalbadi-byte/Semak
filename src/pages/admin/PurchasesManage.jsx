@@ -557,7 +557,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                     <td className="px-4 py-3 font-black text-brand-800 dark:text-brand-100 text-sm">الإجمالي</td>
                     <td></td>
                     <td className="px-4 py-3 text-left font-black text-brand-800 dark:text-brand-100 text-sm whitespace-nowrap">{fmt(reportGrand)}</td>
-                    <td className="px-4 py-3 text-[10px] text-slate-400 font-bold">القيم صافية قبل الضريبة — من بنود الفواتير المصنفة</td>
+                    <td className="px-4 py-3 text-[10px] text-slate-400 font-bold">يشمل المشتريات (صافي قبل الضريبة) + المصروفات المصنفة (تأمينات، رسوم، نثرية...)</td>
                   </tr>
                 </tfoot>
               </table>
