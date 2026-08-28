@@ -2,6 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, RefreshCw, Bot } from 'lucide-react';
 import { API_URL, getAdminToken } from '../lib/api/client';
 
+// يرسم محرف الريال الرسمي (U+20C0) برسمة .sar لأن أغلب الخطوط لا تحمله بعد
+const renderWithSar = (text) => {
+  const parts = String(text).split('⃀');
+  if (parts.length === 1) return text;
+  return parts.map((p, i) => (
+    <React.Fragment key={i}>{p}{i < parts.length - 1 && <span className="sar" />}</React.Fragment>
+  ));
+};
+
 // ─── مساعد سماك الذكي — نافذة عائمة لموظفي لوحة الإدارة (صلاحية ai_assistant) ───
 const SUGGESTIONS = [
   'كم صرفنا على السباكة؟',
@@ -99,7 +108,7 @@ export default function AiAssistant({ userName = '' }) {
                     ? 'bg-[#1a365d] text-white rounded-tr-sm'
                     : 'bg-white dark:bg-brand-800 text-slate-700 dark:text-brand-100 border border-slate-100 dark:border-brand-700 rounded-tl-sm'
                 }`}>
-                  {m.content}
+                  {renderWithSar(m.content)}
                 </div>
               </div>
             ))}
