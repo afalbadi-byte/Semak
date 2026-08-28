@@ -97,19 +97,19 @@ export default function Projects() {
 
   const unitsBase = {
     first:  [
-      { id: "sm-a01", title: "وحدة SM-A01", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a02", title: "وحدة SM-A02", price: "700,000 ريال", badge: "واجهة أمامية",   isSpecial: false }
+      { id: "sm-a01", title: "وحدة SM-A01", price: "تبدأ من 663,695 ريال", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a02", title: "وحدة SM-A02", price: "تبدأ من 663,695 ريال", badge: "واجهة أمامية",   isSpecial: false }
     ],
     second: [
-      { id: "sm-a03", title: "وحدة SM-A03", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a04", title: "وحدة SM-A04", price: "700,000 ريال", badge: "واجهة أمامية",   isSpecial: false }
+      { id: "sm-a03", title: "وحدة SM-A03", price: "تبدأ من 663,695 ريال", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a04", title: "وحدة SM-A04", price: "تبدأ من 663,695 ريال", badge: "واجهة أمامية",   isSpecial: false }
     ],
     third:  [
-      { id: "sm-a05", title: "وحدة SM-A05", price: "720,000 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a06", title: "وحدة SM-A06", price: "700,000 ريال", badge: "واجهة أمامية",   isSpecial: false }
+      { id: "sm-a05", title: "وحدة SM-A05", price: "تبدأ من 663,695 ريال", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a06", title: "وحدة SM-A06", price: "تبدأ من 663,695 ريال", badge: "واجهة أمامية",   isSpecial: false }
     ],
     fourth: [
-      { id: "sm-a07", title: "وحدة SM-A07", price: "1,100,000 ريال", badge: "فيلا روف فاخرة", isSpecial: true, roof: true }
+      { id: "sm-a07", title: "وحدة SM-A07", price: "بالتواصل", badge: "فيلا روف فاخرة", isSpecial: true, roof: true }
     ]
   };
 

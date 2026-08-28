@@ -9,13 +9,13 @@ import { AppContext } from '../../context/AppContext';
 
 // وحدات مشروع سماك البوابة (مطابقة لصفحة المشاريع) — لتعبئة قوالب العروض بسرعة
 const UNITS = [
-  { code: 'SM-A01', facade: 'واجهتين',      price: '720,000',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A02', facade: 'واجهة أمامية', price: '700,000',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A03', facade: 'واجهتين',      price: '720,000',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A04', facade: 'واجهة أمامية', price: '700,000',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A05', facade: 'واجهتين',      price: '720,000',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A06', facade: 'واجهة أمامية', price: '700,000',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A07', facade: 'روف فاخر',     price: '1,100,000', size: '477', rooms: '4 غرف' },
+  { code: 'SM-A01', facade: 'واجهتين',      price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A02', facade: 'واجهة أمامية', price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A03', facade: 'واجهتين',      price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A04', facade: 'واجهة أمامية', price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A05', facade: 'واجهتين',      price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A06', facade: 'واجهة أمامية', price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A07', facade: 'روف فاخر',     price: 'بالتواصل', size: '477', rooms: '4 غرف' },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -237,7 +237,7 @@ export default function WhatsAppCampaign({ showToast }) {
               <span className={label}>تعبئة سريعة بوحدة من سماك البوابة (يملأ الوحدة/الواجهة/السعر)</span>
               <select value={quickUnit} onChange={e => applyUnit(e.target.value)} className={input}>
                 <option value="">— اختر وحدة —</option>
-                {UNITS.map(u => <option key={u.code} value={u.code}>{u.code} · {u.rooms} · {u.size}م² · {u.facade} · {u.price} ريال</option>)}
+                {UNITS.map(u => <option key={u.code} value={u.code}>{u.code} · {u.rooms} · {u.size}م² · {u.facade} · {u.price}</option>)}
               </select>
             </div>
           )}

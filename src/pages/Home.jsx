@@ -44,9 +44,9 @@ export default function Home() {
   ];
 
   const units = [
-    { id: 'SM-A01', floor: 'الدور الأول', badge: 'واجهتين',         price: '720,000', special: true  },
-    { id: 'SM-A02', floor: 'الدور الأول', badge: 'واجهة أمامية',    price: '700,000', special: false },
-    { id: 'SM-A07', floor: 'الدور الرابع', badge: 'فيلا روف فاخرة', price: '1,100,000', special: true },
+    { id: 'SM-A01', floor: 'الدور الأول', badge: 'واجهتين',         price: 'تبدأ من 663,695 ريال', special: true  },
+    { id: 'SM-A02', floor: 'الدور الأول', badge: 'واجهة أمامية',    price: 'تبدأ من 663,695 ريال', special: false },
+    { id: 'SM-A07', floor: 'الدور الرابع', badge: 'فيلا روف فاخرة', price: 'بالتواصل', special: true },
   ];
 
   return (
@@ -218,7 +218,7 @@ export default function Home() {
               <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100 mb-1">{u.id}</h3>
               <p className="text-slate-400 dark:text-brand-400 text-sm mb-4">{u.floor} — {u.badge}</p>
               <div className="flex items-center justify-between">
-                <span className="text-gold-500 font-black text-lg">{u.price} <span className="text-sm font-bold">ريال</span></span>
+                <span className="text-gold-500 font-black text-lg">{u.price}</span>
                 <span className="text-xs text-slate-400 dark:text-brand-400 group-hover:text-gold-500 transition flex items-center gap-1 font-bold">
                   التفاصيل <ArrowLeft size={12} />
                 </span>
