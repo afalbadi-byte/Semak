@@ -48,7 +48,7 @@ jobs:
       - name: Copy brochure landing page to dist/brochure
         run: |
           mkdir -p dist/brochure
-          cp brochure/landing/index.html dist/brochure/index.html
+          cp brochure/landing/* dist/brochure/
 
       - name: Inject Anthropic API key
         run: sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g" dist/api.php
