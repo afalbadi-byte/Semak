@@ -12265,9 +12265,10 @@ KNOWLEDGE;
         }
 
         // ── استدعاء Claude API ──
+        // max_tokens 900: الرد القصير + بلوك META كاملاً — القيمة 500 كانت تبتر META فيتسرب للعميل
         $claude_payload = json_encode([
             "model"      => "claude-haiku-4-5",
-            "max_tokens" => 500,
+            "max_tokens" => 900,
             "system"     => $semak_knowledge_with_context,
             "messages"   => $claude_messages
         ], JSON_UNESCAPED_UNICODE);
@@ -12360,7 +12361,10 @@ KNOWLEDGE;
             // احذف META من الرد قبل إرساله للعميل
             $bot_reply = trim(preg_replace('/\[META\].+?\[\/META\]/s', '', $bot_reply));
         }
-
+        // حارس تسريب: أي META مبتور (بلا وسم إغلاق — كأن يقطع حد الرموز الرد) يُقتطع من موضعه حتى النهاية
+        if (strpos($bot_reply, '[META]') !== false) {
+            $bot_reply = trim(substr($bot_reply, 0, strpos($bot_reply, '[META]')));
+        }
         // ── حفظ رد البوت ──
         $safe_reply = $conn->real_escape_string($bot_reply);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone', 'assistant', '$safe_reply')");
