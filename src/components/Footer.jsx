@@ -12,7 +12,7 @@ const quickLinks = [
   { label: 'الرئيسية', path: '/' },
   { label: 'من نحن', path: '/about' },
   { label: 'خدماتنا', path: '/services' },
-  { label: 'مشاريعنا', path: '/projects' },
+  { label: 'مشاريعنا', path: 'https://brochure.semak.sa/view.html', external: true },
   { label: 'تواصل معنا', path: '/contact' },
 ];
 
@@ -33,6 +33,7 @@ export default function Footer() {
   if (shouldHide) return null;
 
   const handleNav = (path) => {
+    if (/^https?:/.test(path)) { window.location.href = path; return; }
     window.scrollTo(0, 0);
     navigate(path);
   };

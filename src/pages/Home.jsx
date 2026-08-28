@@ -113,7 +113,7 @@ export default function Home() {
               احجز معاينتك اليوم
             </button>
             <button
-              onClick={() => navigate("/projects")}
+              onClick={() => { window.location.href = "https://brochure.semak.sa/view.html"; }}
               className="bg-white/5 backdrop-blur-md border border-white/20 text-white px-8 py-3 rounded-2xl font-bold text-lg hover:bg-white/10 transition"
             >
               استكشف الفرصة
@@ -179,7 +179,7 @@ export default function Home() {
         </div>
         <div className="text-center">
           <button
-            onClick={() => navigate('/projects')}
+            onClick={() => { window.location.href = 'https://brochure.semak.sa/view.html'; }}
             className="inline-flex items-center gap-2 text-gold-500 font-bold text-sm hover:underline"
           >
             شاهد الموقع على الخريطة <ArrowLeft size={16} />
@@ -198,7 +198,7 @@ export default function Home() {
             <p className="mt-3 inline-block bg-gold-500/10 text-gold-600 dark:text-gold-500 font-black text-base px-5 py-1.5 rounded-full">الأسعار تبدأ من 663,695 ريال</p>
           </div>
           <button
-            onClick={() => navigate('/projects')}
+            onClick={() => { window.location.href = 'https://brochure.semak.sa/view.html'; }}
             className="flex items-center gap-2 text-brand-800 dark:text-brand-300 font-bold text-sm border-2 border-brand-800/20 dark:border-brand-700 px-5 py-2.5 rounded-full hover:border-gold-500 hover:text-gold-500 transition"
           >
             جميع الوحدات <ArrowLeft size={16} />
@@ -208,7 +208,7 @@ export default function Home() {
           {units.map((u) => (
             <div
               key={u.id}
-              onClick={() => navigate('/projects')}
+              onClick={() => { window.location.href = 'https://brochure.semak.sa/view.html'; }}
               className="bg-white dark:bg-brand-900 rounded-[2rem] p-7 border border-slate-100 dark:border-brand-700 hover:border-gold-500/30 hover:shadow-xl transition-all duration-300 cursor-pointer group"
             >
               {u.special && (
@@ -228,7 +228,7 @@ export default function Home() {
         </div>
         <div className="mt-10 text-center">
           <button
-            onClick={() => navigate('/projects')}
+            onClick={() => { window.location.href = 'https://brochure.semak.sa/view.html'; }}
             className="bg-brand-800 dark:bg-brand-800 text-white px-10 py-4 rounded-2xl font-bold text-base hover:bg-gold-500 transition-all shadow-lg hover:-translate-y-0.5 inline-flex items-center gap-2"
           >
             استعرض جميع الوحدات والمخططات <ArrowLeft size={18} />
