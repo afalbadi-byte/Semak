@@ -9,13 +9,13 @@ import { AppContext } from '../../context/AppContext';
 
 // وحدات مشروع سماك البوابة (مطابقة لصفحة المشاريع) — لتعبئة قوالب العروض بسرعة
 const UNITS = [
-  { code: 'SM-A01', facade: 'واجهتين',      price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A02', facade: 'واجهة أمامية', price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A03', facade: 'واجهتين',      price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A04', facade: 'واجهة أمامية', price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A05', facade: 'واجهتين',      price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A06', facade: 'واجهة أمامية', price: 'تبدأ من 663,695 ريال',   size: '197.5', rooms: '5 غرف' },
-  { code: 'SM-A07', facade: 'روف فاخر',     price: 'بالتواصل', size: '477', rooms: '4 غرف' },
+  { code: 'SM-A01', facade: 'واجهتين',      price: 'تواصل معنا للسعر',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A02', facade: 'واجهة أمامية', price: 'تواصل معنا للسعر',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A03', facade: 'واجهتين',      price: 'تواصل معنا للسعر',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A04', facade: 'واجهة أمامية', price: 'تواصل معنا للسعر',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A05', facade: 'واجهتين',      price: 'تواصل معنا للسعر',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A06', facade: 'واجهة أمامية', price: 'تواصل معنا للسعر',   size: '197.5', rooms: '5 غرف' },
+  { code: 'SM-A07', facade: 'روف فاخر',     price: 'تواصل معنا للسعر', size: '477', rooms: '4 غرف' },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -97,19 +97,19 @@ export default function Projects() {
 
   const unitsBase = {
     first:  [
-      { id: "sm-a01", title: "وحدة SM-A01", price: "تبدأ من 663,695 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a02", title: "وحدة SM-A02", price: "تبدأ من 663,695 ريال", badge: "واجهة أمامية",   isSpecial: false }
+      { id: "sm-a01", title: "وحدة SM-A01", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a02", title: "وحدة SM-A02", badge: "واجهة أمامية",   isSpecial: false }
     ],
     second: [
-      { id: "sm-a03", title: "وحدة SM-A03", price: "تبدأ من 663,695 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a04", title: "وحدة SM-A04", price: "تبدأ من 663,695 ريال", badge: "واجهة أمامية",   isSpecial: false }
+      { id: "sm-a03", title: "وحدة SM-A03", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a04", title: "وحدة SM-A04", badge: "واجهة أمامية",   isSpecial: false }
     ],
     third:  [
-      { id: "sm-a05", title: "وحدة SM-A05", price: "تبدأ من 663,695 ريال", badge: "واجهتين",        isSpecial: true },
-      { id: "sm-a06", title: "وحدة SM-A06", price: "تبدأ من 663,695 ريال", badge: "واجهة أمامية",   isSpecial: false }
+      { id: "sm-a05", title: "وحدة SM-A05", badge: "واجهتين",        isSpecial: true },
+      { id: "sm-a06", title: "وحدة SM-A06", badge: "واجهة أمامية",   isSpecial: false }
     ],
     fourth: [
-      { id: "sm-a07", title: "وحدة SM-A07", price: "بالتواصل", badge: "فيلا روف فاخرة", isSpecial: true, roof: true }
+      { id: "sm-a07", title: "وحدة SM-A07", badge: "فيلا روف فاخرة", isSpecial: true, roof: true }
     ]
   };
 
@@ -210,7 +210,7 @@ export default function Projects() {
         <div className="text-center mb-12">
           <h2 className="text-gold-500 font-black tracking-[0.3em] uppercase text-sm mb-4">مخططات المشروع</h2>
           <h3 className="text-3xl md:text-4xl font-black text-brand-800 dark:text-brand-100">اختر الطابق لاستعراض الوحدات</h3>
-          <p className="mt-4 inline-block bg-gold-500/10 text-gold-600 dark:text-gold-500 font-black text-lg px-6 py-2 rounded-full">الأسعار تبدأ من 663,695 ريال</p>
+          <p className="mt-4 inline-block bg-gold-500/10 text-gold-600 dark:text-gold-500 font-black text-lg px-6 py-2 rounded-full">للاستفسار عن الأسعار والحجز: 920032842</p>
         </div>
         <div className="flex flex-wrap justify-center gap-4 mb-12">
           {floors.map(f => (
