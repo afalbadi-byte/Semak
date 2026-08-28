@@ -210,6 +210,7 @@ export default function Projects() {
         <div className="text-center mb-12">
           <h2 className="text-gold-500 font-black tracking-[0.3em] uppercase text-sm mb-4">مخططات المشروع</h2>
           <h3 className="text-3xl md:text-4xl font-black text-brand-800 dark:text-brand-100">اختر الطابق لاستعراض الوحدات</h3>
+          <p className="mt-4 inline-block bg-gold-500/10 text-gold-600 dark:text-gold-500 font-black text-lg px-6 py-2 rounded-full">الأسعار تبدأ من 663,695 ريال</p>
         </div>
         <div className="flex flex-wrap justify-center gap-4 mb-12">
           {floors.map(f => (
@@ -241,7 +242,6 @@ export default function Projects() {
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="block font-bold text-xl text-brand-800 dark:text-brand-100">{unit.title}</span>
-                          <span className="text-gold-500 font-black text-lg">{unit.price}</span>
                         </div>
                         <div className="flex flex-col items-end gap-2 mt-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-bold ${unit.isSpecial ? "bg-gold-500/10 text-gold-500" : "bg-slate-100 dark:bg-brand-800 text-slate-600 dark:text-brand-300"}`}>{unit.badge}</span>

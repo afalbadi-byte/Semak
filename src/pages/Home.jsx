@@ -195,6 +195,7 @@ export default function Home() {
           <div>
             <p className="text-gold-500 font-black tracking-[0.3em] text-xs uppercase mb-3">مشاريعنا</p>
             <h2 className="text-3xl md:text-4xl font-black text-brand-800 dark:text-brand-100">سماك — البوابة 1</h2>
+            <p className="mt-3 inline-block bg-gold-500/10 text-gold-600 dark:text-gold-500 font-black text-base px-5 py-1.5 rounded-full">الأسعار تبدأ من 663,695 ريال</p>
           </div>
           <button
             onClick={() => navigate('/projects')}
@@ -217,8 +218,7 @@ export default function Home() {
               )}
               <h3 className="text-2xl font-black text-brand-800 dark:text-brand-100 mb-1">{u.id}</h3>
               <p className="text-slate-400 dark:text-brand-400 text-sm mb-4">{u.floor} — {u.badge}</p>
-              <div className="flex items-center justify-between">
-                <span className="text-gold-500 font-black text-lg">{u.price}</span>
+              <div className="flex items-center justify-end">
                 <span className="text-xs text-slate-400 dark:text-brand-400 group-hover:text-gold-500 transition flex items-center gap-1 font-bold">
                   التفاصيل <ArrowLeft size={12} />
                 </span>
