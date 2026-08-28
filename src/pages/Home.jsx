@@ -195,7 +195,7 @@ export default function Home() {
           <div>
             <p className="text-gold-500 font-black tracking-[0.3em] text-xs uppercase mb-3">مشاريعنا</p>
             <h2 className="text-3xl md:text-4xl font-black text-brand-800 dark:text-brand-100">سماك — البوابة 1</h2>
-            <p className="mt-3 inline-block bg-gold-500/10 text-gold-600 dark:text-gold-500 font-black text-base px-5 py-1.5 rounded-full">الأسعار تبدأ من 663,695 ريال</p>
+            <p className="mt-3 inline-block bg-gold-500/10 text-gold-600 dark:text-gold-500 font-black text-base px-5 py-1.5 rounded-full">الأسعار تبدأ من 663,695 <span className="sar"></span></p>
           </div>
           <button
             onClick={() => { window.location.href = 'https://brochure.semak.sa/view.html'; }}
