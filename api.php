@@ -5129,17 +5129,23 @@ switch ($action) {
                 if (isset($itG['description']) && $itG['description'] !== '') $row['description'] = $itG['description'];
                 $itemsP[] = $row;
             }
+            // مرونة تجريب: wrapper وحقول إضافية من الطلب (لاكتشاف صيغة دفترة المقبولة)
+            $wrapper = preg_match('/^[A-Za-z]{3,40}$/', (string)($b['wrapper'] ?? '')) ? $b['wrapper'] : 'PurchaseInvoice';
+            $inner = [
+                'supplier_id'   => (int)($invG['supplier_id'] ?? 0),
+                'date'          => $rd,
+                'notes'         => $invG['notes'] ?? '',
+                'work_order_id' => $wid,
+            ];
+            if (empty($b['no_items'])) $inner[$wrapper . 'Item'] = $itemsP;
+            foreach ((array)($b['extra'] ?? []) as $ek => $ev) {
+                if (preg_match('/^[a-z_0-9]{1,40}$/', (string)$ek)) $inner[$ek] = $ev;
+            }
             $chP = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
             curl_setopt_array($chP, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CUSTOMREQUEST  => 'PUT',
-                CURLOPT_POSTFIELDS     => json_encode(['PurchaseInvoice' => [
-                    'supplier_id'   => (int)($invG['supplier_id'] ?? 0),
-                    'date'          => $rd,
-                    'notes'         => $invG['notes'] ?? '',
-                    'work_order_id' => $wid,
-                    'PurchaseInvoiceItem' => $itemsP,
-                ]], JSON_UNESCAPED_UNICODE),
+                CURLOPT_POSTFIELDS     => json_encode([$wrapper => $inner], JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
                 CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
             ]);
