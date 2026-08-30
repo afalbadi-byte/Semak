@@ -5133,10 +5133,14 @@ switch ($action) {
             // مرونة تجريب: wrapper وحقول إضافية من الطلب (لاكتشاف صيغة دفترة المقبولة)
             $wrapper = preg_match('/^[A-Za-z]{3,40}$/', (string)($b['wrapper'] ?? '')) ? $b['wrapper'] : 'PurchaseInvoice';
             $inner = [
-                'supplier_id'   => (int)($invG['supplier_id'] ?? 0),
-                'date'          => $rd,
-                'notes'         => $invG['notes'] ?? '',
-                'work_order_id' => $wid,
+                'supplier_id'    => (int)($invG['supplier_id'] ?? 0),
+                'date'           => $rd,
+                'notes'          => $invG['notes'] ?? '',
+                'work_order_id'  => $wid,
+                // تمرير حقول الإرسال والأعلام كما هي — دفترة تتحقق من supplier_email عند علم الإرسال
+                'supplier_email' => $invG['supplier_email'] ?? '',
+                'is_offline'     => $invG['is_offline'] ?? 1,
+                'draft'          => $invG['draft'] ?? 0,
             ];
             $itemsKey = preg_match('/^[A-Za-z]{3,40}$/', (string)($b['items_key'] ?? '')) ? $b['items_key'] : ($wrapper . 'Item');
             foreach ((array)($b['extra'] ?? []) as $ek => $ev) {
