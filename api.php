@@ -5118,11 +5118,12 @@ switch ($action) {
             foreach ((array)($invG['PurchaseOrderItem'] ?? $invG['PurchaseInvoiceItem'] ?? []) as $itG) {
                 if (!is_array($itG)) continue;
                 $row = [
+                    'item'       => $itG['item'] ?? $itG['name'] ?? '',
                     'name'       => $itG['item'] ?? $itG['name'] ?? '',
                     'quantity'   => (float)($itG['quantity'] ?? 1),
                     'unit_price' => (float)($itG['unit_price'] ?? 0),
                     'discount'   => (float)($itG['discount'] ?? 0),
-                    'tax'        => isset($itG['tax1']) && $itG['tax1'] !== '' ? (float)$itG['tax1'] : 15,
+                    'tax1'       => $itG['tax1'] ?? '',
                 ];
                 if (!empty($itG['id']))         $row['id'] = (int)$itG['id'];
                 if (!empty($itG['product_id'])) $row['product_id'] = (int)$itG['product_id'];
