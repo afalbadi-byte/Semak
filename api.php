@@ -5113,16 +5113,32 @@ switch ($action) {
             if (preg_match('#^(\d{2})/(\d{2})/(\d{4})#', $rd, $dm2))      $rd = "{$dm2[3]}-{$dm2[2]}-{$dm2[1]}";
             elseif (!preg_match('/^\d{4}-\d{2}-\d{2}/', $rd))            $rd = date('Y-m-d');
             else                                                          $rd = substr($rd, 0, 10);
-            // 2) أعد الحقول نفسها + المشروع الجديد فقط — بدون مفتاح البنود إطلاقاً
+            // 2) أعد الفاتورة كاملة كما جُلبت (بنودها حرفياً) + المشروع الجديد — دفترة ترفض الجزئي
+            $itemsP = [];
+            foreach ((array)($invG['PurchaseOrderItem'] ?? $invG['PurchaseInvoiceItem'] ?? []) as $itG) {
+                if (!is_array($itG)) continue;
+                $row = [
+                    'name'       => $itG['item'] ?? $itG['name'] ?? '',
+                    'quantity'   => (float)($itG['quantity'] ?? 1),
+                    'unit_price' => (float)($itG['unit_price'] ?? 0),
+                    'discount'   => (float)($itG['discount'] ?? 0),
+                    'tax'        => isset($itG['tax1']) && $itG['tax1'] !== '' ? (float)$itG['tax1'] : 15,
+                ];
+                if (!empty($itG['id']))         $row['id'] = (int)$itG['id'];
+                if (!empty($itG['product_id'])) $row['product_id'] = (int)$itG['product_id'];
+                if (isset($itG['description']) && $itG['description'] !== '') $row['description'] = $itG['description'];
+                $itemsP[] = $row;
+            }
             $chP = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
             curl_setopt_array($chP, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CUSTOMREQUEST  => 'PUT',
                 CURLOPT_POSTFIELDS     => json_encode(['PurchaseInvoice' => [
-                    'supplier_id'   => $invG['supplier_id'] ?? '',
+                    'supplier_id'   => (int)($invG['supplier_id'] ?? 0),
                     'date'          => $rd,
                     'notes'         => $invG['notes'] ?? '',
                     'work_order_id' => $wid,
+                    'PurchaseInvoiceItem' => $itemsP,
                 ]], JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
                 CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
