@@ -5091,6 +5091,31 @@ switch ($action) {
         echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_purchase_set_project': {
+        // تسكين فواتير على مشروع — يرسل work_order_id فقط (لا يمس البنود/المورد/التاريخ)
+        set_time_limit(120);
+        $dk = "__DAFTRA_KEY__";
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $wid = (int)($b['work_order_id'] ?? 0);
+        $ids = array_slice(array_values(array_filter(array_map('intval', (array)($b['ids'] ?? [])))), 0, 60);
+        if (!$ids || !$wid) { echo json_encode(['success'=>false,'message'=>'ids وwork_order_id مطلوبان']); break; }
+        $out = [];
+        foreach ($ids as $pid2) {
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST  => 'PUT',
+                CURLOPT_POSTFIELDS     => json_encode(['PurchaseInvoice' => ['work_order_id' => $wid]]),
+                CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
+                CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            $out[$pid2] = $code;
+        }
+        echo json_encode(['success'=>true, 'results'=>$out]);
+        break;
+    }
+
     case 'daftra_purchase_items': {
         // بنود فاتورة شراء (المواد والكميات) — للمواصفات المرجعية
         if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
