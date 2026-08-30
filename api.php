@@ -10164,6 +10164,35 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
+    case 'daftra_work_cycle_create': {
+        // إنشاء مشروع/دورة عمل في دفترة (v2 entity API) — POST: title, budget?, start_date?, delivery_date?, description?, client_id?
+        $dk = "__DAFTRA_KEY__";
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $title = mb_substr(trim((string)($b['title'] ?? '')), 0, 200);
+        if ($title === '') { echo json_encode(['success'=>false,'message'=>'title مطلوب']); break; }
+        $payload = [
+            'title'            => $title,
+            'start_date'       => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['start_date'] ?? '')) ? $b['start_date'] : date('Y-m-d'),
+            'status'           => 1,
+            'workflow_type_id' => 1,
+            'budget_currency'  => 'SAR',
+        ];
+        if (isset($b['budget']))        $payload['budget'] = (float)$b['budget'];
+        if (!empty($b['description']))  $payload['description'] = mb_substr((string)$b['description'], 0, 500);
+        if (!empty($b['client_id']))    $payload['client_id'] = (int)$b['client_id'];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['delivery_date'] ?? ''))) $payload['delivery_date'] = $b['delivery_date'];
+        $ch = curl_init("https://semak.daftra.com/v2/api/entity/le_workflow-type-entity-1");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+            CURLOPT_HTTPHEADER => ["APIKEY: $dk", "Content-Type: application/json", "Accept: application/json"],
+            CURLOPT_TIMEOUT => 20, CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success' => ($code >= 200 && $code < 300), 'http_code' => $code, 'data' => json_decode($res, true) ?? $res], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'daftra_v2_work_cycle_single':
         // ─── تفاصيل مشروع واحد كاملة من Daftra v2 API ───────────────────────
         $wc_id = (int)($_GET['id'] ?? 0);
