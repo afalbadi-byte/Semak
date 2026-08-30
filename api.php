@@ -10170,14 +10170,15 @@ switch ($action) {
         $b = json_decode(file_get_contents('php://input'), true) ?: [];
         $title = mb_substr(trim((string)($b['title'] ?? '')), 0, 200);
         if ($title === '') { echo json_encode(['success'=>false,'message'=>'title مطلوب']); break; }
+        // دفترة v2 تتطلب number.code وbudget.currency كبنى متداخلة (رسالة 422)
         $payload = [
             'title'            => $title,
             'start_date'       => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['start_date'] ?? '')) ? $b['start_date'] : date('Y-m-d'),
             'status'           => 1,
             'workflow_type_id' => 1,
-            'budget_currency'  => 'SAR',
+            'number'           => ['code' => (string)($b['number'] ?? date('ymdHi'))],
+            'budget'           => ['currency' => 'SAR', 'amount' => (float)($b['budget'] ?? 0)],
         ];
-        if (isset($b['budget']))        $payload['budget'] = (float)$b['budget'];
         if (!empty($b['description']))  $payload['description'] = mb_substr((string)$b['description'], 0, 500);
         if (!empty($b['client_id']))    $payload['client_id'] = (int)$b['client_id'];
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['delivery_date'] ?? ''))) $payload['delivery_date'] = $b['delivery_date'];
