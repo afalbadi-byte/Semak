@@ -5127,10 +5127,10 @@ switch ($action) {
                 CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
                 CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
             ]);
-            curl_exec($chP); $code = curl_getinfo($chP, CURLINFO_HTTP_CODE); curl_close($chP);
-            $out[$pid2] = $code;
+            $resP = curl_exec($chP); $code = curl_getinfo($chP, CURLINFO_HTTP_CODE); curl_close($chP);
+            $out[$pid2] = ($code >= 200 && $code < 300) ? $code : ['code'=>$code, 'err'=>mb_substr((string)$resP, 0, 400)];
         }
-        echo json_encode(['success'=>true, 'results'=>$out]);
+        echo json_encode(['success'=>true, 'results'=>$out], JSON_UNESCAPED_UNICODE);
         break;
     }
 
