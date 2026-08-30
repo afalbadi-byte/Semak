@@ -5101,15 +5101,33 @@ switch ($action) {
         if (!$ids || !$wid) { echo json_encode(['success'=>false,'message'=>'ids وwork_order_id مطلوبان']); break; }
         $out = [];
         foreach ($ids as $pid2) {
-            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
-            curl_setopt_array($ch, [
+            // 1) اجلب حقول الفاتورة الأساسية كما هي (دفترة ترفض PUT جزئياً — 400)
+            $chG = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
+            curl_setopt_array($chG, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
+            $resG = curl_exec($chG); curl_close($chG);
+            $dG = json_decode($resG, true) ?: [];
+            $invG = $dG['data']['PurchaseOrder'] ?? $dG['data']['PurchaseInvoice'] ?? [];
+            if (!$invG) { $out[$pid2] = 'fetch_failed'; continue; }
+            // تطبيع التاريخ (يرد أحياناً dd/mm/yyyy)
+            $rd = (string)($invG['date'] ?? '');
+            if (preg_match('#^(\d{2})/(\d{2})/(\d{4})#', $rd, $dm2))      $rd = "{$dm2[3]}-{$dm2[2]}-{$dm2[1]}";
+            elseif (!preg_match('/^\d{4}-\d{2}-\d{2}/', $rd))            $rd = date('Y-m-d');
+            else                                                          $rd = substr($rd, 0, 10);
+            // 2) أعد الحقول نفسها + المشروع الجديد فقط — بدون مفتاح البنود إطلاقاً
+            $chP = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
+            curl_setopt_array($chP, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CUSTOMREQUEST  => 'PUT',
-                CURLOPT_POSTFIELDS     => json_encode(['PurchaseInvoice' => ['work_order_id' => $wid]]),
+                CURLOPT_POSTFIELDS     => json_encode(['PurchaseInvoice' => [
+                    'supplier_id'   => $invG['supplier_id'] ?? '',
+                    'date'          => $rd,
+                    'notes'         => $invG['notes'] ?? '',
+                    'work_order_id' => $wid,
+                ]], JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
                 CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
             ]);
-            curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            curl_exec($chP); $code = curl_getinfo($chP, CURLINFO_HTTP_CODE); curl_close($chP);
             $out[$pid2] = $code;
         }
         echo json_encode(['success'=>true, 'results'=>$out]);
