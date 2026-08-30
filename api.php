@@ -5138,15 +5138,20 @@ switch ($action) {
                 'notes'         => $invG['notes'] ?? '',
                 'work_order_id' => $wid,
             ];
-            if (empty($b['no_items'])) $inner[$wrapper . 'Item'] = $itemsP;
+            $itemsKey = preg_match('/^[A-Za-z]{3,40}$/', (string)($b['items_key'] ?? '')) ? $b['items_key'] : ($wrapper . 'Item');
             foreach ((array)($b['extra'] ?? []) as $ek => $ev) {
                 if (preg_match('/^[a-z_0-9]{1,40}$/', (string)$ek)) $inner[$ek] = $ev;
+            }
+            $payloadP = [$wrapper => $inner];
+            if (empty($b['no_items'])) {
+                if (!empty($b['items_outside'])) $payloadP[$itemsKey] = $itemsP;   // نمط Cake: البنود أخ للغلاف
+                else                             $payloadP[$wrapper][$itemsKey] = $itemsP;
             }
             $chP = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
             curl_setopt_array($chP, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CUSTOMREQUEST  => 'PUT',
-                CURLOPT_POSTFIELDS     => json_encode([$wrapper => $inner], JSON_UNESCAPED_UNICODE),
+                CURLOPT_POSTFIELDS     => json_encode($payloadP, JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
                 CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
             ]);
