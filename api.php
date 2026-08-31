@@ -4572,6 +4572,58 @@ switch ($action) {
         break;
     }
 
+    case 'pur_class_tree_add': {
+        // إضافة عقد جديدة لشجرة التصنيف (بدون حذف الموجود) — لبنود مصاريف التطوير/الإدارة غير المرتبطة بمشروع محدد
+        $b0 = json_decode(file_get_contents('php://input'), true) ?: [];
+        $newNodes = (array)($b0['nodes'] ?? []);
+        if (!$newNodes) { echo json_encode(['success'=>false,'message'=>'nodes مطلوبة']); break; }
+        $tj = acc_setting($conn, 1, 'purchase_class_tree', '[]');
+        $tree = json_decode($tj, true) ?: [];
+        $existing = array_column($tree, null, 'code');
+        $added = [];
+        foreach ($newNodes as $nn) {
+            $code = preg_replace('/[^0-9]/', '', (string)($nn['code'] ?? ''));
+            $name = trim((string)($nn['name'] ?? ''));
+            $level = (int)($nn['level'] ?? 2);
+            if ($code === '' || $name === '' || isset($existing[$code])) continue;
+            $tree[] = ['code'=>$code, 'level'=>$level, 'name'=>$name];
+            $existing[$code] = true;
+            $added[] = $code;
+        }
+        usort($tree, function($a,$b){ return strcmp($a['code'], $b['code']); });
+        $esc = $conn->real_escape_string(json_encode($tree, JSON_UNESCAPED_UNICODE));
+        $conn->query("INSERT INTO acc_settings (tenant_id,skey,sval) VALUES (1,'purchase_class_tree','$esc')
+                      ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        echo json_encode(['success'=>true, 'added'=>$added, 'total_nodes'=>count($tree)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pur_products_for_invoices': {
+        // أصناف الفواتير المحددة (مثلاً كل فواتير مشروع معين على دفترة) مع تصنيفها الحالي — لمراجعة الأصناف الدخيلة على المشروع
+        $b0 = json_decode(file_get_contents('php://input'), true) ?: [];
+        $ids0 = array_values(array_filter(array_map('intval', (array)($b0['ids'] ?? []))));
+        if (!$ids0) { echo json_encode(['success'=>false,'message'=>'ids مطلوبة']); break; }
+        $idsSql = implode(',', $ids0);
+        $conn->query("SET SESSION group_concat_max_len = 200000");
+        $out = [];
+        $r = $conn->query("SELECT ppi.product_id,
+                                   COALESCE(ap.name, CONCAT('منتج #', ppi.product_id)) AS name,
+                                   pc.code,
+                                   ROUND(SUM(ppi.amount),2) AS total,
+                                   ROUND(SUM(ppi.qty),3) AS qty,
+                                   COUNT(DISTINCT ppi.ref_id) AS invoices,
+                                   GROUP_CONCAT(DISTINCT ppi.ref_id ORDER BY ppi.ref_id) AS ref_ids
+                            FROM purchase_product_items ppi
+                            LEFT JOIN acc_products ap ON ap.tenant_id = 1 AND ap.daftra_id = ppi.product_id
+                            LEFT JOIN purchase_classification pc ON pc.kind='product' AND pc.ref_id = ppi.product_id
+                            WHERE ppi.ref_id IN ($idsSql)
+                            GROUP BY ppi.product_id, ap.name, pc.code
+                            ORDER BY total DESC");
+        if ($r) while ($row = $r->fetch_assoc()) { $row['total']=(float)$row['total']; $row['qty']=(float)$row['qty']; $out[] = $row; }
+        echo json_encode(['success'=>true, 'data'=>$out], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pur_class_get': {
         $out = [];
         $r = $conn->query("SELECT kind, ref_id, code, source FROM purchase_classification");
