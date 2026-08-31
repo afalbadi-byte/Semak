@@ -5106,7 +5106,7 @@ switch ($action) {
                 $chP = curl_init("https://semak.daftra.com/v2/api/entity/purchase_invoice/$pid2");
                 curl_setopt_array($chP, [
                     CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_CUSTOMREQUEST  => 'PATCH',
+                    CURLOPT_CUSTOMREQUEST  => 'PUT',
                     CURLOPT_POSTFIELDS     => json_encode(['work_order_id' => $wid], JSON_UNESCAPED_UNICODE),
                     CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
                     CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
