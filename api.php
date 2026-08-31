@@ -5155,7 +5155,8 @@ switch ($action) {
                 'notes'          => $invG['notes'] ?? '',
                 'work_order_id'  => $wid,
                 // تمرير حقول الإرسال والأعلام كما هي — دفترة تتحقق من supplier_email عند علم الإرسال
-                'supplier_email' => $invG['supplier_email'] ?? '',
+                // إن كان بريد المورد فارغاً (أغلب الموردين المحليين) نستخدم بريد احمد الداخلي فقط لتجاوز التحقق — لا يُغيّر بريد المورد الفعلي في دفترة
+                'supplier_email' => $invG['supplier_email'] ?: 'ahmed.albadi@semak.sa',
                 'is_offline'     => $invG['is_offline'] ?? 1,
                 'draft'          => $invG['draft'] ?? 0,
             ];
