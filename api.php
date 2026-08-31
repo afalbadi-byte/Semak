@@ -5507,7 +5507,7 @@ switch ($action) {
                 'amount'      => (float)($e['amount'] ?? 0),
                 'category'    => $e['category_name'] ?? $e['expense_category_name'] ?? '',
                 'category_id' => $e['expense_category_id'] ?? '',
-                'notes'       => $e['notes'] ?? $e['description'] ?? '',
+                'notes'       => $e['note'] ?? $e['notes'] ?? $e['description'] ?? '',
                 'supplier'    => $e['supplier_business_name'] ?? '',
                 'supplier_id' => $e['supplier_id'] ?? '',
                 'ref'         => $e['ref_no'] ?? $e['no'] ?? '',
@@ -5538,6 +5538,15 @@ switch ($action) {
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
         $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
         echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ':'فشل'], JSON_UNESCAPED_UNICODE);
+        break;
+
+    case 'daftra_expense_get':
+        $dk = "__DAFTRA_KEY__"; $exp_id = (int)($_GET['id']??0);
+        if (!$exp_id) { echo json_encode(['success'=>false]); break; }
+        $ch = curl_init("https://semak.daftra.com/api2/expenses/$exp_id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        echo json_encode(['success'=>$code===200,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_expense_delete':
