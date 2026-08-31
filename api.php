@@ -5148,9 +5148,10 @@ switch ($action) {
         set_time_limit(120);
         $dk = "__DAFTRA_KEY__";
         $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $clearMode = !empty($b['clear']); // إزالة تسكين الفاتورة من أي مشروع (شخصي/غير متعلق بالشركة)
         $wid = (int)($b['work_order_id'] ?? 0);
         $ids = array_slice(array_values(array_filter(array_map('intval', (array)($b['ids'] ?? [])))), 0, 60);
-        if (!$ids || !$wid) { echo json_encode(['success'=>false,'message'=>'ids وwork_order_id مطلوبان']); break; }
+        if (!$ids || (!$wid && !$clearMode)) { echo json_encode(['success'=>false,'message'=>'ids وwork_order_id مطلوبان']); break; }
         $out = [];
         // مسار بديل: تحديث جزئي عبر v2 entity API (حقل واحد فقط) — لا يعيد بناء الفاتورة فلا يُفعّل تحقق إرسال البريد
         if (!empty($b['via_v2'])) {
