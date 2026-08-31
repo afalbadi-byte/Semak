@@ -5100,6 +5100,23 @@ switch ($action) {
         $ids = array_slice(array_values(array_filter(array_map('intval', (array)($b['ids'] ?? [])))), 0, 60);
         if (!$ids || !$wid) { echo json_encode(['success'=>false,'message'=>'ids وwork_order_id مطلوبان']); break; }
         $out = [];
+        // مسار بديل: تحديث جزئي عبر v2 entity API (حقل واحد فقط) — لا يعيد بناء الفاتورة فلا يُفعّل تحقق إرسال البريد
+        if (!empty($b['via_v2'])) {
+            foreach ($ids as $pid2) {
+                $chP = curl_init("https://semak.daftra.com/v2/api/entity/purchase_invoice/$pid2");
+                curl_setopt_array($chP, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_CUSTOMREQUEST  => 'PATCH',
+                    CURLOPT_POSTFIELDS     => json_encode(['work_order_id' => $wid], JSON_UNESCAPED_UNICODE),
+                    CURLOPT_HTTPHEADER     => ["APIKEY: $dk", "Accept: application/json", "Content-Type: application/json"],
+                    CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true,
+                ]);
+                $resP = curl_exec($chP); $code = curl_getinfo($chP, CURLINFO_HTTP_CODE); curl_close($chP);
+                $out[$pid2] = ($code >= 200 && $code < 300) ? $code : ['code'=>$code, 'err'=>mb_substr((string)$resP, 0, 400)];
+            }
+            echo json_encode(['success'=>true, 'results'=>$out, 'via'=>'v2_patch'], JSON_UNESCAPED_UNICODE);
+            break;
+        }
         foreach ($ids as $pid2) {
             // 1) اجلب حقول الفاتورة الأساسية كما هي (دفترة ترفض PUT جزئياً — 400)
             $chG = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid2.json");
