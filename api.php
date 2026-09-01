@@ -11628,10 +11628,15 @@ switch ($action) {
         $safe_p = $conn->real_escape_string($ph);
         $safe_m = $conn->real_escape_string($msg);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message, is_read) VALUES ('$safe_p','agent','$safe_m',1)");
-        // إيقاف فهد تلقائياً — الموظف تدخل بشرياً؛ يعيد تفعيله من الزر عند الانتهاء
-        $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$safe_p', 1)
-                      ON DUPLICATE KEY UPDATE paused=1");
-        echo json_encode(['success'=>true, 'bot_paused'=>true], JSON_UNESCAPED_UNICODE);
+        $botPaused = false;
+        if (!$isSecretary) {
+            // موظف بشري تدخل فعلياً بالمحادثة — أوقف فهد تلقائياً (يعاد تفعيله من الزر عند الانتهاء)
+            // رسائل السكرتير الآلي (مفتاح X-Secretary-Key) لا توقف فهد — يستمر بالرد الطبيعي ما لم تكن المحادثة مسندة ليدوياً بالفعل
+            $conn->query("INSERT INTO wa_bot_paused (phone, paused) VALUES ('$safe_p', 1)
+                          ON DUPLICATE KEY UPDATE paused=1");
+            $botPaused = true;
+        }
+        echo json_encode(['success'=>true, 'bot_paused'=>$botPaused], JSON_UNESCAPED_UNICODE);
         break;
     }
 
