@@ -66,6 +66,9 @@ jobs:
       - name: Inject Daftra session cookie
         run: sed -i "s|__DAFTRA_SESSION__|${{ secrets.DAFTRA_SESSION_COOKIE }}|g" dist/api.php
 
+      - name: Inject Secretary automation key
+        run: sed -i "s|__SECRETARY_API_KEY__|${{ secrets.SECRETARY_API_KEY }}|g" dist/api.php
+
       - name: Inject SMTP credentials
         run: |
           sed -i "s|__SMTP_HOST__|${{ secrets.SMTP_HOST }}|g" dist/api.php

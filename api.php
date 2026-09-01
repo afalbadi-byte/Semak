@@ -11614,7 +11614,10 @@ switch ($action) {
 
     case 'wa_agent_send': {
         // إرسال رسالة موظف: عبر متصل من السيرفر + حفظها في المحادثة + إيقاف فهد تلقائياً
-        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        // مصرّح أيضاً لمفتاح السكرتير الآلي (أحمد ← Claude) عبر ترويسة X-Secretary-Key — بديل عن تسجيل دخول تفاعلي
+        $secKey = $_SERVER['HTTP_X_SECRETARY_KEY'] ?? '';
+        $isSecretary = $secKey !== '' && hash_equals("__SECRETARY_API_KEY__", $secKey);
+        if (!$_jwt_claims && !$isSecretary) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $ph  = preg_replace('/\D/', '', trim($input_data['phone'] ?? ''));
         $msg = trim((string)($input_data['message'] ?? ''));
         if ($ph === '' || $msg === '') { echo json_encode(['success'=>false,'message'=>'الرقم والرسالة مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
