@@ -1552,6 +1552,16 @@ $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
     INDEX idx_phone_time (phone, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ─── auto-migrate: سجل عروض الأسعار المرسلة للعملاء (لخدمة زر "اطلب عرضك") ────
+$conn->query("CREATE TABLE IF NOT EXISTS customer_quotes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    phone       VARCHAR(20) NOT NULL,
+    document_url VARCHAR(500) NOT NULL,
+    document_filename VARCHAR(255) DEFAULT '',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_phone_time (phone, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // ─── auto-migrate: human takeover tracking ───────────────────────────────────
 $conn->query("CREATE TABLE IF NOT EXISTS wa_human_takeover (
     id       INT AUTO_INCREMENT PRIMARY KEY,
@@ -11666,6 +11676,11 @@ switch ($action) {
             if ($docName === '') $docName = basename(parse_url($docUrl, PHP_URL_PATH)) ?: 'document.pdf';
             $docResult = wa_send_document($ph, $docUrl, $docName, $msg !== '' ? $msg : '');
             if (!$docResult['ok']) { echo json_encode(['success'=>false,'message'=>'فشل إرسال المستند','detail'=>$docResult]); break; }
+            // سجل العرض المرسل — يستخدمه فهد لاحقاً عند طلب العميل "اطلب عرضك"
+            $cq_p = $conn->real_escape_string($ph);
+            $cq_u = $conn->real_escape_string($docUrl);
+            $cq_f = $conn->real_escape_string($docName);
+            $conn->query("INSERT INTO customer_quotes (phone, document_url, document_filename) VALUES ('$cq_p','$cq_u','$cq_f')");
         } elseif ($msg !== '') {
             $sent = wa_send_text($ph, $msg);
             if (!$sent) { echo json_encode(['success'=>false,'message'=>'فشل الإرسال عبر متصل']); break; }
@@ -12228,6 +12243,22 @@ KNOWLEDGE;
                 date('Y-m-d H:i:s') . " | bot manually paused for $from_phone → skipping Claude\n",
                 FILE_APPEND);
             echo json_encode(["ok" => true, "bot_paused" => true, "reason" => "manual_pause"]);
+            break;
+        }
+
+        // ── تحقق ٣: زر "اطلب عرضك" — يرسل فهد آخر عرض سعر مسجّل لهذا الرقم مباشرة دون توليد رد ──
+        if (trim($user_msg) === 'اطلب عرضك') {
+            $qq = $conn->query("SELECT document_url, document_filename FROM customer_quotes WHERE phone='$safe_phone' ORDER BY id DESC LIMIT 1");
+            if ($qq && ($qrow = $qq->fetch_assoc())) {
+                $dres = wa_send_document($safe_phone, $qrow['document_url'], $qrow['document_filename'] ?: 'عرض-سعر.pdf', '');
+                $logMsgQ = $conn->real_escape_string('📎 ' . ($qrow['document_filename'] ?: 'عرض سعر') . ' (تلقائي — زر اطلب عرضك)');
+                $conn->query("INSERT INTO wa_bot_conversations (phone, role, message) VALUES ('$safe_phone','assistant','$logMsgQ')");
+                file_put_contents($log_file, date('Y-m-d H:i:s') . " | 'اطلب عرضك' → resent quote to $from_phone (ok=" . ($dres['ok']?'1':'0') . ")\n", FILE_APPEND);
+            } else {
+                wa_send_text($safe_phone, 'ما لقيت عرض سعر مسجل لك حالياً — تواصل معنا على 920032842 ونجهزلك واحد.');
+                file_put_contents($log_file, date('Y-m-d H:i:s') . " | 'اطلب عرضك' from $from_phone but no quote on file\n", FILE_APPEND);
+            }
+            echo json_encode(["ok" => true, "handled" => "quote_request"]);
             break;
         }
 
