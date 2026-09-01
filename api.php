@@ -11613,7 +11613,8 @@ switch ($action) {
 
     case 'wa_templates': {
         // جلب قوالب واتساب المعتمدة من متصل (بمفتاح السيرفر — لا يُكشف للمتصفح)
-        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $secKeyT = $_SERVER['HTTP_X_SECRETARY_KEY'] ?? '';
+        if (!$_jwt_claims && !($secKeyT !== '' && hash_equals("__SECRETARY_API_KEY__", $secKeyT))) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $tch = curl_init('https://api.mottasl.ai/v1/partner/templates');
         curl_setopt_array($tch, [
             CURLOPT_RETURNTRANSFER => true,
