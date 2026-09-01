@@ -1141,6 +1141,22 @@ function wa_send_text($to, $body) {
     curl_close($ch);
     return $status === 200 || $status === 201;
 }
+function wa_send_document($to, $link, $filename, $caption = '') {
+    $key = MOTTASL_TOKEN;
+    $doc = ['link' => $link, 'filename' => $filename];
+    if ($caption !== '') $doc['caption'] = $caption;
+    $ch = curl_init('https://api.mottasl.ai/v1/message/send');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode(['to' => $to, 'type' => 'document', 'document' => $doc]),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', "Authorization: Bearer $key"],
+        CURLOPT_TIMEOUT => 15, CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $res = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['ok' => ($status === 200 || $status === 201), 'http' => $status, 'body' => $res];
+}
 // إرسال رمز الدخول عبر القناة المختارة مع احتياطي تلقائي للقناة الأخرى
 // الترتيب: القناة المفضّلة أولاً → إذا فشلت أو لا توجد بيانات → القناة الاحتياطية
 function send_login_otp($user, $channel, $code) {
@@ -11620,13 +11636,23 @@ switch ($action) {
         if (!$_jwt_claims && !$isSecretary) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $ph  = preg_replace('/\D/', '', trim($input_data['phone'] ?? ''));
         $msg = trim((string)($input_data['message'] ?? ''));
-        if ($ph === '' || $msg === '') { echo json_encode(['success'=>false,'message'=>'الرقم والرسالة مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $docUrl  = trim((string)($input_data['document_url'] ?? ''));
+        $docName = trim((string)($input_data['document_filename'] ?? ''));
+        if ($ph === '' || ($msg === '' && $docUrl === '')) { echo json_encode(['success'=>false,'message'=>'الرقم مطلوب مع رسالة أو رابط مستند']); break; }
         $ph = ltrim($ph, '0');
         if (substr($ph, 0, 3) !== '966' && strlen($ph) === 9) $ph = '966' . $ph;
-        $sent = wa_send_text($ph, $msg);
-        if (!$sent) { echo json_encode(['success'=>false,'message'=>'فشل الإرسال عبر متصل'], JSON_UNESCAPED_UNICODE); break; }
+        $docResult = null;
+        if ($docUrl !== '') {
+            if ($docName === '') $docName = basename(parse_url($docUrl, PHP_URL_PATH)) ?: 'document.pdf';
+            $docResult = wa_send_document($ph, $docUrl, $docName, $msg !== '' ? $msg : '');
+            if (!$docResult['ok']) { echo json_encode(['success'=>false,'message'=>'فشل إرسال المستند','detail'=>$docResult]); break; }
+        } elseif ($msg !== '') {
+            $sent = wa_send_text($ph, $msg);
+            if (!$sent) { echo json_encode(['success'=>false,'message'=>'فشل الإرسال عبر متصل']); break; }
+        }
         $safe_p = $conn->real_escape_string($ph);
-        $safe_m = $conn->real_escape_string($msg);
+        $logMsg = $docUrl !== '' ? ('📎 ' . ($docName ?: 'مستند') . ($msg !== '' ? " — $msg" : '')) : $msg;
+        $safe_m = $conn->real_escape_string($logMsg);
         $conn->query("INSERT INTO wa_bot_conversations (phone, role, message, is_read) VALUES ('$safe_p','agent','$safe_m',1)");
         $botPaused = false;
         if (!$isSecretary) {
