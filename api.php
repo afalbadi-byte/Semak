@@ -11628,6 +11628,25 @@ switch ($action) {
         break;
     }
 
+    case 'doc_upload': {
+        // رفع مستند مباشرة على السيرفر (بدون Git/نشر) برابط عشوائي غير قابل للتخمين — لإرسال عروض الأسعار عبر واتساب
+        $secKey = $_SERVER['HTTP_X_SECRETARY_KEY'] ?? '';
+        $isSecretary = $secKey !== '' && hash_equals("__SECRETARY_API_KEY__", $secKey);
+        if (!$_jwt_claims && !$isSecretary) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول']); break; }
+        $fname = trim((string)($input_data['filename'] ?? 'document.pdf'));
+        $ext = strtolower(pathinfo($fname, PATHINFO_EXTENSION));
+        if (!in_array($ext, ['pdf','png','jpg','jpeg'], true)) $ext = 'pdf';
+        $bin = base64_decode((string)($input_data['data'] ?? ''), true);
+        if ($bin === false || $bin === '') { echo json_encode(['success'=>false,'message'=>'بيانات الملف غير صالحة']); break; }
+        $dir = __DIR__ . '/qdocs';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $token = bin2hex(random_bytes(16));
+        file_put_contents("$dir/$token.$ext", $bin);
+        $url = 'https://' . $_SERVER['HTTP_HOST'] . "/qdocs/$token.$ext";
+        echo json_encode(['success'=>true, 'url'=>$url], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'wa_agent_send': {
         // إرسال رسالة موظف: عبر متصل من السيرفر + حفظها في المحادثة + إيقاف فهد تلقائياً
         // مصرّح أيضاً لمفتاح السكرتير الآلي (أحمد ← Claude) عبر ترويسة X-Secretary-Key — بديل عن تسجيل دخول تفاعلي
