@@ -50,6 +50,11 @@ jobs:
           mkdir -p dist/brochure
           cp brochure/landing/* dist/brochure/
 
+      - name: Copy customer quotes/documents to dist/brochure/quotes
+        run: |
+          mkdir -p dist/brochure/quotes
+          if [ -d brochure/quotes ] && [ "$(ls -A brochure/quotes 2>/dev/null)" ]; then cp brochure/quotes/* dist/brochure/quotes/; fi
+
       - name: Inject Anthropic API key
         run: sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g" dist/api.php
 
