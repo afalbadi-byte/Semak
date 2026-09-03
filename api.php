@@ -5250,6 +5250,122 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     // ══ أرشيف مستندات المشتريات — الربط عندنا والملفات في درايف المالك ══
+
+    // ══ محرّك التقارير — يعمل من مرآة بياناتنا لا من دفترة ══
+    case 'rpt': {
+        $type = preg_replace('/[^a-z_]/', '', (string)($_GET['type'] ?? ''));
+        $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['from'] ?? '')) ? $_GET['from'] : date('Y-01-01');
+        $to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['to'] ?? ''))   ? $_GET['to']   : date('Y-m-d');
+        $W    = "p.date BETWEEN '$from' AND '$to'";
+        $rows = []; $totals = []; $title = ''; $cols = []; $extra = null;
+        $run = function($sql) use ($conn) {
+            $out = []; $r = $conn->query($sql);
+            if ($r) while ($x = $r->fetch_assoc()) $out[] = $x;
+            return $out;
+        };
+        switch ($type) {
+            case 'vat_return':
+                $title = 'الإقرار الضريبي';
+                $cols = [['k'=>'section','t'=>'البند'],['k'=>'base','t'=>'المبلغ الخاضع'],['k'=>'adj','t'=>'التعديل'],['k'=>'tax','t'=>'الضريبة']];
+                $pr = $run("SELECT ROUND(SUM(p.subtotal),2) base, ROUND(SUM(p.total - p.subtotal),2) tax
+                        FROM dmirror_purchases p WHERE $W");
+                $pbase = $pr ? (float)$pr[0]['base'] : 0; $ptax = $pr ? (float)$pr[0]['tax'] : 0;
+                $rows = [
+                    ['section'=>'المبيعات — القيمة المضافة 15%','base'=>0,'adj'=>0,'tax'=>0],
+                    ['section'=>'المشتريات — القيمة المضافة 15%','base'=>round(-$pbase,2),'adj'=>0,'tax'=>round(-$ptax,2)],
+                ];
+                $extra = ['net_due'=>round(-$ptax,2), 'note'=>'المبيعات تُدخل يدوياً حتى ربط فواتير البيع'];
+                break;
+            case 'vat_input':
+                $title = 'ضريبة المشتريات (المدخلات) شهرياً';
+                $cols = [['k'=>'ym','t'=>'الشهر'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'net','t'=>'الصافي'],['k'=>'vat','t'=>'الضريبة'],['k'=>'gross','t'=>'الإجمالي']];
+                $rows = $run("SELECT DATE_FORMAT(p.date,'%Y-%m') ym, COUNT(*) invoices, ROUND(SUM(p.subtotal),2) net,
+                        ROUND(SUM(p.total - p.subtotal),2) vat, ROUND(SUM(p.total),2) gross
+                        FROM dmirror_purchases p WHERE $W GROUP BY ym ORDER BY ym");
+                break;
+            case 'purchases_by_supplier':
+                $title = 'المشتريات حسب المورد';
+                $cols = [['k'=>'supplier','t'=>'المورد'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'gross','t'=>'الإجمالي'],['k'=>'paid','t'=>'المسدد'],['k'=>'remaining','t'=>'المتبقي']];
+                $rows = $run("SELECT p.supplier, COUNT(*) invoices, ROUND(SUM(p.total),2) gross,
+                        ROUND(SUM(p.paid),2) paid, ROUND(SUM(p.total - p.paid),2) remaining
+                        FROM dmirror_purchases p WHERE $W GROUP BY p.supplier ORDER BY gross DESC");
+                break;
+            case 'purchases_by_project':
+                $title = 'المشتريات حسب المشروع';
+                $cols = [['k'=>'project','t'=>'المشروع'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'gross','t'=>'الإجمالي'],['k'=>'paid','t'=>'المسدد']];
+                $rows = $run("SELECT COALESCE(NULLIF(p.work_order_id,0),'بلا مشروع') project, COUNT(*) invoices,
+                        ROUND(SUM(p.total),2) gross, ROUND(SUM(p.paid),2) paid
+                        FROM dmirror_purchases p WHERE $W GROUP BY project ORDER BY gross DESC");
+                break;
+            case 'tax_detail':
+                $title = 'تقرير الضرائب — تفصيل البنود';
+                $cols = [['k'=>'no','t'=>'رقم'],['k'=>'supplier','t'=>'المورد'],['k'=>'date','t'=>'التاريخ'],
+                         ['k'=>'item','t'=>'البند'],['k'=>'base','t'=>'الخاضع للضريبة'],['k'=>'tax','t'=>'الضريبة']];
+                $rows = $run("SELECT p.no, p.supplier, p.date, i.item,
+                        ROUND(-(i.subtotal / 1.15), 2) base, ROUND(-(i.subtotal - i.subtotal / 1.15), 2) tax
+                        FROM dmirror_purchase_items i JOIN dmirror_purchases p ON p.id = i.purchase_id
+                        WHERE $W AND i.tax1 <> '' AND i.tax1 IS NOT NULL
+                        ORDER BY p.date, p.no LIMIT 2000");
+                break;
+            case 'purchases_by_class':
+                $title = 'المشتريات حسب بند التصنيف';
+                $cols = [['k'=>'code','t'=>'الكود'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'gross','t'=>'الإجمالي']];
+                $rows = $run("SELECT COALESCE(c.code,'غير مصنف') code, COUNT(*) invoices, ROUND(SUM(p.total),2) gross
+                        FROM dmirror_purchases p
+                        LEFT JOIN purchase_classification c ON c.kind='purchase' AND c.ref_id=p.id
+                        WHERE $W GROUP BY code ORDER BY gross DESC");
+                break;
+            case 'payments_by_period':
+                $title = 'الدفعات للموردين حسب الفترة';
+                $gg = (string)($_GET['g'] ?? 'month');
+                $fm = ['day'=>'%Y-%m-%d','week'=>'%x-W%v','month'=>'%Y-%m','year'=>'%Y'];
+                $f = isset($fm[$gg]) ? $fm[$gg] : '%Y-%m';
+                $cols = [['k'=>'bucket','t'=>'الفترة'],['k'=>'cnt','t'=>'عدد الدفعات'],['k'=>'amount','t'=>'المبلغ']];
+                $rows = $run("SELECT DATE_FORMAT(y.date,'$f') bucket, COUNT(*) cnt, ROUND(SUM(y.amount),2) amount
+                        FROM dmirror_payments y WHERE y.date BETWEEN '$from' AND '$to' GROUP BY bucket ORDER BY bucket");
+                break;
+            case 'supplier_aging':
+                $title = 'أعمار الذمم الدائنة';
+                $cols = [['k'=>'supplier','t'=>'المورد'],['k'=>'d30','t'=>'حتى 30'],['k'=>'d60','t'=>'31-60'],
+                         ['k'=>'d90','t'=>'61-90'],['k'=>'older','t'=>'أكثر من 90'],['k'=>'total','t'=>'الإجمالي']];
+                $rows = $run("SELECT p.supplier,
+                        ROUND(SUM(CASE WHEN DATEDIFF(CURDATE(),p.date)<=30 THEN p.total-p.paid ELSE 0 END),2) d30,
+                        ROUND(SUM(CASE WHEN DATEDIFF(CURDATE(),p.date) BETWEEN 31 AND 60 THEN p.total-p.paid ELSE 0 END),2) d60,
+                        ROUND(SUM(CASE WHEN DATEDIFF(CURDATE(),p.date) BETWEEN 61 AND 90 THEN p.total-p.paid ELSE 0 END),2) d90,
+                        ROUND(SUM(CASE WHEN DATEDIFF(CURDATE(),p.date)>90 THEN p.total-p.paid ELSE 0 END),2) older,
+                        ROUND(SUM(p.total-p.paid),2) total
+                        FROM dmirror_purchases p WHERE p.total > p.paid + 0.5 GROUP BY p.supplier ORDER BY total DESC");
+                break;
+            case 'items_by_product':
+                $title = 'المشتريات حسب الصنف';
+                $cols = [['k'=>'item','t'=>'الصنف'],['k'=>'qty','t'=>'الكمية'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'amount','t'=>'القيمة']];
+                $rows = $run("SELECT i.item, ROUND(SUM(i.quantity),2) qty, COUNT(DISTINCT i.purchase_id) invoices,
+                        ROUND(SUM(i.subtotal),2) amount
+                        FROM dmirror_purchase_items i JOIN dmirror_purchases p ON p.id=i.purchase_id
+                        WHERE $W GROUP BY i.item ORDER BY amount DESC LIMIT 300");
+                break;
+            case 'docs_coverage':
+                $title = 'تغطية المستندات';
+                $cols = [['k'=>'ym','t'=>'الشهر'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'with_docs','t'=>'لها مستند'],['k'=>'without','t'=>'بلا مستند']];
+                $rows = $run("SELECT DATE_FORMAT(p.date,'%Y-%m') ym, COUNT(*) invoices,
+                        SUM(CASE WHEN d.n>0 THEN 1 ELSE 0 END) with_docs, SUM(CASE WHEN d.n>0 THEN 0 ELSE 1 END) without
+                        FROM dmirror_purchases p
+                        LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d ON d.purchase_id=p.id
+                        WHERE $W GROUP BY ym ORDER BY ym");
+                break;
+            default:
+                echo json_encode(['success'=>false,'message'=>'نوع التقرير غير معروف'], JSON_UNESCAPED_UNICODE);
+                break 2;
+        }
+        $skip = ['ym'=>1,'bucket'=>1,'code'=>1,'project'=>1,'no'=>1,'date'=>1,'supplier'=>1,'item'=>1,'section'=>1];
+        foreach ($rows as $r0) foreach ($r0 as $k => $v) {
+            if (is_numeric($v) && !isset($skip[$k])) $totals[$k] = round((float)(isset($totals[$k]) ? $totals[$k] : 0) + (float)$v, 2);
+        }
+        echo json_encode(['success'=>true,'type'=>$type,'title'=>$title,'from'=>$from,'to'=>$to,
+            'columns'=>$cols,'rows'=>$rows,'totals'=>$totals,'count'=>count($rows),'extra'=>$extra], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pdocs_list': {
         $pid = (int)($_GET['purchase_id'] ?? 0);
         $where = $pid ? "WHERE d.purchase_id = $pid" : '';
