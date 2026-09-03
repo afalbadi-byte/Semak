@@ -29,6 +29,7 @@ const UnitsEdit         = React.lazy(() => import('./UnitsEdit'));
 const WhatsAppInbox     = React.lazy(() => import('./WhatsAppInbox'));
 const InvoicesManage    = React.lazy(() => import('./InvoicesManage'));
 const PurchasesManage   = React.lazy(() => import('./PurchasesManage'));
+const PurchaseDocs      = React.lazy(() => import('./PurchaseDocs'));
 const TreasuryManage    = React.lazy(() => import('./TreasuryManage'));
 const ReportsHub        = React.lazy(() => import('./ReportsHub'));
 const QuotationsManage  = React.lazy(() => import('./QuotationsManage'));
@@ -1048,6 +1049,7 @@ function DashboardInner({ onLogout }) {
             desc:'أوامر العمل · الموردون · المنتجات · متابعة مراحل التنفيذ',
             tools:[
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',        icon:ShoppingCart,   permKey:'finance', color:'amber'  },
+                { id:'purchase_docs', tabId:'purchase_docs', label:'مستندات المشتريات', icon:FileText, permKey:'finance', color:'emerald' },
                 { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'qs',          color:'emerald'},
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
                 { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
@@ -1083,6 +1085,7 @@ function DashboardInner({ onLogout }) {
                 { id:'invoices',    tabId:'invoices',    label:'الفواتير',            icon:Receipt,      permKey:'finance', color:'emerald' },
                 { id:'quotations',  tabId:'quotations',  label:'عروض الأسعار',        icon:FileText,     permKey:'finance', color:'sky'     },
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',       icon:ShoppingCart, permKey:'finance', color:'amber'   },
+                { id:'purchase_docs', tabId:'purchase_docs', label:'مستندات المشتريات', icon:FileText, permKey:'finance', color:'emerald' },
                 { id:'expenses',    tabId:'expenses',    label:'المصروفات',           icon:Tag,          permKey:'finance', color:'red'     },
                 { id:'payments',    tabId:'payments',    label:'المدفوعات والتحصيل',  icon:ArrowRightLeft,permKey:'finance', color:'green'   },
                 { id:'cheques',     tabId:'cheques',     label:'الشيكات',             icon:CreditCard,   permKey:'finance', color:'indigo'  },
@@ -1570,6 +1573,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'invoices'    && hasPermission('finance')     && <div className="animate-fadeIn"><InvoicesManage /></div>}
                 {activeTab === 'quotations'  && hasPermission('finance')     && <div className="animate-fadeIn"><QuotationsManage /></div>}
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
+                {activeTab === 'purchase_docs' && hasPermission('finance')   && <div className="animate-fadeIn"><PurchaseDocs /></div>}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
                 {activeTab === 'month_close' && hasPermission('finance')     && <div className="animate-fadeIn"><MonthlyClose user={dbUser} /></div>}
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}

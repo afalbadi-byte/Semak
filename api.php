@@ -969,6 +969,29 @@ $conn->query("CREATE TABLE IF NOT EXISTS dmirror_changes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (18)");
 } // end DDL v18
+// ─── DDL v19: أرشيف مستندات المشتريات — ربط كل فاتورة بمستنداتها عندنا ──────────
+if ($__sv < 19) {
+$conn->query("CREATE TABLE IF NOT EXISTS purchase_documents (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_id  INT NOT NULL,
+    invoice_no   VARCHAR(40) DEFAULT NULL,
+    doc_type     VARCHAR(20) NOT NULL DEFAULT 'invoice',
+    file_name    VARCHAR(255) NOT NULL,
+    drive_folder VARCHAR(255) DEFAULT NULL,
+    drive_url    VARCHAR(600) DEFAULT NULL,
+    daftra_file_id INT DEFAULT NULL,
+    file_size    BIGINT NOT NULL DEFAULT 0,
+    source       VARCHAR(20) NOT NULL DEFAULT 'manual',
+    confidence   VARCHAR(20) DEFAULT NULL,
+    note         VARCHAR(255) DEFAULT NULL,
+    created_by   VARCHAR(120) DEFAULT NULL,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_doc (purchase_id, file_name),
+    INDEX (purchase_id), INDEX (daftra_file_id), INDEX (doc_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (19)");
+} // end DDL v19
+
 
 
 // ─── مُساعدات محرّك المحاسبة المستقل ────────────────────────────────────────
@@ -5225,6 +5248,101 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
     // مرآة دفترة — سحب البيانات إلى قاعدتنا (قراءة فقط من دفترة، كتابة عندنا)
     // ══════════════════════════════════════════════════════════════════════
+
+    // ══ أرشيف مستندات المشتريات — الربط عندنا والملفات في درايف المالك ══
+    case 'pdocs_list': {
+        $pid = (int)($_GET['purchase_id'] ?? 0);
+        $where = $pid ? "WHERE d.purchase_id = $pid" : '';
+        $r = $conn->query("SELECT d.*, p.no AS mirror_no, p.supplier, p.date, p.total
+                FROM purchase_documents d
+                LEFT JOIN dmirror_purchases p ON p.id = d.purchase_id
+                $where ORDER BY d.purchase_id DESC, d.doc_type, d.id");
+        $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pdocs_stats': {
+        $out = ['success'=>true];
+        $r = $conn->query("SELECT COUNT(*) c FROM purchase_documents");
+        $out['documents'] = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        $r = $conn->query("SELECT COUNT(DISTINCT purchase_id) c FROM purchase_documents");
+        $out['invoices_with_docs'] = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        $r = $conn->query("SELECT COUNT(*) c FROM dmirror_purchases");
+        $out['invoices_total'] = $r ? (int)$r->fetch_assoc()['c'] : 0;
+        $out['invoices_without_docs'] = max(0, $out['invoices_total'] - $out['invoices_with_docs']);
+        $r = $conn->query("SELECT doc_type, COUNT(*) c FROM purchase_documents GROUP BY doc_type");
+        $out['by_type'] = []; if ($r) while ($x = $r->fetch_assoc()) $out['by_type'][$x['doc_type']] = (int)$x['c'];
+        $r = $conn->query("SELECT p.id, p.no, p.date, p.supplier, p.total FROM dmirror_purchases p
+                           LEFT JOIN purchase_documents d ON d.purchase_id = p.id
+                           WHERE d.id IS NULL ORDER BY p.date DESC LIMIT 200");
+        $out['missing'] = []; if ($r) while ($x = $r->fetch_assoc()) $out['missing'][] = $x;
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pdocs_add': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $pid  = (int)($b['purchase_id'] ?? 0);
+        $name = trim((string)($b['file_name'] ?? ''));
+        if (!$pid || $name === '') { echo json_encode(['success'=>false,'message'=>'purchase_id وfile_name مطلوبان']); break; }
+        $types = ['invoice','receipt','other'];
+        $type = in_array(($b['doc_type'] ?? ''), $types, true) ? $b['doc_type'] : 'invoice';
+        $no = '';
+        if ($r = $conn->query("SELECT no FROM dmirror_purchases WHERE id=$pid")) { $row = $r->fetch_assoc(); $no = $row ? (string)$row['no'] : ''; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $conn->query("INSERT INTO purchase_documents
+            (purchase_id, invoice_no, doc_type, file_name, drive_folder, drive_url, daftra_file_id, file_size, source, confidence, note, created_by)
+            VALUES ($pid, '" . $E($no) . "', '" . $E($type) . "', '" . $E($name) . "', '"
+            . $E($b['drive_folder'] ?? '') . "', '" . $E($b['drive_url'] ?? '') . "', "
+            . (int)($b['daftra_file_id'] ?? 0) . ", " . (int)($b['file_size'] ?? 0) . ", '"
+            . $E($b['source'] ?? 'manual') . "', '" . $E($b['confidence'] ?? '') . "', '"
+            . $E($b['note'] ?? '') . "', '" . $E($b['created_by'] ?? '') . "')
+            ON DUPLICATE KEY UPDATE doc_type=VALUES(doc_type), drive_folder=VALUES(drive_folder),
+            drive_url=VALUES(drive_url), daftra_file_id=VALUES(daftra_file_id), note=VALUES(note)");
+        echo json_encode(['success'=>true, 'id'=>(int)$conn->insert_id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pdocs_delete': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+        $conn->query("DELETE FROM purchase_documents WHERE id=$id");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pdocs_import': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $rows = (array)($b['rows'] ?? []);
+        if (!$rows) { echo json_encode(['success'=>false,'message'=>'rows مطلوبة']); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $folder = $E($b['drive_folder'] ?? '');
+        $byNo = []; $noById = [];
+        if ($r = $conn->query("SELECT id, no FROM dmirror_purchases")) {
+            while ($x = $r->fetch_assoc()) { $byNo[(string)$x['no']] = (int)$x['id']; $noById[(int)$x['id']] = (string)$x['no']; }
+        }
+        $added = 0; $skipped = 0;
+        foreach (array_slice($rows, 0, 800) as $row) {
+            $pid = (int)($row['purchase_id'] ?? 0);
+            if (!$pid && isset($row['invoice_no'])) $pid = isset($byNo[(string)$row['invoice_no']]) ? $byNo[(string)$row['invoice_no']] : 0;
+            $name = trim((string)($row['file_name'] ?? ''));
+            if (!$pid || $name === '') { $skipped++; continue; }
+            $types = ['invoice','receipt','other'];
+            $type = in_array(($row['doc_type'] ?? ''), $types, true) ? $row['doc_type'] : 'invoice';
+            $no = isset($noById[$pid]) ? $noById[$pid] : '';
+            $conn->query("INSERT IGNORE INTO purchase_documents
+                (purchase_id, invoice_no, doc_type, file_name, drive_folder, daftra_file_id, source, confidence, note)
+                VALUES ($pid, '" . $E($no) . "', '" . $E($type) . "', '" . $E($name) . "', '$folder', "
+                . (int)($row['daftra_file_id'] ?? 0) . ", 'recovered', '" . $E($row['confidence'] ?? '') . "', '"
+                . $E($row['note'] ?? '') . "')");
+            if ($conn->affected_rows > 0) $added++; else $skipped++;
+        }
+        echo json_encode(['success'=>true, 'added'=>$added, 'skipped'=>$skipped], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'dmirror_sync': {
         set_time_limit(300);
         $dk   = "__DAFTRA_KEY__";
