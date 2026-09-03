@@ -3318,7 +3318,9 @@ switch ($action) {
 
     case 'delete_inspection': {
         // حذف محضر فحص وحدة (صفحة محاضر التسليم)
-        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $secKeyI = $_SERVER['HTTP_X_SECRETARY_KEY'] ?? '';
+        $isSecI = $secKeyI !== '' && hash_equals("__SECRETARY_API_KEY__", $secKeyI);
+        if (!$_jwt_claims && !$isSecI) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $tid  = $_jwt_tid ?? 1;
         $unit = $conn->real_escape_string(trim($input_data['unit'] ?? ''));
         if ($unit === '') { echo json_encode(['success'=>false,'message'=>'رمز الوحدة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
