@@ -5308,6 +5308,8 @@ switch ($action) {
                 'is_offline'     => $invG['is_offline'] ?? 1,
                 'draft'          => $invG['draft'] ?? 0,
             ];
+            // حافظ على رقم الفاتورة الأصلي — بدون هذا الحقل دفترة تولّد رقماً جديداً عند كل PUT
+            if (!empty($invG['no'])) $inner['no'] = $invG['no'];
             $itemsKey = preg_match('/^[A-Za-z]{3,40}$/', (string)($b['items_key'] ?? '')) ? $b['items_key'] : ($wrapper . 'Item');
             foreach ((array)($b['extra'] ?? []) as $ek => $ev) {
                 if (preg_match('/^[a-z_0-9]{1,40}$/', (string)$ek)) $inner[$ek] = $ev;
