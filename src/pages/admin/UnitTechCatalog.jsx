@@ -4,7 +4,7 @@ import {
   Cpu, Home, Zap, Gauge, Droplets, Wrench, Plus, Trash2, Link as LinkIcon, Copy
 } from 'lucide-react';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
 
 const emptyData = () => ({
   electromechanical: { notes: '' },
@@ -92,9 +92,10 @@ export default function UnitTechCatalog() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const _t = getAdminToken();
       const res = await fetch(`${API_URL}?action=save_unit_tech_specs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(_t ? { Authorization: `Bearer ${_t}` } : {}) },
         body: JSON.stringify({ unit: unitName, data }),
       });
       const d = await res.json();

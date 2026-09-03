@@ -3392,7 +3392,9 @@ switch ($action) {
     }
 
     case 'save_unit_tech_specs': {
-        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $secKeyU = $_SERVER['HTTP_X_SECRETARY_KEY'] ?? '';
+        $isSecU = $secKeyU !== '' && hash_equals("__SECRETARY_API_KEY__", $secKeyU);
+        if (!$_jwt_claims && !$isSecU) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $tid  = $_jwt_tid ?? 1;
         $unit = $conn->real_escape_string(trim($input_data['unit'] ?? ''));
         if ($unit === '') { echo json_encode(['success'=>false,'message'=>'رمز الوحدة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
