@@ -32,6 +32,8 @@ const TechDashboard   = lazy(() => import('./pages/admin/TechDashboard'));
 const LetterGenerator = lazy(() => import('./pages/admin/LetterGenerator'));
 const UnitInspection  = lazy(() => import('./pages/admin/UnitInspection'));
 const UnitHandover    = lazy(() => import('./pages/admin/UnitHandover'));
+const UnitTechCatalog = lazy(() => import('./pages/admin/UnitTechCatalog'));
+const UnitCatalog     = lazy(() => import('./pages/customer/UnitCatalog'));
 
 // منصة SaaS (platform)
 const PlatformLogin     = lazy(() => import('./pages/platform/PlatformLogin'));
@@ -144,7 +146,8 @@ const MainShell = () => {
             <Route path="/privacy"   element={<LegalPage title="سياسة الخصوصية" />} />
             <Route path="/terms"     element={<LegalPage title="الشروط والأحكام" />} />
             <Route path="/inspection" element={<UnitInspection />} />
-            <Route path="/handover"  element={<ProtectedRoute><UnitHandover /></ProtectedRoute>} />
+            <Route path="/handover"  element={<UnitHandover />} />
+            <Route path="/unit-catalog" element={<UnitCatalog />} />
 
             {/* بوابة العملاء */}
             <Route path="/customer-login" element={<CustomerLogin />} />
@@ -157,6 +160,7 @@ const MainShell = () => {
             <Route path="/admin/dashboard/*"        element={<Dashboard />} />
             <Route path="/admin/tech-dashboard"     element={<TechDashboard />} />
             <Route path="/admin/letter-generator"   element={<LetterGenerator />} />
+            <Route path="/admin/unit-catalog"       element={<UnitTechCatalog />} />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />

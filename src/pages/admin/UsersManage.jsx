@@ -15,6 +15,7 @@ const APP_MODULES = [
   { id: "feasibility", label: "حاسبة الجدوى والعروض",    icon: TrendingUp,      color: "text-emerald-600", bg: "bg-emerald-50" },
   { id: "qs",          label: "التمتير والتكاليف",       icon: Ruler,           color: "text-emerald-700", bg: "bg-emerald-50" },
   { id: "inspection",  label: "فحص وتسليم الوحدات",      icon: ClipboardCheck,  color: "text-indigo-600",  bg: "bg-indigo-50" },
+  { id: "unit_catalog", label: "الكتالوج التقني للوحدة", icon: ClipboardCheck,  color: "text-teal-600",    bg: "bg-teal-50" },
   { id: "snaglist",    label: "تقارير الملاحظات",        icon: FileWarning,     color: "text-red-600",     bg: "bg-red-50" },
   { id: "maintenance", label: "إدارة طلبات الصيانة",     icon: Wrench,          color: "text-purple-600",  bg: "bg-purple-50" },
   { id: "leads",       label: "سجل المهتمين",            icon: Users,           color: "text-teal-600",    bg: "bg-teal-50" },

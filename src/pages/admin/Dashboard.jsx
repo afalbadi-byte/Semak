@@ -8,11 +8,12 @@ import {
     BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
     Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2,
-    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock, Megaphone, Ruler
+    Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock, Megaphone, Ruler, ClipboardList
 } from 'lucide-react';
 
 // ─── تحميل كسول لكل تبويب — يُقلّص حجم الـ bundle الرئيسي ────────────────
 const UnitInspection    = React.lazy(() => import('./UnitInspection'));
+const UnitTechCatalog   = React.lazy(() => import('./UnitTechCatalog'));
 const SnagList          = React.lazy(() => import('./SnagList'));
 const UsersManage       = React.lazy(() => import('./UsersManage'));
 const MaintenanceManage = React.lazy(() => import('./MaintenanceManage'));
@@ -1036,6 +1037,7 @@ function DashboardInner({ onLogout }) {
                 { id:'units_edit', tabId:'units_edit', label:'تسجيل الملاك',      icon:Edit2,          permKey:'units_edit',                              color:'cyan'   },
                 { id:'maintenance',tabId:'maintenance',label:'الصيانة',           icon:Wrench,         permKey:'maintenance', badge:'maintenance_open',   color:'purple' },
                 { id:'inspection', tabId:'inspection', label:'محاضر التسليم',     icon:ClipboardCheck, permKey:'inspection',  badge:'inspections_pending',color:'indigo' },
+                { id:'unit_catalog', tabId:'unit_catalog', label:'الكتالوج التقني', icon:ClipboardList, permKey:'unit_catalog',                            color:'teal'   },
                 { id:'snaglist',   tabId:'snaglist',   label:'تقارير الملاحظات',  icon:FileWarning,    permKey:'snaglist',                                color:'red'    },
                 { id:'qr',         tabId:'qr',         label:'رموز الوحدات',      icon:QrCode,         permKey:'qr',                                      color:'slate'  },
             ],
@@ -1140,7 +1142,7 @@ function DashboardInner({ onLogout }) {
     // ─── العناوين ────────────────────────────────────────────────────────────
     const TAB_LABELS = {
         overview:'لوحة الإدارة', projects:'المشاريع والأبراج', units:'الوحدات والمخطط',
-        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', qs:'التمتير والتكاليف', guide:'دليل الاستخدام', wa_hub:'مركز واتساب', inspection:'محاضر التسليم',
+        units_edit:'تسجيل الملاك', feasibility:'الجدوى والتسعير', qs:'التمتير والتكاليف', guide:'دليل الاستخدام', wa_hub:'مركز واتساب', inspection:'محاضر التسليم', unit_catalog:'الكتالوج التقني',
         snaglist:'تقارير الملاحظات', maintenance:'الصيانة', leads:'العملاء المحتملون',
         bot:'خدمة العملاء الذكية', whatsapp:'صندوق الرسائل', qr:'رموز الوحدات',
         letters:'الوثائق الرسمية', finance:'الإيرادات والمصروفات', daftra_explorer:'التقارير المالية',
@@ -1554,6 +1556,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'guide'       && <div className="animate-fadeIn"><UserGuide /></div>}
                 {activeTab === 'wa_hub'      && hasPermission('whatsapp')    && <div className="animate-fadeIn"><WhatsAppHub showToast={showToast} onNavigateTab={setActiveTab} /></div>}
                 {activeTab === 'inspection'  && hasPermission('inspection')  && <div className="animate-fadeIn -mt-24"><UnitInspection user={dbUser} navigateTo={()=>setActiveTab('overview')} showToast={showToast} /></div>}
+                {activeTab === 'unit_catalog' && hasPermission('unit_catalog') && <div className="animate-fadeIn -mt-24"><UnitTechCatalog /></div>}
                 {activeTab === 'snaglist'    && hasPermission('snaglist')    && <div className="animate-fadeIn p-6 md:p-8"><SnagList /></div>}
                 {activeTab === 'maintenance' && hasPermission('maintenance') && <div className="animate-fadeIn p-6 md:p-8"><MaintenanceManage showToast={showToast} activeUser={dbUser} /></div>}
                 {activeTab === 'users'       && hasPermission('users_manage')&& <div className="animate-fadeIn p-6 md:p-8"><UsersManage showToast={showToast} /></div>}

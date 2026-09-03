@@ -1552,6 +1552,16 @@ $conn->query("CREATE TABLE IF NOT EXISTS wa_bot_conversations (
     INDEX idx_phone_time (phone, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// ─── auto-migrate: الكتالوج التقني لكل وحدة (إلكتروميكانيك، سمارت هوم، عدادات...) ─
+$conn->query("CREATE TABLE IF NOT EXISTS unit_technical_specs (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tenant_id   INT NOT NULL DEFAULT 1,
+    unit_code   VARCHAR(50) NOT NULL,
+    data        LONGTEXT NOT NULL,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_unit (tenant_id, unit_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 // ─── auto-migrate: سجل عروض الأسعار المرسلة للعملاء (لخدمة زر "اطلب عرضك") ────
 $conn->query("CREATE TABLE IF NOT EXISTS customer_quotes (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -3341,6 +3351,61 @@ switch ($action) {
         }
         echo json_encode(["success" => true]);
         break;
+
+    case 'get_unit_tech_specs': {
+        // الكتالوج التقني — نسخة الموظف (كل الحقول بما فيها الملاحظات الداخلية)
+        $tid  = $_jwt_tid ?? 1;
+        $unit = $conn->real_escape_string(trim($_GET['unit'] ?? ''));
+        if ($unit === '') { echo json_encode(['success'=>false,'message'=>'رمز الوحدة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $res = $conn->query("SELECT data, updated_at FROM unit_technical_specs WHERE unit_code='$unit' AND tenant_id=$tid LIMIT 1");
+        if ($res && $row = $res->fetch_assoc()) {
+            echo json_encode(['success'=>true, 'data'=>json_decode($row['data'], true) ?: [], 'updated_at'=>$row['updated_at']], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode(['success'=>true, 'data'=>null], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
+    case 'get_unit_tech_specs_owner': {
+        // الكتالوج التقني — نسخة المالك (تتحقق من تطابق الجوال، وتخفي الملاحظات الداخلية)
+        $unit  = $conn->real_escape_string(trim($_GET['unit'] ?? ''));
+        $phone = preg_replace('/\D/', '', trim($_GET['phone'] ?? ''));
+        if ($unit === '') { echo json_encode(['success'=>false,'message'=>'رمز الوحدة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $ownRes = $conn->query("SELECT owner_phone FROM owners WHERE unit_code='$unit' LIMIT 1");
+        $ownRow = $ownRes ? $ownRes->fetch_assoc() : null;
+        if ($ownRow && $phone !== '') {
+            $ownDigits = preg_replace('/\D/', '', $ownRow['owner_phone'] ?? '');
+            if (substr($ownDigits, -9) !== substr($phone, -9)) {
+                echo json_encode(['success'=>false,'message'=>'رقم الجوال لا يطابق سجل الوحدة'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+        }
+        $res = $conn->query("SELECT data FROM unit_technical_specs WHERE unit_code='$unit' LIMIT 1");
+        if ($res && $row = $res->fetch_assoc()) {
+            $d = json_decode($row['data'], true) ?: [];
+            unset($d['internal_notes']);
+            echo json_encode(['success'=>true, 'data'=>$d], JSON_UNESCAPED_UNICODE);
+        } else {
+            echo json_encode(['success'=>true, 'data'=>null], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+    }
+
+    case 'save_unit_tech_specs': {
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $tid  = $_jwt_tid ?? 1;
+        $unit = $conn->real_escape_string(trim($input_data['unit'] ?? ''));
+        if ($unit === '') { echo json_encode(['success'=>false,'message'=>'رمز الوحدة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $data = $conn->real_escape_string(json_encode($input_data['data'] ?? [], JSON_UNESCAPED_UNICODE));
+        $check = $conn->query("SELECT id FROM unit_technical_specs WHERE unit_code='$unit' AND tenant_id=$tid");
+        if ($check && $check->num_rows > 0) {
+            $conn->query("UPDATE unit_technical_specs SET data='$data' WHERE unit_code='$unit' AND tenant_id=$tid");
+        } else {
+            $conn->query("INSERT INTO unit_technical_specs (tenant_id, unit_code, data) VALUES ($tid, '$unit', '$data')");
+        }
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     case 'handover_unit':
         $unit_code = $conn->real_escape_string($input_data['unit']);
