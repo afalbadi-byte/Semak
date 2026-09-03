@@ -5281,6 +5281,14 @@ switch ($action) {
         break;
     }
 
+
+    case 'pdocs_counts': {
+        $r = $conn->query("SELECT purchase_id, COUNT(*) c FROM purchase_documents GROUP BY purchase_id");
+        $m = []; if ($r) while ($x = $r->fetch_assoc()) $m[(string)$x['purchase_id']] = (int)$x['c'];
+        echo json_encode(['success'=>true, 'counts'=>(object)$m], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pdocs_add': {
         $b = json_decode(file_get_contents('php://input'), true) ?: [];
         $pid  = (int)($b['purchase_id'] ?? 0);

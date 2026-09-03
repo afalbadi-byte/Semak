@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FileText, Search, Link2, Trash2, AlertTriangle, CheckCircle2, FolderOpen, RefreshCw, Plus } from 'lucide-react';
+import { FileText, Search, Link2, Trash2, AlertTriangle, CheckCircle2, FolderOpen, RefreshCw, Plus, Upload } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
 
 const DRIVE_FOLDER = 'سماك-المستندات';
@@ -37,6 +37,20 @@ export default function PurchaseDocs() {
             body: JSON.stringify(payload),
         }).then(x => x.json());
         if (r.success) { setForm(null); load(); } else setError(r.message || 'تعذر الحفظ');
+    };
+
+    const uploadDoc = async (file, meta) => {
+        const b64 = await new Promise((res, rej) => {
+            const fr = new FileReader();
+            fr.onload = () => res(String(fr.result).split(',')[1] || '');
+            fr.onerror = rej; fr.readAsDataURL(file);
+        });
+        const up = await fetch(`${API_URL}?action=doc_upload`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, data: b64 }),
+        }).then(x => x.json());
+        if (!up.success) { setError(up.message || 'تعذر رفع الملف'); return; }
+        await addDoc({ ...meta, file_name: file.name, drive_url: up.url, file_size: file.size, source: 'upload' });
     };
 
     const delDoc = async id => {
@@ -195,7 +209,7 @@ export default function PurchaseDocs() {
                 </div>
             )}
 
-            {form && <LinkForm form={form} onCancel={() => setForm(null)} onSave={addDoc} />}
+            {form && <LinkForm form={form} onCancel={() => setForm(null)} onSave={addDoc} onUpload={uploadDoc} />}
         </div>
     );
 }
@@ -215,7 +229,8 @@ function Card({ label, value, tone }) {
     );
 }
 
-function LinkForm({ form, onCancel, onSave }) {
+function LinkForm({ form, onCancel, onSave, onUpload }) {
+    const [busy, setBusy] = useState(false);
     const [name, setName] = useState('');
     const [type, setType] = useState('invoice');
     const [note, setNote] = useState('');
@@ -226,9 +241,20 @@ function LinkForm({ form, onCancel, onSave }) {
                     <h3 className="font-black text-brand-900 text-lg">ربط مستند بالفاتورة {form.no}</h3>
                     <p className="text-xs text-slate-500 mt-1">{form.supplier}</p>
                 </div>
-                <div className="text-xs bg-amber-50 text-amber-800 rounded-xl p-3">
-                    ارفع الملف في مجلد <b>{DRIVE_FOLDER}</b> بدرايفك، ثم اكتب اسمه هنا كما هو.
-                </div>
+                <label className="block border-2 border-dashed border-brand-200 rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50">
+                    <Upload size={22} className="mx-auto text-brand-700 mb-1" />
+                    <div className="text-sm font-bold text-brand-900">{busy ? 'جارٍ الرفع...' : 'ارفع الملف مباشرة'}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">PDF أو صورة — يُحفظ على خادمنا ويصير رابطه جاهزاً</div>
+                    <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" disabled={busy}
+                        onChange={async e => {
+                            const f = e.target.files && e.target.files[0];
+                            if (!f) return;
+                            setBusy(true);
+                            await onUpload(f, { purchase_id: form.purchase_id, doc_type: type, note: note });
+                            setBusy(false);
+                        }} />
+                </label>
+                <div className="text-center text-[11px] text-slate-400">أو اربط ملفاً موجوداً في درايفك باسمه</div>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="اسم الملف كما في الدرايف"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm" />
                 <select value={type} onChange={e => setType(e.target.value)}

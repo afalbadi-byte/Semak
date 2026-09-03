@@ -4,7 +4,7 @@ import {
   Plus, Search, Calendar, DollarSign, ShoppingCart,
   Building, Edit3, ChevronLeft, RefreshCw,
   AlertTriangle, CheckCircle2, X, Package, Truck
-} from 'lucide-react';
+, Paperclip } from 'lucide-react';
 import ExportButton from '../../components/ExportButton';
 import { fmt as fmtExport } from '../../utils/exporters';
 import useTableControls from '../../utils/useTableControls';
@@ -56,6 +56,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
   const [classTree, setClassTree]   = useState([]);   // شجرة التصنيف [{code,level,name}]
   const [classMap, setClassMap]     = useState({});   // { [purchase_id]: code }
   const [classFilter, setClassFilter] = useState(''); // '' الكل · 'none' غير مصنف · بادئة كود
+  const [docCounts, setDocCounts]   = useState({});
   const [loading, setLoading]       = useState(false);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
@@ -148,6 +149,13 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       setLoading(false);
     }
   }, [appliedFilters]);
+
+  useEffect(() => {
+    fetch(`${API_URL}?action=pdocs_counts`)
+      .then(r => r.json())
+      .then(j => { if (j.success) setDocCounts(j.counts || {}); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => { loadDropdowns(); }, [loadDropdowns]);
 
@@ -712,6 +720,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المتبقي</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">التصنيف</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">المشروع</th>
+                    <th className="px-4 py-3 text-center text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">مستندات</th>
                     <th className="px-4 py-3 text-right text-xs font-black text-slate-400 dark:text-brand-400 whitespace-nowrap">إجراءات</th>
                   </tr>
                 </thead>
@@ -749,6 +758,17 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                           <span className={remaining > 0 ? 'text-amber-600' : 'text-green-600'}>
                             {fmt(remaining)}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {(() => {
+                            const n = docCounts[String(p.id)] || 0;
+                            return (
+                              <span title={n ? n + ' مستند' : 'لا توجد مستندات'}
+                                className={'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-black ' + (n ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-500')}>
+                                <Paperclip size={12} /> {n || '—'}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3">
                           <select
