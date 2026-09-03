@@ -108,7 +108,7 @@ export default function Contact() {
               <div className="flex gap-3">
 
                 {/* إنستقرام */}
-                <a href="https://www.instagram.com/semak_realestate" target="_blank" rel="noreferrer"
+                <a href="https://www.instagram.com/info.semak" target="_blank" rel="noreferrer"
                   className="group flex items-center gap-3 flex-1 bg-white/5 hover:bg-gradient-to-br hover:from-[#833ab4]/30 hover:via-[#fd1d1d]/20 hover:to-[#fcb045]/20 border border-white/10 hover:border-[#fd1d1d]/40 p-3 rounded-2xl transition-all duration-300">
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#833ab4] via-[#fd1d1d] to-[#fcb045] shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
                     <svg viewBox="0 0 24 24" fill="white" className="w-4 h-4">
@@ -117,7 +117,7 @@ export default function Contact() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] text-slate-400 font-bold">إنستقرام</p>
-                    <p className="text-white font-bold text-xs truncate" dir="ltr">@semak_realestate</p>
+                    <p className="text-white font-bold text-xs truncate" dir="ltr">@info.semak</p>
                   </div>
                 </a>
 
