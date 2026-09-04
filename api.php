@@ -6167,7 +6167,8 @@ switch ($action) {
         if (strpos($data, ',') !== false && strncmp($data, 'data:', 5) === 0) $data = substr($data, strpos($data, ',') + 1);
         if ($data === '') { echo json_encode(['success'=>false,'message'=>'الصورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
         $mime = (string)($b['mime'] ?? 'image/jpeg');
-        if (!in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true)) $mime = 'image/jpeg';
+        $isPdf = ($mime === 'application/pdf');
+        if (!$isPdf && !in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true)) $mime = 'image/jpeg';
 
         $sys = "أنت قارئ فواتير شراء سعودية. استخرج بيانات الفاتورة من الصورة وأعدها JSON فقط بلا أي نص آخر.\n"
              . "الحقول: supplier (اسم المورد كما في الفاتورة), no (رقم الفاتورة), date (YYYY-MM-DD), "
@@ -6176,9 +6177,13 @@ switch ($action) {
              . "قواعد: الأرقام أرقام لا نصوص وبلا فواصل آلاف. إن لم تجد حقلاً فاجعله null. "
              . "التاريخ الهجري حوّله ميلادياً. لا تخترع بنداً غير مكتوب. أعد JSON صالحاً فقط.";
 
+        // الفواتير تصل صورةً من الكاميرا أو ملف PDF من ملفات الجوال
+        $fileBlock = $isPdf
+            ? ['type'=>'document', 'source'=>['type'=>'base64', 'media_type'=>'application/pdf', 'data'=>$data]]
+            : ['type'=>'image',    'source'=>['type'=>'base64', 'media_type'=>$mime, 'data'=>$data]];
         $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>2000, 'system'=>$sys,
             'messages'=>[['role'=>'user', 'content'=>[
-                ['type'=>'image', 'source'=>['type'=>'base64', 'media_type'=>$mime, 'data'=>$data]],
+                $fileBlock,
                 ['type'=>'text',  'text'=>'استخرج بيانات هذه الفاتورة كما هي.'],
             ]]]];
 

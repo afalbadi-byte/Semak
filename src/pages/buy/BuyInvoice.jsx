@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Check, Plus, Trash2, Loader2, X, ScanLine, Wallet, AlertTriangle, Receipt } from 'lucide-react';
+import { Camera, Check, Plus, Trash2, Loader2, X, ScanLine, Wallet, AlertTriangle, Receipt, FolderOpen, FileText } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -87,8 +87,21 @@ export default function BuyInvoice({ onDone }) {
         const f = e.target.files && e.target.files[0];
         if (!f) return;
         const r = new FileReader();
-        r.onload = () => setPhoto({ name: f.name || 'invoice.jpg', mime: f.type || 'image/jpeg', dataUrl: String(r.result) });
+        r.onload = () => setPhoto({
+            name: f.name || 'invoice.jpg',
+            mime: f.type || 'image/jpeg',
+            isPdf: (f.type || '').includes('pdf') || /.pdf$/i.test(f.name || ''),
+            dataUrl: String(r.result),
+        });
         r.readAsDataURL(f);
+    };
+
+    const pickReceipt = e => {
+        const f2 = e.target.files && e.target.files[0];
+        if (!f2) return;
+        const rd = new FileReader();
+        rd.onload = () => setReceipt({ name: f2.name || 'receipt.jpg', dataUrl: String(rd.result) });
+        rd.readAsDataURL(f2);
     };
 
     const runScan = async () => {
@@ -174,25 +187,33 @@ export default function BuyInvoice({ onDone }) {
 
     return (
         <div className="p-4 space-y-3">
-            <label className="block">
-                <div className="rounded-2xl border-2 border-dashed border-white/15 p-4 text-center active:bg-white/5">
-                    {photo ? (
-                        <div className="relative">
-                            <img src={photo.dataUrl} alt="" className="max-h-44 mx-auto rounded-xl" />
-                            <button type="button" onClick={e => { e.preventDefault(); setPhoto(null); }}
-                                className="absolute top-1 left-1 w-7 h-7 rounded-lg bg-black/60 flex items-center justify-center">
-                                <X size={14} />
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="text-slate-400">
-                            <Camera size={26} className="mx-auto mb-1" />
-                            <div className="text-xs font-bold">صوّر الفاتورة</div>
-                        </div>
-                    )}
+            {photo ? (
+                <div className="rounded-2xl border border-white/15 p-3 relative">
+                    {photo.isPdf
+                        ? <div className="flex items-center gap-2 py-4 justify-center text-slate-300">
+                            <FileText size={22} className="text-[#c5a059]" />
+                            <span className="text-xs font-bold truncate max-w-[70%]">{photo.name}</span>
+                          </div>
+                        : <img src={photo.dataUrl} alt="" className="max-h-52 mx-auto rounded-xl" />}
+                    <button type="button" onClick={() => setPhoto(null)}
+                        className="absolute top-2 left-2 w-9 h-9 rounded-xl bg-black/60 flex items-center justify-center">
+                        <X size={16} />
+                    </button>
                 </div>
-                <input type="file" accept="image/*" capture="environment" onChange={pickPhoto} className="hidden" />
-            </label>
+            ) : (
+                <div className="grid grid-cols-2 gap-2">
+                    <label className="min-h-[88px] rounded-2xl border-2 border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:bg-white/5">
+                        <Camera size={22} className="text-[#c5a059]" />
+                        <span className="text-xs font-bold text-slate-300">تصوير الفاتورة</span>
+                        <input type="file" accept="image/*" capture="environment" onChange={pickPhoto} className="hidden" />
+                    </label>
+                    <label className="min-h-[88px] rounded-2xl border-2 border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:bg-white/5">
+                        <FolderOpen size={22} className="text-[#c5a059]" />
+                        <span className="text-xs font-bold text-slate-300">من ملفات الجوال</span>
+                        <input type="file" accept="image/*,application/pdf" onChange={pickPhoto} className="hidden" />
+                    </label>
+                </div>
+            )}
 
             {photo && !scan && (
                 <button onClick={runScan} disabled={scanning}
@@ -287,17 +308,27 @@ export default function BuyInvoice({ onDone }) {
                         </div>
                         <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="مرجع العملية أو رقم الشيك"
                             className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
-                        <label className="block">
-                            <div className="rounded-xl border border-dashed border-white/15 p-3 text-center min-h-[56px] flex items-center justify-center gap-2">
-                                {receipt
-                                    ? <><Receipt size={16} className="text-emerald-400" /><span className="text-xs font-bold">أُرفق الإيصال</span>
-                                        <button type="button" onClick={e => { e.preventDefault(); setReceipt(null); }} className="text-red-400 mr-2"><X size={14} /></button></>
-                                    : <><Receipt size={16} className="text-slate-400" /><span className="text-xs text-slate-400 font-bold">أرفق إيصال السداد</span></>}
+                        {receipt ? (
+                            <div className="rounded-xl border border-white/15 p-2.5 flex items-center gap-2">
+                                <Receipt size={16} className="text-emerald-400 shrink-0" />
+                                <span className="text-xs font-bold truncate flex-1">{receipt.name}</span>
+                                <button type="button" onClick={() => setReceipt(null)}
+                                    className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center text-red-400"><X size={14} /></button>
                             </div>
-                            <input type="file" accept="image/*" capture="environment" className="hidden"
-                                onChange={e => { const f2 = e.target.files && e.target.files[0]; if (!f2) return;
-                                    const rd = new FileReader(); rd.onload = () => setReceipt({ name: f2.name || 'receipt.jpg', dataUrl: String(rd.result) }); rd.readAsDataURL(f2); }} />
-                        </label>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="min-h-[56px] rounded-xl border border-dashed border-white/15 flex items-center justify-center gap-1.5 active:bg-white/5">
+                                    <Camera size={15} className="text-slate-400" />
+                                    <span className="text-[11px] text-slate-300 font-bold">تصوير الإيصال</span>
+                                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={pickReceipt} />
+                                </label>
+                                <label className="min-h-[56px] rounded-xl border border-dashed border-white/15 flex items-center justify-center gap-1.5 active:bg-white/5">
+                                    <FolderOpen size={15} className="text-slate-400" />
+                                    <span className="text-[11px] text-slate-300 font-bold">من الملفات</span>
+                                    <input type="file" accept="image/*,application/pdf" className="hidden" onChange={pickReceipt} />
+                                </label>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

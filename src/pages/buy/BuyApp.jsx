@@ -18,25 +18,33 @@ const TABS = [
 // بطاقة تعريف مستقلة حتى يظهر التطبيق باسمه وأيقونته على الشاشة الرئيسية
 function useBuyManifest() {
     useEffect(() => {
-        const mf = {
-            name: 'مشتريات سماك', short_name: 'مشتريات', lang: 'ar', dir: 'rtl',
-            display: 'standalone', orientation: 'portrait', scope: '/buy', start_url: '/buy',
-            theme_color: '#1a365d', background_color: '#0f172a',
-            icons: [{ src: '/images/favicon.png', sizes: 'any', type: 'image/png', purpose: 'any maskable' }],
-        };
-        const blob = URL.createObjectURL(new Blob([JSON.stringify(mf)], { type: 'application/manifest+json' }));
+        // بطاقة تعريف حقيقية على الخادم — المتصفحات لا تقبل التثبيت من رابط blob
         const prev = document.querySelector('link[rel="manifest"]');
         const prevHref = prev ? prev.getAttribute('href') : null;
-        if (prev) prev.setAttribute('href', blob);
+        if (prev) prev.setAttribute('href', '/buy.webmanifest');
         const title = document.title;
         document.title = 'مشتريات سماك';
-        let meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-        if (!meta) { meta = document.createElement('meta'); meta.name = 'apple-mobile-web-app-title'; document.head.appendChild(meta); }
-        meta.content = 'مشتريات سماك';
+        const metas = [];
+        const setMeta = (name, content) => {
+            let m = document.querySelector('meta[name="' + name + '"]');
+            const created = !m;
+            if (!m) { m = document.createElement('meta'); m.name = name; document.head.appendChild(m); }
+            metas.push({ el: m, created, old: m.content });
+            m.content = content;
+        };
+        setMeta('apple-mobile-web-app-title', 'مشتريات سماك');
+        setMeta('apple-mobile-web-app-capable', 'yes');
+        setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+        setMeta('theme-color', '#1a365d');
+        // سفاري يأخذ أيقونة الشاشة الرئيسية من apple-touch-icon لا من بطاقة التعريف
+        const apple = document.querySelector('link[rel="apple-touch-icon"]');
+        const appleOld = apple ? apple.getAttribute('href') : null;
+        if (apple) apple.setAttribute('href', '/images/app-icon-512.png');
         return () => {
             if (prev && prevHref) prev.setAttribute('href', prevHref);
+            if (apple && appleOld) apple.setAttribute('href', appleOld);
             document.title = title;
-            URL.revokeObjectURL(blob);
+            metas.forEach(m => { if (m.created) m.el.remove(); else m.el.content = m.old; });
         };
     }, []);
 }
