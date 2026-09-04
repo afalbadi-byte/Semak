@@ -34,6 +34,7 @@ const TaxReports        = React.lazy(() => import('./TaxReports'));
 const MeetingRoom       = React.lazy(() => import('./MeetingRoom'));
 const MeetingMinutes    = React.lazy(() => import('./MeetingMinutes'));
 const EntityView        = React.lazy(() => import('./EntityView'));
+const ItemPrices        = React.lazy(() => import('./ItemPrices'));
 const TreasuryManage    = React.lazy(() => import('./TreasuryManage'));
 const ReportsHub        = React.lazy(() => import('./ReportsHub'));
 const QuotationsManage  = React.lazy(() => import('./QuotationsManage'));
@@ -1058,6 +1059,7 @@ function DashboardInner({ onLogout }) {
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',        icon:ShoppingCart,   permKey:'finance', color:'amber'  },
                 { id:'purchase_docs', tabId:'purchase_docs', label:'مستندات المشتريات', icon:FileText, permKey:'finance', color:'emerald' },
                 { id:'tax_reports',  tabId:'tax_reports',  label:'مركز التقارير',      icon:BarChart3, permKey:'finance', color:'sky' },
+                { id:'item_prices',  tabId:'item_prices',  label:'متابعة أسعار الأصناف', icon:Package, permKey:'finance', color:'rose' },
                 { id:'meeting',      tabId:'meeting',      label:'غرفة الاجتماع',      icon:Presentation, permKey:'finance', color:'violet' },
                 { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'qs',          color:'emerald'},
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
@@ -1172,7 +1174,7 @@ function DashboardInner({ onLogout }) {
         rega:'قيد المطور العقاري',
         minutes:'محاضر الاجتماعات', meeting:'غرفة الاجتماع', tax_reports:'مركز التقارير',
         purchase_docs:'مستندات المشتريات', month_close:'القفلة الشهرية', campaign:'الحملات التسويقية',
-        ent:'بطاقة',
+        ent:'بطاقة', item_prices:'متابعة أسعار الأصناف',
     };
 
     // ─── مسار الصفحة: الرئيسية ثم القسم ثم الصفحة ثم البطاقة — يُشتق من الشجرة ──
@@ -1611,6 +1613,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
                 {activeTab === 'purchase_docs' && hasPermission('finance')   && <div className="animate-fadeIn"><PurchaseDocs /></div>}
                 {activeTab === 'tax_reports'  && hasPermission('finance')   && <div className="animate-fadeIn"><TaxReports /></div>}
+                {activeTab === 'item_prices'  && hasPermission('finance')   && <div className="animate-fadeIn"><ItemPrices /></div>}
                 {activeTab === 'meeting'      && hasPermission('finance')   && <div className="animate-fadeIn"><MeetingRoom /></div>}
                 {activeTab === 'minutes'      && <div className="animate-fadeIn"><MeetingMinutes /></div>}
                 {activeTab === 'ent'          && entity && <EntityView type={entity.type} value={entity.value} />}

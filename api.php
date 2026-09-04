@@ -5744,11 +5744,19 @@ switch ($action) {
                 break;
             case 'items_by_product':
                 $title = 'المشتريات حسب الصنف';
-                $cols = [['k'=>'item','t'=>'الصنف'],['k'=>'qty','t'=>'الكمية'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'amount','t'=>'القيمة']];
+                $cols = [['k'=>'item','t'=>'الصنف'],['k'=>'invoices','t'=>'عدد الطلبات'],['k'=>'qty','t'=>'الكمية'],
+                         ['k'=>'last_price','t'=>'آخر سعر'],['k'=>'amount','t'=>'القيمة']];
                 $rows = $run("SELECT i.item, MAX(i.product_id) product_id, ROUND(SUM(i.quantity),2) qty,
                         COUNT(DISTINCT i.purchase_id) invoices, ROUND(SUM(i.subtotal),2) amount
                         FROM dmirror_purchase_items i JOIN dmirror_purchases p ON p.id=i.purchase_id
-                        WHERE $W GROUP BY i.item ORDER BY amount DESC LIMIT 300");
+                        WHERE $W GROUP BY i.item ORDER BY invoices DESC, amount DESC LIMIT 300");
+                foreach ($rows as &$__r) {
+                    $__pid = (int)($__r['product_id'] ?? 0);
+                    $__lp = $__pid ? $run("SELECT ROUND(amount/NULLIF(qty,0),2) p FROM purchase_product_items
+                                           WHERE product_id=$__pid AND qty>0 ORDER BY inv_date DESC, ref_id DESC LIMIT 1") : [];
+                    $__r['last_price'] = $__lp ? $__lp[0]['p'] : '';
+                }
+                unset($__r);
                 break;
             case 'sales_units':
                 $title = 'الوحدات والمبيعات';
@@ -5987,6 +5995,74 @@ switch ($action) {
         if (!$out) { echo json_encode(['success'=>false,'message'=>'لا تفصيل متاح لهذا الرقم'], JSON_UNESCAPED_UNICODE); break; }
         $out['success'] = true;
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'item_prices': {
+        // متابعة أسعار الأصناف: آخر سعر مقابل ما قبله، والأكثر طلباً في الأعلى
+        $q     = trim((string)($_GET['q'] ?? ''));
+        $sort  = preg_replace('/[^a-z_]/', '', (string)($_GET['sort'] ?? 'orders'));
+        $where = $q === '' ? '1' : "COALESCE(ap.name,'') LIKE '%" . $conn->real_escape_string($q) . "%'";
+        $r = $conn->query("SELECT ppi.product_id, COALESCE(ap.name, CONCAT('منتج #', ppi.product_id)) name,
+                    ppi.ref_id, ppi.inv_date, COALESCE(ppi.supplier,'') supplier, ppi.qty, ppi.amount
+                FROM purchase_product_items ppi
+                LEFT JOIN acc_products ap ON ap.tenant_id=1 AND ap.daftra_id=ppi.product_id
+                WHERE $where AND ppi.qty > 0
+                ORDER BY ppi.product_id, ppi.inv_date, ppi.ref_id");
+        $acc = [];
+        if ($r) while ($x = $r->fetch_assoc()) {
+            $pid = (int)$x['product_id'];
+            if (!isset($acc[$pid])) $acc[$pid] = ['product_id'=>$pid, 'name'=>$x['name'], 'moves'=>[], 'refs'=>[],
+                                                 'qty'=>0, 'amount'=>0, 'suppliers'=>[]];
+            $price = round((float)$x['amount'] / max(0.000001, (float)$x['qty']), 2);
+            $acc[$pid]['moves'][] = ['d'=>$x['inv_date'], 'p'=>$price, 's'=>trim($x['supplier'])];
+            $acc[$pid]['refs'][(string)$x['ref_id']] = 1;
+            $acc[$pid]['qty']    += (float)$x['qty'];
+            $acc[$pid]['amount'] += (float)$x['amount'];
+            if (trim($x['supplier']) !== '') $acc[$pid]['suppliers'][trim($x['supplier'])] = 1;
+        }
+        $rows = [];
+        foreach ($acc as $a) {
+            $mv = $a['moves'];
+            $n  = count($mv);
+            $last  = $mv[$n - 1];
+            $first = $mv[0];
+            // آخر سعر مختلف عن الأخير هو المرجع للمقارنة، لا مجرد الحركة السابقة
+            $prev = null;
+            for ($i = $n - 2; $i >= 0; $i--) { if (abs($mv[$i]['p'] - $last['p']) > 0.009) { $prev = $mv[$i]; break; } }
+            $prices = array_column($mv, 'p');
+            $chg = ($prev && $prev['p'] > 0) ? round(($last['p'] - $prev['p']) / $prev['p'] * 100, 1) : null;
+            $rows[] = [
+                'product_id'   => $a['product_id'],
+                'name'         => $a['name'],
+                'orders'       => count($a['refs']),
+                'moves'        => $n,
+                'qty'          => round($a['qty'], 2),
+                'amount'       => round($a['amount'], 2),
+                'last_price'   => $last['p'],
+                'last_date'    => $last['d'],
+                'last_supplier'=> $last['s'],
+                'prev_price'   => $prev ? $prev['p'] : null,
+                'prev_date'    => $prev ? $prev['d'] : null,
+                'change_pct'   => $chg,
+                'first_price'  => $first['p'],
+                'first_date'   => $first['d'],
+                'total_pct'    => ($first['p'] > 0 && $n > 1) ? round(($last['p'] - $first['p']) / $first['p'] * 100, 1) : null,
+                'min_price'    => $prices ? min($prices) : null,
+                'max_price'    => $prices ? max($prices) : null,
+                'avg_price'    => round($a['amount'] / max(0.000001, $a['qty']), 2),
+                'suppliers'    => count($a['suppliers']),
+                'spark'        => array_slice($prices, -12),
+            ];
+        }
+        $cmp = [
+            'orders' => function($x, $y) { return $y['orders'] <=> $x['orders'] ?: $y['amount'] <=> $x['amount']; },
+            'amount' => function($x, $y) { return $y['amount'] <=> $x['amount']; },
+            'change' => function($x, $y) { return ($y['change_pct'] ?? -999) <=> ($x['change_pct'] ?? -999); },
+            'name'   => function($x, $y) { return strcmp($x['name'], $y['name']); },
+        ];
+        usort($rows, $cmp[isset($cmp[$sort]) ? $sort : 'orders']);
+        echo json_encode(['success'=>true, 'sort'=>$sort, 'count'=>count($rows), 'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
     }
 
