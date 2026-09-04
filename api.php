@@ -5630,16 +5630,19 @@ switch ($action) {
             // التطوير يقيس بالصافي (الضريبة مستردة)، والمقاولات بالشامل (الضريبة تكلفة على المشروع)
             $base = ($ptype === 'contracting') ? (float)$x['invoiced_gross'] : (float)$x['invoiced'];
             $x['basis'] = ($ptype === 'contracting') ? 'gross' : 'net';
-            $x['spent'] = round($base + $extra, 2);
-            // في المقاولات الميزانية المعلنة هي قيمة العقد وتشمل هامشنا، فسقف التكلفة أقل
-            $x['cost_budget'] = ($ptype === 'contracting' && $margin > 0)
-                ? round($budget / (1 + $margin / 100), 2) : round($budget, 2);
-            $x['margin_value'] = round($budget - $x['cost_budget'], 2);
-            $ref = (float)$x['cost_budget'];
+            // في المقاولات: الميزانية تبقى قيمة العقد، ويُضاف بند إشراف بنسبة الهامش
+            // يُحتسب لحظياً من التكلفة القائمة فيتحدث تلقائياً مع كل فاتورة جديدة
+            $x['cost'] = round($base + $extra, 2);
+            $x['supervision'] = ($ptype === 'contracting' && $margin > 0)
+                ? round($x['cost'] * $margin / 100, 2) : 0;
+            $x['spent'] = round($x['cost'] + $x['supervision'], 2);
+            $x['cost_budget'] = round($budget, 2);
+            $x['margin_value'] = $x['supervision'];
+            $ref = $budget;
             $x['pct'] = ($ref > 0) ? round($x['spent'] / $ref * 100, 1) : null;
             $x['remaining'] = round($ref - $x['spent'], 2);
-            // الهامش المتوقع فعليا لو أُقفل المشروع على المصروف الحالي مقابل سقف التكلفة
-            $x['margin_projected'] = ($ptype === 'contracting') ? round($budget - $x['spent'], 2) : null;
+            // الفائض المتوقع لو أُقفل المشروع على التكلفة القائمة
+            $x['margin_projected'] = ($ptype === 'contracting') ? round($budget - $x['cost'], 2) : null;
             $rows[] = $x;
         }
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);

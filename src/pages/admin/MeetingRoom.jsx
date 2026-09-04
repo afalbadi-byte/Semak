@@ -288,10 +288,10 @@ export default function MeetingRoom() {
                                         <div className="h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
                                             <div className={'h-full ' + bar} style={{ width: Math.min(100, pct || 0) + '%' }} />
                                         </div>
-                                        <div className="text-[11px] mt-1.5 opacity-70">مصروف {money(b.spent)} من {money(b.cost_budget)} <span className="opacity-70">({b.basis === 'gross' ? 'شامل الضريبة' : 'قبل الضريبة'})</span></div>
+                                        <div className="text-[11px] mt-1.5 opacity-70">إنفاق {money(b.spent)} من {money(b.budget)} <span className="opacity-70">({b.basis === 'gross' ? 'شامل الضريبة' : 'قبل الضريبة'})</span></div>
                                         <div className="text-[11px] opacity-60">المتبقي {money(b.remaining)} · {b.invoices} فاتورة · {b.ptype === 'contracting' ? 'مقاولات' : 'تطوير'}</div>
-                                        {b.ptype === 'contracting' && (
-                                            <div className="text-[11px] opacity-60">قيمة العقد {money(b.budget)} · هامش {Number(b.margin_pct)}% = {money(b.margin_value)}</div>
+                                        {b.ptype === 'contracting' && Number(b.margin_pct) > 0 && (
+                                            <div className="text-[11px] opacity-60">تكلفة {money(b.cost)} + إشراف {Number(b.margin_pct)}% = {money(b.supervision)}</div>
                                         )}
                                     </div>
                                 );
@@ -571,7 +571,7 @@ function BudgetForm({ item, onCancel, onSave }) {
                 </select>
                 {pt === 'contracting' && (
                     <label className="block text-xs text-slate-500">
-                        هامش سماك على التكلفة (%)
+                        نسبة الإشراف على التكلفة (%)
                         <input type="number" value={mg} onChange={e => setMg(e.target.value)}
                             className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-sm" />
                     </label>
