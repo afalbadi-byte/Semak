@@ -1103,6 +1103,25 @@ $conn->query("INSERT IGNORE INTO project_budgets (project_id, name, budget, kind
     (7, 'التطوير والإدارة',          0, 'cost',     'مصاريف إدارية بلا ميزانية محددة')");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (23)");
 } // end DDL v23
+// ─── DDL v24: تكاليف المشروع خارج فواتير دفترة (أرض، مساهمات عينية، رسوم) ──────
+if ($__sv < 24) {
+$conn->query("CREATE TABLE IF NOT EXISTS project_extra_costs (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    title      VARCHAR(200) NOT NULL,
+    amount     DECIMAL(16,2) NOT NULL DEFAULT 0,
+    cost_date  DATE DEFAULT NULL,
+    kind       VARCHAR(20) NOT NULL DEFAULT 'other',
+    note       VARCHAR(400) DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX (project_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("INSERT IGNORE INTO project_extra_costs (id, project_id, title, amount, cost_date, kind, note) VALUES
+    (1, 3, 'قيمة الأرض', 1000000, '2025-01-01', 'land',
+     'مساهمة عينية في رأس المال من نداء الخشان — تدخل في تكلفة المشروع ولا تُسجَّل كفاتورة مشتريات')");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (24)");
+} // end DDL v24
+
 
 
 
@@ -5486,6 +5505,41 @@ switch ($action) {
 
     // ══ اجتماعات سماك الدورية ══
 
+
+
+    case 'pcost_extra_list': {
+        $pid = (int)($_GET['project_id'] ?? 0);
+        $w = $pid ? "WHERE project_id=$pid" : '';
+        $r = $conn->query("SELECT * FROM project_extra_costs $w ORDER BY project_id, cost_date, id");
+        $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pcost_extra_save': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        $pid = (int)($b['project_id'] ?? 0);
+        $t = trim((string)($b['title'] ?? ''));
+        if (!$id && (!$pid || $t === '')) { echo json_encode(['success'=>false,'message'=>'project_id والعنوان مطلوبان']); break; }
+        $dt = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['cost_date'] ?? '')) ? "'" . $b['cost_date'] . "'" : 'NULL';
+        $kind = in_array(($b['kind'] ?? ''), ['land','fees','inkind','other'], true) ? $b['kind'] : 'other';
+        $set = "project_id=$pid, title='" . $E($t) . "', amount=" . (float)($b['amount'] ?? 0)
+             . ", cost_date=$dt, kind='" . $E($kind) . "', note='" . $E($b['note'] ?? '') . "'";
+        if ($id) $conn->query("UPDATE project_extra_costs SET $set WHERE id=$id");
+        else { $conn->query("INSERT INTO project_extra_costs SET $set"); $id = (int)$conn->insert_id; }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pcost_extra_delete': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
+        if ($id) $conn->query("DELETE FROM project_extra_costs WHERE id=$id");
+        echo json_encode(['success'=>$id > 0], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     case 'pbudget_list': {
         $r = $conn->query("SELECT b.*, COALESCE(s.spent,0) spent, COALESCE(s.paid,0) paid, COALESCE(s.invoices,0) invoices
