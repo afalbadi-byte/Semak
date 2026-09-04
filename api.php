@@ -6347,7 +6347,7 @@ switch ($action) {
         break;
     }
 
-    case 'pay_add': {
+    case 'sup_pay_add': {
         // تسجيل دفعة لمورد على فاتورة، بطريقتها ومرجعها وإيصالها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
@@ -6393,7 +6393,7 @@ switch ($action) {
         break;
     }
 
-    case 'pay_list': {
+    case 'sup_pay_list': {
         $pid = (int)($_GET['purchase_id'] ?? 0);
         $sup = trim((string)($_GET['supplier'] ?? ''));
         $w = $pid ? "p.purchase_id=$pid" : ($sup !== '' ? "p.supplier='" . $conn->real_escape_string($sup) . "'" : '1');
