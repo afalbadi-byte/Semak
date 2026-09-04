@@ -5200,11 +5200,30 @@ switch ($action) {
     }
 
     case 'ai_assistant_chat': {
-        // مساعد سماك الذكي — نافذة عائمة للموظفين المصرح لهم (صلاحية ai_assistant تُفحص بالواجهة)
-        // السياق يُجمع حياً من قاعدة البيانات: الوحدات، تقرير الأصناف، أسعار الشراء
-        if (($_SERVER['HTTP_AUTHORIZATION'] ?? '') === '') { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول']); break; }
-        set_time_limit(60);
-        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        // مساعد سماك الذكي — يقرأ بياناتنا الحية عبر أدوات، في حدود صلاحية الموظف
+        $tok = jwt_from_request();
+        $jp  = $tok ? jwt_verify($tok) : null;
+        if (!$jp || empty($jp['sub'])) { echo json_encode(['success'=>false,'message'=>'انتهت الجلسة — سجّل الخروج ثم الدخول مرة أخرى'], JSON_UNESCAPED_UNICODE); break; }
+        $uid  = (int)$jp['sub'];
+        $urow = null;
+        if ($ur0 = $conn->query("SELECT name, role, job, permissions FROM users WHERE id=$uid LIMIT 1")) $urow = $ur0->fetch_assoc();
+        if (!$urow) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $uname   = (string)($urow['name'] ?? '');
+        $ujob    = (string)($urow['job'] ?? '');
+        $isAdmin = (($urow['role'] ?? '') === 'admin');
+        $perms   = json_decode((string)($urow['permissions'] ?? '[]'), true);
+        if (!is_array($perms)) $perms = [];
+        if (!$isAdmin && !in_array('ai_assistant', $perms, true)) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية استخدام المساعد'], JSON_UNESCAPED_UNICODE); break;
+        }
+        $can = function(array $keys) use ($isAdmin, $perms) {
+            if ($isAdmin) return true;
+            foreach ($keys as $k) if (in_array($k, $perms, true)) return true;
+            return false;
+        };
+        set_time_limit(120);
+
+        $b    = json_decode(file_get_contents('php://input'), true) ?: [];
         $msgs = array_slice((array)($b['messages'] ?? []), -14);
         $clean = [];
         foreach ($msgs as $m) {
@@ -5212,66 +5231,268 @@ switch ($action) {
             $txt  = mb_substr(trim((string)($m['content'] ?? '')), 0, 2000);
             if ($txt !== '') $clean[] = ['role'=>$role, 'content'=>$txt];
         }
-        if (!$clean || end($clean)['role'] !== 'user') { echo json_encode(['success'=>false,'message'=>'رسالة فارغة']); break; }
+        if (!$clean || end($clean)['role'] !== 'user') { echo json_encode(['success'=>false,'message'=>'رسالة فارغة'], JSON_UNESCAPED_UNICODE); break; }
 
-        // ─ سياق حي: الوحدات المباعة ─
-        $soldUnits = [];
-        $ur = $conn->query("SELECT unit_code FROM owners WHERE tenant_id=1");
-        if ($ur) while ($u = $ur->fetch_assoc()) $soldUnits[] = $u['unit_code'];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $Q = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $LIM = function($v, $d, $max) { $n = (int)$v; if ($n <= 0) $n = $d; return min($n, $max); };
+        $PURCH = ['finance','accounting','qs','projects'];   // من يرى المشتريات والأسعار
+        $PROJ  = ['finance','accounting','projects'];        // من يرى الميزانيات ونسب الإنجاز
+        $SALES = ['units','units_edit','projects','leads'];  // من يرى الوحدات والملاك
 
-        // ─ سياق حي: تقرير الأصناف (مجموع كل بند) ─
-        $treeNames = [];
-        $tj = acc_setting($conn, 1, 'purchase_class_tree', '');
-        foreach ((array)json_decode($tj, true) as $tn) $treeNames[$tn['code']] = $tn['name'];
-        $catLines = [];
-        $cr2 = $conn->query("SELECT code, ROUND(SUM(amount),0) t, COUNT(DISTINCT ref_id) n FROM purchase_class_items GROUP BY code ORDER BY t DESC");
-        if ($cr2) while ($c2 = $cr2->fetch_assoc()) $catLines[] = $c2['code'] . ' ' . ($treeNames[$c2['code']] ?? '') . ': ' . number_format((float)$c2['t']) . ' ريال (' . $c2['n'] . ' فاتورة)';
+        $TOOLS = [
+        'product_prices' => ['perm'=>$PURCH, 'def'=>[
+            'name'=>'product_prices',
+            'description'=>'أسعار شراء الأصناف من فواتيرنا الفعلية: متوسط وأدنى وأعلى سعر للوحدة، والكمية والإجمالي وعدد الفواتير وأول وآخر تاريخ. ابحث باسم الصنف أو جزء منه (مثل: رخام، سلك 4، بورسلان). اتركه فارغاً لأكبر الأصناف قيمة.',
+            'input_schema'=>['type'=>'object','properties'=>[
+                'query'=>['type'=>'string','description'=>'جزء من اسم الصنف'],
+                'limit'=>['type'=>'integer','description'=>'عدد النتائج (الافتراضي 15)'],
+            ]],
+        ], 'run'=>function($in) use ($Q, $E, $LIM) {
+            $w = trim((string)($in['query'] ?? ''));
+            $where = $w === '' ? '1' : "COALESCE(ap.name,'') LIKE '%" . $E($w) . "%'";
+            $n = $LIM($in['limit'] ?? 0, 15, 40);
+            return $Q("SELECT ppi.product_id, COALESCE(ap.name, CONCAT('منتج #', ppi.product_id)) name,
+                    COUNT(*) invoices, ROUND(SUM(ppi.qty),2) qty, ROUND(SUM(ppi.amount),2) amount,
+                    ROUND(SUM(ppi.amount)/NULLIF(SUM(ppi.qty),0),2) avg_price,
+                    ROUND(MIN(CASE WHEN ppi.qty>0 THEN ppi.amount/ppi.qty END),2) min_price,
+                    ROUND(MAX(CASE WHEN ppi.qty>0 THEN ppi.amount/ppi.qty END),2) max_price,
+                    MIN(ppi.inv_date) first_date, MAX(ppi.inv_date) last_date
+                FROM purchase_product_items ppi
+                LEFT JOIN acc_products ap ON ap.tenant_id=1 AND ap.daftra_id=ppi.product_id
+                WHERE $where GROUP BY ppi.product_id, ap.name ORDER BY amount DESC LIMIT $n");
+        }],
 
-        // ─ سياق حي: أعلى 45 صنفاً بمتوسط وآخر سعر شراء ─
-        $prodLines = [];
-        $pr2 = $conn->query("SELECT ppi.product_id, COALESCE(ap.name, CONCAT('منتج #', ppi.product_id)) nm,
-                                    ROUND(SUM(ppi.amount),0) t, ROUND(SUM(ppi.qty),1) q,
-                                    ROUND(SUM(ppi.amount)/NULLIF(SUM(ppi.qty),0),2) avgp
-                             FROM purchase_product_items ppi
-                             LEFT JOIN acc_products ap ON ap.tenant_id=1 AND ap.daftra_id=ppi.product_id
-                             GROUP BY ppi.product_id, ap.name ORDER BY t DESC LIMIT 45");
-        if ($pr2) while ($p2 = $pr2->fetch_assoc()) $prodLines[] = $p2['nm'] . ': إجمالي ' . number_format((float)$p2['t']) . ' ر.س، كمية ' . $p2['q'] . '، متوسط سعر ' . $p2['avgp'];
+        'product_movement' => ['perm'=>$PURCH, 'def'=>[
+            'name'=>'product_movement',
+            'description'=>'حركة صنف واحد: كل توريداته بالتاريخ والمورد والكمية وسعر الوحدة، لمعرفة أعلى وأدنى سعر ومن باعه بكم. مرر اسم الصنف أو رقمه.',
+            'input_schema'=>['type'=>'object','properties'=>[
+                'query'=>['type'=>'string','description'=>'اسم الصنف أو جزء منه'],
+                'product_id'=>['type'=>'integer','description'=>'رقم الصنف إن كان معروفاً'],
+                'limit'=>['type'=>'integer'],
+            ]],
+        ], 'run'=>function($in) use ($Q, $E, $LIM) {
+            $pid = (int)($in['product_id'] ?? 0);
+            if (!$pid) {
+                $w = trim((string)($in['query'] ?? ''));
+                if ($w === '') return ['error'=>'مرر اسم الصنف'];
+                $f = $Q("SELECT ppi.product_id FROM purchase_product_items ppi
+                         JOIN acc_products ap ON ap.tenant_id=1 AND ap.daftra_id=ppi.product_id
+                         WHERE ap.name LIKE '%" . $E($w) . "%'
+                         GROUP BY ppi.product_id ORDER BY SUM(ppi.amount) DESC LIMIT 1");
+                if (!$f) return ['error'=>'لا يوجد صنف بهذا الاسم'];
+                $pid = (int)$f[0]['product_id'];
+            }
+            $n = $LIM($in['limit'] ?? 0, 40, 120);
+            $nm = $Q("SELECT name FROM acc_products WHERE tenant_id=1 AND daftra_id=$pid LIMIT 1");
+            return ['product_id'=>$pid, 'name'=>$nm ? $nm[0]['name'] : ('منتج #' . $pid),
+                'movements'=>$Q("SELECT ref_id, inv_date, COALESCE(supplier,'') supplier, qty, amount,
+                        ROUND(amount/NULLIF(qty,0),2) unit_price
+                    FROM purchase_product_items WHERE product_id=$pid
+                    ORDER BY inv_date DESC, ref_id DESC LIMIT $n"),
+                'by_supplier'=>$Q("SELECT COALESCE(supplier,'غير محدد') supplier, COUNT(*) invoices,
+                        ROUND(SUM(qty),2) qty, ROUND(SUM(amount),2) amount,
+                        ROUND(SUM(amount)/NULLIF(SUM(qty),0),2) avg_price,
+                        MAX(inv_date) last_date
+                    FROM purchase_product_items WHERE product_id=$pid
+                    GROUP BY supplier ORDER BY amount DESC")];
+        }],
 
-        $sys = "أنت «مساعد سماك الذكي» — مساعد داخلي لموظفي شركة سماك العقارية (سماك العقارية للتسويق، ومؤسسة سمك العمارة للتطوير العقاري س.ت 7051031099، الرقم الموحد 920032842، semak.sa، مكة المكرمة).\n\n"
-             . "مشروع الشركة الحالي: «سماك البوابة السكني» بحي البوابة بمكة داخل حدود الحرم — مبنى مكتمل: دور أرضي مواقف + 3 أدوار سكنية (كل دور: وحدة زاوية بواجهتين + وحدة أمامية) + فيلا روف. الوحدات: SM-A01 وSM-A03 وSM-A05 زوايا بواجهتين، SM-A02 وSM-A04 وSM-A06 أمامية، SM-A07 روف. كل وحدة عادية 197م²: 5 غرف، غرفة خادمة، غرفة غسيل، 4 دورات مياه، مستودع، موقف خاص، منزل ذكي، دخول ذكي، خزانات. الضمانات: سباكة 50 سنة، قواطع كهربائية 25 سنة، هيكل إنشائي 10 سنوات، إنارة وأدوات صحية 3 سنوات.\n"
-             . "سياسة التسعير المعتمدة (سارية من 2026-08-28): لا تُعلن أسعار تفصيلية للوحدات إطلاقاً — السعر المعلن الوحيد للعملاء: «الأسعار تبدأ من 663,695 ⃀» وهو الحد الأدنى المعتمد الذي لا يجوز عرض سعر أدنى منه لأي وحدة، والتسعير النهائي لكل وحدة يصدر بعرض سعر رسمي من الإدارة فقط. الحجز بعربون 2.5% يُخصم من السعر. البيع كاش أو تمويل بنكي (القسط التقريبي من ~3,340 شهرياً للمؤهلين لدعم سكني على 20 سنة بدفعة 5%). حملة قائمة: أول وحدتين تُباعان معهما هدية 6 مكيفات سبليت Gree توريداً وتركيباً (الأسعار وفق السياسة أعلاه — الهدية لا تغير الحد الأدنى).\n"
-             . "الوحدات المباعة حالياً: " . ($soldUnits ? implode('، ', $soldUnits) : 'لا يوجد') . "\n\n"
-             . "مشتريات المشروع حسب البنود (صافي قبل الضريبة):\n- " . implode("\n- ", array_slice($catLines, 0, 30)) . "\n\n"
-             . "أعلى الأصناف شراءً (الاسم: الإجمالي، الكمية، متوسط سعر الوحدة):\n- " . implode("\n- ", $prodLines) . "\n\n"
-             . "قواعدك: أجب بالعربية باختصار مهني ودقة. اعتمد على البيانات أعلاه فقط في الأرقام — وإن سُئلت عن رقم غير موجود عندك فقل إنه غير متاح لديك ووجّه الموظف للصفحة المناسبة في لوحة الإدارة (فواتير الشراء ← حسب الأصناف لحركة الأصناف، المنتجات والخدمات للكتالوج، المصروفات...). "
-             . "ممنوع منعاً باتاً: ذكر أو تقدير تكاليف الوحدات الداخلية أو هوامش الربح أو أي بيانات مستثمرين أو حصص — هذه ليست ضمن بياناتك أصلاً؛ إن سُئلت عنها فأجب أنها بيانات إدارية تُطلب من الإدارة مباشرة. لا تخترع أرقاماً أبداً.";
+        'suppliers' => ['perm'=>$PURCH, 'def'=>[
+            'name'=>'suppliers',
+            'description'=>'الموردون: عدد الفواتير والإجمالي شامل الضريبة والصافي والمسدد والمتبقي وآخر تعامل. مرر جزءاً من الاسم للبحث عن مورد بعينه.',
+            'input_schema'=>['type'=>'object','properties'=>[
+                'query'=>['type'=>'string'], 'limit'=>['type'=>'integer'],
+            ]],
+        ], 'run'=>function($in) use ($Q, $E, $LIM) {
+            $w = trim((string)($in['query'] ?? ''));
+            $where = $w === '' ? '1' : "p.supplier LIKE '%" . $E($w) . "%'";
+            $n = $LIM($in['limit'] ?? 0, 20, 60);
+            return $Q("SELECT p.supplier, COUNT(*) invoices, ROUND(SUM(p.total),2) gross,
+                    ROUND(SUM(p.subtotal),2) net, ROUND(SUM(p.paid),2) paid,
+                    ROUND(SUM(p.total - p.paid),2) outstanding, MAX(p.date) last_date
+                FROM dmirror_purchases p WHERE $where
+                GROUP BY p.supplier ORDER BY gross DESC LIMIT $n");
+        }],
+        ];
 
-        $payload = json_encode([
-            'model' => 'claude-sonnet-5',
-            'max_tokens' => 1200,
-            'system' => $sys,
-            'messages' => $clean,
-        ], JSON_UNESCAPED_UNICODE);
+        $TOOLS['invoices'] = ['perm'=>$PURCH, 'def'=>[
+            'name'=>'invoices',
+            'description'=>'فواتير المشتريات: رقم الفاتورة والتاريخ والمورد والإجمالي والمسدد والمشروع المسكّنة عليه. رشّح بالمورد أو بالفترة أو بالمشروع أو بحد أدنى للمبلغ.',
+            'input_schema'=>['type'=>'object','properties'=>[
+                'supplier'=>['type'=>'string'], 'from'=>['type'=>'string','description'=>'YYYY-MM-DD'],
+                'to'=>['type'=>'string','description'=>'YYYY-MM-DD'],
+                'project_id'=>['type'=>'integer','description'=>'3 البوابة، 6 فيلا د. ليلى، 7 التطوير والإدارة'],
+                'min_total'=>['type'=>'number'], 'limit'=>['type'=>'integer'],
+            ]],
+        ], 'run'=>function($in) use ($Q, $E, $LIM) {
+            $c = ['1'];
+            if (trim((string)($in['supplier'] ?? '')) !== '') $c[] = "p.supplier LIKE '%" . $E($in['supplier']) . "%'";
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($in['from'] ?? ''))) $c[] = "p.date >= '" . $E($in['from']) . "'";
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($in['to'] ?? '')))   $c[] = "p.date <= '" . $E($in['to']) . "'";
+            if ((int)($in['project_id'] ?? 0) > 0) $c[] = "pp.project_id = " . (int)$in['project_id'];
+            if ((float)($in['min_total'] ?? 0) > 0) $c[] = "p.total >= " . (float)$in['min_total'];
+            $n = $LIM($in['limit'] ?? 0, 25, 80);
+            $W = implode(' AND ', $c);
+            return $Q("SELECT p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.subtotal,2) net,
+                    ROUND(p.paid,2) paid, pp.project_id, COALESCE(b.name,'بلا مشروع') project
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                WHERE $W ORDER BY p.date DESC, p.id DESC LIMIT $n");
+        }];
 
-        $reply = ''; $ok = false;
-        foreach (['claude-sonnet-5', 'claude-haiku-4-5'] as $mdl) {
-            $pl = json_decode($payload, true); $pl['model'] = $mdl;
+        $TOOLS['spend_by_class'] = ['perm'=>$PURCH, 'def'=>[
+            'name'=>'spend_by_class',
+            'description'=>'المصروف حسب بنود شجرة التصنيف (أعمال العظم، الكهرباء، السباكة، التشطيبات...) بالصافي قبل الضريبة مع عدد الفواتير.',
+            'input_schema'=>['type'=>'object','properties'=>['limit'=>['type'=>'integer']]],
+        ], 'run'=>function($in) use ($Q, $LIM, $conn) {
+            $names = [];
+            foreach ((array)json_decode(acc_setting($conn, 1, 'purchase_class_tree', ''), true) as $t)
+                if (isset($t['code'])) $names[$t['code']] = $t['name'] ?? '';
+            $n = $LIM($in['limit'] ?? 0, 40, 120);
+            $rows = $Q("SELECT code, ROUND(SUM(amount),2) amount, COUNT(DISTINCT ref_id) invoices
+                        FROM purchase_class_items GROUP BY code ORDER BY amount DESC LIMIT $n");
+            foreach ($rows as &$r) $r['name'] = $names[$r['code']] ?? '';
+            return $rows;
+        }];
+
+        $TOOLS['projects_status'] = ['perm'=>$PROJ, 'def'=>[
+            'name'=>'projects_status',
+            'description'=>'حالة المشاريع: الميزانية والمصروف ونسبة الإنجاز والمتبقي. التطوير يُقاس قبل الضريبة لأنها مستردة، والمقاولات شامل الضريبة مضافاً إليها بند الإشراف بنسبة متفق عليها.',
+            'input_schema'=>['type'=>'object','properties'=>[]],
+        ], 'run'=>function($in) use ($Q) {
+            $rows = $Q("SELECT b.*, COALESCE(s.net,0) net, COALESCE(s.gross,0) gross, COALESCE(s.invoices,0) invoices,
+                    COALESCE(s.paid,0) paid, COALESCE(e.extra,0) extra_costs
+                FROM project_budgets b
+                LEFT JOIN (SELECT pp.project_id pid, ROUND(SUM(p.subtotal),2) net, ROUND(SUM(p.total),2) gross,
+                                  ROUND(SUM(p.paid),2) paid, COUNT(*) invoices
+                           FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                           WHERE pp.project_id IS NOT NULL GROUP BY pp.project_id) s ON s.pid = b.project_id
+                LEFT JOIN (SELECT project_id pid, ROUND(SUM(amount),2) extra FROM project_extra_costs GROUP BY project_id) e
+                  ON e.pid = b.project_id
+                ORDER BY b.project_id");
+            $out = [];
+            foreach ($rows as $x) {
+                $ct   = (($x['ptype'] ?? 'dev') === 'contracting');
+                $mg   = (float)($x['margin_pct'] ?? 0);
+                $cost = round(($ct ? (float)$x['gross'] : (float)$x['net']) + (float)$x['extra_costs'], 2);
+                $sup  = ($ct && $mg > 0) ? round($cost * $mg / 100, 2) : 0;
+                $bud  = (float)$x['budget'];
+                $out[] = ['project_id'=>(int)$x['project_id'], 'name'=>$x['name'],
+                    'type'=>$ct ? 'مقاولات' : 'تطوير', 'basis'=>$ct ? 'شامل الضريبة' : 'قبل الضريبة',
+                    'invoices'=>(int)$x['invoices'], 'cost'=>$cost, 'supervision'=>$sup,
+                    'spent'=>round($cost + $sup, 2), 'budget'=>$bud,
+                    'pct'=>$bud > 0 ? round(($cost + $sup) / $bud * 100, 1) : null,
+                    'remaining'=>round($bud - $cost - $sup, 2)];
+            }
+            return $out;
+        }];
+
+        $TOOLS['purchases_totals'] = ['perm'=>$PURCH, 'def'=>[
+            'name'=>'purchases_totals',
+            'description'=>'إجماليات المشتريات: الكلي والصافي والضريبة والمسدد والمتبقي، وتوزيع شهري لآخر اثني عشر شهراً.',
+            'input_schema'=>['type'=>'object','properties'=>[]],
+        ], 'run'=>function($in) use ($Q) {
+            return ['overall'=>$Q("SELECT COUNT(*) invoices, ROUND(SUM(total),2) gross, ROUND(SUM(subtotal),2) net,
+                        ROUND(SUM(total-subtotal),2) vat, ROUND(SUM(paid),2) paid, ROUND(SUM(total-paid),2) outstanding
+                        FROM dmirror_purchases"),
+                'monthly'=>$Q("SELECT DATE_FORMAT(date,'%Y-%m') ym, COUNT(*) invoices, ROUND(SUM(subtotal),2) net,
+                        ROUND(SUM(total-subtotal),2) vat, ROUND(SUM(total),2) gross
+                        FROM dmirror_purchases GROUP BY ym ORDER BY ym DESC LIMIT 12")];
+        }];
+
+        $TOOLS['units_status'] = ['perm'=>$SALES, 'def'=>[
+            'name'=>'units_status',
+            'description'=>'حالة الوحدات في المشروع: الرقم والحالة (متاح، محجوز، مباعة) والمساحة، مع الملاك المسجلين للوحدات المباعة.',
+            'input_schema'=>['type'=>'object','properties'=>[]],
+        ], 'run'=>function($in) use ($Q) {
+            return ['units'=>$Q("SELECT u.unit_code, COALESCE(u.status,'') status, COALESCE(u.spaces,'') spaces,
+                        COALESCE(p.name,'') project
+                    FROM units u LEFT JOIN projects p ON p.id = u.project_id
+                    WHERE u.tenant_id=1 ORDER BY u.unit_code"),
+                'owners'=>$Q("SELECT unit_code, owner_name, COALESCE(owner_phone,'') owner_phone
+                    FROM owners WHERE tenant_id=1 ORDER BY unit_code")];
+        }];
+
+        $TOOLS['docs_gaps'] = ['perm'=>$PURCH, 'def'=>[
+            'name'=>'docs_gaps',
+            'description'=>'الفواتير التي لا مستند مرفق لها عندنا، وتغطية المستندات شهرياً — لمتابعة الاكتمال المستندي.',
+            'input_schema'=>['type'=>'object','properties'=>['limit'=>['type'=>'integer']]],
+        ], 'run'=>function($in) use ($Q, $LIM) {
+            $n = $LIM($in['limit'] ?? 0, 25, 80);
+            return ['coverage'=>$Q("SELECT COUNT(*) invoices, SUM(CASE WHEN d.n>0 THEN 1 ELSE 0 END) with_docs
+                        FROM dmirror_purchases p
+                        LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
+                          ON d.purchase_id = p.id"),
+                'missing'=>$Q("SELECT p.no, p.date, p.supplier, ROUND(p.total,2) gross FROM dmirror_purchases p
+                        LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
+                          ON d.purchase_id = p.id
+                        WHERE COALESCE(d.n,0) = 0 ORDER BY p.total DESC LIMIT $n")];
+        }];
+
+        $toolDefs = []; $allowed = [];
+        foreach ($TOOLS as $tn => $t) if ($can($t['perm'])) { $toolDefs[] = $t['def']; $allowed[] = $tn; }
+
+        $sys = "أنت «مساعد سماك الذكي» — مساعد داخلي لموظفي سماك العقارية (سماك العقارية للتسويق، ومؤسسة سمك العمارة للتطوير العقاري س.ت 7051031099، الرقم الموحد 920032842، semak.sa، مكة المكرمة).\n\n"
+             . "تتحدث الآن مع: " . ($uname !== '' ? $uname : 'موظف') . ($ujob !== '' ? " — {$ujob}" : '') . ($isAdmin ? ' (مدير النظام)' : '') . ".\n\n"
+             . "مشاريع الشركة:\n"
+             . "1) «سماك البوابة السكني» بحي البوابة بمكة داخل حدود الحرم — تطوير: أرض تتحول إلى وحدات سكنية. مبنى مكتمل: دور أرضي مواقف + ثلاثة أدوار سكنية (كل دور: وحدة زاوية بواجهتين + وحدة أمامية) + فيلا روف. الوحدات SM-A01 وSM-A03 وSM-A05 زوايا بواجهتين، وSM-A02 وSM-A04 وSM-A06 أمامية، وSM-A07 روف. كل وحدة عادية 197م²: خمس غرف، غرفة خادمة، غرفة غسيل، أربع دورات مياه، مستودع، موقف خاص، منزل ذكي، دخول ذكي، خزانات. الضمانات: سباكة خمسون سنة، قواطع كهربائية خمس وعشرون سنة، هيكل إنشائي عشر سنوات، إنارة وأدوات صحية ثلاث سنوات.\n"
+             . "2) «فيلا د. ليلى» — عقد مقاولات تشطيب تنفذه سماك، قيمته 690,000 ريال.\n"
+             . "3) «مصاريف التطوير والإدارة» — مصروف عام لا يخص مشروعاً بعينه.\n\n"
+             . "فرق أساسي في قياس التكلفة: في التطوير تُقاس التكلفة صافية قبل الضريبة لأن ضريبة المدخلات مستردة؛ وفي المقاولات تُقاس شاملة الضريبة ويُضاف بند إشراف بنسبة من التكلفة.\n\n"
+             . "سياسة التسعير المعتمدة (سارية من 2026-08-28): لا تُعلن أسعار تفصيلية للوحدات إطلاقاً — السعر المعلن الوحيد للعملاء «الأسعار تبدأ من 663,695 ريال» وهو الحد الأدنى الذي لا يجوز النزول عنه، والتسعير النهائي يصدر بعرض سعر رسمي من الإدارة. الحجز بعربون 2.5% يُخصم من السعر. البيع كاش أو تمويل بنكي (القسط التقريبي من نحو 3,340 شهرياً للمؤهلين لدعم سكني على عشرين سنة بدفعة 5%). حملة قائمة: أول وحدتين تُباعان معهما هدية ست مكيفات سبليت Gree توريداً وتركيباً.\n\n"
+             . "أدواتك تقرأ قاعدة بياناتنا مباشرة. استخدمها دائماً قبل أن تذكر أي رقم، ولا تجب من الذاكرة ولا تقدّر. الأدوات المتاحة لهذا الموظف: " . ($allowed ? implode('، ', $allowed) : 'لا شيء') . ".\n"
+             . "إن سُئلت عن شيء لا تغطيه أدواتك المتاحة فقل ذلك صراحة ووجّه الموظف للصفحة المناسبة في لوحة الإدارة. وإن ردّت أداة بأن البيانات خارج الصلاحية فأبلغ الموظف أن هذه البيانات تحتاج صلاحية إضافية من الإدارة، ولا تحاول الالتفاف عليها.\n"
+             . "استدعِ أكثر من أداة عند الحاجة، ولا تكتفِ بالمتوسط إن كان السؤال عن أعلى أو أدنى أو عن مورد بعينه.\n"
+             . "أجب بالعربية باختصار مهني. الأرقام بفواصل الآلاف وبالريال.\n"
+             . ($isAdmin
+                ? "أنت تتحدث مع مدير النظام: التكاليف والهوامش وأرقام المشاريع مسموح بحثها معه بالكامل."
+                : "ممنوع منعاً باتاً مناقشة تكلفة الوحدات أو هوامش الربح أو بيانات المستثمرين والحصص مع هذا الموظف؛ إن سُئلت عنها فقل إنها بيانات إدارية تُطلب من الإدارة مباشرة.");
+
+        $callAI = function($messages, $model) use ($sys, $toolDefs) {
+            $pl = ['model'=>$model, 'max_tokens'=>1600, 'system'=>$sys, 'messages'=>$messages];
+            if ($toolDefs) $pl['tools'] = $toolDefs;
             $ch = curl_init('https://api.anthropic.com/v1/messages');
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
                 CURLOPT_POSTFIELDS => json_encode($pl, JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
-                CURLOPT_TIMEOUT => 45,
+                CURLOPT_TIMEOUT => 60,
             ]);
             $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-            if ($code === 200) {
-                $d = json_decode($res, true);
-                $reply = $d['content'][0]['text'] ?? '';
-                if ($reply !== '') { $ok = true; break; }
+            return ($code === 200) ? json_decode($res, true) : null;
+        };
+
+        $conv = $clean; $reply = ''; $used = []; $model = 'claude-sonnet-5';
+        for ($turn = 0; $turn < 6; $turn++) {
+            $d = $callAI($conv, $model);
+            if (!$d && $model !== 'claude-haiku-4-5') { $model = 'claude-haiku-4-5'; $d = $callAI($conv, $model); }
+            if (!$d) break;
+            $content = (array)($d['content'] ?? []);
+            $txt = ''; $calls = [];
+            foreach ($content as $blk) {
+                if (($blk['type'] ?? '') === 'text')     $txt .= $blk['text'];
+                if (($blk['type'] ?? '') === 'tool_use') $calls[] = $blk;
             }
+            if ($txt !== '') $reply = $txt;
+            if (($d['stop_reason'] ?? '') !== 'tool_use' || !$calls) break;
+            $conv[] = ['role'=>'assistant', 'content'=>$content];
+            $results = [];
+            foreach ($calls as $c) {
+                $tn  = (string)($c['name'] ?? '');
+                $in  = (array)($c['input'] ?? []);
+                if (!isset($TOOLS[$tn]))            $out = ['error'=>'أداة غير معروفة'];
+                elseif (!$can($TOOLS[$tn]['perm'])) $out = ['error'=>'هذه البيانات خارج صلاحية هذا الموظف'];
+                else { $used[] = $tn; try { $out = $TOOLS[$tn]['run']($in); } catch (Throwable $e) { $out = ['error'=>'تعذر تنفيذ الأداة']; } }
+                $results[] = ['type'=>'tool_result', 'tool_use_id'=>$c['id'],
+                              'content'=>mb_substr(json_encode($out, JSON_UNESCAPED_UNICODE), 0, 60000)];
+            }
+            $conv[] = ['role'=>'user', 'content'=>$results];
         }
-        echo json_encode($ok
-            ? ['success'=>true, 'reply'=>$reply]
+
+        echo json_encode($reply !== ''
+            ? ['success'=>true, 'reply'=>$reply, 'tools'=>array_values(array_unique($used))]
             : ['success'=>false, 'message'=>'تعذر الاتصال بالمساعد — أعد المحاولة'], JSON_UNESCAPED_UNICODE);
         break;
     }
