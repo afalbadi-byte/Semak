@@ -3489,7 +3489,9 @@ switch ($action) {
         $name  = $conn->real_escape_string($input_data['name']);
         $phone = $conn->real_escape_string($input_data['phone']);
         $email = $conn->real_escape_string($input_data['email']);
-        $conn->query("INSERT INTO owners (unit_code, owner_name, owner_phone, owner_email, tenant_id) VALUES ('$unit', '$name', '$phone', '$email', $tid)");
+        $nid   = $conn->real_escape_string(preg_replace('/D/', '', (string)($input_data['national_id'] ?? '')));
+        $conn->query("INSERT INTO owners (unit_code, owner_name, owner_phone, owner_email, national_id, tenant_id)
+                      VALUES ('$unit', '$name', '$phone', '$email', " . ($nid !== '' ? "'$nid'" : 'NULL') . ", $tid)");
         $conn->query("UPDATE units SET status = 'مباعة' WHERE unit_code = '$unit' AND tenant_id=$tid");
         echo json_encode(["success" => true]);
         break;
@@ -3526,7 +3528,9 @@ switch ($action) {
                 $conn->query("UPDATE units SET status = 'مباعة' WHERE unit_code = '$new_unit'");
             }
         }
-        $conn->query("UPDATE owners SET owner_name='$name', owner_phone='$phone', owner_email='$email', unit_code='$new_unit' WHERE id=$id");
+        $nid = $conn->real_escape_string(preg_replace('/D/', '', (string)($input_data['national_id'] ?? '')));
+        $conn->query("UPDATE owners SET owner_name='$name', owner_phone='$phone', owner_email='$email',
+                      national_id=" . ($nid !== '' ? "'$nid'" : 'NULL') . ", unit_code='$new_unit' WHERE id=$id");
         echo json_encode(["success" => true]);
         break;
 
