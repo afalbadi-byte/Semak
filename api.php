@@ -1043,6 +1043,51 @@ $conn->query("CREATE TABLE IF NOT EXISTS meeting_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (21)");
 } // end DDL v21
+// ─── DDL v22: منهجية Level 10 — الصخور والسكوركارد وحقول الاجتماع ──────────────
+if ($__sv < 22) {
+ensure_column($conn, "meetings", "segue",      "segue TEXT");
+ensure_column($conn, "meetings", "headlines",  "headlines TEXT");
+ensure_column($conn, "meetings", "cascading",  "cascading TEXT");
+ensure_column($conn, "meetings", "rating",     "rating DECIMAL(3,1) DEFAULT NULL");
+ensure_column($conn, "meeting_items", "kind",  "kind VARCHAR(10) NOT NULL DEFAULT 'issue'");
+$conn->query("CREATE TABLE IF NOT EXISTS rocks (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    title      VARCHAR(300) NOT NULL,
+    owner      VARCHAR(120) DEFAULT NULL,
+    quarter    VARCHAR(10) DEFAULT NULL,
+    due_date   DATE DEFAULT NULL,
+    status     VARCHAR(12) NOT NULL DEFAULT 'on_track',
+    section    VARCHAR(20) DEFAULT NULL,
+    note       VARCHAR(500) DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (status), INDEX (quarter)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS scorecard_metrics (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(200) NOT NULL,
+    owner      VARCHAR(120) DEFAULT NULL,
+    section    VARCHAR(20) DEFAULT NULL,
+    target     DECIMAL(16,2) DEFAULT NULL,
+    direction  VARCHAR(6) NOT NULL DEFAULT 'gte',
+    unit       VARCHAR(20) DEFAULT NULL,
+    source     VARCHAR(10) NOT NULL DEFAULT 'manual',
+    source_key VARCHAR(60) DEFAULT NULL,
+    sort_index INT NOT NULL DEFAULT 0,
+    active     TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS scorecard_values (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    metric_id  INT NOT NULL,
+    meeting_id INT DEFAULT NULL,
+    val        DECIMAL(16,2) DEFAULT NULL,
+    noted_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_mv (metric_id, meeting_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (22)");
+} // end DDL v22
+
 
 
 
@@ -5423,6 +5468,88 @@ switch ($action) {
 
 
     // ══ اجتماعات سماك الدورية ══
+
+    case 'rock_list': {
+        $r = $conn->query("SELECT * FROM rocks ORDER BY status, due_date, id DESC");
+        $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'rock_save': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        $t  = trim((string)($b['title'] ?? ''));
+        if (!$id && $t === '') { echo json_encode(['success'=>false,'message'=>'العنوان مطلوب']); break; }
+        $st  = in_array(($b['status'] ?? ''), ['on_track','off_track','done','cancelled'], true) ? $b['status'] : 'on_track';
+        $due = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['due_date'] ?? '')) ? "'" . $b['due_date'] . "'" : 'NULL';
+        $set = "title='" . $E($t) . "', owner='" . $E($b['owner'] ?? '') . "', quarter='" . $E($b['quarter'] ?? '')
+             . "', due_date=$due, status='" . $E($st) . "', section='" . $E($b['section'] ?? '')
+             . "', note='" . $E($b['note'] ?? '') . "'";
+        if ($id) $conn->query("UPDATE rocks SET $set WHERE id=$id");
+        else { $conn->query("INSERT INTO rocks SET $set"); $id = (int)$conn->insert_id; }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'rock_delete': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
+        if ($id) $conn->query("DELETE FROM rocks WHERE id=$id");
+        echo json_encode(['success'=>$id > 0], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'score_list': {
+        $mid = (int)($_GET['meeting_id'] ?? 0);
+        $rows = [];
+        $r = $conn->query("SELECT m.*, v.val FROM scorecard_metrics m
+                LEFT JOIN scorecard_values v ON v.metric_id=m.id AND v.meeting_id=" . ($mid ?: 0) . "
+                WHERE m.active=1 ORDER BY m.sort_index, m.id");
+        if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+        // تاريخ آخر ست قراءات لكل مؤشر
+        foreach ($rows as &$x) {
+            $mid2 = (int)$x['id']; $x['history'] = [];
+            $q = $conn->query("SELECT val, noted_at FROM scorecard_values WHERE metric_id=$mid2 ORDER BY id DESC LIMIT 6");
+            if ($q) while ($h = $q->fetch_assoc()) $x['history'][] = $h;
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'score_save': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        $nm = trim((string)($b['name'] ?? ''));
+        if (!$id && $nm === '') { echo json_encode(['success'=>false,'message'=>'اسم المؤشر مطلوب']); break; }
+        $dir = in_array(($b['direction'] ?? ''), ['gte','lte'], true) ? $b['direction'] : 'gte';
+        $src = in_array(($b['source'] ?? ''), ['manual','auto'], true) ? $b['source'] : 'manual';
+        $tg  = ($b['target'] === '' || $b['target'] === null) ? 'NULL' : (float)$b['target'];
+        $set = "name='" . $E($nm) . "', owner='" . $E($b['owner'] ?? '') . "', section='" . $E($b['section'] ?? '')
+             . "', target=$tg, direction='" . $E($dir) . "', unit='" . $E($b['unit'] ?? '')
+             . "', source='" . $E($src) . "', source_key='" . $E($b['source_key'] ?? '')
+             . "', sort_index=" . (int)($b['sort_index'] ?? 0) . ", active=" . ((int)($b['active'] ?? 1) ? 1 : 0);
+        if ($id) $conn->query("UPDATE scorecard_metrics SET $set WHERE id=$id");
+        else { $conn->query("INSERT INTO scorecard_metrics SET $set"); $id = (int)$conn->insert_id; }
+        if (isset($b['val']) && $b['val'] !== '' && !empty($b['meeting_id'])) {
+            $mid = (int)$b['meeting_id']; $v = (float)$b['val'];
+            $conn->query("INSERT INTO scorecard_values (metric_id, meeting_id, val) VALUES ($id, $mid, $v)
+                          ON DUPLICATE KEY UPDATE val=VALUES(val), noted_at=NOW()");
+        }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'score_delete': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
+        if ($id) { $conn->query("DELETE FROM scorecard_metrics WHERE id=$id"); $conn->query("DELETE FROM scorecard_values WHERE metric_id=$id"); }
+        echo json_encode(['success'=>$id > 0], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'mtg_kpis': {
         $out = ['success'=>true];
         $one = function($sql, $def = 0) use ($conn) {
@@ -5517,7 +5644,7 @@ switch ($action) {
         $id = (int)($b['id'] ?? 0);
         $ttl = trim((string)($b['title'] ?? '')) ?: ('اجتماع سماك الدوري ' . date('Y-m-d'));
         $dt  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['meet_date'] ?? '')) ? $b['meet_date'] : date('Y-m-d');
-        $set = "title='" . $E($ttl) . "', meet_date='$dt', attendees='" . $E($b['attendees'] ?? '')
+        $set = "title='" . $E($ttl) . "', meet_date='$dt', segue='" . $E($b['segue'] ?? '') . "', headlines='" . $E($b['headlines'] ?? '') . "', cascading='" . $E($b['cascading'] ?? '') . "', attendees='" . $E($b['attendees'] ?? '')
              . "', summary='" . $E($b['summary'] ?? '') . "', created_by='" . $E($b['created_by'] ?? '') . "'";
         if ($id) { $conn->query("UPDATE meetings SET $set WHERE id=$id"); }
         else {
@@ -5573,7 +5700,8 @@ switch ($action) {
         if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
         $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $snap = $E(json_encode($b['kpis'] ?? null, JSON_UNESCAPED_UNICODE));
-        $conn->query("UPDATE meetings SET status='closed', closed_at=NOW(), summary='" . $E($b['summary'] ?? '')
+        $rt = (!isset($b['rating']) || $b['rating'] === '') ? 'NULL' : (float)$b['rating'];
+        $conn->query("UPDATE meetings SET status='closed', closed_at=NOW(), rating=$rt, summary='" . $E($b['summary'] ?? '')
             . "', kpi_snapshot='$snap' WHERE id=$id");
         echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
         break;
