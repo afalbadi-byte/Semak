@@ -1121,6 +1121,23 @@ $conn->query("INSERT IGNORE INTO project_extra_costs (id, project_id, title, amo
      'مساهمة عينية في رأس المال من نداء الخشان — تدخل في تكلفة المشروع ولا تُسجَّل كفاتورة مشتريات')");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (24)");
 } // end DDL v24
+// ─── DDL v25: تسكين المشتريات على المشاريع عندنا — دفترة لا تُمس ────────────────
+if ($__sv < 25) {
+$conn->query("CREATE TABLE IF NOT EXISTS purchase_project (
+    purchase_id INT PRIMARY KEY,
+    project_id  INT DEFAULT NULL,
+    note        VARCHAR(255) DEFAULT NULL,
+    set_by      VARCHAR(120) DEFAULT NULL,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (project_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// ابدأ من تسكين دفترة الحالي حتى لا نفقد ما هو مسكّن فعلاً
+$conn->query("INSERT IGNORE INTO purchase_project (purchase_id, project_id, note, set_by)
+    SELECT id, work_order_id, 'موروث من تسكين دفترة', 'system' FROM dmirror_purchases
+    WHERE work_order_id IS NOT NULL AND work_order_id > 0");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (25)");
+} // end DDL v25
+
 
 
 
@@ -5541,14 +5558,55 @@ switch ($action) {
         break;
     }
 
+
+    case 'ppro_set': {
+        // تسكين فاتورة (أو عدة فواتير) على مشروع — في نظامنا فقط
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $ids = array_slice(array_values(array_filter(array_map('intval', (array)($b['ids'] ?? [])))), 0, 500);
+        if (!$ids && isset($b['purchase_id'])) $ids = [(int)$b['purchase_id']];
+        if (!$ids) { echo json_encode(['success'=>false,'message'=>'ids مطلوبة']); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $pid = (isset($b['project_id']) && $b['project_id'] !== '' && (int)$b['project_id'] > 0) ? (int)$b['project_id'] : 'NULL';
+        $note = $E($b['note'] ?? ''); $by = $E($b['set_by'] ?? '');
+        $n = 0;
+        foreach ($ids as $id) {
+            $conn->query("INSERT INTO purchase_project (purchase_id, project_id, note, set_by)
+                VALUES ($id, $pid, '$note', '$by')
+                ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), note=VALUES(note), set_by=VALUES(set_by)");
+            $n++;
+        }
+        echo json_encode(['success'=>true,'updated'=>$n], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'ppro_list': {
+        // الفواتير مع تسكينها عندنا (وما ورثناه من دفترة)
+        $pid = $_GET['project_id'] ?? '';
+        $w = '';
+        if ($pid === 'none')      $w = "WHERE pp.project_id IS NULL";
+        elseif ($pid !== '')      $w = "WHERE pp.project_id = " . (int)$pid;
+        $r = $conn->query("SELECT p.id, p.no, p.date, p.supplier, p.total, p.paid,
+                p.work_order_id AS daftra_project, pp.project_id AS our_project, pp.note
+            FROM dmirror_purchases p LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+            $w ORDER BY p.date DESC, p.id DESC LIMIT 600");
+        $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pbudget_list': {
-        $r = $conn->query("SELECT b.*, COALESCE(s.spent,0) spent, COALESCE(s.paid,0) paid, COALESCE(s.invoices,0) invoices
+        $r = $conn->query("SELECT b.*, COALESCE(s.spent,0) invoiced, COALESCE(s.paid,0) paid,
+                COALESCE(s.invoices,0) invoices, COALESCE(e.extra,0) extra_costs
             FROM project_budgets b
-            LEFT JOIN (SELECT work_order_id pid, ROUND(SUM(total),2) spent, ROUND(SUM(paid),2) paid, COUNT(*) invoices
-                       FROM dmirror_purchases WHERE work_order_id IS NOT NULL GROUP BY work_order_id) s
+            LEFT JOIN (SELECT pp.project_id pid, ROUND(SUM(p.total),2) spent, ROUND(SUM(p.paid),2) paid, COUNT(*) invoices
+                       FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                       WHERE pp.project_id IS NOT NULL GROUP BY pp.project_id) s
               ON s.pid = b.project_id
+            LEFT JOIN (SELECT project_id pid, ROUND(SUM(amount),2) extra FROM project_extra_costs GROUP BY project_id) e
+              ON e.pid = b.project_id
             ORDER BY b.project_id");
         $rows = []; if ($r) while ($x = $r->fetch_assoc()) {
+            $x['spent'] = round((float)$x['invoiced'] + (float)$x['extra_costs'], 2);
             $x['pct'] = ((float)$x['budget'] > 0) ? round((float)$x['spent'] / (float)$x['budget'] * 100, 1) : null;
             $x['remaining'] = round((float)$x['budget'] - (float)$x['spent'], 2);
             $rows[] = $x;
@@ -5669,7 +5727,7 @@ switch ($action) {
                     FROM dmirror_purchases GROUP BY pid ORDER BY spent DESC"),
             'units_total' => (int)$one("SELECT COUNT(*) FROM units", 0),
             'units_sold'  => (int)$one("SELECT COUNT(*) FROM owners", 0),
-            'villa_spent' => (float)$one("SELECT ROUND(COALESCE(SUM(total),0),2) FROM dmirror_purchases WHERE work_order_id=6"),
+            'villa_spent' => (float)$one("SELECT ROUND(COALESCE(SUM(p.total),0),2) FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id=p.id WHERE pp.project_id=6"),
         ];
         // المشتريات
         $out['purchases'] = [
