@@ -5364,7 +5364,7 @@ switch ($action) {
         $TOOLS['projects_status'] = ['perm'=>$PROJ, 'def'=>[
             'name'=>'projects_status',
             'description'=>'حالة المشاريع: الميزانية والمصروف ونسبة الإنجاز والمتبقي. التطوير يُقاس قبل الضريبة لأنها مستردة، والمقاولات شامل الضريبة مضافاً إليها بند الإشراف بنسبة متفق عليها.',
-            'input_schema'=>['type'=>'object','properties'=>[]],
+            'input_schema'=>['type'=>'object','properties'=>new stdClass()],
         ], 'run'=>function($in) use ($Q) {
             $rows = $Q("SELECT b.*, COALESCE(s.net,0) net, COALESCE(s.gross,0) gross, COALESCE(s.invoices,0) invoices,
                     COALESCE(s.paid,0) paid, COALESCE(e.extra,0) extra_costs
@@ -5396,7 +5396,7 @@ switch ($action) {
         $TOOLS['purchases_totals'] = ['perm'=>$PURCH, 'def'=>[
             'name'=>'purchases_totals',
             'description'=>'إجماليات المشتريات: الكلي والصافي والضريبة والمسدد والمتبقي، وتوزيع شهري لآخر اثني عشر شهراً.',
-            'input_schema'=>['type'=>'object','properties'=>[]],
+            'input_schema'=>['type'=>'object','properties'=>new stdClass()],
         ], 'run'=>function($in) use ($Q) {
             return ['overall'=>$Q("SELECT COUNT(*) invoices, ROUND(SUM(total),2) gross, ROUND(SUM(subtotal),2) net,
                         ROUND(SUM(total-subtotal),2) vat, ROUND(SUM(paid),2) paid, ROUND(SUM(total-paid),2) outstanding
@@ -5409,7 +5409,7 @@ switch ($action) {
         $TOOLS['units_status'] = ['perm'=>$SALES, 'def'=>[
             'name'=>'units_status',
             'description'=>'حالة الوحدات في المشروع: الرقم والحالة (متاح، محجوز، مباعة) والمساحة، مع الملاك المسجلين للوحدات المباعة.',
-            'input_schema'=>['type'=>'object','properties'=>[]],
+            'input_schema'=>['type'=>'object','properties'=>new stdClass()],
         ], 'run'=>function($in) use ($Q) {
             return ['units'=>$Q("SELECT u.unit_code, COALESCE(u.status,'') status, COALESCE(u.spaces,'') spaces,
                         COALESCE(p.name,'') project
@@ -5465,7 +5465,11 @@ switch ($action) {
                 CURLOPT_TIMEOUT => 60,
             ]);
             $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-            return ($code === 200) ? json_decode($res, true) : null;
+            if ($code !== 200) {
+                $GLOBALS['__ai_last_err'] = 'HTTP ' . $code . ' — ' . mb_substr((string)$res, 0, 200);
+                return null;
+            }
+            return json_decode($res, true);
         };
 
         $conv = $clean; $reply = ''; $used = []; $model = 'claude-sonnet-5';
@@ -5497,7 +5501,8 @@ switch ($action) {
 
         echo json_encode($reply !== ''
             ? ['success'=>true, 'reply'=>$reply, 'tools'=>array_values(array_unique($used))]
-            : ['success'=>false, 'message'=>'تعذر الاتصال بالمساعد — أعد المحاولة'], JSON_UNESCAPED_UNICODE);
+            : ['success'=>false, 'message'=>'تعذر الاتصال بالمساعد — أعد المحاولة',
+               'detail'=>(string)($GLOBALS['__ai_last_err'] ?? '')], JSON_UNESCAPED_UNICODE);
         break;
     }
 

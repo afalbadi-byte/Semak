@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, RefreshCw, Bot } from 'lucide-react';
+import { Sparkles, X, Send, RefreshCw, Bot, MessageSquarePlus, LogOut } from 'lucide-react';
 import { API_URL, getAdminToken } from '../lib/api/client';
 
 // يرسم محرف الريال الرسمي (U+20C0) برسمة .sar لأن أغلب الخطوط لا تحمله بعد
@@ -28,6 +28,13 @@ export default function AiAssistant({ userName = '' }) {
   const [loading, setLoading] = useState(false);
   const endRef = useRef(null);
 
+  const clearChat = () => {
+    setMessages([]); setInput('');
+    try { sessionStorage.removeItem('semak_ai_chat'); } catch { /* تجاهل */ }
+  };
+  const newSession = () => { clearChat(); };
+  const endSession = () => { clearChat(); setOpen(false); };
+
   useEffect(() => {
     try { sessionStorage.setItem('semak_ai_chat', JSON.stringify(messages.slice(-30))); } catch { /* تجاهل */ }
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -50,7 +57,8 @@ export default function AiAssistant({ userName = '' }) {
       const data = await res.json();
       setMessages(m => [...m, {
         role: 'assistant',
-        content: data.success ? data.reply : (data.message || 'تعذر الاتصال — أعد المحاولة'),
+        content: data.success ? data.reply
+          : ((data.message || 'تعذر الاتصال — أعد المحاولة') + (data.detail ? ' — ' + data.detail : '')),
       }]);
     } catch {
       setMessages(m => [...m, { role: 'assistant', content: 'خطأ في الاتصال بالخادم — أعد المحاولة' }]);
@@ -82,6 +90,14 @@ export default function AiAssistant({ userName = '' }) {
               <div className="text-white font-black text-sm">مساعد سماك الذكي</div>
               <div className="text-white/60 text-[10px] font-bold">ملم بالمشروع والمشتريات والأسعار — اسأل أي شيء</div>
             </div>
+            <button onClick={newSession} title="جلسة جديدة — يبدأ من صفحة بيضاء"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+              <MessageSquarePlus size={15} className="text-white" />
+            </button>
+            <button onClick={endSession} title="إنهاء الجلسة — يمسح المحادثة ويغلق"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-red-500/70 flex items-center justify-center transition">
+              <LogOut size={15} className="text-white" />
+            </button>
           </div>
 
           {/* الرسائل */}
