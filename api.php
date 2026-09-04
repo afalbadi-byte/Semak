@@ -1154,6 +1154,25 @@ ensure_column($conn, 'dmirror_purchases', 'created_by', "created_by VARCHAR(120)
 ensure_column($conn, 'dmirror_purchases', 'note',       "note VARCHAR(400) DEFAULT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (27)");
 } // end DDL v27
+// ─── DDL v28: سجل دفعات الموردين — لكل فاتورة دفعاتها بطريقتها وإيصالها ───────
+if ($__sv < 28) {
+$conn->query("CREATE TABLE IF NOT EXISTS purchase_payments (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_id INT NOT NULL,
+    supplier    VARCHAR(255) DEFAULT NULL,
+    amount      DECIMAL(14,2) NOT NULL DEFAULT 0,
+    method      VARCHAR(20) NOT NULL DEFAULT 'transfer',
+    pay_date    DATE DEFAULT NULL,
+    reference   VARCHAR(120) DEFAULT NULL,
+    bank        VARCHAR(120) DEFAULT NULL,
+    receipt_url VARCHAR(600) DEFAULT NULL,
+    note        VARCHAR(400) DEFAULT NULL,
+    created_by  VARCHAR(120) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX (purchase_id), INDEX (pay_date), INDEX (method)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (28)");
+} // end DDL v28
 
 
 
@@ -6107,10 +6126,283 @@ switch ($action) {
                 . $E($docUrl) . "', 'mobile', '" . $E($u['name'] ?? '') . "')");
             $conn->query("UPDATE dmirror_purchases SET attachments=1 WHERE id=$newId");
         }
+        // الدفعة إن سُدِّدت مع الفاتورة: سجل مستقل بطريقتها ومرجعها وإيصالها
+        if ($paid > 0) {
+            $meth = in_array(($b['pay_method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['pay_method'] : 'transfer';
+            $pdt  = preg_match('/^d{4}-d{2}-d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : $date;
+            $rcpt = trim((string)($b['receipt_url'] ?? ''));
+            $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date, reference,
+                    bank, receipt_url, note, created_by)
+                VALUES ($newId, '" . $E($sup) . "', $paid, '" . $E($meth) . "', '$pdt', '"
+                . $E(mb_substr((string)($b['pay_reference'] ?? ''), 0, 110)) . "', '"
+                . $E(mb_substr((string)($b['pay_bank'] ?? ''), 0, 110)) . "', '" . $E($rcpt) . "', '', '"
+                . $E($u['name'] ?? '') . "')");
+            if ($rcpt !== '') {
+                $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, doc_type, file_name, drive_url,
+                        source, created_by)
+                    VALUES ($newId, '" . $E($no) . "', 'receipt', '" . $E('إيصال سداد ' . $no) . "', '"
+                    . $E($rcpt) . "', 'mobile', '" . $E($u['name'] ?? '') . "')");
+            }
+        }
         acc_audit($conn, 1, 'purchase', $newId, 'create',
             'فاتورة شراء من تطبيق المشتريات · ' . $sup . ' · ' . $total, $u['name'] ?? '');
         echo json_encode(['success'=>true, 'id'=>$newId, 'no'=>$no, 'total'=>$total, 'subtotal'=>$subtotal,
             'vat'=>$vat, 'message'=>'حُفظت الفاتورة'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'invoice_scan': {
+        // معالج ذكي يقرأ صورة الفاتورة ويستخرج بياناتها ويطابق أصنافها بأصنافنا
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية المشتريات'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(120);
+
+        $b    = json_decode(file_get_contents('php://input'), true) ?: [];
+        $data = (string)($b['image'] ?? '');
+        if (strpos($data, ',') !== false && strncmp($data, 'data:', 5) === 0) $data = substr($data, strpos($data, ',') + 1);
+        if ($data === '') { echo json_encode(['success'=>false,'message'=>'الصورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
+        $mime = (string)($b['mime'] ?? 'image/jpeg');
+        if (!in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true)) $mime = 'image/jpeg';
+
+        $sys = "أنت قارئ فواتير شراء سعودية. استخرج بيانات الفاتورة من الصورة وأعدها JSON فقط بلا أي نص آخر.\n"
+             . "الحقول: supplier (اسم المورد كما في الفاتورة), no (رقم الفاتورة), date (YYYY-MM-DD), "
+             . "subtotal (المجموع قبل الضريبة), vat (ضريبة القيمة المضافة), total (الإجمالي شامل الضريبة), "
+             . "vat_number (الرقم الضريبي إن وُجد), items (مصفوفة: name الوصف كما هو، qty الكمية، price سعر الوحدة قبل الضريبة).\n"
+             . "قواعد: الأرقام أرقام لا نصوص وبلا فواصل آلاف. إن لم تجد حقلاً فاجعله null. "
+             . "التاريخ الهجري حوّله ميلادياً. لا تخترع بنداً غير مكتوب. أعد JSON صالحاً فقط.";
+
+        $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>2000, 'system'=>$sys,
+            'messages'=>[['role'=>'user', 'content'=>[
+                ['type'=>'image', 'source'=>['type'=>'base64', 'media_type'=>$mime, 'data'=>$data]],
+                ['type'=>'text',  'text'=>'استخرج بيانات هذه الفاتورة كما هي.'],
+            ]]]];
+
+        $call = function($pl) {
+            $ch = curl_init('https://api.anthropic.com/v1/messages');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($pl, JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+                CURLOPT_TIMEOUT => 90,
+            ]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            return [$code, $res];
+        };
+        [$code, $res] = $call($payload);
+        if ($code !== 200) {
+            $payload['model'] = 'claude-haiku-4-5';
+            [$code, $res] = $call($payload);
+        }
+        if ($code !== 200) {
+            echo json_encode(['success'=>false,'message'=>'تعذر قراءة الفاتورة',
+                'detail'=>'HTTP ' . $code . ' — ' . mb_substr((string)$res, 0, 200)], JSON_UNESCAPED_UNICODE); break;
+        }
+        $d   = json_decode($res, true);
+        $txt = '';
+        foreach ((array)($d['content'] ?? []) as $blk) if (($blk['type'] ?? '') === 'text') $txt .= $blk['text'];
+        // النموذج قد يحيط الـJSON بسياج شفرة
+        if (preg_match('/\{[\s\S]*\}/', $txt, $m)) $txt = $m[0];
+        $inv = json_decode($txt, true);
+        if (!is_array($inv)) { echo json_encode(['success'=>false,'message'=>'تعذر تفسير قراءة الفاتورة',
+            'raw'=>mb_substr($txt, 0, 300)], JSON_UNESCAPED_UNICODE); break; }
+
+        // ── مطابقة النصوص بأصنافنا ومورّدينا ──────────────────────────────
+        $norm = function($s) {
+            $s = trim(mb_strtolower((string)$s));
+            $s = str_replace(['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'], ['0','1','2','3','4','5','6','7','8','9'], $s);
+            $s = str_replace(['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'], ['0','1','2','3','4','5','6','7','8','9'], $s);
+            $s = str_replace(['أ','إ','آ'], 'ا', $s);
+            $s = str_replace(['ة'], 'ه', $s);
+            $s = str_replace(['ى'], 'ي', $s);
+            $s = preg_replace('/[\x{064B}-\x{0652}\x{0640}]/u', '', $s);   // تشكيل وتطويل
+            $s = preg_replace('/[^\p{Arabic}\p{L}\p{N} ]/u', ' ', $s);
+            return trim(preg_replace('/\s+/u', ' ', $s));
+        };
+        $score = function($a, $b) use ($norm) {
+            $a = $norm($a); $b = $norm($b);
+            if ($a === '' || $b === '') return 0.0;
+            if ($a === $b) return 1.0;
+            $pct = 0.0; similar_text($a, $b, $pct); $sim = $pct / 100;
+            // الاحتواء مقصود: وصف المورد المختصر يقع داخل اسمنا الطويل
+            $wa = array_unique(array_filter(explode(' ', $a)));
+            $wb = array_unique(array_filter(explode(' ', $b)));
+            $word = 0.0;
+            if ($wa && $wb) {
+                $c = count(array_intersect($wa, $wb));
+                $word = 0.5 * ($c / max(count($wa), count($wb))) + 0.5 * ($c / min(count($wa), count($wb)));
+            }
+            // الأرقام تفصل بين المقاسات: 4 ملي ليست 6 ملي
+            preg_match_all('/d+(?:.d+)?/', $a, $ma);
+            preg_match_all('/d+(?:.d+)?/', $b, $mb);
+            $da = array_unique($ma[0]); $db = array_unique($mb[0]);
+            $dig = 0.5;
+            if ($da || $db) {
+                if ($da && $db) {
+                    $dc = count(array_intersect($da, $db));
+                    $dig = 0.5 * ($dc / max(count($da), count($db))) + 0.5 * ($dc / min(count($da), count($db)));
+                } else { $dig = 0.0; }
+            }
+            return round($sim * 0.45 + $word * 0.35 + $dig * 0.20, 3);
+        };
+
+        $products = [];
+        $pr = $conn->query("SELECT daftra_id, name FROM acc_products WHERE tenant_id=1 AND name <> ''");
+        if ($pr) while ($x = $pr->fetch_assoc()) $products[] = ['id'=>(int)$x['daftra_id'], 'name'=>$x['name']];
+        $suppliers = [];
+        $sr = $conn->query("SELECT supplier, COUNT(*) n FROM dmirror_purchases WHERE supplier <> '' GROUP BY supplier");
+        if ($sr) while ($x = $sr->fetch_assoc()) $suppliers[] = $x['supplier'];
+
+        $rank = function($needle, $hay, $key, $n = 3) use ($score) {
+            $out = [];
+            foreach ($hay as $h) {
+                $v = $key ? $h[$key] : $h;
+                $out[] = ['row'=>$h, 'score'=>$score($needle, $v)];
+            }
+            usort($out, function($x, $y) { return $y['score'] <=> $x['score']; });
+            return array_slice($out, 0, $n);
+        };
+        $best = function($needle, $hay, $key) use ($rank) {
+            $r = $rank($needle, $hay, $key, 1);
+            return $r ? [$r[0]['row'], $r[0]['score']] : [null, 0];
+        };
+
+        // المورد
+        $supRaw = (string)($inv['supplier'] ?? '');
+        [$supHit, $supScore] = $best($supRaw, $suppliers, null);
+        $inv['supplier_matched']  = ($supScore >= 0.55) ? $supHit : null;
+        $inv['supplier_score']    = $supScore;
+
+        // البنود: الاسم وحده لا يكفي — السعر وتاريخ المورد يرجّحان بين المتشابهات
+        $avg = []; $last = [];
+        $ar = $conn->query("SELECT product_id, ROUND(SUM(amount)/NULLIF(SUM(qty),0),2) a
+                            FROM purchase_product_items WHERE qty > 0 GROUP BY product_id");
+        if ($ar) while ($x = $ar->fetch_assoc()) $avg[(int)$x['product_id']] = (float)$x['a'];
+        $lr2 = $conn->query("SELECT p1.product_id, ROUND(p1.amount/NULLIF(p1.qty,0),2) p
+                             FROM purchase_product_items p1
+                             JOIN (SELECT product_id, MAX(inv_date) d FROM purchase_product_items
+                                   WHERE qty>0 GROUP BY product_id) m
+                               ON m.product_id = p1.product_id AND m.d = p1.inv_date
+                             WHERE p1.qty > 0");
+        if ($lr2) while ($x = $lr2->fetch_assoc()) $last[(int)$x['product_id']] = (float)$x['p'];
+        $supProd = [];
+        if ($inv['supplier_matched']) {
+            $sp = $conn->query("SELECT DISTINCT product_id FROM purchase_product_items
+                                WHERE supplier = '" . $conn->real_escape_string($inv['supplier_matched']) . "'");
+            if ($sp) while ($x = $sp->fetch_assoc()) $supProd[(int)$x['product_id']] = 1;
+        }
+
+        $items = [];
+        foreach ((array)($inv['items'] ?? []) as $it) {
+            $nm = trim((string)($it['name'] ?? ''));
+            if ($nm === '') continue;
+            $price = (float)($it['price'] ?? 0);
+            $pool  = $rank($nm, $products, 'name', 12);       // مرشحون بالاسم ثم نرجّح بالسعر والمورد
+            $scored = [];
+            foreach ($pool as $c) {
+                $pid2 = (int)$c['row']['id'];
+                $ref  = $last[$pid2] ?? ($avg[$pid2] ?? 0);
+                $near = 0.5;                                   // محايد إن جهلنا سعراً
+                if ($price > 0 && $ref > 0) $near = max(0, 1 - abs($price - $ref) / max($price, $ref));
+                $final = 0.75 * $c['score'] + 0.25 * $near + (isset($supProd[$pid2]) ? 0.05 : 0);
+                $scored[] = ['id'=>$pid2, 'name'=>$c['row']['name'], 'score'=>round(min(1, $final), 3),
+                             'text'=>$c['score'], 'ref_price'=>$ref];
+            }
+            usort($scored, function($x, $y) { return $y['score'] <=> $x['score']; });
+            $cands = array_slice($scored, 0, 3);
+            $top   = $cands ? $cands[0] : null;
+            $items[] = [
+                'name'       => $nm,
+                'qty'        => (float)($it['qty'] ?? 0),
+                'price'      => $price,
+                'match_id'   => ($top && $top['score'] >= 0.6) ? $top['id'] : null,
+                'match_name' => ($top && $top['score'] >= 0.6) ? $top['name'] : null,
+                'match_score'=> $top ? $top['score'] : 0,
+                'candidates' => $cands,
+                'last_price' => ($top && $top['ref_price'] > 0) ? $top['ref_price'] : null,
+            ];
+        }
+        $inv['items'] = $items;
+
+        // اتساق الأرقام: نحسب من البنود ونقارن بما قرأه من الفاتورة
+        $calc = 0; foreach ($items as $x) $calc += $x['qty'] * $x['price'];
+        $inv['items_subtotal'] = round($calc, 2);
+        $sub = (float)($inv['subtotal'] ?? 0);
+        $inv['subtotal_mismatch'] = ($sub > 0 && $calc > 0 && abs($sub - $calc) > max(1, $sub * 0.02));
+
+        // فاتورة مكررة؟
+        $dupe = null;
+        if (!empty($inv['no']) && $inv['supplier_matched']) {
+            $dq = $conn->query("SELECT id, total FROM dmirror_purchases WHERE no='" . $conn->real_escape_string($inv['no'])
+                . "' AND supplier='" . $conn->real_escape_string($inv['supplier_matched']) . "' LIMIT 1");
+            if ($dq && ($dr = $dq->fetch_assoc())) $dupe = ['id'=>(int)$dr['id'], 'total'=>(float)$dr['total']];
+        }
+        $inv['duplicate'] = $dupe;
+
+        echo json_encode(['success'=>true, 'invoice'=>$inv], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pay_add': {
+        // تسجيل دفعة لمورد على فاتورة، بطريقتها ومرجعها وإيصالها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسجيل الدفعات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $pid = (int)($b['purchase_id'] ?? 0);
+        $amt = round((float)($b['amount'] ?? 0), 2);
+        if (!$pid || $amt <= 0) { echo json_encode(['success'=>false,'message'=>'الفاتورة والمبلغ مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $inv = $conn->query("SELECT supplier, total, paid FROM dmirror_purchases WHERE id=$pid LIMIT 1");
+        if (!$inv || !$inv->num_rows) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $iv = $inv->fetch_assoc();
+        $remain = round((float)$iv['total'] - (float)$iv['paid'], 2);
+        if ($amt > $remain + 0.01) {
+            echo json_encode(['success'=>false,'message'=>'المبلغ أكبر من المتبقي على الفاتورة (' . number_format($remain, 2) . ')'], JSON_UNESCAPED_UNICODE); break; }
+        $method = in_array(($b['method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['method'] : 'transfer';
+        $pdate  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : date('Y-m-d');
+        $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date, reference, bank,
+                receipt_url, note, created_by)
+            VALUES ($pid, '" . $E($iv['supplier']) . "', $amt, '" . $E($method) . "', '$pdate', '"
+            . $E(mb_substr((string)($b['reference'] ?? ''), 0, 110)) . "', '" . $E(mb_substr((string)($b['bank'] ?? ''), 0, 110)) . "', '"
+            . $E($b['receipt_url'] ?? '') . "', '" . $E(mb_substr((string)($b['note'] ?? ''), 0, 380)) . "', '" . $E($u['name'] ?? '') . "')");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        $payId = (int)$conn->insert_id;
+        // المسدد على الفاتورة = مجموع دفعاتنا المسجلة، أو ما جاء من دفترة أيهما أكبر
+        $sum = 0; $sr = $conn->query("SELECT ROUND(SUM(amount),2) s FROM purchase_payments WHERE purchase_id=$pid");
+        if ($sr && ($srr = $sr->fetch_assoc())) $sum = (float)$srr['s'];
+        $newPaid = max($sum, (float)$iv['paid']);
+        if ($sum >= (float)$iv['paid']) $newPaid = $sum;
+        $conn->query("UPDATE dmirror_purchases SET paid=" . round($newPaid, 2) . " WHERE id=$pid");
+        if (($b['receipt_url'] ?? '') !== '') {
+            $conn->query("INSERT INTO purchase_documents (purchase_id, doc_type, file_name, drive_url, source, created_by)
+                VALUES ($pid, 'receipt', '" . $E('إيصال سداد ' . $amt) . "', '" . $E($b['receipt_url']) . "', 'mobile', '"
+                . $E($u['name'] ?? '') . "')");
+        }
+        echo json_encode(['success'=>true, 'id'=>$payId, 'paid'=>round($newPaid, 2),
+            'remaining'=>round((float)$iv['total'] - $newPaid, 2)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pay_list': {
+        $pid = (int)($_GET['purchase_id'] ?? 0);
+        $sup = trim((string)($_GET['supplier'] ?? ''));
+        $w = $pid ? "p.purchase_id=$pid" : ($sup !== '' ? "p.supplier='" . $conn->real_escape_string($sup) . "'" : '1');
+        $r = $conn->query("SELECT p.*, d.no invoice_no, d.total invoice_total
+            FROM purchase_payments p LEFT JOIN dmirror_purchases d ON d.id = p.purchase_id
+            WHERE $w ORDER BY p.pay_date DESC, p.id DESC LIMIT 300");
+        $rows = []; $tot = 0;
+        if ($r) while ($x = $r->fetch_assoc()) { $rows[] = $x; $tot += (float)$x['amount']; }
+        echo json_encode(['success'=>true, 'data'=>$rows, 'total'=>round($tot, 2)], JSON_UNESCAPED_UNICODE);
         break;
     }
 

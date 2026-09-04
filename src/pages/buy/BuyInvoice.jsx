@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Check, Plus, Trash2, Loader2, X } from 'lucide-react';
+import { Camera, Check, Plus, Trash2, Loader2, X, ScanLine, Wallet, AlertTriangle, Receipt } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -61,6 +61,14 @@ export default function BuyInvoice({ onDone }) {
     const [paid, setPaid]   = useState('');
     const [note, setNote]   = useState('');
     const [photo, setPhoto] = useState(null);       // { name, dataUrl }
+    const [scan, setScan]   = useState(null);       // نتيجة المعالج الذكي قبل الاعتماد
+    const [scanning, setScanning] = useState(false);
+    const [payOn, setPayOn]   = useState(false);
+    const [payMethod, setPayMethod] = useState('transfer');
+    const [payRef, setPayRef] = useState('');
+    const [payBank, setPayBank] = useState('');
+    const [payDate, setPayDate] = useState(today());
+    const [receipt, setReceipt] = useState(null);   // صورة الإيصال
     const [busy, setBusy]   = useState(false);
     const [msg, setMsg]     = useState(null);
 
@@ -79,8 +87,39 @@ export default function BuyInvoice({ onDone }) {
         const f = e.target.files && e.target.files[0];
         if (!f) return;
         const r = new FileReader();
-        r.onload = () => setPhoto({ name: f.name || 'invoice.jpg', dataUrl: String(r.result) });
+        r.onload = () => setPhoto({ name: f.name || 'invoice.jpg', mime: f.type || 'image/jpeg', dataUrl: String(r.result) });
         r.readAsDataURL(f);
+    };
+
+    const runScan = async () => {
+        if (!photo) return setMsg({ e: 1, t: 'صوّر الفاتورة أولاً' });
+        setScanning(true); setMsg(null); setScan(null);
+        try {
+            const r = await fetch(`${API_URL}?action=invoice_scan`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                body: JSON.stringify({ image: photo.dataUrl, mime: photo.mime || 'image/jpeg' }),
+            }).then(x => x.json());
+            if (!r.success) { setMsg({ e: 1, t: (r.message || 'تعذر القراءة') + (r.detail ? ' — ' + r.detail : '') }); return; }
+            const inv = r.invoice || {};
+            setScan({ ...inv, items: (inv.items || []).map(it => ({ ...it, use: it.match_id || null })) });
+        } catch { setMsg({ e: 1, t: 'تعذر الاتصال بالمعالج' }); }
+        finally { setScanning(false); }
+    };
+
+    // اعتماد القراءة: تُنقل إلى النموذج ليراجعها المدير قبل الحفظ
+    const applyScan = () => {
+        if (!scan) return;
+        if (scan.supplier_matched || scan.supplier) setSupplier(scan.supplier_matched || scan.supplier);
+        if (scan.no) setNo(String(scan.no));
+        if (/^d{4}-d{2}-d{2}$/.test(String(scan.date || ''))) setDate(scan.date);
+        const its = (scan.items || []).map(it => ({
+            name: it.use_name || it.match_name || it.name,
+            qty: String(it.qty || ''), price: String(it.price || ''),
+        })).filter(x => x.name);
+        if (its.length) { setItems(its); setManual(''); }
+        else if (scan.subtotal) setManual(String(scan.subtotal));
+        setScan(null);
+        setMsg({ t: 'نُقلت القراءة للنموذج — راجعها ثم احفظ' });
     };
 
     const save = async () => {
@@ -99,6 +138,15 @@ export default function BuyInvoice({ onDone }) {
                 }).then(r => r.json());
                 if (up.success) docUrl = up.url; else setMsg({ t: 'تعذر رفع الصورة، حُفظت الفاتورة بدونها' });
             }
+            let rcptUrl = '';
+            if (payOn && receipt) {
+                const rb = receipt.dataUrl.split(',')[1] || '';
+                const ur = await fetch(`${API_URL}?action=doc_upload`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                    body: JSON.stringify({ filename: receipt.name, data: rb }),
+                }).then(x => x.json());
+                if (ur.success) rcptUrl = ur.url;
+            }
             const r = await fetch(`${API_URL}?action=purchase_create`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
                 body: JSON.stringify({
@@ -107,12 +155,15 @@ export default function BuyInvoice({ onDone }) {
                     items: items.filter(i => i.name && Number(i.qty) > 0)
                         .map(i => ({ name: i.name, qty: Number(i.qty), price: Number(i.price) || 0 })),
                     subtotal: items.length ? undefined : Number(manual) || 0,
-                    paid: Number(paid) || 0, note, doc_url: docUrl,
+                    paid: payOn ? (Number(paid) || 0) : 0, note, doc_url: docUrl,
+                    pay_method: payMethod, pay_reference: payRef, pay_bank: payBank,
+                    pay_date: payDate, receipt_url: rcptUrl,
                 }),
             }).then(x => x.json());
             if (!r.success) { setMsg({ e: 1, t: r.message || 'تعذر الحفظ' }); return; }
             setMsg({ t: `حُفظت الفاتورة ${r.no} بمبلغ ${money(r.total)}` });
             setSupplier(''); setNo(''); setItems([]); setManual(''); setPaid(''); setNote(''); setPhoto(null);
+            setPayOn(false); setReceipt(null); setPayRef(''); setPayBank('');
             setTimeout(() => onDone && onDone(), 1200);
         } catch (e) {
             setMsg({ e: 1, t: 'تعذر الاتصال — حاول مرة أخرى' });
@@ -142,6 +193,16 @@ export default function BuyInvoice({ onDone }) {
                 </div>
                 <input type="file" accept="image/*" capture="environment" onChange={pickPhoto} className="hidden" />
             </label>
+
+            {photo && !scan && (
+                <button onClick={runScan} disabled={scanning}
+                    className="w-full min-h-[52px] rounded-2xl bg-[#1a365d] border border-[#c5a059]/50 text-[15px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    {scanning ? <Loader2 size={18} className="animate-spin" /> : <ScanLine size={18} className="text-[#c5a059]" />}
+                    {scanning ? 'يقرأ الفاتورة...' : 'اقرأ الفاتورة تلقائياً'}
+                </button>
+            )}
+
+            {scan && <ScanReview scan={scan} setScan={setScan} onApply={applyScan} onCancel={() => setScan(null)} />}
 
             <Suggest kind="supplier" value={supplier} onChange={setSupplier} placeholder="المورد" />
 
@@ -196,8 +257,50 @@ export default function BuyInvoice({ onDone }) {
                 </div>
             </div>
 
-            <input inputMode="decimal" value={paid} onChange={e => setPaid(e.target.value)} placeholder="المسدد (اتركه فارغاً إن لم يُسدد)"
-                className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500" />
+            <div className="rounded-2xl bg-white/5 p-3 space-y-2">
+                <button onClick={() => { setPayOn(v => !v); if (!payOn && !paid) setPaid(String(total || '')); }}
+                    className="w-full flex items-center justify-between min-h-[44px]">
+                    <span className="flex items-center gap-2 text-sm font-black"><Wallet size={16} className="text-[#c5a059]" /> سُدِّدت الفاتورة</span>
+                    <span className={'w-12 h-7 rounded-full transition relative ' + (payOn ? 'bg-[#c5a059]' : 'bg-white/15')}>
+                        <span className={'absolute top-1 w-5 h-5 rounded-full bg-white transition-all ' + (payOn ? 'right-1' : 'right-6')} />
+                    </span>
+                </button>
+
+                {payOn && (
+                    <div className="space-y-2 pt-1">
+                        <input inputMode="decimal" value={paid} onChange={e => setPaid(e.target.value)} placeholder="المبلغ المسدد"
+                            className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-[#c5a059]" />
+                        <div className="grid grid-cols-4 gap-1.5">
+                            {[['transfer','تحويل'],['cash','نقدي'],['cheque','شيك'],['card','بطاقة']].map(([k, t]) => (
+                                <button key={k} onClick={() => setPayMethod(k)}
+                                    className={'min-h-[44px] rounded-xl text-xs font-bold border ' +
+                                        (payMethod === k ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]' : 'bg-white/5 border-white/10 text-slate-300')}>
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <input value={payBank} onChange={e => setPayBank(e.target.value)} placeholder="البنك / الخزنة"
+                                className="px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                            <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+                                className="px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                        </div>
+                        <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="مرجع العملية أو رقم الشيك"
+                            className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                        <label className="block">
+                            <div className="rounded-xl border border-dashed border-white/15 p-3 text-center min-h-[56px] flex items-center justify-center gap-2">
+                                {receipt
+                                    ? <><Receipt size={16} className="text-emerald-400" /><span className="text-xs font-bold">أُرفق الإيصال</span>
+                                        <button type="button" onClick={e => { e.preventDefault(); setReceipt(null); }} className="text-red-400 mr-2"><X size={14} /></button></>
+                                    : <><Receipt size={16} className="text-slate-400" /><span className="text-xs text-slate-400 font-bold">أرفق إيصال السداد</span></>}
+                            </div>
+                            <input type="file" accept="image/*" capture="environment" className="hidden"
+                                onChange={e => { const f2 = e.target.files && e.target.files[0]; if (!f2) return;
+                                    const rd = new FileReader(); rd.onload = () => setReceipt({ name: f2.name || 'receipt.jpg', dataUrl: String(rd.result) }); rd.readAsDataURL(f2); }} />
+                        </label>
+                    </div>
+                )}
+            </div>
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="ملاحظة (اختياري)"
                 className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500" />
 
@@ -211,6 +314,80 @@ export default function BuyInvoice({ onDone }) {
                 className="w-full py-4 rounded-2xl bg-gold-500 text-slate-900 font-black flex items-center justify-center gap-2 disabled:opacity-50">
                 {busy ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />} حفظ الفاتورة
             </button>
+        </div>
+    );
+}
+
+// ─── مراجعة قراءة المعالج قبل الاعتماد: كل بند وأقرب ثلاثة أصناف عندنا ──────
+function ScanReview({ scan, setScan, onApply, onCancel }) {
+    const items = scan.items || [];
+    const pick = (i, cand) => setScan(s => ({
+        ...s,
+        items: s.items.map((it, k) => (k === i
+            ? { ...it, use: cand ? cand.id : null, use_name: cand ? cand.name : it.name, match_score: cand ? cand.score : 0 }
+            : it)),
+    }));
+
+    return (
+        <div className="rounded-2xl border border-[#c5a059]/50 bg-[#1a365d]/40 p-3 space-y-3">
+            <div className="flex items-center gap-2">
+                <ScanLine size={16} className="text-[#c5a059]" />
+                <span className="text-sm font-black">قراءة المعالج — راجعها</span>
+            </div>
+
+            {scan.duplicate && (
+                <div className="rounded-xl bg-red-500/15 text-red-300 p-2.5 text-xs font-bold flex items-start gap-2">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    فاتورة بنفس الرقم لهذا المورد مسجلة عندنا بمبلغ {money(scan.duplicate.total)} — تأكد أنها ليست مكررة
+                </div>
+            )}
+            {scan.subtotal_mismatch && (
+                <div className="rounded-xl bg-amber-500/15 text-amber-300 p-2.5 text-xs font-bold flex items-start gap-2">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    مجموع البنود {money(scan.items_subtotal)} لا يطابق مبلغ الفاتورة {money(scan.subtotal)}
+                </div>
+            )}
+
+            <div className="text-xs space-y-1 bg-black/20 rounded-xl p-2.5">
+                <div className="flex justify-between"><span className="text-slate-400">المورد</span>
+                    <span className="font-bold truncate max-w-[60%] text-left">{scan.supplier_matched || scan.supplier || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">رقم الفاتورة</span><span className="font-bold">{scan.no || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">التاريخ</span><span className="font-bold">{scan.date || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">قبل الضريبة</span><span className="font-bold tabular-nums">{money(scan.subtotal)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">الإجمالي</span><span className="font-black tabular-nums text-[#c5a059]">{money(scan.total)}</span></div>
+            </div>
+
+            {items.map((it, i) => (
+                <div key={i} className="rounded-xl bg-black/20 p-2.5 space-y-1.5">
+                    <div className="text-xs font-bold">{it.name}</div>
+                    <div className="text-[11px] text-slate-400">
+                        {it.qty} × {money(it.price)}
+                        {it.last_price ? ' · آخر سعر عندنا ' + money(it.last_price) : ''}
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap">
+                        {(it.candidates || []).map(c => (
+                            <button key={c.id} onClick={() => pick(i, c)}
+                                className={'px-2.5 py-2 rounded-lg text-[11px] font-bold border min-h-[40px] ' +
+                                    (it.use === c.id ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]' : 'bg-white/5 border-white/10 text-slate-300')}>
+                                {c.name} <span className="opacity-60">{Math.round(c.score * 100)}%</span>
+                            </button>
+                        ))}
+                        <button onClick={() => pick(i, null)}
+                            className={'px-2.5 py-2 rounded-lg text-[11px] font-bold border min-h-[40px] ' +
+                                (it.use ? 'bg-white/5 border-white/10 text-slate-400' : 'bg-white/15 border-white/20 text-white')}>
+                            كما في الفاتورة
+                        </button>
+                    </div>
+                </div>
+            ))}
+            {!items.length && <p className="text-xs text-slate-400 text-center py-2">لم يقرأ بنوداً — أدخل المبلغ يدوياً</p>}
+
+            <div className="flex gap-2">
+                <button onClick={onCancel} className="flex-1 min-h-[48px] rounded-xl bg-white/10 text-sm font-bold">تجاهل</button>
+                <button onClick={onApply} className="flex-[2] min-h-[48px] rounded-xl bg-[#c5a059] text-[#0b1220] text-sm font-black flex items-center justify-center gap-2">
+                    <Check size={16} /> اعتمد القراءة
+                </button>
+            </div>
         </div>
     );
 }

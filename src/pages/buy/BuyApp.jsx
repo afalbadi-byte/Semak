@@ -5,6 +5,7 @@ import BuyHome from './BuyHome';
 import BuyInvoice from './BuyInvoice';
 import BuyItems from './BuyItems';
 import BuyChat from './BuyChat';
+import BuyWelcome from './BuyWelcome';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
@@ -42,6 +43,10 @@ function useBuyManifest() {
 
 export default function BuyApp() {
     const [tab, setTab]   = useState('home');
+    // الترحيب يُعرض أول مرة فقط لكل جهاز
+    const [welcome, setWelcome] = useState(() => {
+        try { return localStorage.getItem('buy_seen') !== '1'; } catch { return true; }
+    });
     const [user, setUser] = useState(null);
     const [state, setState] = useState('loading');   // loading | ok | denied | anon
     useBuyManifest();
@@ -82,15 +87,25 @@ export default function BuyApp() {
         </div>
     );
 
+    if (welcome) return (
+        <BuyWelcome userName={user?.name || ''}
+            onStart={() => { try { localStorage.setItem('buy_seen', '1'); } catch { /* تجاهل */ } setWelcome(false); }} />
+    );
+
     return (
-        <div dir="rtl" className="min-h-screen bg-slate-950 text-white font-cairo flex flex-col">
-            <header className="px-4 pt-5 pb-3 bg-gradient-to-l from-[#1a365d] to-[#2d5299] sticky top-0 z-20">
+        <div dir="rtl" className="min-h-screen bg-[#0b1220] text-white font-cairo flex flex-col"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+            <header className="px-4 pb-3 bg-gradient-to-l from-[#1a365d] to-[#2d5299] sticky top-0 z-20"
+                style={{ paddingTop: 'calc(env(safe-area-inset-top) + 16px)' }}>
                 <div className="flex items-center justify-between">
                     <div>
                         <div className="text-[11px] text-white/60 font-bold">مشتريات سماك</div>
                         <div className="font-black">{user?.name || 'مدير المشتريات'}</div>
                     </div>
-                    <button onClick={logout} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
+                    <button onClick={() => setWelcome(true)} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center ml-2 text-[11px] font-bold">
+                        دليل
+                    </button>
+                    <button onClick={logout} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
                         <LogOut size={16} />
                     </button>
                 </div>
@@ -110,7 +125,7 @@ export default function BuyApp() {
                         const on = tab === t.k;
                         return (
                             <button key={t.k} onClick={() => setTab(t.k)}
-                                className={'py-3 flex flex-col items-center gap-1 text-[11px] font-bold transition ' +
+                                className={'min-h-[56px] py-2 flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition ' +
                                     (on ? 'text-gold-500' : 'text-slate-400')}>
                                 <Icon size={19} />{t.t}
                             </button>
