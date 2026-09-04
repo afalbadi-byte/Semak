@@ -6352,6 +6352,76 @@ switch ($action) {
         break;
     }
 
+    case 'receipt_scan': {
+        // قراءة إيصال السداد: المبلغ وتاريخه وطريقته والمستفيد والمرجع
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية المشتريات'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(120);
+
+        $b    = json_decode(file_get_contents('php://input'), true) ?: [];
+        $data = (string)($b['image'] ?? '');
+        if (strpos($data, ',') !== false && strncmp($data, 'data:', 5) === 0) $data = substr($data, strpos($data, ',') + 1);
+        if ($data === '') { echo json_encode(['success'=>false,'message'=>'الصورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
+        $mime  = (string)($b['mime'] ?? 'image/jpeg');
+        $isPdf = ($mime === 'application/pdf');
+        if (!$isPdf && !in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true)) $mime = 'image/jpeg';
+
+        $sys = "أنت قارئ إيصالات سداد سعودية (تحويل بنكي، إيداع، شيك، نقدي، مدى). أعد JSON فقط بلا أي نص آخر.\n"
+             . "الحقول: amount (المبلغ رقماً), pay_date (YYYY-MM-DD), method (واحدة من: transfer للتحويل والإيداع، "
+             . "cash للنقدي، cheque للشيك، card لمدى والبطاقات، other لغيرها), bank (اسم البنك المُحوَّل منه أو إليه), "
+             . "beneficiary (اسم المستفيد أو الحساب المحوَّل إليه), reference (رقم العملية أو المرجع أو رقم الشيك), "
+             . "from_account (الحساب المحوَّل منه إن ظهر).\n"
+             . "قواعد: الأرقام بلا فواصل آلاف. ما لا تجده اجعله null. التاريخ الهجري حوّله ميلادياً. "
+             . "لا تخترع رقماً غير مكتوب. أعد JSON صالحاً فقط.";
+
+        $fileBlock = $isPdf
+            ? ['type'=>'document', 'source'=>['type'=>'base64', 'media_type'=>'application/pdf', 'data'=>$data]]
+            : ['type'=>'image',    'source'=>['type'=>'base64', 'media_type'=>$mime, 'data'=>$data]];
+        $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>800, 'system'=>$sys,
+            'messages'=>[['role'=>'user', 'content'=>[$fileBlock,
+                ['type'=>'text', 'text'=>'استخرج بيانات هذا الإيصال كما هي.']]]]];
+
+        $call = function($pl) {
+            $ch = curl_init('https://api.anthropic.com/v1/messages');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($pl, JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+                CURLOPT_TIMEOUT => 90,
+            ]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            return [$code, $res];
+        };
+        [$code, $res] = $call($payload);
+        if ($code !== 200) { $payload['model'] = 'claude-haiku-4-5'; [$code, $res] = $call($payload); }
+        if ($code !== 200) {
+            echo json_encode(['success'=>false,'message'=>'تعذر قراءة الإيصال',
+                'detail'=>'HTTP ' . $code . ' — ' . mb_substr((string)$res, 0, 200)], JSON_UNESCAPED_UNICODE); break; }
+
+        $d = json_decode($res, true); $txt = '';
+        foreach ((array)($d['content'] ?? []) as $blk) if (($blk['type'] ?? '') === 'text') $txt .= $blk['text'];
+        if (preg_match('/\{[\s\S]*\}/', $txt, $m)) $txt = $m[0];
+        $r = json_decode($txt, true);
+        if (!is_array($r)) { echo json_encode(['success'=>false,'message'=>'تعذر تفسير قراءة الإيصال',
+            'raw'=>mb_substr($txt, 0, 300)], JSON_UNESCAPED_UNICODE); break; }
+
+        $meth = (string)($r['method'] ?? '');
+        if (!in_array($meth, ['transfer','cash','cheque','card','other'], true)) $meth = 'transfer';
+        $r['method'] = $meth;
+        // مقارنة بمبلغ الفاتورة إن مُرِّر — الفرق يُعرض للمدير ولا يُصحَّح تلقائياً
+        $inv = round((float)($b['invoice_total'] ?? 0), 2);
+        $amt = round((float)($r['amount'] ?? 0), 2);
+        $r['amount_mismatch'] = ($inv > 0 && $amt > 0 && abs($inv - $amt) > 0.5);
+        $r['invoice_total']   = $inv ?: null;
+        echo json_encode(['success'=>true, 'receipt'=>$r], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'sup_pay_add': {
         // تسجيل دفعة لمورد على فاتورة، بطريقتها ومرجعها وإيصالها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {

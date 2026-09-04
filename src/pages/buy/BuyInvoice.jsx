@@ -69,6 +69,8 @@ export default function BuyInvoice({ onDone }) {
     const [payBank, setPayBank] = useState('');
     const [payDate, setPayDate] = useState(today());
     const [receipt, setReceipt] = useState(null);   // صورة الإيصال
+    const [rScan, setRScan] = useState(null);       // قراءة الإيصال قبل الاعتماد
+    const [rScanning, setRScanning] = useState(false);
     const [busy, setBusy]   = useState(false);
     const [msg, setMsg]     = useState(null);
 
@@ -100,8 +102,38 @@ export default function BuyInvoice({ onDone }) {
         const f2 = e.target.files && e.target.files[0];
         if (!f2) return;
         const rd = new FileReader();
-        rd.onload = () => setReceipt({ name: f2.name || 'receipt.jpg', dataUrl: String(rd.result) });
+        rd.onload = () => { setRScan(null); setReceipt({
+            name: f2.name || 'receipt.jpg',
+            mime: f2.type || 'image/jpeg',
+            dataUrl: String(rd.result),
+        }); };
         rd.readAsDataURL(f2);
+    };
+
+    // قراءة الإيصال كما تُقرأ الفاتورة، ثم يراجع المدير ويعتمد
+    const runReceiptScan = async () => {
+        if (!receipt) return;
+        setRScanning(true); setRScan(null);
+        try {
+            const r = await fetch(`${API_URL}?action=receipt_scan`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                body: JSON.stringify({ image: receipt.dataUrl, mime: receipt.mime || 'image/jpeg', invoice_total: total }),
+            }).then(x => x.json());
+            if (!r.success) { setMsg({ e: 1, t: (r.message || 'تعذر قراءة الإيصال') + (r.detail ? ' — ' + r.detail : '') }); return; }
+            setRScan(r.receipt || {});
+        } catch { setMsg({ e: 1, t: 'تعذر الاتصال بالمعالج' }); }
+        finally { setRScanning(false); }
+    };
+
+    const applyReceiptScan = () => {
+        if (!rScan) return;
+        if (rScan.amount) setPaid(String(rScan.amount));
+        if (rScan.method) setPayMethod(rScan.method);
+        if (rScan.bank) setPayBank(String(rScan.bank));
+        if (rScan.reference) setPayRef(String(rScan.reference));
+        if (/^d{4}-d{2}-d{2}$/.test(String(rScan.pay_date || ''))) setPayDate(rScan.pay_date);
+        setRScan(null);
+        setMsg({ t: 'نُقلت بيانات الإيصال — راجعها ثم احفظ' });
     };
 
     const runScan = async () => {
@@ -309,11 +341,53 @@ export default function BuyInvoice({ onDone }) {
                         <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="مرجع العملية أو رقم الشيك"
                             className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
                         {receipt ? (
-                            <div className="rounded-xl border border-white/15 p-2.5 flex items-center gap-2">
-                                <Receipt size={16} className="text-emerald-400 shrink-0" />
-                                <span className="text-xs font-bold truncate flex-1">{receipt.name}</span>
-                                <button type="button" onClick={() => setReceipt(null)}
-                                    className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center text-red-400"><X size={14} /></button>
+                            <div className="space-y-2">
+                                <div className="rounded-xl border border-white/15 p-2.5 flex items-center gap-2">
+                                    <Receipt size={16} className="text-emerald-400 shrink-0" />
+                                    <span className="text-xs font-bold truncate flex-1">{receipt.name}</span>
+                                    <button type="button" onClick={() => { setReceipt(null); setRScan(null); }}
+                                        className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center text-red-400"><X size={14} /></button>
+                                </div>
+                                {!rScan && (
+                                    <button onClick={runReceiptScan} disabled={rScanning}
+                                        className="w-full min-h-[48px] rounded-xl bg-[#1a365d] border border-[#c5a059]/50 text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                                        {rScanning ? <Loader2 size={16} className="animate-spin" /> : <ScanLine size={16} className="text-[#c5a059]" />}
+                                        {rScanning ? 'يقرأ الإيصال...' : 'اقرأ الإيصال تلقائياً'}
+                                    </button>
+                                )}
+                                {rScan && (
+                                    <div className="rounded-xl border border-[#c5a059]/50 bg-[#1a365d]/40 p-2.5 space-y-2">
+                                        <div className="text-xs font-black flex items-center gap-1.5">
+                                            <ScanLine size={14} className="text-[#c5a059]" /> قراءة الإيصال — راجعها
+                                        </div>
+                                        {rScan.amount_mismatch && (
+                                            <div className="rounded-lg bg-amber-500/15 text-amber-300 p-2 text-[11px] font-bold flex items-start gap-1.5">
+                                                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                                                مبلغ الإيصال {money(rScan.amount)} يخالف إجمالي الفاتورة {money(rScan.invoice_total)}
+                                            </div>
+                                        )}
+                                        <div className="text-[11px] space-y-1 bg-black/20 rounded-lg p-2">
+                                            <div className="flex justify-between"><span className="text-slate-400">المبلغ</span>
+                                                <span className="font-black tabular-nums text-[#c5a059]">{money(rScan.amount)}</span></div>
+                                            <div className="flex justify-between"><span className="text-slate-400">التاريخ</span>
+                                                <span className="font-bold">{rScan.pay_date || '—'}</span></div>
+                                            <div className="flex justify-between"><span className="text-slate-400">الطريقة</span>
+                                                <span className="font-bold">{({ transfer: 'تحويل', cash: 'نقدي', cheque: 'شيك', card: 'بطاقة', other: 'أخرى' })[rScan.method] || '—'}</span></div>
+                                            <div className="flex justify-between"><span className="text-slate-400">البنك</span>
+                                                <span className="font-bold truncate max-w-[60%] text-left">{rScan.bank || '—'}</span></div>
+                                            <div className="flex justify-between"><span className="text-slate-400">المستفيد</span>
+                                                <span className="font-bold truncate max-w-[60%] text-left">{rScan.beneficiary || '—'}</span></div>
+                                            <div className="flex justify-between"><span className="text-slate-400">المرجع</span>
+                                                <span className="font-bold truncate max-w-[60%] text-left">{rScan.reference || '—'}</span></div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setRScan(null)} className="flex-1 min-h-[44px] rounded-lg bg-white/10 text-xs font-bold">تجاهل</button>
+                                            <button onClick={applyReceiptScan} className="flex-[2] min-h-[44px] rounded-lg bg-[#c5a059] text-[#0b1220] text-xs font-black flex items-center justify-center gap-1.5">
+                                                <Check size={14} /> اعتمد بيانات الإيصال
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 gap-2">
