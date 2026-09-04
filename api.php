@@ -5736,6 +5736,58 @@ switch ($action) {
                         FROM dmirror_purchase_items i JOIN dmirror_purchases p ON p.id=i.purchase_id
                         WHERE $W GROUP BY i.item ORDER BY amount DESC LIMIT 300");
                 break;
+            case 'sales_units':
+                $title = 'الوحدات والمبيعات';
+                $cols = [['k'=>'unit_code','t'=>'الوحدة'],['k'=>'status','t'=>'الحالة'],['k'=>'owner','t'=>'المالك'],
+                         ['k'=>'phone','t'=>'الجوال'],['k'=>'national_id','t'=>'الهوية'],['k'=>'since','t'=>'تاريخ التسجيل']];
+                $rows = $run("SELECT u.unit_code, COALESCE(u.status,'متاح') status,
+                        COALESCE(o.owner_name,'') owner, COALESCE(o.owner_phone,'') phone,
+                        COALESCE(o.national_id,'') national_id, LEFT(COALESCE(o.created_at,''),10) since
+                    FROM units u LEFT JOIN owners o ON o.unit_code = u.unit_code AND o.tenant_id = u.tenant_id
+                    WHERE u.tenant_id = 1 ORDER BY u.unit_code");
+                break;
+            case 'leads_monthly':
+                $title = 'المهتمون شهرياً';
+                $cols = [['k'=>'ym','t'=>'الشهر'],['k'=>'leads','t'=>'العدد'],['k'=>'new','t'=>'جديد'],
+                         ['k'=>'contacted','t'=>'تم التواصل'],['k'=>'reserved','t'=>'حجز'],['k'=>'closed','t'=>'مغلق']];
+                $rows = $run("SELECT DATE_FORMAT(created_at,'%Y-%m') ym, COUNT(*) leads,
+                        SUM(status='new') new, SUM(status='contacted') contacted,
+                        SUM(status='reserved') reserved, SUM(status='closed') closed
+                    FROM acc_leads GROUP BY ym ORDER BY ym DESC LIMIT 24");
+                break;
+            case 'project_budgets':
+                $title = 'ميزانيات المشاريع ونسب الإنجاز';
+                $cols = [['k'=>'name','t'=>'المشروع'],['k'=>'type','t'=>'الشق'],['k'=>'cost','t'=>'التكلفة'],
+                         ['k'=>'supervision','t'=>'الإشراف'],['k'=>'spent','t'=>'الإنفاق'],
+                         ['k'=>'budget','t'=>'الميزانية'],['k'=>'pct','t'=>'الإنجاز %'],['k'=>'remaining','t'=>'المتبقي']];
+                $raw = $run("SELECT b.*, COALESCE(s.net,0) net, COALESCE(s.gross,0) gross, COALESCE(e.extra,0) extra
+                    FROM project_budgets b
+                    LEFT JOIN (SELECT pp.project_id pid, ROUND(SUM(p.subtotal),2) net, ROUND(SUM(p.total),2) gross
+                               FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                               WHERE pp.project_id IS NOT NULL GROUP BY pp.project_id) s ON s.pid = b.project_id
+                    LEFT JOIN (SELECT project_id pid, ROUND(SUM(amount),2) extra FROM project_extra_costs GROUP BY project_id) e
+                      ON e.pid = b.project_id
+                    ORDER BY b.project_id");
+                foreach ($raw as $x) {
+                    $ct = (($x['ptype'] ?? 'dev') === 'contracting'); $mg = (float)($x['margin_pct'] ?? 0);
+                    $cost = round(($ct ? (float)$x['gross'] : (float)$x['net']) + (float)$x['extra'], 2);
+                    $sup  = ($ct && $mg > 0) ? round($cost * $mg / 100, 2) : 0;
+                    $bud  = (float)$x['budget'];
+                    $rows[] = ['name'=>$x['name'], 'type'=>$ct ? 'مقاولات' : 'تطوير', 'cost'=>$cost,
+                        'supervision'=>$sup, 'spent'=>round($cost + $sup, 2), 'budget'=>$bud,
+                        'pct'=>$bud > 0 ? round(($cost + $sup) / $bud * 100, 1) : '',
+                        'remaining'=>round($bud - $cost - $sup, 2)];
+                }
+                break;
+            case 'extra_costs':
+                $title = 'تكاليف المشاريع خارج فواتير المشتريات';
+                $cols = [['k'=>'project','t'=>'المشروع'],['k'=>'title','t'=>'البند'],['k'=>'kind','t'=>'النوع'],
+                         ['k'=>'cost_date','t'=>'التاريخ'],['k'=>'amount','t'=>'القيمة'],['k'=>'note','t'=>'ملاحظة']];
+                $rows = $run("SELECT COALESCE(b.name, CONCAT('مشروع ', c.project_id)) project, c.title, c.kind,
+                        c.cost_date, ROUND(c.amount,2) amount, COALESCE(c.note,'') note
+                    FROM project_extra_costs c LEFT JOIN project_budgets b ON b.project_id = c.project_id
+                    ORDER BY c.cost_date DESC, c.id DESC");
+                break;
             case 'docs_coverage':
                 $title = 'تغطية المستندات';
                 $cols = [['k'=>'ym','t'=>'الشهر'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'with_docs','t'=>'لها مستند'],['k'=>'without','t'=>'بلا مستند']];

@@ -13,6 +13,10 @@ const REPORTS = [
     { key: 'supplier_aging',        name: 'أعمار الذمم الدائنة',          group: 'المالية' },
     { key: 'payments_by_period',    name: 'الدفعات حسب الفترة',           group: 'المالية' },
     { key: 'docs_coverage',         name: 'تغطية المستندات',              group: 'الرقابة' },
+    { key: 'sales_units',           name: 'الوحدات والمبيعات',            group: 'المبيعات' },
+    { key: 'leads_monthly',         name: 'المهتمون شهرياً',              group: 'المبيعات' },
+    { key: 'project_budgets',       name: 'ميزانيات المشاريع والإنجاز',   group: 'المشاريع' },
+    { key: 'extra_costs',           name: 'تكاليف خارج فواتير المشتريات', group: 'المشاريع' },
 ];
 
 const money = v => {
