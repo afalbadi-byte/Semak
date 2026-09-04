@@ -1087,6 +1087,23 @@ $conn->query("CREATE TABLE IF NOT EXISTS scorecard_values (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (22)");
 } // end DDL v22
+// ─── DDL v23: ميزانيات المشاريع — لقياس نسبة الاستهلاك مقابل المصروف ───────────
+if ($__sv < 23) {
+$conn->query("CREATE TABLE IF NOT EXISTS project_budgets (
+    project_id INT PRIMARY KEY,
+    name       VARCHAR(120) NOT NULL,
+    budget     DECIMAL(16,2) NOT NULL DEFAULT 0,
+    kind       VARCHAR(20) NOT NULL DEFAULT 'cost',
+    note       VARCHAR(255) DEFAULT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("INSERT IGNORE INTO project_budgets (project_id, name, budget, kind, note) VALUES
+    (3, 'سماك البوابة',        3723264, 'cost',     'تكلفة المشروع المعتمدة من ملف المستثمرين'),
+    (6, 'فيلا د. ليلى',         690000, 'contract', 'القيمة التقديرية للعقد شاملة الضريبة'),
+    (7, 'التطوير والإدارة',          0, 'cost',     'مصاريف إدارية بلا ميزانية محددة')");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (23)");
+} // end DDL v23
+
 
 
 
@@ -5469,6 +5486,37 @@ switch ($action) {
 
     // ══ اجتماعات سماك الدورية ══
 
+
+    case 'pbudget_list': {
+        $r = $conn->query("SELECT b.*, COALESCE(s.spent,0) spent, COALESCE(s.paid,0) paid, COALESCE(s.invoices,0) invoices
+            FROM project_budgets b
+            LEFT JOIN (SELECT work_order_id pid, ROUND(SUM(total),2) spent, ROUND(SUM(paid),2) paid, COUNT(*) invoices
+                       FROM dmirror_purchases WHERE work_order_id IS NOT NULL GROUP BY work_order_id) s
+              ON s.pid = b.project_id
+            ORDER BY b.project_id");
+        $rows = []; if ($r) while ($x = $r->fetch_assoc()) {
+            $x['pct'] = ((float)$x['budget'] > 0) ? round((float)$x['spent'] / (float)$x['budget'] * 100, 1) : null;
+            $x['remaining'] = round((float)$x['budget'] - (float)$x['spent'], 2);
+            $rows[] = $x;
+        }
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pbudget_save': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $pid = (int)($b['project_id'] ?? 0);
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'project_id مطلوب']); break; }
+        $kind = in_array(($b['kind'] ?? ''), ['cost','contract'], true) ? $b['kind'] : 'cost';
+        $conn->query("INSERT INTO project_budgets (project_id, name, budget, kind, note) VALUES ($pid, '"
+            . $E($b['name'] ?? ('مشروع ' . $pid)) . "', " . (float)($b['budget'] ?? 0) . ", '" . $E($kind) . "', '"
+            . $E($b['note'] ?? '') . "') ON DUPLICATE KEY UPDATE name=VALUES(name), budget=VALUES(budget),
+            kind=VALUES(kind), note=VALUES(note)");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'rock_list': {
         $r = $conn->query("SELECT * FROM rocks ORDER BY status, due_date, id DESC");
         $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
@@ -5567,6 +5615,7 @@ switch ($action) {
                     FROM dmirror_purchases GROUP BY pid ORDER BY spent DESC"),
             'units_total' => (int)$one("SELECT COUNT(*) FROM units", 0),
             'units_sold'  => (int)$one("SELECT COUNT(*) FROM owners", 0),
+            'villa_spent' => (float)$one("SELECT ROUND(COALESCE(SUM(total),0),2) FROM dmirror_purchases WHERE work_order_id=6"),
         ];
         // المشتريات
         $out['purchases'] = [
@@ -5580,6 +5629,10 @@ switch ($action) {
             'docs_missing' => (int)$one("SELECT COUNT(*) FROM dmirror_purchases p
                     LEFT JOIN (SELECT purchase_id FROM purchase_documents GROUP BY purchase_id) d ON d.purchase_id=p.id
                     WHERE d.purchase_id IS NULL"),
+            'docs_coverage' => (float)$one("SELECT ROUND(100 * COUNT(DISTINCT d.purchase_id) / NULLIF(COUNT(DISTINCT p.id),0), 1) FROM dmirror_purchases p LEFT JOIN purchase_documents d ON d.purchase_id = p.id"),
+            'paid_pct'      => (float)$one("SELECT ROUND(100 * SUM(paid) / NULLIF(SUM(total),0), 1) FROM dmirror_purchases"),
+            'avg_invoice'   => (float)$one("SELECT ROUND(AVG(total),0) FROM dmirror_purchases"),
+            'active_suppliers' => (int)$one("SELECT COUNT(DISTINCT supplier) FROM dmirror_purchases WHERE date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"),
         ];
         // السيولة
         $out['cash'] = [

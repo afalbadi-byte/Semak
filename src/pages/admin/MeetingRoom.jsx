@@ -36,6 +36,11 @@ export default function MeetingRoom() {
     const [prevItems, setPrevItems] = useState([]);
     const [rocks, setRocks]     = useState([]);
     const [metrics, setMetrics] = useState([]);
+    const [budgets, setBudgets] = useState([]);
+    const [editBud, setEditBud] = useState(null);
+    const [hiddenAuto, setHiddenAuto] = useState(() => { try { return JSON.parse(localStorage.getItem('mtg_hidden_auto') || '[]'); } catch (e) { return []; } });
+    const toggleAuto = name => setHiddenAuto(prev => { const nx = prev.includes(name) ? prev.filter(x => x !== name) : prev.concat(name); try { localStorage.setItem('mtg_hidden_auto', JSON.stringify(nx)); } catch (e) {} return nx; });
+    const [showHidden, setShowHidden] = useState(false);
     const [idx, setIdx]         = useState(0);
     const [present, setPresent] = useState(false);
     const [busy, setBusy]       = useState(false);
@@ -48,13 +53,15 @@ export default function MeetingRoom() {
     const load = useCallback(async () => {
         setBusy(true);
         try {
-            const [k, m, r] = await Promise.all([
+            const [k, m, r, bd] = await Promise.all([
                 fetch(`${API_URL}?action=mtg_kpis`).then(x => x.json()),
                 fetch(`${API_URL}?action=mtg_get`).then(x => x.json()),
                 fetch(`${API_URL}?action=rock_list`).then(x => x.json()),
+                fetch(`${API_URL}?action=pbudget_list`).then(x => x.json()),
             ]);
             if (k.success) setKpis(k);
             if (r.success) setRocks(r.data || []);
+            if (bd && bd.success) setBudgets(bd.data || []);
             if (m.success) {
                 setMeeting(m.meeting); setItems(m.items || []);
                 setPrev(m.previous); setPrevItems(m.previous_items || []);
@@ -93,6 +100,7 @@ export default function MeetingRoom() {
     const delItem = async id => { await post('mtg_item_delete', { id }); load(); };
     const saveRock = async r => { await post('rock_save', r); load(); };
     const delRock = async id => { if (window.confirm('حذف هذه الأولوية؟')) { await post('rock_delete', { id }); load(); } };
+    const saveBudget = async b => { await post('pbudget_save', b); setEditBud(null); load(); };
     const saveMetric = async m => { await post('score_save', { ...m, meeting_id: meeting ? meeting.id : 0 }); load(); };
     const delMetric = async id => { if (window.confirm('حذف هذا المؤشر؟')) { await post('score_delete', { id }); load(); } };
     const closeMeeting = async rating => {
@@ -112,6 +120,15 @@ export default function MeetingRoom() {
             { name: 'وحدات متاحة للبيع',         val: kpis.sales.units_available, target: null, dom: 'sales' },
             { name: 'عملاء جدد (30 يوم)',        val: kpis.sales.leads_30d,       target: null, dom: 'sales' },
             { name: 'ضريبة الشهر (مدخلات)',      val: kpis.gov.vat_month,         target: null, dom: 'gov' },
+            { name: 'ضريبة قابلة للاسترداد (شهر)', val: kpis.gov.vat_month,        target: null, dom: 'gov' },
+            { name: 'نسبة تغطية المستندات',      val: kpis.purchases.docs_coverage, target: 90,  dom: 'purchases', unit: '%' },
+            { name: 'نسبة السداد للموردين',      val: kpis.purchases.paid_pct,     target: 90,   dom: 'cash', unit: '%' },
+            { name: 'متوسط قيمة الفاتورة',       val: kpis.purchases.avg_invoice,  target: null, dom: 'purchases' },
+            { name: 'موردون نشطون (90 يوم)',     val: kpis.purchases.active_suppliers, target: null, dom: 'purchases' },
+            { name: 'مصروف الفيلا',              val: kpis.projects.villa_spent,   target: null, dom: 'projects' },
+            { name: 'وحدات مباعة',               val: kpis.projects.units_sold,    target: null, dom: 'sales' },
+            { name: 'قضايا مفتوحة من السابق',    val: prevItems.filter(x => x.status === 'open').length, target: 0, dom: 'projects', lower: true },
+            { name: 'أولويات متعثرة',            val: rocks.filter(r => r.status === 'off_track').length, target: 0, dom: 'projects', lower: true },
         ];
     };
 
@@ -208,17 +225,56 @@ export default function MeetingRoom() {
 
             {sec.key === 'scorecard' && (
                 <div className="space-y-3">
+                    <div className="flex items-center justify-between no-print">
+                        <span className={'text-xs font-black ' + txt}>مؤشرات آلية من بياناتنا</span>
+                        {hiddenAuto.length > 0 && (
+                            <button onClick={() => setShowHidden(!showHidden)} className="text-[11px] font-bold text-slate-400">
+                                {showHidden ? 'إخفاء المخفية' : 'إظهار المخفية (' + hiddenAuto.length + ')'}
+                            </button>
+                        )}
+                    </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {autoMetrics().map((m, i) => {
+                        {autoMetrics().filter(m => showHidden || !hiddenAuto.includes(m.name)).map((m, i) => {
                             const off = m.target != null && (m.lower ? m.val > m.target : m.val < m.target);
                             return (
                                 <div key={i} className={'rounded-xl p-3 border ' + (off ? 'bg-red-50 border-red-200' : present ? 'bg-white/10 border-white/10' : 'bg-emerald-50 border-emerald-100')}>
-                                    <div className={'text-[11px] font-bold ' + (present ? 'text-slate-300' : 'text-slate-500')}>{m.name}</div>
-                                    <div className={'text-xl font-black mt-0.5 ' + (off ? 'text-red-700' : present ? 'text-white' : 'text-emerald-800')}>{money(m.val)}</div>
+                                    <div className="flex items-start justify-between gap-1">
+                                      <div className={'text-[11px] font-bold ' + (present ? 'text-slate-300' : 'text-slate-500')}>{m.name}</div>
+                                      <button onClick={() => toggleAuto(m.name)} title={hiddenAuto.includes(m.name) ? 'إظهار' : 'إخفاء الكرت'}
+                                        className="text-slate-300 hover:text-red-500 shrink-0">
+                                        {hiddenAuto.includes(m.name) ? <Plus size={12} /> : <X size={12} />}
+                                      </button>
+                                    </div>
+                                    <div className={'text-xl font-black mt-0.5 ' + (off ? 'text-red-700' : present ? 'text-white' : 'text-emerald-800')}>{money(m.val)}{m.unit || ''}</div>
                                     <div className="text-[10px] mt-0.5 opacity-70">{off ? 'خارج المسار' : 'على المسار'} · آلي</div>
                                 </div>
                             );
                         })}
+                    </div>
+                    <div className={'rounded-2xl border p-4 ' + box}>
+                        <h4 className={'font-black text-sm mb-3 ' + txt}>نسبة استهلاك ميزانية كل مشروع</h4>
+                        <div className="grid md:grid-cols-3 gap-3">
+                            {budgets.map(b => {
+                                const pct = b.pct == null ? null : Number(b.pct);
+                                const over = pct != null && pct > 100;
+                                const near = pct != null && pct > 85 && pct <= 100;
+                                const bar = over ? 'bg-red-500' : near ? 'bg-amber-500' : 'bg-emerald-500';
+                                return (
+                                    <div key={b.project_id} className={'rounded-xl p-3 ' + (present ? 'bg-white/5' : 'bg-slate-50')}>
+                                        <div className="flex items-center justify-between">
+                                            <div className={'text-sm font-black ' + txt}>{b.name}</div>
+                                            <button onClick={() => setEditBud(b)} className="text-[11px] text-slate-400">تعديل</button>
+                                        </div>
+                                        <div className={'text-2xl font-black mt-1 ' + (over ? 'text-red-600' : txt)}>{pct == null ? '—' : pct + '%'}</div>
+                                        <div className="h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
+                                            <div className={'h-full ' + bar} style={{ width: Math.min(100, pct || 0) + '%' }} />
+                                        </div>
+                                        <div className="text-[11px] mt-1.5 opacity-70">مصروف {money(b.spent)} من {money(b.budget)}</div>
+                                        <div className="text-[11px] opacity-60">المتبقي {money(b.remaining)} · {b.invoices} فاتورة · {b.kind === 'contract' ? 'قيمة العقد' : 'ميزانية التكلفة'}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                     <div className={'rounded-2xl border p-4 ' + box}>
                         <h4 className={'font-black text-sm mb-2 ' + txt}>مؤشرات يدوية (لها مالك وحد)</h4>
@@ -434,6 +490,7 @@ export default function MeetingRoom() {
                     </div>
                 </div>
             )}
+        {editBud && <BudgetForm item={editBud} onCancel={() => setEditBud(null)} onSave={saveBudget} />}
         </div>
         </Wrap>
     );
@@ -467,6 +524,33 @@ function MetricForm({ onSave, present }) {
             </select>
             <button disabled={!n.trim()} onClick={() => { onSave({ name: n, owner: o, target: t, direction: dir }); setN(''); setO(''); setT(''); }}
                 className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold disabled:opacity-40">إضافة</button>
+        </div>
+    );
+}
+
+function BudgetForm({ item, onCancel, onSave }) {
+    const [b, setB] = useState(String(item.budget || ''));
+    const [n, setN] = useState(item.name || '');
+    const [k, setK] = useState(item.kind || 'cost');
+    return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={onCancel}>
+            <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3" onClick={e => e.stopPropagation()}>
+                <h3 className="font-black text-brand-900">ميزانية المشروع</h3>
+                <input value={n} onChange={e => setN(e.target.value)} placeholder="اسم المشروع"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm" />
+                <input type="number" value={b} onChange={e => setB(e.target.value)} placeholder="الميزانية"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm" />
+                <select value={k} onChange={e => setK(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm">
+                    <option value="cost">ميزانية تكلفة</option>
+                    <option value="contract">قيمة عقد</option>
+                </select>
+                <div className="flex gap-2 justify-end">
+                    <button onClick={onCancel} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-bold">إلغاء</button>
+                    <button onClick={() => onSave({ project_id: item.project_id, name: n, budget: b, kind: k })}
+                        className="px-4 py-2 rounded-xl bg-brand-900 text-white text-sm font-bold">حفظ</button>
+                </div>
+            </div>
         </div>
     );
 }
