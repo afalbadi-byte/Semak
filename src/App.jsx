@@ -234,6 +234,7 @@ const AppRoot = () => {
 
   useEffect(() => { bootstrapBranding(); }, [bootstrapBranding]);
 
+  if (location.pathname.startsWith('/buy'))      return <TechShell />;
   if (location.pathname.startsWith('/tech'))     return <TechShell />;
   if (location.pathname.startsWith('/platform')) return <PlatformShell />;
   return <MainShell />;
