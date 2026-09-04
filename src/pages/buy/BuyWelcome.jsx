@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ScanLine, Wallet, Package, Bot, ChevronLeft, ShieldCheck } from 'lucide-react';
+import InstallApp from '../../components/InstallApp';
 
 // ─── شاشة الترحيب — هوية سماك: كحلي #1a365d وذهبي #c5a059 ──────────────────
 // المقاسات القياسية المطبّقة هنا:
@@ -69,6 +70,7 @@ export default function BuyWelcome({ onStart, userName = '' }) {
                 <div className="flex items-center justify-center gap-1.5 text-[12px] text-slate-500">
                     <ShieldCheck size={14} /> بياناتك داخل نظام سماك، وكل إدخال باسمك
                 </div>
+                <InstallApp label="ثبّت التطبيق على الشاشة الرئيسية" className="!bg-white/10 !text-white" />
                 <button onClick={onStart}
                     className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1220] text-[17px] font-black active:scale-[.99] transition">
                     ابدأ

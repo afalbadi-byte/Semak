@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { User, Lock, RefreshCw, ArrowRight, ShieldCheck, Mail, MessageCircle, KeyRound, Smartphone } from 'lucide-react';
 
 import { API_URL, LS_ADMIN_JWT } from '../../lib/api/client';
+import InstallApp from '../../components/InstallApp';
 import { AppContext } from '../../context/AppContext';
 
 const DEVICE_KEY = 'semak_device_token';
@@ -37,6 +38,25 @@ export default function AdminLogin({ setUser, showToast }) {
   }, []);
 
   useEffect(() => { if (step === 'otp' && codeRef.current) codeRef.current.focus(); }, [step]);
+
+  // قادم من تطبيق المشتريات؟ اربط بطاقة تعريفه ليثبّت التطبيق لا الموقع
+  const [fromBuy, setFromBuy] = useState(false);
+  useEffect(() => {
+    let next = '';
+    try { next = new URLSearchParams(window.location.search).get('next') || ''; } catch { next = ''; }
+    if (!next.startsWith('/buy')) return;
+    setFromBuy(true);
+    const link = document.querySelector('link[rel="manifest"]');
+    const old = link ? link.getAttribute('href') : null;
+    if (link) link.setAttribute('href', '/buy.webmanifest');
+    const apple = document.querySelector('link[rel="apple-touch-icon"]');
+    const appleOld = apple ? apple.getAttribute('href') : null;
+    if (apple) apple.setAttribute('href', '/images/app-icon-512.png');
+    return () => {
+      if (link && old) link.setAttribute('href', old);
+      if (apple && appleOld) apple.setAttribute('href', appleOld);
+    };
+  }, []);
 
   const toast = (t, m, k) => { if (showToast) showToast(t, m, k); else if (k === 'error') alert(m); };
 
@@ -381,7 +401,13 @@ export default function AdminLogin({ setUser, showToast }) {
           </>
         )}
 
-        <div className="mt-8 text-center pt-6 border-t border-slate-100 dark:border-brand-700 space-y-3">
+        <div className="mt-6 pt-5 border-t border-slate-100 dark:border-brand-700">
+          <InstallApp
+            label={fromBuy ? 'ثبّت تطبيق المشتريات' : 'ثبّت التطبيق على جوالك'}
+            hint="يُضاف لشاشة جوالك ويفتح بملء الشاشة، ويحدّث نفسه تلقائياً" />
+        </div>
+
+        <div className="mt-6 text-center pt-5 border-t border-slate-100 dark:border-brand-700 space-y-3">
           <a
             href="/register"
             className="block text-sm font-bold text-[#c5a059] hover:text-[#b8913f] transition"
