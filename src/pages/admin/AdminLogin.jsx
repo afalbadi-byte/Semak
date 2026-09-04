@@ -56,7 +56,14 @@ export default function AdminLogin({ setUser, showToast }) {
 
     toast("تم تسجيل الدخول", `مرحباً بك، ${userData.name}`);
 
-    if (userData.role === "technician") window.location.href = "/tech-dashboard";
+    // العودة إلى الوجهة التي جاء منها (تطبيق المشتريات مثلا) — داخلية فقط
+    let next = null;
+    try {
+      const q = new URLSearchParams(window.location.search).get('next');
+      if (q && /^\/[A-Za-z0-9_\-\/]*$/.test(q)) next = q;
+    } catch { next = null; }
+    if (next) window.location.href = next;
+    else if (userData.role === "technician") window.location.href = "/tech-dashboard";
     else window.location.href = "/admin/dashboard";
   };
 
