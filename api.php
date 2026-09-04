@@ -5444,10 +5444,15 @@ switch ($action) {
                 break;
             case 'purchases_by_project':
                 $title = 'المشتريات حسب المشروع';
-                $cols = [['k'=>'project','t'=>'المشروع'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'gross','t'=>'الإجمالي'],['k'=>'paid','t'=>'المسدد']];
-                $rows = $run("SELECT COALESCE(NULLIF(p.work_order_id,0),'بلا مشروع') project, COUNT(*) invoices,
+                $cols = [['k'=>'project','t'=>'المشروع'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'net','t'=>'قبل الضريبة'],
+                         ['k'=>'vat','t'=>'الضريبة'],['k'=>'gross','t'=>'شامل الضريبة'],['k'=>'paid','t'=>'المسدد']];
+                $rows = $run("SELECT COALESCE(b.name, CONCAT('مشروع ', pp.project_id), 'بلا مشروع') project, COUNT(*) invoices,
+                        ROUND(SUM(p.subtotal),2) net, ROUND(SUM(p.total - p.subtotal),2) vat,
                         ROUND(SUM(p.total),2) gross, ROUND(SUM(p.paid),2) paid
-                        FROM dmirror_purchases p WHERE $W GROUP BY project ORDER BY gross DESC");
+                        FROM dmirror_purchases p
+                        LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                        LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                        WHERE $W GROUP BY project ORDER BY net DESC");
                 break;
             case 'tax_detail':
                 $title = 'تقرير الضرائب — تفصيل البنود';
@@ -5595,10 +5600,12 @@ switch ($action) {
     }
 
     case 'pbudget_list': {
-        $r = $conn->query("SELECT b.*, COALESCE(s.spent,0) invoiced, COALESCE(s.paid,0) paid,
+        $r = $conn->query("SELECT b.*, COALESCE(s.spent,0) invoiced, COALESCE(s.gross,0) invoiced_gross,
+                COALESCE(s.vat,0) vat, COALESCE(s.paid,0) paid,
                 COALESCE(s.invoices,0) invoices, COALESCE(e.extra,0) extra_costs
             FROM project_budgets b
-            LEFT JOIN (SELECT pp.project_id pid, ROUND(SUM(p.total),2) spent, ROUND(SUM(p.paid),2) paid, COUNT(*) invoices
+            LEFT JOIN (SELECT pp.project_id pid, ROUND(SUM(p.subtotal),2) spent, ROUND(SUM(p.total),2) gross,
+                              ROUND(SUM(p.total - p.subtotal),2) vat, ROUND(SUM(p.paid),2) paid, COUNT(*) invoices
                        FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
                        WHERE pp.project_id IS NOT NULL GROUP BY pp.project_id) s
               ON s.pid = b.project_id
@@ -5722,12 +5729,13 @@ switch ($action) {
         $ym = date('Y-m');
         // المشاريع
         $out['projects'] = [
-            'by_project' => $rows("SELECT COALESCE(NULLIF(work_order_id,0),0) pid, COUNT(*) invoices,
-                    ROUND(SUM(total),2) spent, ROUND(SUM(paid),2) paid
-                    FROM dmirror_purchases GROUP BY pid ORDER BY spent DESC"),
+            'by_project' => $rows("SELECT COALESCE(pp.project_id,0) pid, COUNT(*) invoices,
+                    ROUND(SUM(p.subtotal),2) spent, ROUND(SUM(p.total),2) gross, ROUND(SUM(p.paid),2) paid
+                    FROM dmirror_purchases p LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                    GROUP BY pid ORDER BY spent DESC"),
             'units_total' => (int)$one("SELECT COUNT(*) FROM units", 0),
             'units_sold'  => (int)$one("SELECT COUNT(*) FROM owners", 0),
-            'villa_spent' => (float)$one("SELECT ROUND(COALESCE(SUM(p.total),0),2) FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id=p.id WHERE pp.project_id=6"),
+            'villa_spent' => (float)$one("SELECT ROUND(COALESCE(SUM(p.subtotal),0),2) FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id=p.id WHERE pp.project_id=6"),
         ];
         // المشتريات
         $out['purchases'] = [

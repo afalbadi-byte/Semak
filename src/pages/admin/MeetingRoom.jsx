@@ -269,7 +269,7 @@ export default function MeetingRoom() {
                                         <div className="h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
                                             <div className={'h-full ' + bar} style={{ width: Math.min(100, pct || 0) + '%' }} />
                                         </div>
-                                        <div className="text-[11px] mt-1.5 opacity-70">مصروف {money(b.spent)} من {money(b.budget)}</div>
+                                        <div className="text-[11px] mt-1.5 opacity-70">مصروف {money(b.spent)} من {money(b.budget)} <span className="opacity-70">(قبل الضريبة)</span></div>
                                         <div className="text-[11px] opacity-60">المتبقي {money(b.remaining)} · {b.invoices} فاتورة · {b.kind === 'contract' ? 'قيمة العقد' : 'ميزانية التكلفة'}</div>
                                     </div>
                                 );
