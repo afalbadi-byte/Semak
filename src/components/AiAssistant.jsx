@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, RefreshCw, Bot, MessageSquarePlus, LogOut } from 'lucide-react';
+import { Sparkles, X, Send, RefreshCw, Bot, MessageSquarePlus, LogOut, Maximize2, Minimize2 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../lib/api/client';
+import MiniMarkdown from './MiniMarkdown';
 
 // يرسم محرف الريال الرسمي (U+20C0) برسمة .sar لأن أغلب الخطوط لا تحمله بعد
 const renderWithSar = (text) => {
@@ -21,6 +22,7 @@ const SUGGESTIONS = [
 
 export default function AiAssistant({ userName = '' }) {
   const [open, setOpen] = useState(false);
+  const [wide, setWide] = useState(false);
   const [messages, setMessages] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem('semak_ai_chat') || '[]'); } catch { return []; }
   });
@@ -80,7 +82,8 @@ export default function AiAssistant({ userName = '' }) {
 
       {/* نافذة المحادثة */}
       {open && (
-        <div dir="rtl" className="fixed bottom-24 left-6 z-[90] w-[360px] max-w-[calc(100vw-3rem)] h-[480px] max-h-[70vh] bg-white dark:bg-brand-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-brand-700 flex flex-col overflow-hidden font-cairo">
+        <div dir="rtl" className={'fixed bottom-24 left-6 z-[90] max-w-[calc(100vw-3rem)] max-h-[80vh] bg-white dark:bg-brand-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-brand-700 flex flex-col overflow-hidden font-cairo ' +
+            (wide ? 'w-[760px] h-[640px]' : 'w-[380px] h-[480px]')}>
           {/* الرأس */}
           <div className="bg-gradient-to-l from-[#1a365d] to-[#2d5299] px-4 py-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
@@ -90,6 +93,10 @@ export default function AiAssistant({ userName = '' }) {
               <div className="text-white font-black text-sm">مساعد سماك الذكي</div>
               <div className="text-white/60 text-[10px] font-bold">ملم بالمشروع والمشتريات والأسعار — اسأل أي شيء</div>
             </div>
+            <button onClick={() => setWide(w => !w)} title={wide ? 'تصغير النافذة' : 'توسيع النافذة'}
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+              {wide ? <Minimize2 size={15} className="text-white" /> : <Maximize2 size={15} className="text-white" />}
+            </button>
             <button onClick={newSession} title="جلسة جديدة — يبدأ من صفحة بيضاء"
               className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
               <MessageSquarePlus size={15} className="text-white" />
@@ -119,12 +126,12 @@ export default function AiAssistant({ userName = '' }) {
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs font-medium leading-relaxed whitespace-pre-wrap ${
+                <div className={`px-3 py-2 rounded-2xl text-xs font-medium leading-relaxed ${
                   m.role === 'user'
-                    ? 'bg-[#1a365d] text-white rounded-tr-sm'
-                    : 'bg-white dark:bg-brand-800 text-slate-700 dark:text-brand-100 border border-slate-100 dark:border-brand-700 rounded-tl-sm'
+                    ? 'max-w-[85%] whitespace-pre-wrap bg-[#1a365d] text-white rounded-tr-sm'
+                    : 'max-w-full w-full bg-white dark:bg-brand-800 text-slate-700 dark:text-brand-100 border border-slate-100 dark:border-brand-700 rounded-tl-sm'
                 }`}>
-                  {renderWithSar(m.content)}
+                  {m.role === 'user' ? renderWithSar(m.content) : <MiniMarkdown text={m.content} />}
                 </div>
               </div>
             ))}
