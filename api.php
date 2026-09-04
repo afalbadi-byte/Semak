@@ -1011,6 +1011,39 @@ $conn->query("CREATE TABLE IF NOT EXISTS pending_costs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (20)");
 } // end DDL v20
+// ─── DDL v21: اجتماعات سماك الدورية — الأجندة والقرارات والمحضر ────────────────
+if ($__sv < 21) {
+$conn->query("CREATE TABLE IF NOT EXISTS meetings (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    title       VARCHAR(200) NOT NULL,
+    meet_date   DATE NOT NULL,
+    status      VARCHAR(12) NOT NULL DEFAULT 'open',
+    attendees   VARCHAR(500) DEFAULT NULL,
+    summary     TEXT,
+    kpi_snapshot MEDIUMTEXT,
+    created_by  VARCHAR(120) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    closed_at   DATETIME DEFAULT NULL,
+    INDEX (meet_date), INDEX (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS meeting_items (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    meeting_id  INT NOT NULL,
+    section     VARCHAR(30) NOT NULL,
+    title       VARCHAR(300) NOT NULL,
+    decision    TEXT,
+    owner       VARCHAR(120) DEFAULT NULL,
+    due_date    DATE DEFAULT NULL,
+    status      VARCHAR(12) NOT NULL DEFAULT 'open',
+    carried_from INT DEFAULT NULL,
+    sort_index  INT NOT NULL DEFAULT 0,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (meeting_id), INDEX (section), INDEX (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (21)");
+} // end DDL v21
+
 
 
 
@@ -5387,6 +5420,181 @@ switch ($action) {
         break;
     }
 
+
+
+    // ══ اجتماعات سماك الدورية ══
+    case 'mtg_kpis': {
+        $out = ['success'=>true];
+        $one = function($sql, $def = 0) use ($conn) {
+            $r = $conn->query($sql); if (!$r) return $def;
+            $x = $r->fetch_assoc(); return $x ? array_values($x)[0] : $def;
+        };
+        $rows = function($sql) use ($conn) {
+            $o = []; $r = $conn->query($sql); if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o;
+        };
+        $ym = date('Y-m');
+        // المشاريع
+        $out['projects'] = [
+            'by_project' => $rows("SELECT COALESCE(NULLIF(work_order_id,0),0) pid, COUNT(*) invoices,
+                    ROUND(SUM(total),2) spent, ROUND(SUM(paid),2) paid
+                    FROM dmirror_purchases GROUP BY pid ORDER BY spent DESC"),
+            'units_total' => (int)$one("SELECT COUNT(*) FROM units", 0),
+            'units_sold'  => (int)$one("SELECT COUNT(*) FROM owners", 0),
+        ];
+        // المشتريات
+        $out['purchases'] = [
+            'total'        => (float)$one("SELECT ROUND(SUM(total),2) FROM dmirror_purchases"),
+            'paid'         => (float)$one("SELECT ROUND(SUM(paid),2) FROM dmirror_purchases"),
+            'unpaid'       => (float)$one("SELECT ROUND(SUM(total-paid),2) FROM dmirror_purchases WHERE total > paid"),
+            'month_total'  => (float)$one("SELECT ROUND(COALESCE(SUM(total),0),2) FROM dmirror_purchases WHERE DATE_FORMAT(date,'%Y-%m')='$ym'"),
+            'month_count'  => (int)$one("SELECT COUNT(*) FROM dmirror_purchases WHERE DATE_FORMAT(date,'%Y-%m')='$ym'"),
+            'top_suppliers'=> $rows("SELECT supplier, ROUND(SUM(total),2) amount FROM dmirror_purchases
+                    WHERE date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY) GROUP BY supplier ORDER BY amount DESC LIMIT 5"),
+            'docs_missing' => (int)$one("SELECT COUNT(*) FROM dmirror_purchases p
+                    LEFT JOIN (SELECT purchase_id FROM purchase_documents GROUP BY purchase_id) d ON d.purchase_id=p.id
+                    WHERE d.purchase_id IS NULL"),
+        ];
+        // السيولة
+        $out['cash'] = [
+            'payables'      => (float)$one("SELECT ROUND(SUM(total-paid),2) FROM dmirror_purchases WHERE total > paid + 0.5"),
+            'overdue90'     => (float)$one("SELECT ROUND(COALESCE(SUM(total-paid),0),2) FROM dmirror_purchases
+                                WHERE total > paid + 0.5 AND DATEDIFF(CURDATE(), date) > 90"),
+            'awaiting_inv'  => (float)$one("SELECT ROUND(COALESCE(SUM(paid),0),2) FROM pending_costs WHERE status='awaiting_invoice'"),
+            'paid_30d'      => (float)$one("SELECT ROUND(COALESCE(SUM(amount),0),2) FROM dmirror_payments
+                                WHERE date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)"),
+        ];
+        // المبيعات
+        $out['sales'] = [
+            'units_available' => (int)$one("SELECT COUNT(*) FROM units u LEFT JOIN owners o ON o.unit_code=u.unit_code WHERE o.id IS NULL", 0),
+            'leads_30d'       => (int)$one("SELECT COUNT(*) FROM leads WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", 0),
+            'quotes_30d'      => (int)$one("SELECT COUNT(*) FROM customer_quotes WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", 0),
+        ];
+        // الحكومية
+        $out['gov'] = [
+            'rega' => $one("SELECT sval FROM acc_settings WHERE skey='rega_dev_tracker' LIMIT 1", ''),
+            'vat_month' => (float)$one("SELECT ROUND(COALESCE(SUM(total-subtotal),0),2) FROM dmirror_purchases WHERE DATE_FORMAT(date,'%Y-%m')='$ym'"),
+        ];
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_list': {
+        $r = $conn->query("SELECT m.*, (SELECT COUNT(*) FROM meeting_items i WHERE i.meeting_id=m.id) items
+                           FROM meetings m ORDER BY m.meet_date DESC, m.id DESC LIMIT 100");
+        $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_get': {
+        $id = (int)($_GET['id'] ?? 0);
+        if (!$id) { $r = $conn->query("SELECT id FROM meetings ORDER BY meet_date DESC, id DESC LIMIT 1");
+                    $x = $r ? $r->fetch_assoc() : null; $id = $x ? (int)$x['id'] : 0; }
+        if (!$id) { echo json_encode(['success'=>true,'meeting'=>null,'items'=>[],'previous'=>null]); break; }
+        $r = $conn->query("SELECT * FROM meetings WHERE id=$id");
+        $m = $r ? $r->fetch_assoc() : null;
+        $items = []; $r = $conn->query("SELECT * FROM meeting_items WHERE meeting_id=$id ORDER BY section, sort_index, id");
+        if ($r) while ($x = $r->fetch_assoc()) $items[] = $x;
+        $prev = null; $pitems = [];
+        if ($m) {
+            $r = $conn->query("SELECT * FROM meetings WHERE (meet_date < '" . $conn->real_escape_string($m['meet_date'])
+                . "' OR (meet_date='" . $conn->real_escape_string($m['meet_date']) . "' AND id < $id))
+                ORDER BY meet_date DESC, id DESC LIMIT 1");
+            $prev = $r ? $r->fetch_assoc() : null;
+            if ($prev) {
+                $pid = (int)$prev['id'];
+                $r = $conn->query("SELECT * FROM meeting_items WHERE meeting_id=$pid ORDER BY section, sort_index, id");
+                if ($r) while ($x = $r->fetch_assoc()) $pitems[] = $x;
+            }
+        }
+        echo json_encode(['success'=>true,'meeting'=>$m,'items'=>$items,'previous'=>$prev,'previous_items'=>$pitems], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_save': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        $ttl = trim((string)($b['title'] ?? '')) ?: ('اجتماع سماك الدوري ' . date('Y-m-d'));
+        $dt  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['meet_date'] ?? '')) ? $b['meet_date'] : date('Y-m-d');
+        $set = "title='" . $E($ttl) . "', meet_date='$dt', attendees='" . $E($b['attendees'] ?? '')
+             . "', summary='" . $E($b['summary'] ?? '') . "', created_by='" . $E($b['created_by'] ?? '') . "'";
+        if ($id) { $conn->query("UPDATE meetings SET $set WHERE id=$id"); }
+        else {
+            $conn->query("INSERT INTO meetings SET $set");
+            $id = (int)$conn->insert_id;
+            // رحّل البنود المفتوحة من الاجتماع السابق
+            $r = $conn->query("SELECT id FROM meetings WHERE id <> $id ORDER BY meet_date DESC, id DESC LIMIT 1");
+            $p = $r ? $r->fetch_assoc() : null;
+            if ($p) {
+                $pid = (int)$p['id'];
+                $q = $conn->query("SELECT * FROM meeting_items WHERE meeting_id=$pid AND status='open'");
+                if ($q) while ($x = $q->fetch_assoc()) {
+                    $conn->query("INSERT INTO meeting_items (meeting_id, section, title, decision, owner, due_date, status, carried_from)
+                        VALUES ($id, '" . $E($x['section']) . "', '" . $E($x['title']) . "', '" . $E($x['decision'])
+                        . "', '" . $E($x['owner']) . "', " . ($x['due_date'] ? "'" . $E($x['due_date']) . "'" : 'NULL')
+                        . ", 'open', " . (int)$x['id'] . ")");
+                }
+            }
+        }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_item_save': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        $mid = (int)($b['meeting_id'] ?? 0);
+        $ttl = trim((string)($b['title'] ?? ''));
+        if (!$id && (!$mid || $ttl === '')) { echo json_encode(['success'=>false,'message'=>'meeting_id والعنوان مطلوبان']); break; }
+        $sec = in_array(($b['section'] ?? ''), ['projects','gov','purchases','cash','sales','other'], true) ? $b['section'] : 'other';
+        $st  = in_array(($b['status'] ?? ''), ['open','done','cancelled'], true) ? $b['status'] : 'open';
+        $due = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['due_date'] ?? '')) ? "'" . $b['due_date'] . "'" : 'NULL';
+        $set = "section='" . $E($sec) . "', title='" . $E($ttl) . "', decision='" . $E($b['decision'] ?? '')
+             . "', owner='" . $E($b['owner'] ?? '') . "', due_date=$due, status='" . $E($st) . "'";
+        if ($id) $conn->query("UPDATE meeting_items SET $set WHERE id=$id");
+        else { $conn->query("INSERT INTO meeting_items SET meeting_id=$mid, $set"); $id = (int)$conn->insert_id; }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_item_delete': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
+        if ($id) $conn->query("DELETE FROM meeting_items WHERE id=$id");
+        echo json_encode(['success'=>$id > 0], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_close': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $snap = $E(json_encode($b['kpis'] ?? null, JSON_UNESCAPED_UNICODE));
+        $conn->query("UPDATE meetings SET status='closed', closed_at=NOW(), summary='" . $E($b['summary'] ?? '')
+            . "', kpi_snapshot='$snap' WHERE id=$id");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_minutes': {
+        // محضر للعرض العام (للموظفين) — الاجتماعات المقفلة فقط
+        $id = (int)($_GET['id'] ?? 0);
+        $w = $id ? "m.id=$id" : "m.status='closed'";
+        $r = $conn->query("SELECT m.id, m.title, m.meet_date, m.attendees, m.summary, m.closed_at
+                           FROM meetings m WHERE $w ORDER BY m.meet_date DESC LIMIT 20");
+        $ms = []; if ($r) while ($x = $r->fetch_assoc()) $ms[] = $x;
+        foreach ($ms as &$m) {
+            $mid = (int)$m['id']; $m['items'] = [];
+            $q = $conn->query("SELECT section, title, decision, owner, due_date, status FROM meeting_items
+                               WHERE meeting_id=$mid ORDER BY section, sort_index, id");
+            if ($q) while ($x = $q->fetch_assoc()) $m['items'][] = $x;
+        }
+        echo json_encode(['success'=>true,'data'=>$ms], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     case 'pcost_list': {
         $r = $conn->query("SELECT * FROM pending_costs ORDER BY paid_date DESC, id DESC");

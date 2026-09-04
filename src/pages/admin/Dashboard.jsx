@@ -5,7 +5,7 @@ import {
     UserCircle, FileWarning, Loader2, FilePenLine, QrCode, Calculator,
     Printer, RefreshCw, TrendingUp, Building2, Edit2, MessageCircle, Bot,
     AlertTriangle, DollarSign, ArrowLeft, CheckCircle2, Coins, ShieldCheck,
-    BarChart3, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
+    BarChart3, Presentation, Briefcase, HardHat, Landmark, Cpu, ChevronRight,
     Receipt, ShoppingCart, FileText, Tag, Truck, Package, CreditCard,
     Home, Key, UserCheck, ArrowRightLeft, BookOpen, Layers, Link2,
     Menu, X, ChevronDown, ExternalLink, Bell, ScrollText, Clock, Zap, Lock, Megaphone, Ruler, ClipboardList
@@ -31,6 +31,7 @@ const InvoicesManage    = React.lazy(() => import('./InvoicesManage'));
 const PurchasesManage   = React.lazy(() => import('./PurchasesManage'));
 const PurchaseDocs      = React.lazy(() => import('./PurchaseDocs'));
 const TaxReports        = React.lazy(() => import('./TaxReports'));
+const MeetingRoom       = React.lazy(() => import('./MeetingRoom'));
 const TreasuryManage    = React.lazy(() => import('./TreasuryManage'));
 const ReportsHub        = React.lazy(() => import('./ReportsHub'));
 const QuotationsManage  = React.lazy(() => import('./QuotationsManage'));
@@ -1052,6 +1053,7 @@ function DashboardInner({ onLogout }) {
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',        icon:ShoppingCart,   permKey:'finance', color:'amber'  },
                 { id:'purchase_docs', tabId:'purchase_docs', label:'مستندات المشتريات', icon:FileText, permKey:'finance', color:'emerald' },
                 { id:'tax_reports',  tabId:'tax_reports',  label:'مركز التقارير',      icon:BarChart3, permKey:'finance', color:'sky' },
+                { id:'meeting',      tabId:'meeting',      label:'غرفة الاجتماع',      icon:Presentation, permKey:'finance', color:'violet' },
                 { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'qs',          color:'emerald'},
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
                 { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
@@ -1089,6 +1091,7 @@ function DashboardInner({ onLogout }) {
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',       icon:ShoppingCart, permKey:'finance', color:'amber'   },
                 { id:'purchase_docs', tabId:'purchase_docs', label:'مستندات المشتريات', icon:FileText, permKey:'finance', color:'emerald' },
                 { id:'tax_reports',  tabId:'tax_reports',  label:'مركز التقارير',      icon:BarChart3, permKey:'finance', color:'sky' },
+                { id:'meeting',      tabId:'meeting',      label:'غرفة الاجتماع',      icon:Presentation, permKey:'finance', color:'violet' },
                 { id:'expenses',    tabId:'expenses',    label:'المصروفات',           icon:Tag,          permKey:'finance', color:'red'     },
                 { id:'payments',    tabId:'payments',    label:'المدفوعات والتحصيل',  icon:ArrowRightLeft,permKey:'finance', color:'green'   },
                 { id:'cheques',     tabId:'cheques',     label:'الشيكات',             icon:CreditCard,   permKey:'finance', color:'indigo'  },
@@ -1578,6 +1581,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
                 {activeTab === 'purchase_docs' && hasPermission('finance')   && <div className="animate-fadeIn"><PurchaseDocs /></div>}
                 {activeTab === 'tax_reports'  && hasPermission('finance')   && <div className="animate-fadeIn"><TaxReports /></div>}
+                {activeTab === 'meeting'      && hasPermission('finance')   && <div className="animate-fadeIn"><MeetingRoom /></div>}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
                 {activeTab === 'month_close' && hasPermission('finance')     && <div className="animate-fadeIn"><MonthlyClose user={dbUser} /></div>}
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}
