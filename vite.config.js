@@ -30,13 +30,21 @@ export default defineConfig({
         clientsClaim: true,
         // استثناء مسارات المشاركة/الملفات المرفوعة يدوياً من إعادة توجيه SPA (حتى تفتح مباشرةً)
         navigateFallbackDenylist: [/^\/share\//, /^\/api\.php/, /\.(pdf|zip|xml|txt)$/i],
-        globPatterns: ['**/*.{js,css,html,woff2}', 'images/logo-*.{png,jpg}', 'images/favicon.png'],
+        // الهيكل وحده يُنزَّل مقدماً؛ بقية الشاشات تُجلب عند فتحها وتُخزَّن حينها.
+        // كان التخزين المسبق يشمل مئتي ملف بثلاثة ميغا فيبطئ أول فتح على الجوال.
+        globPatterns: ['index.html', 'registerSW.js', 'assets/index-*.{js,css}', 'images/favicon.png'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/semak\.sa\/api\.php/,
             handler: 'NetworkFirst',
             options: { cacheName: 'api-cache', networkTimeoutSeconds: 10 }
+          },
+          {
+            // شاشات التطبيق تُخزَّن أول ما تُفتح فتصير فورية بعدها
+            urlPattern: /\/assets\/.+\.(js|css|woff2)$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'assets-cache', expiration: { maxEntries: 220, maxAgeSeconds: 60 * 60 * 24 * 30 } }
           },
           {
             urlPattern: /\/images\/.+\.(jpg|png)$/,

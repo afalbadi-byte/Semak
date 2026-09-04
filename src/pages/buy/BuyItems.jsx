@@ -15,7 +15,7 @@ export default function BuyItems() {
         setBusy(true);
         try {
             const t = getAdminToken();
-            const r = await fetch(`${API_URL}?action=item_prices&sort=orders&q=${encodeURIComponent(query || '')}`,
+            const r = await fetch(`${API_URL}?action=item_prices&sort=orders&limit=120&q=${encodeURIComponent(query || '')}`,
                 { headers: t ? { Authorization: `Bearer ${t}` } : {} }).then(x => x.json());
             setRows((r.data || []).slice(0, 120));
         } catch { setRows([]); }

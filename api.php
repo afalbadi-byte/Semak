@@ -6209,6 +6209,8 @@ switch ($action) {
             'name'   => function($x, $y) { return strcmp($x['name'], $y['name']); },
         ];
         usort($rows, $cmp[isset($cmp[$sort]) ? $sort : 'orders']);
+        $lim = (int)($_GET['limit'] ?? 0);
+        if ($lim > 0) $rows = array_slice($rows, 0, $lim);
         echo json_encode(['success'=>true, 'sort'=>$sort, 'count'=>count($rows), 'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
     }
