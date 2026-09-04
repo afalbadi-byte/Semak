@@ -7,6 +7,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // اسم جديد لعامل الخدمة: النسخة القديمة محبوسة في كاش الحافة أسبوعا
+      // وتظل تخدم تطبيقا قديما، والرابط الجديد يتجاوزها فورا.
+      filename: 'service-worker.js',
+      injectRegister: null,
       includeAssets: ['images/favicon.png', 'images/logo-main.png'],
       manifest: {
         name: 'سماك العقارية',

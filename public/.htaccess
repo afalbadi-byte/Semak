@@ -18,7 +18,7 @@
 # ── عامل الخدمة وبطاقات التعريف: بلا كاش إطلاقاً ───────────────
 # قاعدة الكاش الطويل أدناه تشمل كل ملفات JS، وكانت تحبس sw.js في المتصفح
 # أسبوعاً كاملاً فيبقى التطبيق على نسخته القديمة رغم النشر.
-<FilesMatch "^(sw\.js|registerSW\.js|workbox-[^/]+\.js)$">
+<FilesMatch "^(sw\.js|service-worker\.js|registerSW\.js|workbox-[^/]+\.js)$">
   Header set Cache-Control "no-cache, no-store, must-revalidate"
   Header set Pragma "no-cache"
   Header set Expires "0"
