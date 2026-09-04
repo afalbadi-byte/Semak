@@ -41,6 +41,7 @@ const PlatformDashboard = lazy(() => import('./pages/platform/PlatformDashboard'
 
 // سماك التقنية
 const TechApp = lazy(() => import('./pages/tech/TechApp'));
+const BuyApp  = lazy(() => import('./pages/buy/BuyApp'));
 const BrandSocialKit = lazy(() => import('./pages/BrandSocialKit'));
 
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -183,6 +184,8 @@ const TechShell = () => {
       </div>
     }>
       <Routes>
+        <Route path="/buy/*"  element={<BuyApp />} />
+        <Route path="/buy"    element={<BuyApp />} />
         <Route path="/tech/*" element={<TechApp />} />
         <Route path="/tech"   element={<TechApp />} />
       </Routes>
