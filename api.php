@@ -5748,12 +5748,12 @@ switch ($action) {
                 break;
             case 'leads_monthly':
                 $title = 'المهتمون شهرياً';
-                $cols = [['k'=>'ym','t'=>'الشهر'],['k'=>'leads','t'=>'العدد'],['k'=>'new','t'=>'جديد'],
-                         ['k'=>'contacted','t'=>'تم التواصل'],['k'=>'reserved','t'=>'حجز'],['k'=>'closed','t'=>'مغلق']];
-                $rows = $run("SELECT DATE_FORMAT(created_at,'%Y-%m') ym, COUNT(*) leads,
-                        SUM(status='new') new, SUM(status='contacted') contacted,
-                        SUM(status='reserved') reserved, SUM(status='closed') closed
-                    FROM acc_leads GROUP BY ym ORDER BY ym DESC LIMIT 24");
+                $cols = [['k'=>'ym','t'=>'الشهر'],['k'=>'leads','t'=>'العدد'],['k'=>'bot','t'=>'من بوت فهد'],
+                         ['k'=>'site','t'=>'من الموقع'],['k'=>'statuses','t'=>'الحالات']];
+                $rows = $run("SELECT DATE_FORMAT(date,'%Y-%m') ym, COUNT(*) leads,
+                        SUM(source LIKE '%فهد%') bot, SUM(source NOT LIKE '%فهد%') site,
+                        GROUP_CONCAT(DISTINCT status SEPARATOR '، ') statuses
+                    FROM leads GROUP BY ym ORDER BY ym DESC LIMIT 24");
                 break;
             case 'project_budgets':
                 $title = 'ميزانيات المشاريع ونسب الإنجاز';
