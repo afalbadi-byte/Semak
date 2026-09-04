@@ -5485,6 +5485,14 @@ switch ($action) {
             }
             if ($txt !== '') $reply = $txt;
             if (($d['stop_reason'] ?? '') !== 'tool_use' || !$calls) break;
+            // المصفوفة الفارغة تعود [] لا {} عند إعادة الترميز، والمزود يرفض input غير كائن
+            foreach ($content as $bi => $blk) {
+                if (($blk['type'] ?? '') !== 'tool_use') continue;
+                $inp = $blk['input'] ?? null;
+                if (!is_array($inp) || $inp === [] || array_keys($inp) === range(0, count($inp) - 1)) {
+                    $content[$bi]['input'] = new stdClass();
+                }
+            }
             $conv[] = ['role'=>'assistant', 'content'=>$content];
             $results = [];
             foreach ($calls as $c) {
