@@ -32,6 +32,7 @@ const PurchasesManage   = React.lazy(() => import('./PurchasesManage'));
 const PurchaseDocs      = React.lazy(() => import('./PurchaseDocs'));
 const TaxReports        = React.lazy(() => import('./TaxReports'));
 const MeetingRoom       = React.lazy(() => import('./MeetingRoom'));
+const MeetingMinutes    = React.lazy(() => import('./MeetingMinutes'));
 const TreasuryManage    = React.lazy(() => import('./TreasuryManage'));
 const ReportsHub        = React.lazy(() => import('./ReportsHub'));
 const QuotationsManage  = React.lazy(() => import('./QuotationsManage'));
@@ -1136,6 +1137,7 @@ function DashboardInner({ onLogout }) {
             desc:'إدارة الفريق · الصلاحيات · الأدوار الوظيفية',
             tools:[
                 { id:'users', tabId:'users', label:'إدارة الفريق', icon:UserCircle, permKey:'users_manage', color:'purple' },
+                { id:'minutes', tabId:'minutes', label:'محاضر الاجتماعات', icon:FileText, permKey:'guide', color:'violet' },
             ],
         },
         {
@@ -1582,6 +1584,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'purchase_docs' && hasPermission('finance')   && <div className="animate-fadeIn"><PurchaseDocs /></div>}
                 {activeTab === 'tax_reports'  && hasPermission('finance')   && <div className="animate-fadeIn"><TaxReports /></div>}
                 {activeTab === 'meeting'      && hasPermission('finance')   && <div className="animate-fadeIn"><MeetingRoom /></div>}
+                {activeTab === 'minutes'      && <div className="animate-fadeIn"><MeetingMinutes /></div>}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
                 {activeTab === 'month_close' && hasPermission('finance')     && <div className="animate-fadeIn"><MonthlyClose user={dbUser} /></div>}
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}

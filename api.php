@@ -6135,12 +6135,13 @@ switch ($action) {
         // محضر للعرض العام (للموظفين) — الاجتماعات المقفلة فقط
         $id = (int)($_GET['id'] ?? 0);
         $w = $id ? "m.id=$id" : "m.status='closed'";
-        $r = $conn->query("SELECT m.id, m.title, m.meet_date, m.attendees, m.summary, m.closed_at
+        $r = $conn->query("SELECT m.id, m.title, m.meet_date, m.attendees, m.summary, m.cascading,
+                                  m.rating, m.closed_at
                            FROM meetings m WHERE $w ORDER BY m.meet_date DESC LIMIT 20");
         $ms = []; if ($r) while ($x = $r->fetch_assoc()) $ms[] = $x;
         foreach ($ms as &$m) {
             $mid = (int)$m['id']; $m['items'] = [];
-            $q = $conn->query("SELECT section, title, decision, owner, due_date, status FROM meeting_items
+            $q = $conn->query("SELECT kind, section, title, decision, owner, due_date, status FROM meeting_items
                                WHERE meeting_id=$mid ORDER BY section, sort_index, id");
             if ($q) while ($x = $q->fetch_assoc()) $m['items'][] = $x;
         }
