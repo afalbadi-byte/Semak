@@ -1137,6 +1137,16 @@ $conn->query("INSERT IGNORE INTO purchase_project (purchase_id, project_id, note
     WHERE work_order_id IS NOT NULL AND work_order_id > 0");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (25)");
 } // end DDL v25
+// ─── DDL v26: شقّا النشاط — تطوير (صافي) ومقاولات (شامل الضريبة + هامشنا) ─────
+if ($__sv < 26) {
+ensure_column($conn, 'project_budgets', 'ptype',      "ptype VARCHAR(20) NOT NULL DEFAULT 'dev'");
+ensure_column($conn, 'project_budgets', 'margin_pct', "margin_pct DECIMAL(6,2) NOT NULL DEFAULT 0");
+// التطوير: أرض تتحوّل لوحدات سكنية — الضريبة مستردة فلا تدخل التكلفة
+$conn->query("UPDATE project_budgets SET ptype='dev', margin_pct=0 WHERE project_id IN (3,7)");
+// المقاولات: التكلفة شاملة الضريبة ويُضاف عليها هامش سماك
+$conn->query("UPDATE project_budgets SET ptype='contracting', margin_pct=10 WHERE project_id = 6");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (26)");
+} // end DDL v26
 
 
 
@@ -5613,9 +5623,23 @@ switch ($action) {
               ON e.pid = b.project_id
             ORDER BY b.project_id");
         $rows = []; if ($r) while ($x = $r->fetch_assoc()) {
-            $x['spent'] = round((float)$x['invoiced'] + (float)$x['extra_costs'], 2);
-            $x['pct'] = ((float)$x['budget'] > 0) ? round((float)$x['spent'] / (float)$x['budget'] * 100, 1) : null;
-            $x['remaining'] = round((float)$x['budget'] - (float)$x['spent'], 2);
+            $ptype  = ($x['ptype'] ?? 'dev') === 'contracting' ? 'contracting' : 'dev';
+            $margin = (float)($x['margin_pct'] ?? 0);
+            $budget = (float)$x['budget'];
+            $extra  = (float)$x['extra_costs'];
+            // التطوير يقيس بالصافي (الضريبة مستردة)، والمقاولات بالشامل (الضريبة تكلفة على المشروع)
+            $base = ($ptype === 'contracting') ? (float)$x['invoiced_gross'] : (float)$x['invoiced'];
+            $x['basis'] = ($ptype === 'contracting') ? 'gross' : 'net';
+            $x['spent'] = round($base + $extra, 2);
+            // في المقاولات الميزانية المعلنة هي قيمة العقد وتشمل هامشنا، فسقف التكلفة أقل
+            $x['cost_budget'] = ($ptype === 'contracting' && $margin > 0)
+                ? round($budget / (1 + $margin / 100), 2) : round($budget, 2);
+            $x['margin_value'] = round($budget - $x['cost_budget'], 2);
+            $ref = (float)$x['cost_budget'];
+            $x['pct'] = ($ref > 0) ? round($x['spent'] / $ref * 100, 1) : null;
+            $x['remaining'] = round($ref - $x['spent'], 2);
+            // الهامش المتوقع فعليا لو أُقفل المشروع على المصروف الحالي مقابل سقف التكلفة
+            $x['margin_projected'] = ($ptype === 'contracting') ? round($budget - $x['spent'], 2) : null;
             $rows[] = $x;
         }
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
@@ -5627,11 +5651,14 @@ switch ($action) {
         $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $pid = (int)($b['project_id'] ?? 0);
         if (!$pid) { echo json_encode(['success'=>false,'message'=>'project_id مطلوب']); break; }
-        $kind = in_array(($b['kind'] ?? ''), ['cost','contract'], true) ? $b['kind'] : 'cost';
-        $conn->query("INSERT INTO project_budgets (project_id, name, budget, kind, note) VALUES ($pid, '"
+        $kind  = in_array(($b['kind'] ?? ''), ['cost','contract'], true) ? $b['kind'] : 'cost';
+        $ptype = in_array(($b['ptype'] ?? ''), ['dev','contracting'], true) ? $b['ptype'] : 'dev';
+        $marg  = max(0, min(100, (float)($b['margin_pct'] ?? ($ptype === 'contracting' ? 10 : 0))));
+        $conn->query("INSERT INTO project_budgets (project_id, name, budget, kind, ptype, margin_pct, note) VALUES ($pid, '"
             . $E($b['name'] ?? ('مشروع ' . $pid)) . "', " . (float)($b['budget'] ?? 0) . ", '" . $E($kind) . "', '"
+            . $E($ptype) . "', " . $marg . ", '"
             . $E($b['note'] ?? '') . "') ON DUPLICATE KEY UPDATE name=VALUES(name), budget=VALUES(budget),
-            kind=VALUES(kind), note=VALUES(note)");
+            kind=VALUES(kind), ptype=VALUES(ptype), margin_pct=VALUES(margin_pct), note=VALUES(note)");
         echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
         break;
     }
@@ -5735,7 +5762,7 @@ switch ($action) {
                     GROUP BY pid ORDER BY spent DESC"),
             'units_total' => (int)$one("SELECT COUNT(*) FROM units", 0),
             'units_sold'  => (int)$one("SELECT COUNT(*) FROM owners", 0),
-            'villa_spent' => (float)$one("SELECT ROUND(COALESCE(SUM(p.subtotal),0),2) FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id=p.id WHERE pp.project_id=6"),
+            'villa_spent' => (float)$one("SELECT ROUND(COALESCE(SUM(p.total),0),2) FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id=p.id WHERE pp.project_id=6"),
         ];
         // المشتريات
         $out['purchases'] = [

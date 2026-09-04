@@ -269,8 +269,11 @@ export default function MeetingRoom() {
                                         <div className="h-2 rounded-full bg-slate-200 mt-2 overflow-hidden">
                                             <div className={'h-full ' + bar} style={{ width: Math.min(100, pct || 0) + '%' }} />
                                         </div>
-                                        <div className="text-[11px] mt-1.5 opacity-70">مصروف {money(b.spent)} من {money(b.budget)} <span className="opacity-70">(قبل الضريبة)</span></div>
-                                        <div className="text-[11px] opacity-60">المتبقي {money(b.remaining)} · {b.invoices} فاتورة · {b.kind === 'contract' ? 'قيمة العقد' : 'ميزانية التكلفة'}</div>
+                                        <div className="text-[11px] mt-1.5 opacity-70">مصروف {money(b.spent)} من {money(b.cost_budget)} <span className="opacity-70">({b.basis === 'gross' ? 'شامل الضريبة' : 'قبل الضريبة'})</span></div>
+                                        <div className="text-[11px] opacity-60">المتبقي {money(b.remaining)} · {b.invoices} فاتورة · {b.ptype === 'contracting' ? 'مقاولات' : 'تطوير'}</div>
+                                        {b.ptype === 'contracting' && (
+                                            <div className="text-[11px] opacity-60">قيمة العقد {money(b.budget)} · هامش {Number(b.margin_pct)}% = {money(b.margin_value)}</div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -532,6 +535,8 @@ function BudgetForm({ item, onCancel, onSave }) {
     const [b, setB] = useState(String(item.budget || ''));
     const [n, setN] = useState(item.name || '');
     const [k, setK] = useState(item.kind || 'cost');
+    const [pt, setPt] = useState(item.ptype || 'dev');
+    const [mg, setMg] = useState(String(item.margin_pct ?? (item.ptype === 'contracting' ? 10 : 0)));
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={onCancel}>
             <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3" onClick={e => e.stopPropagation()}>
@@ -540,6 +545,18 @@ function BudgetForm({ item, onCancel, onSave }) {
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm" />
                 <input type="number" value={b} onChange={e => setB(e.target.value)} placeholder="الميزانية"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm" />
+                <select value={pt} onChange={e => { setPt(e.target.value); setMg(e.target.value === 'contracting' ? '10' : '0'); }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm">
+                    <option value="dev">تطوير — التكلفة قبل الضريبة</option>
+                    <option value="contracting">مقاولات — التكلفة شاملة الضريبة</option>
+                </select>
+                {pt === 'contracting' && (
+                    <label className="block text-xs text-slate-500">
+                        هامش سماك على التكلفة (%)
+                        <input type="number" value={mg} onChange={e => setMg(e.target.value)}
+                            className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-sm" />
+                    </label>
+                )}
                 <select value={k} onChange={e => setK(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm">
                     <option value="cost">ميزانية تكلفة</option>
@@ -547,7 +564,7 @@ function BudgetForm({ item, onCancel, onSave }) {
                 </select>
                 <div className="flex gap-2 justify-end">
                     <button onClick={onCancel} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-bold">إلغاء</button>
-                    <button onClick={() => onSave({ project_id: item.project_id, name: n, budget: b, kind: k })}
+                    <button onClick={() => onSave({ project_id: item.project_id, name: n, budget: b, kind: k, ptype: pt, margin_pct: mg })}
                         className="px-4 py-2 rounded-xl bg-brand-900 text-white text-sm font-bold">حفظ</button>
                 </div>
             </div>
