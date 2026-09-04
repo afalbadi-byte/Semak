@@ -103,10 +103,18 @@ export default function MeetingRoom() {
     const saveBudget = async b => { await post('pbudget_save', b); setEditBud(null); load(); };
     const saveMetric = async m => { await post('score_save', { ...m, meeting_id: meeting ? meeting.id : 0 }); load(); };
     const delMetric = async id => { if (window.confirm('حذف هذا المؤشر؟')) { await post('score_delete', { id }); load(); } };
-    const closeMeeting = async rating => {
-        if (!window.confirm('إنهاء الاجتماع وإصدار المحضر؟')) return;
+    const closeMeeting = async (rating, skipConfirm) => {
+        if (!skipConfirm && !window.confirm('إنهاء الاجتماع وإصدار المحضر؟')) return;
         await post('mtg_close', { id: meeting.id, kpis, rating, summary: meeting.summary || '' });
         load();
+    };
+    // زر الإنهاء متاح من الترويسة في أي قسم، لا في الختام وحده
+    const endMeeting = async () => {
+        const raw = window.prompt('تقييم الاجتماع من واحد إلى عشرة، ثم يُقفل ويصدر المحضر', '8');
+        if (raw === null) return;
+        const r = Math.round(Number(raw));
+        if (!(r >= 1 && r <= 10)) { window.alert('التقييم رقم من واحد إلى عشرة'); return; }
+        await closeMeeting(r, true);
     };
 
     const autoMetrics = () => {
@@ -176,6 +184,17 @@ export default function MeetingRoom() {
                             {running ? <Pause size={14} /> : <Play size={14} />}
                         </button>
                     </div>
+                    {meeting.status !== 'closed' && (
+                        <button onClick={endMeeting} title="إنهاء الاجتماع وإصدار المحضر"
+                            className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold flex items-center gap-1.5">
+                            <Check size={15} /> إنهاء الاجتماع
+                        </button>
+                    )}
+                    {meeting.status === 'closed' && (
+                        <button onClick={newMeeting} className="px-3 py-2 rounded-xl bg-brand-900 text-white text-sm font-bold">
+                            بدء اجتماع جديد
+                        </button>
+                    )}
                     <button onClick={() => setPresent(!present)} className="px-3 py-2 rounded-xl bg-gold-500 text-white text-sm font-bold">
                         {present ? <X size={15} /> : <Maximize2 size={15} />}
                     </button>
