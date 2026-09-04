@@ -5681,7 +5681,8 @@ switch ($action) {
                 $title = 'المشتريات حسب المشروع';
                 $cols = [['k'=>'project','t'=>'المشروع'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'net','t'=>'قبل الضريبة'],
                          ['k'=>'vat','t'=>'الضريبة'],['k'=>'gross','t'=>'شامل الضريبة'],['k'=>'paid','t'=>'المسدد']];
-                $rows = $run("SELECT COALESCE(b.name, CONCAT('مشروع ', pp.project_id), 'بلا مشروع') project, COUNT(*) invoices,
+                $rows = $run("SELECT COALESCE(b.name, CONCAT('مشروع ', pp.project_id), 'بلا مشروع') project,
+                        MAX(pp.project_id) project_id, COUNT(*) invoices,
                         ROUND(SUM(p.subtotal),2) net, ROUND(SUM(p.total - p.subtotal),2) vat,
                         ROUND(SUM(p.total),2) gross, ROUND(SUM(p.paid),2) paid
                         FROM dmirror_purchases p
@@ -5693,7 +5694,7 @@ switch ($action) {
                 $title = 'تقرير الضرائب — تفصيل البنود';
                 $cols = [['k'=>'no','t'=>'رقم'],['k'=>'supplier','t'=>'المورد'],['k'=>'date','t'=>'التاريخ'],
                          ['k'=>'item','t'=>'البند'],['k'=>'base','t'=>'الخاضع للضريبة'],['k'=>'tax','t'=>'الضريبة']];
-                $rows = $run("SELECT p.no, p.supplier, p.date, i.item,
+                $rows = $run("SELECT p.id, p.no, p.supplier, p.date, i.item, i.product_id,
                         ROUND(-(i.subtotal / 1.15), 2) base, ROUND(-(i.subtotal - i.subtotal / 1.15), 2) tax
                         FROM dmirror_purchase_items i JOIN dmirror_purchases p ON p.id = i.purchase_id
                         WHERE $W AND i.tax1 <> '' AND i.tax1 IS NOT NULL
@@ -5731,8 +5732,8 @@ switch ($action) {
             case 'items_by_product':
                 $title = 'المشتريات حسب الصنف';
                 $cols = [['k'=>'item','t'=>'الصنف'],['k'=>'qty','t'=>'الكمية'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'amount','t'=>'القيمة']];
-                $rows = $run("SELECT i.item, ROUND(SUM(i.quantity),2) qty, COUNT(DISTINCT i.purchase_id) invoices,
-                        ROUND(SUM(i.subtotal),2) amount
+                $rows = $run("SELECT i.item, MAX(i.product_id) product_id, ROUND(SUM(i.quantity),2) qty,
+                        COUNT(DISTINCT i.purchase_id) invoices, ROUND(SUM(i.subtotal),2) amount
                         FROM dmirror_purchase_items i JOIN dmirror_purchases p ON p.id=i.purchase_id
                         WHERE $W GROUP BY i.item ORDER BY amount DESC LIMIT 300");
                 break;
@@ -5883,6 +5884,288 @@ switch ($action) {
             $w ORDER BY p.date DESC, p.id DESC LIMIT 600");
         $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'kpi_detail': {
+        // تفصيل رقم من لوحة الأرقام: صفوفه الحقيقية، وكل صف يقود لبطاقة كيانه
+        $k = preg_replace('/[^a-z0-9_]/', '', (string)($_GET['key'] ?? ''));
+        $Q = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $ym = date('Y-m');
+        $INV = ['cols'=>[['k'=>'no','t'=>'رقم'],['k'=>'date','t'=>'التاريخ'],['k'=>'supplier','t'=>'المورد'],
+                         ['k'=>'gross','t'=>'الإجمالي'],['k'=>'paid','t'=>'المسدد']],
+                'link'=>['col'=>'no','type'=>'purchase','value_col'=>'id'],
+                'link2'=>['col'=>'supplier','type'=>'supplier','value_col'=>'supplier']];
+        $out = null;
+
+        if ($k === 'month_total') {
+            $out = ['title'=>'مشتريات الشهر'] + $INV + ['rows'=>$Q("SELECT id, no, date, supplier,
+                ROUND(total,2) gross, ROUND(paid,2) paid FROM dmirror_purchases
+                WHERE DATE_FORMAT(date,'%Y-%m')='$ym' ORDER BY total DESC")];
+        } elseif ($k === 'unpaid') {
+            $out = ['title'=>'المستحق للموردين'] + $INV + ['rows'=>$Q("SELECT id, no, date, supplier,
+                ROUND(total,2) gross, ROUND(paid,2) paid FROM dmirror_purchases
+                WHERE total > paid + 0.5 ORDER BY (total-paid) DESC")];
+        } elseif ($k === 'overdue90') {
+            $out = ['title'=>'متأخر أكثر من تسعين يوماً'] + $INV + ['rows'=>$Q("SELECT id, no, date, supplier,
+                ROUND(total,2) gross, ROUND(paid,2) paid FROM dmirror_purchases
+                WHERE total > paid + 0.5 AND DATEDIFF(CURDATE(), date) > 90 ORDER BY date")];
+        } elseif ($k === 'docs_missing') {
+            $out = ['title'=>'فواتير بلا مستند'] + $INV + ['rows'=>$Q("SELECT p.id, p.no, p.date, p.supplier,
+                ROUND(p.total,2) gross, ROUND(p.paid,2) paid FROM dmirror_purchases p
+                LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
+                  ON d.purchase_id = p.id
+                WHERE COALESCE(d.n,0)=0 ORDER BY p.total DESC")];
+        } elseif ($k === 'avg_invoice' || $k === 'docs_coverage' || $k === 'paid_pct') {
+            $out = ['title'=>'كل فواتير الشراء'] + $INV + ['rows'=>$Q("SELECT id, no, date, supplier,
+                ROUND(total,2) gross, ROUND(paid,2) paid FROM dmirror_purchases ORDER BY date DESC LIMIT 400")];
+        } elseif ($k === 'active_suppliers') {
+            $out = ['title'=>'موردون نشطون في تسعين يوماً',
+                'cols'=>[['k'=>'supplier','t'=>'المورد'],['k'=>'invoices','t'=>'الفواتير'],
+                         ['k'=>'gross','t'=>'القيمة'],['k'=>'last_date','t'=>'آخر تعامل']],
+                'link'=>['col'=>'supplier','type'=>'supplier','value_col'=>'supplier'],
+                'rows'=>$Q("SELECT supplier, COUNT(*) invoices, ROUND(SUM(total),2) gross, MAX(date) last_date
+                    FROM dmirror_purchases WHERE date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+                    GROUP BY supplier ORDER BY gross DESC")];
+        } elseif ($k === 'vat_month') {
+            $out = ['title'=>'ضريبة المدخلات شهرياً',
+                'cols'=>[['k'=>'ym','t'=>'الشهر'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'net','t'=>'قبل الضريبة'],
+                         ['k'=>'vat','t'=>'الضريبة'],['k'=>'gross','t'=>'الإجمالي']],
+                'rows'=>$Q("SELECT DATE_FORMAT(date,'%Y-%m') ym, COUNT(*) invoices, ROUND(SUM(subtotal),2) net,
+                        ROUND(SUM(total-subtotal),2) vat, ROUND(SUM(total),2) gross
+                    FROM dmirror_purchases GROUP BY ym ORDER BY ym DESC LIMIT 24")];
+        } elseif ($k === 'awaiting_inv') {
+            $out = ['title'=>'مدفوع بلا فاتورة',
+                'cols'=>[['k'=>'supplier','t'=>'المورد'],['k'=>'subject','t'=>'الموضوع'],['k'=>'paid','t'=>'المسدد'],
+                         ['k'=>'paid_date','t'=>'تاريخ السداد'],['k'=>'status','t'=>'الحالة']],
+                'link'=>['col'=>'supplier','type'=>'supplier','value_col'=>'supplier'],
+                'rows'=>$Q("SELECT supplier, COALESCE(subject,'') subject, ROUND(paid,2) paid, paid_date, status
+                    FROM pending_costs WHERE status <> 'invoiced' ORDER BY paid_date DESC")];
+        }
+        elseif ($k === 'units_available' || $k === 'units_sold') {
+            $out = ['title'=>$k === 'units_sold' ? 'الوحدات المباعة' : 'الوحدات المتاحة',
+                'cols'=>[['k'=>'unit_code','t'=>'الوحدة'],['k'=>'status','t'=>'الحالة'],
+                         ['k'=>'owner','t'=>'المالك'],['k'=>'phone','t'=>'الجوال']],
+                'link'=>['col'=>'unit_code','type'=>'unit','value_col'=>'unit_code'],
+                'rows'=>$Q("SELECT u.unit_code, COALESCE(u.status,'متاح') status,
+                        COALESCE(o.owner_name,'') owner, COALESCE(o.owner_phone,'') phone
+                    FROM units u LEFT JOIN owners o ON o.unit_code=u.unit_code AND o.tenant_id=u.tenant_id
+                    WHERE u.tenant_id=1 ORDER BY u.unit_code")];
+        } elseif ($k === 'leads_30d') {
+            $out = ['title'=>'عملاء جدد في ثلاثين يوماً',
+                'cols'=>[['k'=>'name','t'=>'الاسم'],['k'=>'phone','t'=>'الجوال'],['k'=>'interest','t'=>'الاهتمام'],
+                         ['k'=>'source','t'=>'المصدر'],['k'=>'date','t'=>'التاريخ']],
+                'rows'=>$Q("SELECT name, phone, LEFT(COALESCE(interest,''),120) interest, COALESCE(source,'') source,
+                        LEFT(date,10) date FROM leads
+                    WHERE date >= DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY date DESC")];
+        } elseif ($k === 'villa_spent' || $k === 'by_project') {
+            $out = ['title'=>'المشاريع والإنفاق',
+                'cols'=>[['k'=>'name','t'=>'المشروع'],['k'=>'invoices','t'=>'الفواتير'],
+                         ['k'=>'net','t'=>'قبل الضريبة'],['k'=>'gross','t'=>'شامل الضريبة'],['k'=>'paid','t'=>'المسدد']],
+                'link'=>['col'=>'name','type'=>'project','value_col'=>'project_id'],
+                'rows'=>$Q("SELECT b.project_id, b.name, COUNT(p.id) invoices, ROUND(SUM(p.subtotal),2) net,
+                        ROUND(SUM(p.total),2) gross, ROUND(SUM(p.paid),2) paid
+                    FROM project_budgets b
+                    LEFT JOIN purchase_project pp ON pp.project_id = b.project_id
+                    LEFT JOIN dmirror_purchases p ON p.id = pp.purchase_id
+                    GROUP BY b.project_id, b.name ORDER BY gross DESC")];
+        }
+
+        if (!$out) { echo json_encode(['success'=>false,'message'=>'لا تفصيل متاح لهذا الرقم'], JSON_UNESCAPED_UNICODE); break; }
+        $out['success'] = true;
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'entity': {
+        // بطاقة كيان موحّدة: كل ما في النظام تحت اسم واحد (مورد، فاتورة، صنف، مشروع، وحدة)
+        $type = preg_replace('/[^a-z_]/', '', (string)($_GET['type'] ?? ''));
+        $val  = trim((string)($_GET['value'] ?? ''));
+        if ($val === '') { echo json_encode(['success'=>false,'message'=>'قيمة الكيان مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $Q = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $out = ['success'=>true, 'type'=>$type, 'value'=>$val, 'title'=>$val, 'subtitle'=>'',
+                'stats'=>[], 'links'=>[], 'sections'=>[]];
+        $ok = true;
+
+        if ($type === 'supplier') {
+            $v = $E($val);
+            $s = $Q("SELECT COUNT(*) invoices, ROUND(SUM(total),2) gross, ROUND(SUM(subtotal),2) net,
+                        ROUND(SUM(paid),2) paid, ROUND(SUM(total-paid),2) outstanding, MAX(date) last_date
+                     FROM dmirror_purchases WHERE supplier='$v'");
+            $s = $s ? $s[0] : [];
+            $out['subtitle'] = 'مورد';
+            $out['stats'] = [
+                ['label'=>'عدد الفواتير', 'value'=>(int)($s['invoices'] ?? 0)],
+                ['label'=>'شامل الضريبة', 'value'=>(float)($s['gross'] ?? 0), 'money'=>1],
+                ['label'=>'قبل الضريبة',  'value'=>(float)($s['net'] ?? 0), 'money'=>1],
+                ['label'=>'المسدد',       'value'=>(float)($s['paid'] ?? 0), 'money'=>1],
+                ['label'=>'المتبقي',      'value'=>(float)($s['outstanding'] ?? 0), 'money'=>1],
+                ['label'=>'آخر تعامل',    'value'=>$s['last_date'] ?? '—'],
+            ];
+            $out['sections'][] = ['title'=>'الفواتير',
+                'cols'=>[['k'=>'no','t'=>'رقم'],['k'=>'date','t'=>'التاريخ'],['k'=>'gross','t'=>'الإجمالي'],
+                         ['k'=>'paid','t'=>'المسدد'],['k'=>'project','t'=>'المشروع'],['k'=>'docs','t'=>'مستندات']],
+                'link'=>['col'=>'no','type'=>'purchase','value_col'=>'id'],
+                'rows'=>$Q("SELECT p.id, p.no, p.date, ROUND(p.total,2) gross, ROUND(p.paid,2) paid,
+                        COALESCE(b.name,'بلا مشروع') project, COALESCE(d.n,0) docs
+                    FROM dmirror_purchases p
+                    LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                    LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                    LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
+                      ON d.purchase_id = p.id
+                    WHERE p.supplier='$v' ORDER BY p.date DESC, p.id DESC LIMIT 200")];
+            $out['sections'][] = ['title'=>'الأصناف المشتراة منه',
+                'cols'=>[['k'=>'name','t'=>'الصنف'],['k'=>'qty','t'=>'الكمية'],['k'=>'amount','t'=>'القيمة'],['k'=>'avg_price','t'=>'متوسط السعر']],
+                'link'=>['col'=>'name','type'=>'product','value_col'=>'product_id'],
+                'rows'=>$Q("SELECT ppi.product_id, COALESCE(ap.name, CONCAT('منتج #', ppi.product_id)) name,
+                        ROUND(SUM(ppi.qty),2) qty, ROUND(SUM(ppi.amount),2) amount,
+                        ROUND(SUM(ppi.amount)/NULLIF(SUM(ppi.qty),0),2) avg_price
+                    FROM purchase_product_items ppi
+                    LEFT JOIN acc_products ap ON ap.tenant_id=1 AND ap.daftra_id=ppi.product_id
+                    WHERE ppi.supplier='$v' GROUP BY ppi.product_id, ap.name ORDER BY amount DESC LIMIT 100")];
+        }
+        elseif ($type === 'purchase') {
+            $pid = (int)$val;
+            $h = $Q("SELECT p.*, COALESCE(b.name,'') project, pp.project_id
+                     FROM dmirror_purchases p
+                     LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                     LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                     WHERE p.id=$pid LIMIT 1");
+            if (!$h) { $ok = false; $out = ['success'=>false,'message'=>'الفاتورة غير موجودة']; }
+            else {
+                $h = $h[0];
+                $out['title']    = 'فاتورة شراء ' . $h['no'];
+                $out['subtitle'] = $h['supplier'];
+                $out['links'][]  = ['label'=>$h['supplier'], 'type'=>'supplier', 'value'=>$h['supplier']];
+                if (!empty($h['project_id'])) $out['links'][] = ['label'=>$h['project'], 'type'=>'project', 'value'=>$h['project_id']];
+                $out['stats'] = [
+                    ['label'=>'التاريخ',     'value'=>$h['date']],
+                    ['label'=>'الإجمالي',    'value'=>(float)$h['total'], 'money'=>1],
+                    ['label'=>'قبل الضريبة', 'value'=>(float)$h['subtotal'], 'money'=>1],
+                    ['label'=>'الضريبة',     'value'=>round((float)$h['total'] - (float)$h['subtotal'], 2), 'money'=>1],
+                    ['label'=>'المسدد',      'value'=>(float)$h['paid'], 'money'=>1],
+                    ['label'=>'المتبقي',     'value'=>round((float)$h['total'] - (float)$h['paid'], 2), 'money'=>1],
+                ];
+                $out['sections'][] = ['title'=>'البنود',
+                    'cols'=>[['k'=>'item','t'=>'الصنف'],['k'=>'quantity','t'=>'الكمية'],
+                             ['k'=>'unit_price','t'=>'سعر الوحدة'],['k'=>'subtotal','t'=>'الإجمالي']],
+                    'link'=>['col'=>'item','type'=>'product','value_col'=>'product_id'],
+                    'rows'=>$Q("SELECT item, product_id, quantity, unit_price, subtotal
+                                FROM dmirror_purchase_items WHERE purchase_id=$pid ORDER BY id")];
+                $out['sections'][] = ['title'=>'المستندات',
+                    'cols'=>[['k'=>'file_name','t'=>'المستند'],['k'=>'doc_type','t'=>'النوع'],
+                             ['k'=>'created_at','t'=>'أضيف'],['k'=>'drive_url','t'=>'الرابط']],
+                    'url_col'=>'drive_url',
+                    'rows'=>$Q("SELECT file_name, doc_type, LEFT(created_at,10) created_at, drive_url
+                                FROM purchase_documents WHERE purchase_id=$pid ORDER BY id")];
+            }
+        }
+        elseif ($type === 'product') {
+            $prid = (int)$val;
+            $nm = $Q("SELECT name FROM acc_products WHERE tenant_id=1 AND daftra_id=$prid LIMIT 1");
+            $out['title']    = $nm ? $nm[0]['name'] : ('منتج #' . $prid);
+            $out['subtitle'] = 'صنف';
+            $s = $Q("SELECT COUNT(*) invoices, ROUND(SUM(qty),2) qty, ROUND(SUM(amount),2) amount,
+                        ROUND(SUM(amount)/NULLIF(SUM(qty),0),2) avg_price,
+                        ROUND(MIN(CASE WHEN qty>0 THEN amount/qty END),2) min_price,
+                        ROUND(MAX(CASE WHEN qty>0 THEN amount/qty END),2) max_price
+                     FROM purchase_product_items WHERE product_id=$prid");
+            $s = $s ? $s[0] : [];
+            $out['stats'] = [
+                ['label'=>'عدد الحركات', 'value'=>(int)($s['invoices'] ?? 0)],
+                ['label'=>'الكمية',      'value'=>(float)($s['qty'] ?? 0)],
+                ['label'=>'القيمة',      'value'=>(float)($s['amount'] ?? 0), 'money'=>1],
+                ['label'=>'متوسط السعر', 'value'=>(float)($s['avg_price'] ?? 0), 'money'=>1],
+                ['label'=>'أدنى سعر',    'value'=>(float)($s['min_price'] ?? 0), 'money'=>1],
+                ['label'=>'أعلى سعر',    'value'=>(float)($s['max_price'] ?? 0), 'money'=>1],
+            ];
+            $out['sections'][] = ['title'=>'حسب المورد',
+                'cols'=>[['k'=>'supplier','t'=>'المورد'],['k'=>'qty','t'=>'الكمية'],
+                         ['k'=>'amount','t'=>'القيمة'],['k'=>'avg_price','t'=>'متوسط السعر'],['k'=>'last_date','t'=>'آخر توريد']],
+                'link'=>['col'=>'supplier','type'=>'supplier','value_col'=>'supplier'],
+                'rows'=>$Q("SELECT COALESCE(supplier,'غير محدد') supplier, ROUND(SUM(qty),2) qty,
+                        ROUND(SUM(amount),2) amount, ROUND(SUM(amount)/NULLIF(SUM(qty),0),2) avg_price,
+                        MAX(inv_date) last_date
+                    FROM purchase_product_items WHERE product_id=$prid GROUP BY supplier ORDER BY amount DESC")];
+            $out['sections'][] = ['title'=>'كل الحركات',
+                'cols'=>[['k'=>'no','t'=>'الفاتورة'],['k'=>'inv_date','t'=>'التاريخ'],['k'=>'supplier','t'=>'المورد'],
+                         ['k'=>'qty','t'=>'الكمية'],['k'=>'unit_price','t'=>'سعر الوحدة'],['k'=>'amount','t'=>'القيمة']],
+                'link'=>['col'=>'no','type'=>'purchase','value_col'=>'id'],
+                'rows'=>$Q("SELECT ppi.ref_id id, COALESCE(p.no, ppi.ref_id) no, ppi.inv_date,
+                        COALESCE(ppi.supplier,'') supplier, ppi.qty, ROUND(ppi.amount/NULLIF(ppi.qty,0),2) unit_price,
+                        ROUND(ppi.amount,2) amount
+                    FROM purchase_product_items ppi LEFT JOIN dmirror_purchases p ON p.id = ppi.ref_id
+                    WHERE ppi.product_id=$prid ORDER BY ppi.inv_date DESC LIMIT 200")];
+        }
+        elseif ($type === 'project') {
+            $prj = (int)$val;
+            $b = $Q("SELECT * FROM project_budgets WHERE project_id=$prj LIMIT 1");
+            $b = $b ? $b[0] : ['name'=>'مشروع ' . $prj, 'budget'=>0, 'ptype'=>'dev', 'margin_pct'=>0];
+            $agg = $Q("SELECT COUNT(*) invoices, ROUND(SUM(p.subtotal),2) net, ROUND(SUM(p.total),2) gross,
+                        ROUND(SUM(p.paid),2) paid
+                       FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                       WHERE pp.project_id=$prj");
+            $agg = $agg ? $agg[0] : [];
+            $ex  = $Q("SELECT ROUND(COALESCE(SUM(amount),0),2) extra FROM project_extra_costs WHERE project_id=$prj");
+            $extra = $ex ? (float)$ex[0]['extra'] : 0;
+            $ct  = (($b['ptype'] ?? 'dev') === 'contracting');
+            $mg  = (float)($b['margin_pct'] ?? 0);
+            $cost = round(($ct ? (float)($agg['gross'] ?? 0) : (float)($agg['net'] ?? 0)) + $extra, 2);
+            $sup  = ($ct && $mg > 0) ? round($cost * $mg / 100, 2) : 0;
+            $bud  = (float)$b['budget'];
+            $out['title']    = $b['name'];
+            $out['subtitle'] = $ct ? 'مشروع مقاولات' : 'مشروع تطوير';
+            $out['stats'] = [
+                ['label'=>'عدد الفواتير', 'value'=>(int)($agg['invoices'] ?? 0)],
+                ['label'=>$ct ? 'التكلفة شاملة الضريبة' : 'التكلفة قبل الضريبة', 'value'=>$cost, 'money'=>1],
+                ['label'=>'الإشراف',      'value'=>$sup, 'money'=>1],
+                ['label'=>'الإنفاق',      'value'=>round($cost + $sup, 2), 'money'=>1],
+                ['label'=>'الميزانية',    'value'=>$bud, 'money'=>1],
+                ['label'=>'الإنجاز',      'value'=>$bud > 0 ? (round(($cost + $sup) / $bud * 100, 1) . '%') : '—'],
+            ];
+            $out['sections'][] = ['title'=>'فواتير المشروع',
+                'cols'=>[['k'=>'no','t'=>'رقم'],['k'=>'date','t'=>'التاريخ'],['k'=>'supplier','t'=>'المورد'],
+                         ['k'=>'gross','t'=>'الإجمالي'],['k'=>'paid','t'=>'المسدد']],
+                'link'=>['col'=>'no','type'=>'purchase','value_col'=>'id'],
+                'link2'=>['col'=>'supplier','type'=>'supplier','value_col'=>'supplier'],
+                'rows'=>$Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.paid,2) paid
+                    FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                    WHERE pp.project_id=$prj ORDER BY p.date DESC, p.id DESC LIMIT 300")];
+            $out['sections'][] = ['title'=>'تكاليف خارج الفواتير',
+                'cols'=>[['k'=>'title','t'=>'البند'],['k'=>'kind','t'=>'النوع'],['k'=>'cost_date','t'=>'التاريخ'],
+                         ['k'=>'amount','t'=>'القيمة'],['k'=>'note','t'=>'ملاحظة']],
+                'rows'=>$Q("SELECT title, kind, cost_date, ROUND(amount,2) amount, COALESCE(note,'') note
+                    FROM project_extra_costs WHERE project_id=$prj ORDER BY cost_date DESC")];
+            $out['sections'][] = ['title'=>'أكبر الموردين في المشروع',
+                'cols'=>[['k'=>'supplier','t'=>'المورد'],['k'=>'invoices','t'=>'الفواتير'],['k'=>'gross','t'=>'القيمة']],
+                'link'=>['col'=>'supplier','type'=>'supplier','value_col'=>'supplier'],
+                'rows'=>$Q("SELECT p.supplier, COUNT(*) invoices, ROUND(SUM(p.total),2) gross
+                    FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                    WHERE pp.project_id=$prj GROUP BY p.supplier ORDER BY gross DESC LIMIT 50")];
+        }
+        elseif ($type === 'unit') {
+            $u = $E($val);
+            $r = $Q("SELECT u.unit_code, COALESCE(u.status,'متاح') status, COALESCE(u.spaces,'') spaces,
+                        COALESCE(p.name,'') project
+                     FROM units u LEFT JOIN projects p ON p.id = u.project_id
+                     WHERE u.unit_code='$u' AND u.tenant_id=1 LIMIT 1");
+            $o = $Q("SELECT owner_name, COALESCE(owner_phone,'') owner_phone, COALESCE(national_id,'') national_id,
+                        LEFT(created_at,10) since
+                     FROM owners WHERE unit_code='$u' AND tenant_id=1 LIMIT 1");
+            $out['title']    = 'الوحدة ' . $val;
+            $out['subtitle'] = $r ? $r[0]['project'] : '';
+            $out['stats'] = [
+                ['label'=>'الحالة', 'value'=>$r ? $r[0]['status'] : 'غير مسجلة'],
+                ['label'=>'المالك', 'value'=>$o ? $o[0]['owner_name'] : '—'],
+                ['label'=>'الجوال', 'value'=>$o ? $o[0]['owner_phone'] : '—'],
+                ['label'=>'الهوية', 'value'=>$o && $o[0]['national_id'] !== '' ? $o[0]['national_id'] : '—'],
+                ['label'=>'تاريخ التسجيل', 'value'=>$o ? $o[0]['since'] : '—'],
+            ];
+        }
+        else { $ok = false; $out = ['success'=>false,'message'=>'نوع كيان غير معروف']; }
+
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
         break;
     }
 

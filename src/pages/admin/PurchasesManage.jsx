@@ -11,6 +11,7 @@ import useTableControls from '../../utils/useTableControls';
 import SortHeader from '../../components/SortHeader';
 import TablePager from '../../components/TablePager';
 
+import EntityLink from '../../components/EntityLink';
 import { API_URL } from '../../lib/api/client';
 import { useToast } from '../../components/ui';
 import { usePartyDirectory } from '../../hooks/usePartyDirectory';
@@ -734,9 +735,9 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                         className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/50 dark:hover:bg-brand-800 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}
                       >
                         <td className="px-4 py-3">
-                          <span className="bg-gold-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-lg text-xs font-black">
+                          <EntityLink type="purchase" value={p.id} className="bg-gold-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-lg text-xs font-black no-underline">
                             #{p.no || p.id}
-                          </span>
+                          </EntityLink>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{p.date || '—'}</td>
                         <td className="px-4 py-3">
@@ -749,7 +750,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                                   className="text-xs font-bold text-brand-800 dark:text-brand-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-right">
                                   {p.supplier || '—'}
                                 </button>
-                              ) : <span className="text-xs text-slate-700 dark:text-brand-300 font-bold">{p.supplier || '—'}</span>;
+                              ) : <EntityLink type="supplier" value={p.supplier} className="text-xs text-slate-700 dark:text-brand-300 font-bold">{p.supplier || '—'}</EntityLink>;
                             })()}
                           </div>
                         </td>

@@ -33,6 +33,7 @@ const PurchaseDocs      = React.lazy(() => import('./PurchaseDocs'));
 const TaxReports        = React.lazy(() => import('./TaxReports'));
 const MeetingRoom       = React.lazy(() => import('./MeetingRoom'));
 const MeetingMinutes    = React.lazy(() => import('./MeetingMinutes'));
+const EntityView        = React.lazy(() => import('./EntityView'));
 const TreasuryManage    = React.lazy(() => import('./TreasuryManage'));
 const ReportsHub        = React.lazy(() => import('./ReportsHub'));
 const QuotationsManage  = React.lazy(() => import('./QuotationsManage'));
@@ -67,6 +68,8 @@ import { AppContext } from '../../context/AppContext';
 import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import AiAssistant from '../../components/AiAssistant';
+import Breadcrumbs from '../../components/Breadcrumbs';
+import { parseEntity, ENTITY_LABEL } from '../../lib/entity';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
 const DEPT_PALETTE = {
@@ -875,6 +878,7 @@ function DashboardInner({ onLogout }) {
     const [seg0, seg1] = splat.split('/');
     const activeTab = seg0 || 'overview';
     const detailId  = seg1 || null;
+    const entity    = parseEntity(splat);   // /ent/<نوع>/<قيمة> — بطاقة الكيان
     const setActiveTab = (tab) => {
         navigate(!tab || tab === 'overview' ? '/admin/dashboard' : `/admin/dashboard/${tab}`);
     };
@@ -1166,7 +1170,29 @@ function DashboardInner({ onLogout }) {
         parties:'كشوف حسابات الأطراف', activity_log:'سجل النشاط', security:'الأمان والبريد',
         subscription:'الاشتراك والباقة',
         rega:'قيد المطور العقاري',
+        minutes:'محاضر الاجتماعات', meeting:'غرفة الاجتماع', tax_reports:'مركز التقارير',
+        purchase_docs:'مستندات المشتريات', month_close:'القفلة الشهرية', campaign:'الحملات التسويقية',
+        ent:'بطاقة',
     };
+
+    // ─── مسار الصفحة: الرئيسية ثم القسم ثم الصفحة ثم البطاقة — يُشتق من الشجرة ──
+    const crumbs = (() => {
+        const t = [{ label: 'الرئيسية', to: '/admin/dashboard' }];
+        if (activeTab === 'overview') return t;
+        const dept = DEPARTMENTS.find(d => (d.tools || []).some(x => x.tabId === activeTab));
+        if (dept) t.push({ label: dept.label, to: '/admin/dashboard' });
+        if (entity) {
+            // البطاقة تحت قسم يناسب نوعها، مع اسم الكيان في النهاية
+            const home = { supplier: 'suppliers', purchase: 'purchases', product: 'products',
+                           project: 'projects', unit: 'units' }[entity.type];
+            if (home) t.push({ label: TAB_LABELS[home] || home, to: '/admin/dashboard/' + home });
+            t.push({ label: (ENTITY_LABEL[entity.type] || '') + ' · ' + entity.value });
+        } else {
+            t.push({ label: TAB_LABELS[activeTab] || activeTab });
+            if (detailId) t.push({ label: detailId });
+        }
+        return t;
+    })();
 
     if (authLoading) return (
         <div className="flex h-screen items-center justify-center bg-brand-50/50 dark:bg-brand-950 flex-col gap-5 font-cairo">
@@ -1552,6 +1578,8 @@ function DashboardInner({ onLogout }) {
                     );
                 })()}
 
+                <Breadcrumbs trail={crumbs} />
+
                 {/* ════ محتوى التبويبات ════ */}
                 <ErrorBoundary key={activeTab}>
                 <Suspense fallback={
@@ -1585,6 +1613,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'tax_reports'  && hasPermission('finance')   && <div className="animate-fadeIn"><TaxReports /></div>}
                 {activeTab === 'meeting'      && hasPermission('finance')   && <div className="animate-fadeIn"><MeetingRoom /></div>}
                 {activeTab === 'minutes'      && <div className="animate-fadeIn"><MeetingMinutes /></div>}
+                {activeTab === 'ent'          && entity && <EntityView type={entity.type} value={entity.value} />}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
                 {activeTab === 'month_close' && hasPermission('finance')     && <div className="animate-fadeIn"><MonthlyClose user={dbUser} /></div>}
                 {activeTab === 'payments'    && hasPermission('finance')     && <div className="animate-fadeIn"><PaymentsManage /></div>}

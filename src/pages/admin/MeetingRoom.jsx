@@ -4,6 +4,8 @@ import {
     Sparkles, AlertTriangle, Flag, RefreshCw, X, Maximize2, Trash2, Play, Pause
 } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
+import { useNavigate } from 'react-router-dom';
+import { entityPath } from '../../lib/entity';
 
 // أجندة Level 10 — سبعة أقسام بتوقيت ثابت (90 دقيقة)
 const AGENDA = [
@@ -38,6 +40,8 @@ export default function MeetingRoom() {
     const [metrics, setMetrics] = useState([]);
     const [budgets, setBudgets] = useState([]);
     const [editBud, setEditBud] = useState(null);
+    const navigate = useNavigate();
+    const [drill, setDrill] = useState(null);
     const [hiddenAuto, setHiddenAuto] = useState(() => { try { return JSON.parse(localStorage.getItem('mtg_hidden_auto') || '[]'); } catch (e) { return []; } });
     const toggleAuto = name => setHiddenAuto(prev => { const nx = prev.includes(name) ? prev.filter(x => x !== name) : prev.concat(name); try { localStorage.setItem('mtg_hidden_auto', JSON.stringify(nx)); } catch (e) {} return nx; });
     const [showHidden, setShowHidden] = useState(false);
@@ -120,21 +124,21 @@ export default function MeetingRoom() {
     const autoMetrics = () => {
         if (!kpis) return [];
         return [
-            { name: 'مشتريات الشهر',            val: kpis.purchases.month_total, target: null, dom: 'purchases' },
-            { name: 'المستحق للموردين',          val: kpis.purchases.unpaid,      target: null, dom: 'cash' },
-            { name: 'متأخر أكثر من 90 يوم',      val: kpis.cash.overdue90,        target: 0,    dom: 'cash', lower: true },
-            { name: 'مدفوع بلا فاتورة',          val: kpis.cash.awaiting_inv,     target: 0,    dom: 'cash', lower: true },
-            { name: 'فواتير بلا مستند',          val: kpis.purchases.docs_missing, target: 0,   dom: 'purchases', lower: true },
-            { name: 'وحدات متاحة للبيع',         val: kpis.sales.units_available, target: null, dom: 'sales' },
-            { name: 'عملاء جدد (30 يوم)',        val: kpis.sales.leads_30d,       target: null, dom: 'sales' },
-            { name: 'ضريبة الشهر (مدخلات)',      val: kpis.gov.vat_month,         target: null, dom: 'gov' },
+            { name: 'مشتريات الشهر',            val: kpis.purchases.month_total, target: null, dom: 'purchases', k: 'month_total' },
+            { name: 'المستحق للموردين',          val: kpis.purchases.unpaid,      target: null, dom: 'cash', k: 'unpaid' },
+            { name: 'متأخر أكثر من 90 يوم',      val: kpis.cash.overdue90,        target: 0,    dom: 'cash', lower: true, k: 'overdue90' },
+            { name: 'مدفوع بلا فاتورة',          val: kpis.cash.awaiting_inv,     target: 0,    dom: 'cash', lower: true, k: 'awaiting_inv' },
+            { name: 'فواتير بلا مستند',          val: kpis.purchases.docs_missing, target: 0,   dom: 'purchases', lower: true, k: 'docs_missing' },
+            { name: 'وحدات متاحة للبيع',         val: kpis.sales.units_available, target: null, dom: 'sales', k: 'units_available' },
+            { name: 'عملاء جدد (30 يوم)',        val: kpis.sales.leads_30d,       target: null, dom: 'sales', k: 'leads_30d' },
+            { name: 'ضريبة الشهر (مدخلات)',      val: kpis.gov.vat_month,         target: null, dom: 'gov', k: 'vat_month' },
             { name: 'ضريبة قابلة للاسترداد (شهر)', val: kpis.gov.vat_month,        target: null, dom: 'gov' },
-            { name: 'نسبة تغطية المستندات',      val: kpis.purchases.docs_coverage, target: 90,  dom: 'purchases', unit: '%' },
-            { name: 'نسبة السداد للموردين',      val: kpis.purchases.paid_pct,     target: 90,   dom: 'cash', unit: '%' },
-            { name: 'متوسط قيمة الفاتورة',       val: kpis.purchases.avg_invoice,  target: null, dom: 'purchases' },
-            { name: 'موردون نشطون (90 يوم)',     val: kpis.purchases.active_suppliers, target: null, dom: 'purchases' },
-            { name: 'مصروف الفيلا',              val: kpis.projects.villa_spent,   target: null, dom: 'projects' },
-            { name: 'وحدات مباعة',               val: kpis.projects.units_sold,    target: null, dom: 'sales' },
+            { name: 'نسبة تغطية المستندات',      val: kpis.purchases.docs_coverage, target: 90,  dom: 'purchases', unit: '%', k: 'docs_coverage' },
+            { name: 'نسبة السداد للموردين',      val: kpis.purchases.paid_pct,     target: 90,   dom: 'cash', unit: '%', k: 'paid_pct' },
+            { name: 'متوسط قيمة الفاتورة',       val: kpis.purchases.avg_invoice,  target: null, dom: 'purchases', k: 'avg_invoice' },
+            { name: 'موردون نشطون (90 يوم)',     val: kpis.purchases.active_suppliers, target: null, dom: 'purchases', k: 'active_suppliers' },
+            { name: 'مصروف الفيلا',              val: kpis.projects.villa_spent,   target: null, dom: 'projects', k: 'villa_spent' },
+            { name: 'وحدات مباعة',               val: kpis.projects.units_sold,    target: null, dom: 'sales', k: 'units_sold' },
             { name: 'قضايا مفتوحة من السابق',    val: prevItems.filter(x => x.status === 'open').length, target: 0, dom: 'projects', lower: true },
             { name: 'أولويات متعثرة',            val: rocks.filter(r => r.status === 'off_track').length, target: 0, dom: 'projects', lower: true },
         ];
@@ -256,16 +260,18 @@ export default function MeetingRoom() {
                         {autoMetrics().filter(m => showHidden || !hiddenAuto.includes(m.name)).map((m, i) => {
                             const off = m.target != null && (m.lower ? m.val > m.target : m.val < m.target);
                             return (
-                                <div key={i} className={'rounded-xl p-3 border ' + (off ? 'bg-red-50 border-red-200' : present ? 'bg-white/10 border-white/10' : 'bg-emerald-50 border-emerald-100')}>
+                                <div key={i} onClick={() => m.k && setDrill({ k: m.k, name: m.name })}
+                                    className={'rounded-xl p-3 border transition ' + (m.k ? 'cursor-pointer hover:ring-2 hover:ring-gold-400 ' : '') +
+                                        (off ? 'bg-red-50 border-red-200' : present ? 'bg-white/10 border-white/10' : 'bg-emerald-50 border-emerald-100')}>
                                     <div className="flex items-start justify-between gap-1">
                                       <div className={'text-[11px] font-bold ' + (present ? 'text-slate-300' : 'text-slate-500')}>{m.name}</div>
-                                      <button onClick={() => toggleAuto(m.name)} title={hiddenAuto.includes(m.name) ? 'إظهار' : 'إخفاء الكرت'}
+                                      <button onClick={e => { e.stopPropagation(); toggleAuto(m.name); }} title={hiddenAuto.includes(m.name) ? 'إظهار' : 'إخفاء الكرت'}
                                         className="text-slate-300 hover:text-red-500 shrink-0">
                                         {hiddenAuto.includes(m.name) ? <Plus size={12} /> : <X size={12} />}
                                       </button>
                                     </div>
                                     <div className={'text-xl font-black mt-0.5 ' + (off ? 'text-red-700' : present ? 'text-white' : 'text-emerald-800')}>{money(m.val)}{m.unit || ''}</div>
-                                    <div className="text-[10px] mt-0.5 opacity-70">{off ? 'خارج المسار' : 'على المسار'} · آلي</div>
+                                    <div className="text-[10px] mt-0.5 opacity-70">{off ? 'خارج المسار' : 'على المسار'}{m.k ? ' · اضغط للتفصيل' : ' · آلي'}</div>
                                 </div>
                             );
                         })}
@@ -281,7 +287,8 @@ export default function MeetingRoom() {
                                 return (
                                     <div key={b.project_id} className={'rounded-xl p-3 ' + (present ? 'bg-white/5' : 'bg-slate-50')}>
                                         <div className="flex items-center justify-between">
-                                            <div className={'text-sm font-black ' + txt}>{b.name}</div>
+                                            <button onClick={() => navigate(entityPath('project', b.project_id))}
+                                            className={'text-sm font-black underline decoration-dotted underline-offset-4 hover:text-gold-600 ' + txt}>{b.name}</button>
                                             <button onClick={() => setEditBud(b)} className="text-[11px] text-slate-400">تعديل</button>
                                         </div>
                                         <div className={'text-2xl font-black mt-1 ' + (over ? 'text-red-600' : txt)}>{pct == null ? '—' : pct + '%'}</div>
@@ -513,6 +520,7 @@ export default function MeetingRoom() {
                 </div>
             )}
         {editBud && <BudgetForm item={editBud} onCancel={() => setEditBud(null)} onSave={saveBudget} />}
+        {drill && <KpiDrill item={drill} onClose={() => setDrill(null)} />}
         </div>
         </Wrap>
     );
@@ -586,6 +594,73 @@ function BudgetForm({ item, onCancel, onSave }) {
                     <button onClick={() => onSave({ project_id: item.project_id, name: n, budget: b, kind: k, ptype: pt, margin_pct: mg })}
                         className="px-4 py-2 rounded-xl bg-brand-900 text-white text-sm font-bold">حفظ</button>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── تفصيل رقم من لوحة الأرقام: صفوفه الحقيقية، وكل دلالة فيه رابط ──────────
+function KpiDrill({ item, onClose }) {
+    const [data, setData] = useState(null);
+    const [err, setErr]   = useState('');
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        let live = true;
+        fetch(`${API_URL}?action=kpi_detail&key=${encodeURIComponent(item.k)}`)
+            .then(r => r.json())
+            .then(r => { if (!live) return; r.success ? setData(r) : setErr(r.message || 'لا تفصيل متاح'); })
+            .catch(() => live && setErr('تعذر الاتصال'));
+        return () => { live = false; };
+    }, [item.k]);
+
+    const cols  = data?.cols || [];
+    const rows  = data?.rows || [];
+    const links = [data?.link, data?.link2].filter(Boolean);
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-start justify-center p-4 overflow-auto" onClick={onClose}>
+            <div className="bg-white rounded-2xl w-full max-w-5xl my-8" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                    <div>
+                        <h3 className="font-black text-brand-900">{data?.title || item.name}</h3>
+                        <p className="text-[11px] text-slate-400">{rows.length} صف · اضغط أي اسم لتفتح بطاقته</p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-red-500"><X size={18} /></button>
+                </div>
+                {err && <div className="p-6 text-sm text-red-600">{err}</div>}
+                {!err && !data && <div className="p-10 text-center text-slate-400 text-sm">جاري التحميل...</div>}
+                {data && (
+                    <div className="overflow-x-auto max-h-[70vh]">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 sticky top-0">
+                                <tr className="text-xs text-slate-500 text-right">
+                                    {cols.map(c => <th key={c.k} className="py-2 px-3 font-bold whitespace-nowrap">{c.t}</th>)}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.map((r, i) => (
+                                    <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
+                                        {cols.map(c => {
+                                            const lk = links.find(l => l.col === c.k);
+                                            const v  = r[c.k];
+                                            return (
+                                                <td key={c.k} className="py-2 px-3 whitespace-nowrap">
+                                                    {lk
+                                                        ? <button onClick={() => { onClose(); navigate(entityPath(lk.type, r[lk.value_col])); }}
+                                                            className="text-brand-700 font-bold underline decoration-dotted underline-offset-4 hover:text-gold-600">
+                                                            {String(v ?? '—')}
+                                                          </button>
+                                                        : String(v ?? '—')}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
         </div>
     );

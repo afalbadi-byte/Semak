@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BarChart3, Download, Printer, RefreshCw, AlertTriangle } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
+import EntityLink from '../../components/EntityLink';
 
 const REPORTS = [
     { key: 'vat_return',            name: 'الإقرار الضريبي',              group: 'الضرائب' },
@@ -25,6 +26,16 @@ const money = v => {
     return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 const isNum = v => v !== '' && v !== null && !isNaN(Number(v));
+
+// أي عمود دلالي في أي تقرير يصير رابطاً لبطاقة كيانه
+const entityOf = (colKey, row) => {
+    if (colKey === 'supplier' && row.supplier) return { type: 'supplier', value: row.supplier };
+    if (colKey === 'unit_code' && row.unit_code) return { type: 'unit', value: row.unit_code };
+    if (colKey === 'no' && row.id) return { type: 'purchase', value: row.id };
+    if ((colKey === 'item' || colKey === 'name') && row.product_id) return { type: 'product', value: row.product_id };
+    if (colKey === 'project' && row.project_id) return { type: 'project', value: row.project_id };
+    return null;
+};
 
 export default function TaxReports() {
     const today = new Date().toISOString().slice(0, 10);
@@ -164,7 +175,11 @@ export default function TaxReports() {
                                     <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
                                         {data.columns.map(c => (
                                             <td key={c.k} className={'p-3 whitespace-nowrap ' + (isNum(r[c.k]) ? 'text-left font-bold tabular-nums' : '')}>
-                                                {isNum(r[c.k]) ? money(r[c.k]) : (r[c.k] || '—')}
+                                                {(() => {
+                                                    const e = entityOf(c.k, r);
+                                                    const txt = isNum(r[c.k]) ? money(r[c.k]) : (r[c.k] || '—');
+                                                    return e ? <EntityLink type={e.type} value={e.value} className="text-brand-700 font-bold">{txt}</EntityLink> : txt;
+                                                })()}
                                             </td>
                                         ))}
                                     </tr>
