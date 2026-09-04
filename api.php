@@ -991,6 +991,27 @@ $conn->query("CREATE TABLE IF NOT EXISTS purchase_documents (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (19)");
 } // end DDL v19
+// ─── DDL v20: التزامات بلا فاتورة — مدفوعات تمت ولم يصدر المورد فاتورتها بعد ────
+if ($__sv < 20) {
+$conn->query("CREATE TABLE IF NOT EXISTS pending_costs (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    project_id  INT DEFAULT NULL,
+    supplier    VARCHAR(255) NOT NULL,
+    subject     VARCHAR(255) DEFAULT NULL,
+    amount      DECIMAL(14,2) NOT NULL DEFAULT 0,
+    paid        DECIMAL(14,2) NOT NULL DEFAULT 0,
+    paid_date   DATE DEFAULT NULL,
+    status      VARCHAR(20) NOT NULL DEFAULT 'awaiting_invoice',
+    note        VARCHAR(500) DEFAULT NULL,
+    daftra_id   INT DEFAULT NULL,
+    created_by  VARCHAR(120) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (project_id), INDEX (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (20)");
+} // end DDL v20
+
 
 
 
@@ -5363,6 +5384,44 @@ switch ($action) {
         }
         echo json_encode(['success'=>true,'type'=>$type,'title'=>$title,'from'=>$from,'to'=>$to,
             'columns'=>$cols,'rows'=>$rows,'totals'=>$totals,'count'=>count($rows),'extra'=>$extra], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+
+    case 'pcost_list': {
+        $r = $conn->query("SELECT * FROM pending_costs ORDER BY paid_date DESC, id DESC");
+        $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+        $sum = 0; foreach ($rows as $x) if ($x['status'] !== 'invoiced') $sum += (float)$x['paid'];
+        echo json_encode(['success'=>true,'data'=>$rows,'awaiting_total'=>round($sum,2)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pcost_save': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id  = (int)($b['id'] ?? 0);
+        $sup = trim((string)($b['supplier'] ?? ''));
+        if ($sup === '') { echo json_encode(['success'=>false,'message'=>'اسم المورد مطلوب']); break; }
+        $pid = (int)($b['project_id'] ?? 0);
+        $amt = (float)($b['amount'] ?? 0);
+        $pd  = (float)($b['paid'] ?? 0);
+        $dt  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['paid_date'] ?? '')) ? "'" . $b['paid_date'] . "'" : 'NULL';
+        $st  = in_array(($b['status'] ?? ''), ['awaiting_invoice','invoiced','cancelled'], true) ? $b['status'] : 'awaiting_invoice';
+        $set = "project_id=" . ($pid ?: 'NULL') . ", supplier='" . $E($sup) . "', subject='" . $E($b['subject'] ?? '')
+             . "', amount=$amt, paid=$pd, paid_date=$dt, status='" . $E($st) . "', note='" . $E($b['note'] ?? '')
+             . "', daftra_id=" . (int)($b['daftra_id'] ?? 0) . ", created_by='" . $E($b['created_by'] ?? '') . "'";
+        if ($id) $conn->query("UPDATE pending_costs SET $set WHERE id=$id");
+        else { $conn->query("INSERT INTO pending_costs SET $set"); $id = (int)$conn->insert_id; }
+        echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pcost_delete': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+        $conn->query("DELETE FROM pending_costs WHERE id=$id");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
         break;
     }
 
