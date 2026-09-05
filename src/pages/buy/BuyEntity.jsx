@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X } from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
@@ -17,10 +17,11 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [data, setData] = useState(null);
     const [err, setErr]   = useState('');
     const [del, setDel]   = useState(null);   // { blockers } أو { ask: true }
+    const [edit, setEdit] = useState(null);   // نسخة قابلة للتحرير من الفاتورة
     const [busy, setBusy] = useState(false);
     const [tick, setTick] = useState(0);      // لإعادة الجلب بعد الإلغاء
 
-    useDepthGuard(del ? 1 : 0, () => setDel(null));
+    useDepthGuard((del ? 1 : 0) + (edit ? 1 : 0), () => { edit ? setEdit(null) : setDel(null); });
 
     const post = (action, body) => fetch(`${API_URL}?action=${action}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
@@ -50,6 +51,33 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
         finally { setBusy(false); }
     };
 
+    // حفظ التعديل: البنود إن وُجدت هي المرجع، وإلا فالمبلغ المُدخل
+    const saveEdit = async () => {
+        setBusy(true); setErr('');
+        try {
+            const rows = (edit.items || []).filter(i => String(i.name || '').trim() && Number(i.qty) > 0);
+            const body = {
+                id: value, no: edit.no, date: edit.date, supplier: edit.supplier,
+                note: edit.note || '', project_id: Number(edit.project_id) || 0,
+                items: rows.map(i => ({ name: i.name, qty: Number(i.qty) || 0, price: Number(i.price) || 0 })),
+            };
+            if (!rows.length) body.subtotal = Number(edit.subtotal) || 0;
+            if (edit.vat !== '' && edit.vat !== null && edit.vat !== undefined) body.vat = Number(edit.vat) || 0;
+            if (!edit.paid_locked) body.paid = Number(edit.paid) || 0;
+            const r = await post('purchase_update', body);
+            if (!r.success) { setErr(r.message || 'تعذر الحفظ'); return; }
+            if (r.overpaid > 0) alert('تنبيه: المسدد يزيد عن الإجمالي بمقدار ' + money(r.overpaid) + ' ريال');
+            setEdit(null); setTick(t => t + 1);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
+
+    const editNet = (edit && (edit.items || []).some(i => Number(i.qty) > 0))
+        ? (edit.items || []).reduce((a, i) => a + (Number(i.qty) || 0) * (Number(i.price) || 0), 0)
+        : Number(edit?.subtotal) || 0;
+    const editVat = (edit && edit.vat !== '' && edit.vat !== null && edit.vat !== undefined)
+        ? Number(edit.vat) || 0 : Math.round(editNet * 15) / 100;
+
     useEffect(() => {
         let live = true;
         setData(null); setErr('');
@@ -67,6 +95,13 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                 <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] font-bold text-slate-400 min-h-[44px]">
                     <ArrowRight size={16} /> رجوع
                 </button>
+                {type === 'purchase' && data && data.edit && (
+                    <button onClick={() => setEdit({ ...data.edit, items: (data.edit.items || []).map(i => ({ ...i })) })}
+                        disabled={busy}
+                        className="min-h-[44px] px-3 rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-bold flex items-center gap-1.5">
+                        <Pencil size={14} /> تعديل
+                    </button>
+                )}
                 {type === 'purchase' && data && data.origin === 'local' && (
                     <button onClick={() => setDel({ ask: true })} disabled={busy}
                         className="min-h-[44px] px-3 rounded-xl bg-red-500/15 text-red-300 text-[12px] font-bold flex items-center gap-1.5">
@@ -77,6 +112,102 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
 
             {err && <div className="rounded-xl bg-red-500/15 text-red-300 p-3 text-xs font-bold">{err}</div>}
             {!data && !err && <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-[#c5a059]" /></div>}
+
+            {edit && (
+                <div className="fixed inset-0 bg-black/70 z-[85] flex items-end justify-center p-0 sm:p-4"
+                    onClick={() => !busy && setEdit(null)}>
+                    <div dir="rtl" onClick={e => e.stopPropagation()}
+                        className="bg-[#0f1e36] rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+                        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-black text-[15px] flex items-center gap-2">
+                                <Pencil size={16} className="text-[#c5a059]" /> تعديل الفاتورة
+                            </h3>
+                            <button onClick={() => setEdit(null)} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <Field label="المورد">
+                            <input value={edit.supplier} onChange={e => setEdit({ ...edit, supplier: e.target.value })} className={INP} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-2">
+                            <Field label="رقم الفاتورة">
+                                <input value={edit.no} onChange={e => setEdit({ ...edit, no: e.target.value })} className={INP} />
+                            </Field>
+                            <Field label="التاريخ">
+                                <input type="date" value={edit.date || ''} onChange={e => setEdit({ ...edit, date: e.target.value })} className={INP} />
+                            </Field>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                            <span className="text-[12px] font-black text-slate-300">البنود</span>
+                            <button onClick={() => setEdit({ ...edit, items: [...(edit.items || []), { name: '', qty: 1, price: 0 }] })}
+                                className="h-9 px-2.5 rounded-lg bg-white/10 text-[11px] font-bold flex items-center gap-1">
+                                <Plus size={13} /> بند
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            {(edit.items || []).map((it, i) => (
+                                <div key={i} className="rounded-xl bg-black/25 border border-white/10 p-2 space-y-2">
+                                    <div className="flex gap-2">
+                                        <input value={it.name || ''} placeholder="اسم الصنف"
+                                            onChange={e => setEdit({ ...edit, items: edit.items.map((x, j) => j === i ? { ...x, name: e.target.value } : x) })}
+                                            className={INP + ' flex-1 min-w-0'} />
+                                        <button onClick={() => setEdit({ ...edit, items: edit.items.filter((_, j) => j !== i) })}
+                                            className="w-[52px] h-[52px] shrink-0 rounded-xl bg-red-500/15 text-red-300 flex items-center justify-center">
+                                            <Trash2 size={15} />
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input type="number" inputMode="decimal" value={it.qty} placeholder="الكمية"
+                                            onChange={e => setEdit({ ...edit, items: edit.items.map((x, j) => j === i ? { ...x, qty: e.target.value } : x) })}
+                                            className={INP + ' min-w-0'} />
+                                        <input type="number" inputMode="decimal" value={it.price} placeholder="سعر الوحدة"
+                                            onChange={e => setEdit({ ...edit, items: edit.items.map((x, j) => j === i ? { ...x, price: e.target.value } : x) })}
+                                            className={INP + ' min-w-0'} />
+                                    </div>
+                                </div>
+                            ))}
+                            {!(edit.items || []).length && (
+                                <Field label="المبلغ قبل الضريبة">
+                                    <input type="number" inputMode="decimal" value={edit.subtotal}
+                                        onChange={e => setEdit({ ...edit, subtotal: e.target.value })} className={INP} />
+                                </Field>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <Field label="الضريبة">
+                                <input type="number" inputMode="decimal" value={edit.vat}
+                                    onChange={e => setEdit({ ...edit, vat: e.target.value })} className={INP} />
+                            </Field>
+                            <Field label={edit.paid_locked ? 'المسدد (من الدفعات)' : 'المسدد'}>
+                                <input type="number" inputMode="decimal" value={edit.paid} disabled={!!edit.paid_locked}
+                                    onChange={e => setEdit({ ...edit, paid: e.target.value })}
+                                    className={INP + (edit.paid_locked ? ' opacity-50' : '')} />
+                            </Field>
+                        </div>
+                        <Field label="ملاحظة">
+                            <input value={edit.note || ''} onChange={e => setEdit({ ...edit, note: e.target.value })} className={INP} />
+                        </Field>
+
+                        <div className="rounded-xl bg-white/[0.06] border border-white/10 p-3 text-[12px] space-y-1">
+                            <div className="flex justify-between"><span className="text-slate-400">قبل الضريبة</span>
+                                <span className="font-black tabular-nums">{money(editNet)}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">الضريبة</span>
+                                <span className="font-black tabular-nums">{money(editVat)}</span></div>
+                            <div className="flex justify-between text-[#c5a059]"><span>الإجمالي</span>
+                                <span className="font-black tabular-nums">{money(editNet + editVat)}</span></div>
+                        </div>
+
+                        <button onClick={saveEdit} disabled={busy}
+                            className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1628] text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                            {busy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} حفظ التعديل
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {del && (
                 <div className="fixed inset-0 bg-black/60 z-[80] flex items-end justify-center p-4" onClick={() => setDel(null)}>
@@ -165,6 +296,17 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                 </>
             )}
         </div>
+    );
+}
+
+const INP = 'w-full h-[52px] rounded-xl bg-black/30 border border-white/10 px-3 text-[13px] font-bold outline-none focus:border-[#c5a059]';
+
+function Field({ label, children }) {
+    return (
+        <label className="block space-y-1">
+            <span className="text-[11px] font-bold text-slate-400">{label}</span>
+            {children}
+        </label>
     );
 }
 

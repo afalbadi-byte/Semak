@@ -7181,6 +7181,123 @@ switch ($action) {
         exit;
     }
 
+    case 'purchase_update': {
+        // تعديل فاتورة شراء أُدخلت من عندنا — لا تُمسّ فواتير دفترة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة — سجّل الدخول مرة أخرى'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        if (!$u) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if ((($u['role'] ?? '') !== 'admin') && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true)) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تعديل المشتريات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b  = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E  = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+
+        $old = null;
+        if ($r = $conn->query("SELECT id, no, date, supplier, total, subtotal, paid, COALESCE(origin,'daftra') origin
+                               FROM dmirror_purchases WHERE id=$id LIMIT 1")) $old = $r->fetch_assoc();
+        if (!$old) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        if ($old['origin'] !== 'local') {
+            echo json_encode(['success'=>false,'message'=>'هذه الفاتورة مصدرها دفترة — تُعدَّل من دفترة، وإلا رجع التعديل مع أول مزامنة'],
+                JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $sup  = trim((string)($b['supplier'] ?? $old['supplier']));
+        $no   = trim((string)($b['no'] ?? $old['no']));
+        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['date'] ?? '')) ? $b['date'] : (string)$old['date'];
+        if ($sup === '') { echo json_encode(['success'=>false,'message'=>'اسم المورد مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        if ($no  === '') { echo json_encode(['success'=>false,'message'=>'رقم الفاتورة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+
+        // لا يتكرر رقم الفاتورة لنفس المورد على سجل آخر
+        $dup = $conn->query("SELECT id FROM dmirror_purchases
+                             WHERE no='" . $E($no) . "' AND supplier='" . $E($sup) . "' AND id <> $id LIMIT 1");
+        if ($dup && $dup->num_rows) {
+            $dr = $dup->fetch_assoc();
+            echo json_encode(['success'=>false,'message'=>'رقم الفاتورة مسجل لهذا المورد على فاتورة أخرى',
+                'id'=>(int)$dr['id']], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $items = is_array($b['items'] ?? null) ? $b['items'] : [];
+        $net = 0; $clean = [];
+        foreach ($items as $it) {
+            $nm = trim((string)($it['name'] ?? ''));
+            $qt = (float)($it['qty'] ?? 0);
+            $pr = (float)($it['price'] ?? 0);
+            if ($nm === '' || $qt <= 0) continue;
+            $line = round($qt * $pr, 2);
+            $net += $line;
+            $clean[] = ['name'=>$nm, 'qty'=>$qt, 'price'=>$pr, 'line'=>$line];
+        }
+        $subtotal = $clean ? round($net, 2) : round((float)($b['subtotal'] ?? $old['subtotal']), 2);
+        $vat      = isset($b['vat']) && $b['vat'] !== '' ? round((float)$b['vat'], 2) : round($subtotal * 0.15, 2);
+        $total    = round($subtotal + $vat, 2);
+        if ($total <= 0) { echo json_encode(['success'=>false,'message'=>'المبلغ مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+
+        // المسدد يبقى مشتقا من الدفعات المسجلة إن وُجدت — لا يُكتب يدويا فوقها
+        $paid = round((float)$old['paid'], 2);
+        $hasPay = false;
+        if ($r = $conn->query("SELECT ROUND(COALESCE(SUM(amount),0),2) s, COUNT(*) n FROM purchase_payments WHERE purchase_id=$id"))
+            if ($x = $r->fetch_assoc()) { $hasPay = ((int)$x['n'] > 0); if ($hasPay) $paid = (float)$x['s']; }
+        if (!$hasPay && isset($b['paid']) && $b['paid'] !== '') $paid = max(0, round((float)$b['paid'], 2));
+        $overpaid = ($paid > $total + 0.5) ? round($paid - $total, 2) : 0;
+
+        $pid_pr = (int)($b['project_id'] ?? 0);
+        $note   = mb_substr((string)($b['note'] ?? ''), 0, 380);
+
+        $conn->query("UPDATE dmirror_purchases SET no='" . $E($no) . "', date='" . $E($date) . "',
+                supplier='" . $E($sup) . "', total=$total, subtotal=$subtotal, paid=$paid,
+                items_count=" . count($clean) . ", modified=NOW(), note='" . $E($note) . "'
+            WHERE id=$id AND COALESCE(origin,'daftra')='local'");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+
+        // البنود تُبنى من جديد، ومعها تغذية متابعة الأسعار
+        $conn->query("DELETE FROM dmirror_purchase_items WHERE purchase_id=$id");
+        $conn->query("DELETE FROM purchase_product_items WHERE ref_id=$id");
+        $seq = $id * 100;
+        foreach ($clean as $it) {
+            $seq++;
+            $conn->query("INSERT INTO dmirror_purchase_items (id, purchase_id, item, description, quantity, unit_price,
+                    discount, tax1, subtotal, product_id)
+                VALUES ($seq, $id, '" . $E($it['name']) . "', '', " . $it['qty'] . ", " . $it['price'] . ",
+                    0, '15', " . $it['line'] . ", 0)");
+            $prid = 0;
+            $pr2 = $conn->query("SELECT daftra_id FROM acc_products WHERE tenant_id=1 AND name='" . $E($it['name']) . "' LIMIT 1");
+            if ($pr2 && ($prr = $pr2->fetch_assoc())) $prid = (int)$prr['daftra_id'];
+            if ($prid > 0)
+                $conn->query("INSERT INTO purchase_product_items (ref_id, product_id, amount, qty, inv_date, supplier)
+                    VALUES ($id, $prid, " . $it['line'] . ", " . $it['qty'] . ", '" . $E($date) . "', '" . $E($sup) . "')
+                    ON DUPLICATE KEY UPDATE amount=VALUES(amount), qty=VALUES(qty),
+                        inv_date=VALUES(inv_date), supplier=VALUES(supplier)");
+        }
+
+        // التسكين على المشروع
+        if ($pid_pr > 0)
+            $conn->query("INSERT INTO purchase_project (purchase_id, project_id, note, set_by)
+                VALUES ($id, $pid_pr, 'تعديل من تطبيق المشتريات', '" . $E($u['name'] ?? '') . "')
+                ON DUPLICATE KEY UPDATE project_id=VALUES(project_id)");
+        elseif (isset($b['project_id']))
+            $conn->query("DELETE FROM purchase_project WHERE purchase_id=$id");
+
+        $diff = [];
+        if ((string)$old['no'] !== $no)                        $diff[] = 'الرقم ' . $old['no'] . ' ← ' . $no;
+        if ((string)$old['date'] !== (string)$date)            $diff[] = 'التاريخ ' . $old['date'] . ' ← ' . $date;
+        if ((string)$old['supplier'] !== $sup)                 $diff[] = 'المورد ' . $old['supplier'] . ' ← ' . $sup;
+        if (abs((float)$old['total'] - $total) > 0.009)        $diff[] = 'الإجمالي ' . $old['total'] . ' ← ' . $total;
+        if (abs((float)$old['subtotal'] - $subtotal) > 0.009)  $diff[] = 'قبل الضريبة ' . $old['subtotal'] . ' ← ' . $subtotal;
+        if (abs((float)$old['paid'] - $paid) > 0.009)          $diff[] = 'المسدد ' . $old['paid'] . ' ← ' . $paid;
+        acc_audit($conn, 1, 'purchase', $id, 'update',
+            'تعديل فاتورة ' . $no . ($diff ? ' · ' . implode(' · ', $diff) : ' · البنود'), $u['name'] ?? '');
+
+        echo json_encode(['success'=>true, 'id'=>$id, 'total'=>$total, 'subtotal'=>$subtotal, 'vat'=>$vat,
+            'paid'=>$paid, 'paid_locked'=>$hasPay, 'overpaid'=>$overpaid, 'items'=>count($clean),
+            'changes'=>$diff, 'message'=>'حُفظ تعديل الفاتورة ' . $no], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'purchase_delete': {
         // حذف فاتورة شراء — لا يمر إلا بعد إلغاء ما هو مرتبط بها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -7633,6 +7750,22 @@ switch ($action) {
                 $out['title']    = 'فاتورة شراء ' . $h['no'];
                 $out['subtitle'] = $h['supplier'];
                 $out['origin']   = $h['origin'] ?? 'daftra';
+                if (($h['origin'] ?? '') === 'local') {
+                    $out['edit'] = [
+                        'id'         => $pid,
+                        'no'         => (string)$h['no'],
+                        'date'       => (string)$h['date'],
+                        'supplier'   => (string)$h['supplier'],
+                        'subtotal'   => round((float)$h['subtotal'], 2),
+                        'vat'        => round((float)$h['total'] - (float)$h['subtotal'], 2),
+                        'paid'       => round((float)$h['paid'], 2),
+                        'project_id' => (int)($h['project_id'] ?? 0),
+                        'note'       => (string)($h['note'] ?? ''),
+                        'paid_locked'=> (int)($Q("SELECT COUNT(*) n FROM purchase_payments WHERE purchase_id=$pid")[0]['n'] ?? 0) > 0 ? 1 : 0,
+                        'items'      => $Q("SELECT item name, quantity qty, unit_price price
+                                            FROM dmirror_purchase_items WHERE purchase_id=$pid ORDER BY id"),
+                    ];
+                }
                 $out['links'][]  = ['label'=>$h['supplier'], 'type'=>'supplier', 'value'=>$h['supplier']];
                 if (!empty($h['project_id'])) $out['links'][] = ['label'=>$h['project'], 'type'=>'project', 'value'=>$h['project_id']];
                 $out['stats'] = [
@@ -8281,7 +8414,7 @@ switch ($action) {
             echo json_encode(['success'=>false, 'message'=>'تعذر الاتصال بدفترة', 'http'=>$code], JSON_UNESCAPED_UNICODE); break;
         }
         $d = json_decode($res, true) ?: [];
-        $added = 0; $updated = 0; $seen = 0;
+        $added = 0; $updated = 0; $seen = 0; $need = [];
 
         foreach (($d['data'] ?? []) as $it) {
             $p = $it['PurchaseOrder'] ?? $it['PurchaseInvoice'] ?? $it;
@@ -8309,18 +8442,91 @@ switch ($action) {
                 ON DUPLICATE KEY UPDATE no=VALUES(no), date=VALUES(date), supplier_id=VALUES(supplier_id),
                     supplier=VALUES(supplier), total=VALUES(total), subtotal=VALUES(subtotal), paid=VALUES(paid),
                     work_order_id=VALUES(work_order_id), modified=VALUES(modified), raw=VALUES(raw)");
-            if (!$old) $added++;
-            elseif (abs((float)$old['total'] - $tot) > 0.009 || abs((float)$old['paid'] - $paid) > 0.009) $updated++;
+            if (!$old) { $added++; $need[] = $id; }
+            elseif (abs((float)$old['total'] - $tot) > 0.009 || abs((float)$old['paid'] - $paid) > 0.009) { $updated++; $need[] = $id; }
             // فاتورة جديدة ترث تسكين دفترة إن وُجد
             if ($wo !== 'NULL')
                 $conn->query("INSERT IGNORE INTO purchase_project (purchase_id, project_id, note, set_by)
                               VALUES ($id, $wo, 'موروث من دفترة عند المزامنة', 'system')");
         }
+        // فواتير مرآتنا بلا بنود (تشمل ما وصل سابقاً من المزامنة الخفيفة)
+        if (count($need) < 12) {
+            if ($q = $conn->query("SELECT p.id FROM dmirror_purchases p
+                    LEFT JOIN dmirror_purchase_items i ON i.purchase_id = p.id
+                    WHERE i.id IS NULL AND (p.origin IS NULL OR p.origin='daftra')
+                    GROUP BY p.id ORDER BY p.id DESC LIMIT 12")) {
+                while ($r = $q->fetch_assoc()) $need[] = (int)$r['id'];
+            }
+        }
+        $need = array_slice(array_values(array_unique($need)), 0, 12);
+
+        // جلب تفاصيل كل فاتورة محتاجة: البنود والدفعات والمرفقات + تغذية متابعة الأسعار
+        $items_done = 0;
+        foreach ($need as $pid) {
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
+                CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+            $rr = curl_exec($ch); $cc = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            if ($cc !== 200 || !$rr) continue;
+            $dd = json_decode($rr, true) ?: [];
+            $o  = $dd['data']['PurchaseOrder'] ?? $dd['data']['PurchaseInvoice'] ?? null;
+            if (!$o) continue;
+
+            $idate = null; $isup = '';
+            if ($r2 = $conn->query("SELECT date, supplier FROM dmirror_purchases WHERE id=$pid LIMIT 1"))
+                if ($x2 = $r2->fetch_assoc()) { $idate = $x2['date']; $isup = (string)$x2['supplier']; }
+            $dsql2 = $idate ? "'" . $conn->real_escape_string($idate) . "'" : 'NULL';
+
+            $items = (array)($o['PurchaseOrderItem'] ?? $o['PurchaseInvoiceItem'] ?? []);
+            if ($items) $conn->query("DELETE FROM purchase_product_items WHERE ref_id=$pid");
+            foreach ($items as $it) {
+                $it = $it['PurchaseOrderItem'] ?? $it['PurchaseInvoiceItem'] ?? $it;
+                if (!isset($it['id'])) continue;
+                $qty  = (float)($it['quantity'] ?? 0);
+                $up   = (float)($it['unit_price'] ?? 0);
+                $line = (float)($it['subtotal'] ?? 0);
+                if ($line <= 0) $line = $up * ($qty ?: 1);
+                $conn->query("REPLACE INTO dmirror_purchase_items
+                    (id,purchase_id,item,description,quantity,unit_price,discount,tax1,subtotal,product_id) VALUES ("
+                    . (int)$it['id'] . ", $pid, '" . $conn->real_escape_string((string)($it['item'] ?? $it['name'] ?? '')) . "', '"
+                    . $conn->real_escape_string((string)($it['description'] ?? '')) . "', $qty, $up, "
+                    . (float)($it['discount'] ?? 0) . ", '" . $conn->real_escape_string((string)($it['tax1'] ?? '')) . "', "
+                    . $line . ", " . (int)($it['product_id'] ?? 0) . ")");
+                $prid = (int)($it['product_id'] ?? 0);
+                if ($prid > 0 && $qty > 0)
+                    $conn->query("INSERT INTO purchase_product_items (ref_id, product_id, amount, qty, inv_date, supplier)
+                        VALUES ($pid, $prid, $line, $qty, $dsql2, '" . $conn->real_escape_string($isup) . "')
+                        ON DUPLICATE KEY UPDATE amount=VALUES(amount), qty=VALUES(qty),
+                            inv_date=VALUES(inv_date), supplier=VALUES(supplier)");
+            }
+            foreach ((array)($o['PurchaseOrderPayment'] ?? []) as $pay) {
+                if (!isset($pay['id'])) continue;
+                $pd = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($pay['date'] ?? '')) ? "'" . substr($pay['date'],0,10) . "'" : 'NULL';
+                $conn->query("REPLACE INTO dmirror_payments (id,purchase_id,amount,date,treasury_id,created) VALUES ("
+                    . (int)$pay['id'] . ", $pid, " . (float)($pay['amount'] ?? 0) . ", $pd, "
+                    . (int)($pay['treasury_id'] ?? 0) . ", "
+                    . (!empty($pay['created']) ? "'" . $conn->real_escape_string($pay['created']) . "'" : 'NULL') . ")");
+            }
+            $att = (array)($o['Attachments'] ?? []);
+            foreach ($att as $a) {
+                if (!isset($a['id'])) continue;
+                $conn->query("REPLACE INTO dmirror_attachments
+                    (file_id,name,path,entity_key,entity_id,file_size,mime_type,created_at) VALUES ("
+                    . (int)$a['id'] . ", '" . $conn->real_escape_string((string)($a['name'] ?? '')) . "', '"
+                    . $conn->real_escape_string((string)($a['path'] ?? '')) . "', '"
+                    . $conn->real_escape_string((string)($a['entity_key'] ?? 'purchase_order')) . "', $pid, "
+                    . (int)($a['file_size'] ?? 0) . ", '" . $conn->real_escape_string((string)($a['mime_type'] ?? '')) . "', "
+                    . (!empty($a['created_at']) ? "'" . $conn->real_escape_string($a['created_at']) . "'" : 'NULL') . ")");
+            }
+            $conn->query("UPDATE dmirror_purchases SET items_count=" . count($items) . ", attachments=" . count($att) . " WHERE id=$pid");
+            if ($items) $items_done++;
+        }
+
         $conn->query("INSERT INTO daftra_sync_log (entity, count, synced_at, synced_by)
                       VALUES ('purchases_lite', $seen, NOW(), 'app')
                       ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW(), synced_by=VALUES(synced_by)");
-        echo json_encode(['success'=>true, 'checked'=>$seen, 'added'=>$added, 'updated'=>$updated],
-            JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true, 'checked'=>$seen, 'added'=>$added, 'updated'=>$updated,
+            'items_synced'=>$items_done], JSON_UNESCAPED_UNICODE);
         break;
     }
 
