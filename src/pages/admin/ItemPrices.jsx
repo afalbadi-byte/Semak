@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Minus, Search, RefreshCw, Printer, Package } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
 import EntityLink from '../../components/EntityLink';
+import SortHeader from '../../components/SortHeader';
+import { useSort, smartFirstDir } from '../../lib/sortable';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
     ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -60,6 +62,9 @@ export default function ItemPrices() {
 
     useEffect(() => { load(); }, [sort]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+    const { sorted: view, key: sortKey, dir: sortDir, toggle } = useSort(rows);
+    const onSort = k => toggle(k, smartFirstDir(rows, k));
+
     const rising = rows.filter(r => (r.change_pct || 0) > 0).length;
     const falling = rows.filter(r => (r.change_pct || 0) < 0).length;
 
@@ -108,20 +113,21 @@ export default function ItemPrices() {
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-brand-800">
                             <tr className="text-xs text-slate-500 dark:text-brand-300 text-right">
-                                <th className="py-2.5 px-3 font-bold">الصنف</th>
-                                <th className="py-2.5 px-3 font-bold">الطلبات</th>
-                                <th className="py-2.5 px-3 font-bold">آخر سعر</th>
-                                <th className="py-2.5 px-3 font-bold">السابق</th>
-                                <th className="py-2.5 px-3 font-bold">التغير</th>
+                                {[['name','الصنف'],['orders','الطلبات'],['last_price','آخر سعر'],['prev_price','السابق'],
+                                  ['change_pct','التغير']].map(([k, t]) => (
+                                    <SortHeader key={k} label={t} k={k} sortKey={sortKey} dir={sortDir} onSort={onSort}
+                                        className="py-2.5 px-3 font-bold" />
+                                ))}
                                 <th className="py-2.5 px-3 font-bold">المسار</th>
-                                <th className="py-2.5 px-3 font-bold">من البداية</th>
-                                <th className="py-2.5 px-3 font-bold">أدنى / أعلى</th>
-                                <th className="py-2.5 px-3 font-bold">آخر مورد</th>
-                                <th className="py-2.5 px-3 font-bold">القيمة</th>
+                                {[['total_pct','من البداية'],['min_price','أدنى / أعلى'],['last_supplier','آخر مورد'],
+                                  ['amount','القيمة']].map(([k, t]) => (
+                                    <SortHeader key={k} label={t} k={k} sortKey={sortKey} dir={sortDir} onSort={onSort}
+                                        className="py-2.5 px-3 font-bold" />
+                                ))}
                             </tr>
                         </thead>
                         <tbody>
-                            {rows.map(r => (
+                            {view.map(r => (
                                 <tr key={r.product_id} className="border-t border-slate-100 dark:border-brand-800 hover:bg-slate-50 dark:hover:bg-brand-800/40">
                                     <td className="py-2 px-3">
                                         <EntityLink type="product" value={r.product_id} className="font-bold text-brand-800 dark:text-brand-100">

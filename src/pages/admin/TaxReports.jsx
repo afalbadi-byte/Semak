@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BarChart3, Download, Printer, RefreshCw, AlertTriangle } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
 import EntityLink from '../../components/EntityLink';
+import SortHeader from '../../components/SortHeader';
+import { useSort, smartFirstDir } from '../../lib/sortable';
 
 const REPORTS = [
     { key: 'vat_return',            name: 'الإقرار الضريبي',              group: 'الضرائب' },
@@ -44,6 +46,10 @@ export default function TaxReports() {
     const [to, setTo]       = useState(today);
     const [g, setG]         = useState('month');
     const [data, setData]   = useState(null);
+
+    // ترتيب صفوف أي تقرير بالضغط على رأس عموده
+    const { sorted: sortedRows, key: sortKey, dir: sortDir, toggle } = useSort(data ? data.rows : []);
+    const onSort = k => toggle(k, smartFirstDir(data ? data.rows : [], k));
     const [busy, setBusy]   = useState(false);
     const [err, setErr]     = useState('');
 
@@ -166,12 +172,13 @@ export default function TaxReports() {
                             <thead className="bg-slate-50 text-slate-600">
                                 <tr>
                                     {data.columns.map(c => (
-                                        <th key={c.k} className="p-3 text-right whitespace-nowrap font-black text-xs">{c.t}</th>
+                                        <SortHeader key={c.k} label={c.t} k={c.k} sortKey={sortKey} dir={sortDir}
+                                            onSort={onSort} className="p-3 text-right font-black text-xs" />
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.rows.map((r, i) => (
+                                {sortedRows.map((r, i) => (
                                     <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
                                         {data.columns.map(c => (
                                             <td key={c.k} className={'p-3 whitespace-nowrap ' + (isNum(r[c.k]) ? 'text-left font-bold tabular-nums' : '')}>

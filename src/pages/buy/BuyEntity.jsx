@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
+import { SortBar } from '../../components/SortHeader';
+import { useSort, smartFirstDir } from '../../lib/sortable';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
     ? String(v ?? '—') : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -165,8 +167,10 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
 // صفوف القسم كبطاقات لا كجدول — أنسب لعرض الجوال
 function Section({ sec, onOpen }) {
     const [open, setOpen] = useState(true);
-    const rows = sec.rows || [];
+    const [showSort, setShowSort] = useState(false);
+    const raw  = sec.rows || [];
     const cols = sec.cols || [];
+    const { sorted: rows, key: sortKey, dir: sortDir, toggle, setDir } = useSort(raw);
     const links = [sec.link, sec.link2].filter(Boolean);
     const head = cols[0];
     const rest = cols.slice(1);
@@ -188,7 +192,20 @@ function Section({ sec, onOpen }) {
 
             {open && (
                 <div className="px-3 pb-3 space-y-2">
-                    {!rows.length && <p className="text-[12px] text-slate-500 text-center py-3">لا بيانات</p>}
+                    {raw.length > 1 && (
+                        <>
+                            <button onClick={() => setShowSort(v => !v)}
+                                className="text-[11px] font-bold text-slate-400 min-h-[36px]">
+                                {showSort ? 'إخفاء الترتيب' : 'ترتيب'}
+                            </button>
+                            {showSort && (
+                                <SortBar cols={cols} sortKey={sortKey} dir={sortDir}
+                                    onSort={k => toggle(k, smartFirstDir(raw, k))}
+                                    onDir={() => setDir(d => (d === 'asc' ? 'desc' : 'asc'))} />
+                            )}
+                        </>
+                    )}
+                    {!raw.length && <p className="text-[12px] text-slate-500 text-center py-3">لا بيانات</p>}
                     {rows.map((r, i) => {
                         const hl = links.find(l => l.col === head?.k);
                         const val = head ? r[head.k] : '';

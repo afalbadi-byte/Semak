@@ -3,6 +3,8 @@ import { Loader2, ExternalLink, Layers, Download, Archive } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
 import EntityLink from '../../components/EntityLink';
 import { ENTITY_LABEL } from '../../lib/entity';
+import SortHeader from '../../components/SortHeader';
+import { useSort, smartFirstDir } from '../../lib/sortable';
 
 const money = v => {
     const n = Number(v);
@@ -70,8 +72,10 @@ export default function EntityView({ type, value }) {
 }
 
 function Section({ sec }) {
-    const rows = sec.rows || [];
+    const raw  = sec.rows || [];
     const cols = sec.cols || [];
+    const { sorted: rows, key: sortKey, dir: sortDir, toggle } = useSort(raw);
+    const onSort = k => toggle(k, smartFirstDir(raw, k));
     const links = [sec.link, sec.link2].filter(Boolean);
     const linkFor = k => links.find(l => l.col === k);
 
@@ -88,14 +92,17 @@ function Section({ sec }) {
                     </a>
                 )}
             </div>
-            {!rows.length ? (
+            {!raw.length ? (
                 <p className="text-sm text-slate-400 text-center py-8">لا بيانات</p>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 dark:bg-brand-800">
                             <tr className="text-xs text-slate-500 dark:text-brand-300 text-right">
-                                {cols.map(c => <th key={c.k} className="py-2 px-3 font-bold whitespace-nowrap">{c.t}</th>)}
+                                {cols.map(c => (
+                                    <SortHeader key={c.k} label={c.t} k={c.k} sortKey={sortKey} dir={sortDir}
+                                        onSort={onSort} className="py-2 px-3 font-bold" />
+                                ))}
                             </tr>
                         </thead>
                         <tbody>

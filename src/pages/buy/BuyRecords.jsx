@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyEntity from './BuyEntity';
+import { SortBar } from '../../components/SortHeader';
+import { useSort, smartFirstDir } from '../../lib/sortable';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const short = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -16,6 +18,12 @@ export default function BuyRecords() {
     const [busy, setBusy]   = useState(false);
     const [filter, setFilter] = useState('');        // '' | unpaid | no_docs
     const [stack, setStack] = useState([]);          // مكدس البطاقات المفتوحة
+    const { sorted: view, key: sortKey, dir: sortDir, toggle, setDir } = useSort(rows);
+    const SORTS = tab === 'invoices'
+        ? [{ k: 'date', t: 'التاريخ' }, { k: 'gross', t: 'المبلغ' }, { k: 'remaining', t: 'المتبقي' },
+           { k: 'supplier', t: 'المورد' }, { k: 'no', t: 'رقم الفاتورة' }, { k: 'docs', t: 'المستندات' }]
+        : [{ k: 'gross', t: 'القيمة' }, { k: 'invoices', t: 'عدد الفواتير' }, { k: 'outstanding', t: 'المتبقي' },
+           { k: 'last_date', t: 'آخر تعامل' }, { k: 'name', t: 'الاسم' }];
 
     const load = useCallback(async () => {
         setBusy(true);
@@ -83,8 +91,12 @@ export default function BuyRecords() {
                 </div>
             )}
 
+            <SortBar cols={SORTS} sortKey={sortKey} dir={sortDir}
+                onSort={k => toggle(k, smartFirstDir(rows, k))}
+                onDir={() => setDir(d => (d === 'asc' ? 'desc' : 'asc'))} />
+
             <div className="space-y-2">
-                {tab === 'invoices' && rows.map(r => (
+                {tab === 'invoices' && view.map(r => (
                     <button key={r.id} onClick={() => open('purchase', r.id)}
                         className="w-full text-right rounded-xl bg-white/[0.05] border border-white/10 p-3 active:bg-white/10">
                         <div className="flex items-start justify-between gap-2">
@@ -114,7 +126,7 @@ export default function BuyRecords() {
                     </button>
                 ))}
 
-                {tab === 'suppliers' && rows.map(r => (
+                {tab === 'suppliers' && view.map(r => (
                     <button key={r.name} onClick={() => open('supplier', r.name)}
                         className="w-full text-right rounded-xl bg-white/[0.05] border border-white/10 p-3 active:bg-white/10">
                         <div className="flex items-start justify-between gap-2">
