@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet } from 'lucide-react';
+import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyEntity from './BuyEntity';
 import { SortBar } from '../../components/SortHeader';
@@ -22,7 +22,22 @@ export default function BuyRecords() {
     const [sortKey, setSortKey] = useState('date');
     const [sortDir, setSortDir] = useState('desc');
     const [more, setMore] = useState(false);
+    const [proof, setProof] = useState(null);        // تدقيق إثباتات الدفعات
+    const [onlyGap, setOnlyGap] = useState(true);
     const view = rows;
+    // تبويب الدفعات مستقل: يقرأ تدقيق الإثباتات لا قائمة الفواتير
+    useEffect(() => {
+        if (tab !== 'payments') return;
+        let live = true;
+        setBusy(true);
+        fetch(`${API_URL}?action=pay_proofs${onlyGap ? '&only=missing' : ''}`, { headers: auth() })
+            .then(r => r.json())
+            .then(r => { if (live && r.success) setProof(r); })
+            .catch(() => {})
+            .finally(() => live && setBusy(false));
+        return () => { live = false; };
+    }, [tab, onlyGap]);
+
     const SORTS = tab === 'invoices'
         ? [{ k: 'date', t: 'التاريخ' }, { k: 'gross', t: 'المبلغ' }, { k: 'remaining', t: 'المتبقي' },
            { k: 'supplier', t: 'المورد' }, { k: 'no', t: 'رقم الفاتورة' }, { k: 'docs', t: 'المستندات' }]
@@ -61,8 +76,8 @@ export default function BuyRecords() {
 
     return (
         <div className="p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-                {[['invoices', 'الفواتير'], ['suppliers', 'الموردون']].map(([k, t]) => (
+            <div className="grid grid-cols-3 gap-2">
+                {[['invoices', 'الفواتير'], ['suppliers', 'الموردون'], ['payments', 'الدفعات']].map(([k, t]) => (
                     <button key={k} onClick={() => { setTab(k); setRows([]); }}
                         className={'h-[48px] rounded-xl text-[14px] font-black border ' +
                             (tab === k ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]' : 'bg-white/5 border-white/10 text-slate-300')}>
@@ -71,6 +86,7 @@ export default function BuyRecords() {
                 ))}
             </div>
 
+            {tab !== 'payments' && (
             <div className="flex gap-2">
                 <div className="relative flex-1 min-w-0">
                     <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -82,6 +98,72 @@ export default function BuyRecords() {
                     <RefreshCw size={17} className={busy ? 'animate-spin' : ''} />
                 </button>
             </div>
+            )}
+
+            {tab === 'payments' && (
+                <>
+                    {proof && (
+                        <div className="rounded-2xl bg-white/[0.05] border border-white/10 p-3 space-y-2">
+                            <div className="flex items-center gap-2">
+                                {proof.without_proof === 0
+                                    ? <ShieldCheck size={16} className="text-emerald-300" />
+                                    : <ShieldAlert size={16} className="text-amber-300" />}
+                                <span className="text-[13px] font-black">إثباتات الدفعات</span>
+                                <span className="text-[11px] text-slate-400 mr-auto">{proof.payments} دفعة</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="rounded-xl bg-emerald-500/10 p-2.5">
+                                    <div className="text-[11px] text-emerald-300">لها إثبات</div>
+                                    <div className="text-[15px] font-black tabular-nums">{proof.with_proof}</div>
+                                    <div className="text-[10px] text-slate-400 tabular-nums">{money(proof.amount_with_proof)}</div>
+                                </div>
+                                <div className="rounded-xl bg-amber-500/10 p-2.5">
+                                    <div className="text-[11px] text-amber-300">بلا إثبات</div>
+                                    <div className="text-[15px] font-black tabular-nums">{proof.without_proof}</div>
+                                    <div className="text-[10px] text-slate-400 tabular-nums">{money(proof.amount_without_proof)}</div>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                                الإثبات: إيصال مرفوع على الدفعة، أو مستند إيصال على فاتورتها، أو مرفق في دفترة عليها.
+                            </p>
+                            <button onClick={() => setOnlyGap(v => !v)}
+                                className="w-full h-[40px] rounded-xl bg-white/10 text-[12px] font-bold">
+                                {onlyGap ? 'اعرض كل الدفعات' : 'اعرض الناقصة فقط'}
+                            </button>
+                        </div>
+                    )}
+                    {busy && !proof && (
+                        <p className="text-[12px] text-slate-500 text-center py-6">يحسب…</p>
+                    )}
+                    <div className="space-y-2">
+                        {(proof?.rows || []).map(r => (
+                            <button key={r.source + r.id} onClick={() => r.purchase_id && open('purchase', r.purchase_id)}
+                                className="w-full text-right rounded-xl bg-white/[0.05] border border-white/10 p-3 active:bg-white/10">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-[14px] font-bold truncate">{r.supplier || '—'}</div>
+                                        <div className="text-[11px] text-slate-400 mt-0.5">
+                                            {r.invoice_no ? '#' + r.invoice_no + ' · ' : ''}{r.pay_date} · {r.source}
+                                        </div>
+                                    </div>
+                                    <div className="text-left shrink-0">
+                                        <div className="text-[15px] font-black tabular-nums">{money(r.amount)}</div>
+                                        <div className={'text-[10px] font-bold ' +
+                                            (Number(r.has_proof) ? 'text-emerald-300' : 'text-amber-300')}>
+                                            {Number(r.has_proof) ? 'له إثبات' : 'بلا إثبات'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </button>
+                        ))}
+                        {proof && !(proof.rows || []).length && (
+                            <p className="text-[12px] text-emerald-300 text-center py-6 font-bold">
+                                كل الدفعات لها إثباتاتها ✓
+                            </p>
+                        )}
+                    </div>
+                </>
+            )}
 
             {tab === 'invoices' && (
                 <div className="grid grid-cols-3 gap-2">
@@ -113,9 +195,9 @@ export default function BuyRecords() {
                 </button>
             )}
 
-            <SortBar cols={SORTS} sortKey={sortKey} dir={sortDir}
+            {tab !== 'payments' && <SortBar cols={SORTS} sortKey={sortKey} dir={sortDir}
                 onSort={k => setSortKey(k || (tab === 'invoices' ? 'date' : 'gross'))}
-                onDir={() => setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))} />
+                onDir={() => setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))} />}
 
             <div className="space-y-2">
                 {tab === 'invoices' && view.map(r => (
