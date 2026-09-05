@@ -7109,7 +7109,7 @@ switch ($action) {
         $isHtml = stripos($ctype, 'text/html') !== false || strncmp((string)$body, '<!DOCTYPE', 9) === 0;
         if ($code !== 200 || $body === false || $body === '' || $isHtml) {
             echo json_encode(['success'=>false,
-                'message'=>'تعذر جلب المرفق من دفترة — جلسة دفترة منتهية، حدّثها من إعدادات الربط',
+                'message'=>'جلسة دفترة منتهية أو غير مضبوطة — حدّثها من: لوحة الإدارة ← تقنية المعلومات ← ربط دفترة',
                 'http'=>$code], JSON_UNESCAPED_UNICODE); break;
         }
 
