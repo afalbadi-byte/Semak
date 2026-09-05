@@ -4130,7 +4130,7 @@ switch ($action) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break;
         }
         $uid = (int)$_jwt_claims['sub'];
-        $r = $conn->query("SELECT id,name,email,role,job,phone,department,permissions FROM users WHERE id=$uid LIMIT 1");
+        $r = $conn->query("SELECT id,name,email,role,job,phone,department,permissions,must_change_password FROM users WHERE id=$uid LIMIT 1");
         $row = $r ? $r->fetch_assoc() : null;
         echo $row ? json_encode(['success'=>true,'user'=>$row], JSON_UNESCAPED_UNICODE)
                   : json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE);

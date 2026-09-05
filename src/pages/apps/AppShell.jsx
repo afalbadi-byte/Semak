@@ -5,6 +5,7 @@ import { useDepthGuard } from '../../lib/backstack';
 import BuyLogin from '../buy/BuyLogin';
 import BuySplash from '../buy/BuySplash';
 import BuyInstallGate from '../buy/BuyInstallGate';
+import BuyChangePw from '../buy/BuyChangePw';
 
 // ─── هيكل مشترك لتطبيقات الجوال ─────────────────────────────────────────────
 // نفس آلية تطبيق المشتريات: ترحيب، بوابة تثبيت، دخول داخلي، تبويبات،
@@ -76,6 +77,8 @@ export default function AppShell({ appKey, title, tabs, perms, manifest, childre
         </div>
     );
     if (state === 'anon') return <BuyLogin onDone={() => { setState('loading'); check(); }} />;
+    if (user && parseInt(user.must_change_password ?? 0, 10) === 1)
+        return <BuyChangePw onDone={() => { setState('loading'); check(); }} />;
     if (state === 'denied') return (
         <div dir="rtl" className="min-h-screen bg-[#0b1220] text-white flex flex-col items-center justify-center gap-3 p-8 font-cairo">
             <p className="font-black">لا تملك صلاحية {title}</p>

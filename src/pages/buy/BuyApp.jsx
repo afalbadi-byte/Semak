@@ -10,6 +10,7 @@ import BuyWelcome from './BuyWelcome';
 import BuyLogin from './BuyLogin';
 import BuySplash from './BuySplash';
 import BuyInstallGate from './BuyInstallGate';
+import BuyChangePw from './BuyChangePw';
 import { useDepthGuard } from '../../lib/backstack';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
@@ -115,6 +116,8 @@ export default function BuyApp() {
         </div>
     );
     if (state === 'anon') return <BuyLogin onDone={() => { setState('loading'); check(); }} />;
+    if (user && parseInt(user.must_change_password ?? 0, 10) === 1)
+        return <BuyChangePw onDone={() => { setState('loading'); check(); }} />;
     if (state === 'denied') return (
         <div dir="rtl" className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-3 p-8 font-cairo">
             <p className="font-black">لا تملك صلاحية المشتريات</p>
