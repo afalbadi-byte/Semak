@@ -6386,7 +6386,9 @@ switch ($action) {
         $vat      = isset($b['vat']) && $b['vat'] !== '' ? round((float)$b['vat'], 2) : round($subtotal * 0.15, 2);
         $total    = round($subtotal + $vat, 2);
         if ($total <= 0) { echo json_encode(['success'=>false,'message'=>'المبلغ مطلوب'], JSON_UNESCAPED_UNICODE); break; }
-        $paid = min(round((float)($b['paid'] ?? 0), 2), $total);
+        // يُحفظ الرقم كما هو ولو تجاوز الإجمالي (إيصال يغطي فواتير أخرى أو دفعة مقدمة)
+        $paid = max(0, round((float)($b['paid'] ?? 0), 2));
+        $paidOver = ($paid > $total + 0.5) ? round($paid - $total, 2) : 0;
         $pid  = (int)($b['project_id'] ?? 0);
 
         // منع التكرار: نفس المورد ونفس رقم الفاتورة
@@ -6464,7 +6466,11 @@ switch ($action) {
         acc_audit($conn, 1, 'purchase', $newId, 'create',
             'فاتورة شراء من تطبيق المشتريات · ' . $sup . ' · ' . $total, $u['name'] ?? '');
         echo json_encode(['success'=>true, 'id'=>$newId, 'no'=>$no, 'total'=>$total, 'subtotal'=>$subtotal,
-            'vat'=>$vat, 'message'=>'حُفظت الفاتورة'], JSON_UNESCAPED_UNICODE);
+            'vat'=>$vat, 'paid'=>$paid, 'paid_over'=>$paidOver,
+            'warning'=>$paidOver > 0
+                ? ('المسدد يتجاوز إجمالي الفاتورة بـ' . number_format($paidOver, 2) . ' — حُفظ كما في الإيصال')
+                : '',
+            'message'=>'حُفظت الفاتورة'], JSON_UNESCAPED_UNICODE);
         break;
     }
 
@@ -6757,9 +6763,8 @@ switch ($action) {
         $inv = $conn->query("SELECT supplier, total, paid FROM dmirror_purchases WHERE id=$pid LIMIT 1");
         if (!$inv || !$inv->num_rows) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
         $iv = $inv->fetch_assoc();
-        $remain = round((float)$iv['total'] - (float)$iv['paid'], 2);
-        if ($amt > $remain + 0.01) {
-            echo json_encode(['success'=>false,'message'=>'المبلغ أكبر من المتبقي على الفاتورة (' . number_format($remain, 2) . ')'], JSON_UNESCAPED_UNICODE); break; }
+        $remain  = round((float)$iv['total'] - (float)$iv['paid'], 2);
+        $overBy  = ($amt > $remain + 0.5) ? round($amt - $remain, 2) : 0;
         $method = in_array(($b['method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['method'] : 'transfer';
         $pdate  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : date('Y-m-d');
         $det = is_array($b['receipt_details'] ?? null)
@@ -6785,7 +6790,10 @@ switch ($action) {
                 . $E($u['name'] ?? '') . "')");
         }
         echo json_encode(['success'=>true, 'id'=>$payId, 'paid'=>round($newPaid, 2),
-            'remaining'=>round((float)$iv['total'] - $newPaid, 2)], JSON_UNESCAPED_UNICODE);
+            'remaining'=>round((float)$iv['total'] - $newPaid, 2), 'paid_over'=>$overBy,
+            'warning'=>$overBy > 0
+                ? ('الدفعة تتجاوز المتبقي بـ' . number_format($overBy, 2) . ' — حُفظت كما في الإيصال')
+                : ''], JSON_UNESCAPED_UNICODE);
         break;
     }
 

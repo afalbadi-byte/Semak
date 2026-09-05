@@ -215,11 +215,11 @@ export default function BuyInvoice({ onDone }) {
                 }),
             }).then(x => x.json());
             if (!r.success) { setMsg({ e: 1, t: r.message || 'تعذر الحفظ' }); return; }
-            setMsg({ t: `حُفظت الفاتورة ${r.no} بمبلغ ${money(r.total)}` });
+            setMsg({ t: `حُفظت الفاتورة ${r.no} بمبلغ ${money(r.total)}` + (r.warning ? ' — ' + r.warning : '') });
             setSupplier(''); setNo(''); setItems([]); setManual(''); setPaid(''); setNote(''); setPhoto(null);
             setPayOn(false); setReceipt(null); setPayRef(''); setPayBank('');
             setRDetails(null); setRScan(null); setPayBenef('');
-            setTimeout(() => onDone && onDone(), 1200);
+            setTimeout(() => onDone && onDone(), r.warning ? 4000 : 1200);
         } catch (e) {
             setMsg({ e: 1, t: 'تعذر الاتصال — حاول مرة أخرى' });
         } finally { setBusy(false); }
@@ -361,6 +361,13 @@ export default function BuyInvoice({ onDone }) {
                             className={FIELD} />
                         <input value={payBenef} onChange={e => setPayBenef(e.target.value)} placeholder="المستفيد (اسم المستلم أو الحساب)"
                             className={FIELD} />
+                        {payOn && Number(paid) > total + 0.5 && (
+                            <div className="rounded-xl bg-amber-500/15 text-amber-300 p-2.5 text-[11px] font-bold flex items-start gap-1.5">
+                                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                                المسدد {money(paid)} يتجاوز إجمالي الفاتورة {money(total)} بـ{money(Number(paid) - total)} —
+                                سيُحفظ كما هو، وقد يكون الإيصال يغطي فواتير أخرى
+                            </div>
+                        )}
                         {payDate && date && payDate < date && (
                             <div className="rounded-xl bg-amber-500/15 text-amber-300 p-2.5 text-[11px] font-bold flex items-start gap-1.5">
                                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
