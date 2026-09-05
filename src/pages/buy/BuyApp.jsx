@@ -10,6 +10,7 @@ import BuyWelcome from './BuyWelcome';
 import BuyLogin from './BuyLogin';
 import BuySplash from './BuySplash';
 import BuyInstallGate from './BuyInstallGate';
+import { useDepthGuard } from '../../lib/backstack';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
@@ -68,6 +69,7 @@ const isPhone = () => {
 export default function BuyApp() {
     const [tab, setTab]   = useState('home');
     // الترحيب يُعرض أول مرة فقط لكل جهاز
+    useDepthGuard(tab === 'home' ? 0 : 1, () => setTab('home'));
     const [splash, setSplash] = useState(() => {
         try { return sessionStorage.getItem('buy_splash') !== '1'; } catch { return true; }
     });

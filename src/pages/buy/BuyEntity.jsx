@@ -3,6 +3,7 @@ import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, A
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
+import { useDepthGuard } from '../../lib/backstack';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
     ? String(v ?? '—') : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -17,6 +18,8 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [del, setDel]   = useState(null);   // { blockers } أو { ask: true }
     const [busy, setBusy] = useState(false);
     const [tick, setTick] = useState(0);      // لإعادة الجلب بعد الإلغاء
+
+    useDepthGuard(del ? 1 : 0, () => setDel(null));
 
     const post = (action, body) => fetch(`${API_URL}?action=${action}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Share, PlusSquare, X, Smartphone } from 'lucide-react';
+import { useDepthGuard } from '../lib/backstack';
 
 // ─── زر تثبيت التطبيق على الجوال ─────────────────────────────────────────────
 // أندرويد: نافذة التثبيت الأصلية بضغطة واحدة عبر beforeinstallprompt.
@@ -14,6 +15,7 @@ export default function InstallApp({ label = 'ثبّت التطبيق على ج�
     const [showIos, setShowIos] = useState(false);
     const [done, setDone] = useState(false);
     const [installed, setInstalled] = useState(() => { try { return isStandalone(); } catch { return false; } });
+    useDepthGuard(showIos ? 1 : 0, () => setShowIos(false));
 
     useEffect(() => {
         const onPrompt = e => { e.preventDefault(); window.__bip = e; setPrompt(e); };

@@ -4,6 +4,7 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyEntity from './BuyEntity';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
+import { useDepthGuard } from '../../lib/backstack';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const short = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -40,6 +41,7 @@ export default function BuyRecords() {
 
     const open = (type, value) => setStack(s => s.concat({ type, value }));
     const back = () => setStack(s => s.slice(0, -1));
+    useDepthGuard(stack.length, back);
 
     if (stack.length) {
         const top = stack[stack.length - 1];
