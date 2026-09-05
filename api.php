@@ -160,6 +160,61 @@ function daftra_session_cookie($conn) {
     return "__DAFTRA_SESSION__";
 }
 
+// ─── قراءة مستند وتحقق من انتمائه لفاتورته ──────────────────────────────────
+// الربط الحالي للمستندات المسترجعة استُنتج من التوقيت، وهذا يقرأ الملف نفسه.
+function doc_fetch_bytes($conn, $doc) {
+    $url = (string)($doc['drive_url'] ?? '');
+    if ($url !== '') {
+        $p = parse_url($url, PHP_URL_PATH);
+        if ($p && strpos($p, '/qdocs/') === 0 && is_file(__DIR__ . $p))
+            return [file_get_contents(__DIR__ . $p), mime_content_type(__DIR__ . $p) ?: 'application/pdf'];
+    }
+    $fid = (int)($doc['daftra_file_id'] ?? 0);
+    if (!$fid) return [null, null];
+    $ch = curl_init("https://semak.daftra.com/v2/owner/entity/files/preview/$fid");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => 45, CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_HTTPHEADER => ['Cookie: ' . daftra_session_cookie($conn), 'Accept: */*',
+                              'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)'],
+    ]);
+    $body = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $ct   = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    curl_close($ch);
+    if ($code !== 200 || !$body || stripos($ct, 'text/html') !== false) return [null, null];
+    return [$body, $ct ?: 'application/pdf'];
+}
+
+// استخراج بيانات مستند (فاتورة أو إيصال) بالرؤية
+function doc_read_fields($bytes, $mime) {
+    $isPdf = stripos($mime, 'pdf') !== false;
+    if (!$isPdf && stripos($mime, 'image/') !== 0) return null;         // docx وغيرها لا تُقرأ
+    $sys = "أنت قارئ مستندات مالية سعودية (فاتورة مورد أو إيصال سداد). أعد JSON فقط:\n"
+         . "{\"kind\":\"invoice\" أو \"receipt\", \"supplier\":اسم المورد أو المستفيد, \"no\":رقم الفاتورة إن وُجد, "
+         . "\"date\":\"YYYY-MM-DD\", \"total\":المبلغ الإجمالي رقما}\n"
+         . "الأرقام بلا فواصل. ما لا تجده null. لا تخترع شيئا.";
+    $block = $isPdf
+        ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>base64_encode($bytes)]]
+        : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mime,'data'=>base64_encode($bytes)]];
+    $pl = ['model'=>'claude-haiku-4-5', 'max_tokens'=>600, 'system'=>$sys,
+           'messages'=>[['role'=>'user','content'=>[$block, ['type'=>'text','text'=>'استخرج الحقول.']]]]];
+    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($pl, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+    if ($code !== 200) return null;
+    $d = json_decode($res, true); $txt = '';
+    foreach ((array)($d['content'] ?? []) as $b) if (($b['type'] ?? '') === 'text') $txt .= $b['text'];
+    if (preg_match('/\{[\s\S]*\}/', $txt, $m)) $txt = $m[0];
+    $out = json_decode($txt, true);
+    return is_array($out) ? $out : null;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // محرّك المحاسبة المستقل (Semak Ledger) — قاعدة بياناتنا، كودنا، صفر دفترة
 // multi-tenant جاهز للترخيص والبيع
@@ -1212,6 +1267,16 @@ $conn->query("CREATE TABLE IF NOT EXISTS webauthn_challenges (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (31)");
 } // end DDL v31
+// ─── DDL v32: تحقق من صحة ربط المستندات المسترجعة بفواتيرها ─────────────────
+if ($__sv < 32) {
+ensure_column($conn, 'purchase_documents', 'verify_status', "verify_status VARCHAR(12) DEFAULT NULL");
+ensure_column($conn, 'purchase_documents', 'verify_note', "verify_note VARCHAR(400) DEFAULT NULL");
+ensure_column($conn, 'purchase_documents', 'verified_at', "verified_at DATETIME DEFAULT NULL");
+ensure_column($conn, 'purchase_documents', 'suggest_purchase_id', "suggest_purchase_id INT DEFAULT NULL");
+// الوسم القديم «مؤكد» كان استنتاجا لا تحققا — يُصحَّح حتى لا يُبنى عليه
+$conn->query("UPDATE purchase_documents SET confidence='مستنتج' WHERE source='recovered' AND confidence='مؤكد'");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (32)");
+} // end DDL v32
 
 
 
@@ -6844,6 +6909,110 @@ switch ($action) {
         header('Cache-Control: private, max-age=600');
         readfile($local);
         exit;
+    }
+
+    case 'doc_verify': {
+        // يقرأ المستند ويقارن بفاتورته: مطابق أو غير مطابق أو غير حاسم
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(300);
+        $one   = (int)($_GET['id'] ?? 0);
+        $limit = min(25, max(1, (int)($_GET['limit'] ?? 5)));
+        $w = $one ? "d.id=$one" : "d.verify_status IS NULL AND COALESCE(d.daftra_file_id,0) > 0";
+        $docs = [];
+        if ($r = $conn->query("SELECT d.*, p.no inv_no, p.supplier inv_supplier, ROUND(p.total,2) inv_total,
+                                      ROUND(p.paid,2) inv_paid, p.date inv_date
+                               FROM purchase_documents d
+                               LEFT JOIN dmirror_purchases p ON p.id = d.purchase_id
+                               WHERE $w ORDER BY d.id LIMIT $limit")) while ($x = $r->fetch_assoc()) $docs[] = $x;
+        if (!$docs) { echo json_encode(['success'=>true,'done'=>true,'checked'=>0,
+            'message'=>'لا مستندات بانتظار التحقق'], JSON_UNESCAPED_UNICODE); break; }
+
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $norm = function($s) {
+            $s = trim(mb_strtolower((string)$s));
+            $s = str_replace(['أ','إ','آ'], 'ا', $s);
+            $s = str_replace('ة', 'ه', $s); $s = str_replace('ى', 'ي', $s);
+            return trim(preg_replace('/\s+/u', ' ', $s));
+        };
+        $out = [];
+        foreach ($docs as $doc) {
+            [$bytes, $mime] = doc_fetch_bytes($conn, $doc);
+            $id = (int)$doc['id'];
+            if (!$bytes) {
+                $conn->query("UPDATE purchase_documents SET verify_status='تعذر',
+                              verify_note='تعذر جلب الملف من دفترة', verified_at=NOW() WHERE id=$id");
+                $out[] = ['id'=>$id, 'status'=>'تعذر', 'note'=>'تعذر جلب الملف'];
+                continue;
+            }
+            $f = doc_read_fields($bytes, $mime);
+            if (!$f) {
+                $conn->query("UPDATE purchase_documents SET verify_status='تعذر',
+                              verify_note='صيغة لا تُقرأ آليا', verified_at=NOW() WHERE id=$id");
+                $out[] = ['id'=>$id, 'status'=>'تعذر', 'note'=>'صيغة لا تُقرأ'];
+                continue;
+            }
+            $ftot = isset($f['total']) ? round((float)$f['total'], 2) : null;
+            $fno  = trim((string)($f['no'] ?? ''));
+            $fsup = trim((string)($f['supplier'] ?? ''));
+            $itot = round((float)($doc['inv_total'] ?? 0), 2);
+            $ipaid= round((float)($doc['inv_paid'] ?? 0), 2);
+            $ino  = trim((string)($doc['inv_no'] ?? ''));
+            $isup = trim((string)($doc['inv_supplier'] ?? ''));
+
+            $hits = [];
+            $amountOk = ($ftot !== null && $ftot > 0 && (abs($ftot - $itot) <= 0.5 || abs($ftot - $ipaid) <= 0.5));
+            if ($amountOk) $hits[] = 'المبلغ';
+            $noOk = ($fno !== '' && $ino !== '' && ltrim($fno, '0') === ltrim($ino, '0'));
+            if ($noOk) $hits[] = 'رقم الفاتورة';
+            $supOk = false;
+            if ($fsup !== '' && $isup !== '') {
+                $a = $norm($fsup); $b = $norm($isup);
+                $pct = 0.0; similar_text($a, $b, $pct);
+                $supOk = ($pct >= 55) || (mb_strpos($b, $a) !== false) || (mb_strpos($a, $b) !== false);
+            }
+            if ($supOk) $hits[] = 'المورد';
+            $status = 'غير حاسم';
+            if ($amountOk && ($supOk || $noOk)) $status = 'مطابق';
+            elseif ($amountOk || ($supOk && $noOk)) $status = 'مطابق';
+            elseif ($ftot !== null && $ftot > 0 && !$amountOk && !$supOk) $status = 'غير مطابق';
+
+            $suggest = 'NULL';
+            if ($status === 'غير مطابق' && $ftot > 0) {
+                $q = $conn->query("SELECT id FROM dmirror_purchases
+                                   WHERE ABS(total - $ftot) <= 0.5 OR ABS(paid - $ftot) <= 0.5 LIMIT 1");
+                if ($q && ($sr = $q->fetch_assoc())) $suggest = (int)$sr['id'];
+            }
+            $note = 'قرأنا: ' . ($fsup ?: 'بلا مورد') . ' · ' . ($fno !== '' ? 'رقم ' . $fno : 'بلا رقم')
+                  . ' · ' . ($ftot !== null ? number_format($ftot, 2) : 'بلا مبلغ')
+                  . ' | الفاتورة: ' . $isup . ' · رقم ' . $ino . ' · ' . number_format($itot, 2)
+                  . ($hits ? ' | تطابق: ' . implode('، ', $hits) : '');
+            $conn->query("UPDATE purchase_documents SET verify_status='" . $E($status) . "',
+                          verify_note='" . $E(mb_substr($note, 0, 390)) . "', verified_at=NOW(),
+                          suggest_purchase_id=$suggest WHERE id=$id");
+            $out[] = ['id'=>$id, 'purchase_id'=>(int)$doc['purchase_id'], 'status'=>$status, 'note'=>$note];
+        }
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) c FROM purchase_documents
+                               WHERE verify_status IS NULL AND COALESCE(daftra_file_id,0) > 0"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['c'];
+        echo json_encode(['success'=>true, 'checked'=>count($out), 'left'=>$left, 'results'=>$out], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'doc_verify_stats': {
+        $rows = [];
+        if ($r = $conn->query("SELECT COALESCE(verify_status,'بانتظار') st, COUNT(*) n
+                               FROM purchase_documents GROUP BY st ORDER BY n DESC"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        $bad = [];
+        if ($r = $conn->query("SELECT d.id, d.purchase_id, d.file_name, d.verify_note, d.suggest_purchase_id,
+                                      p.no inv_no, p.supplier
+                               FROM purchase_documents d LEFT JOIN dmirror_purchases p ON p.id=d.purchase_id
+                               WHERE d.verify_status='غير مطابق' ORDER BY d.id LIMIT 100"))
+            while ($x = $r->fetch_assoc()) $bad[] = $x;
+        echo json_encode(['success'=>true, 'summary'=>$rows, 'mismatched'=>$bad], JSON_UNESCAPED_UNICODE);
+        break;
     }
 
     case 'doc_daftra': {
