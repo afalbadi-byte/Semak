@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Home, FilePlus, Package, Bot, LogOut, RefreshCw } from 'lucide-react';
+import { Home, FilePlus, Package, Bot, LogOut, RefreshCw, FileText } from 'lucide-react';
 import { API_URL, getAdminToken, LS_ADMIN_JWT } from '../../lib/api/client';
 import BuyHome from './BuyHome';
 import BuyInvoice from './BuyInvoice';
 import BuyItems from './BuyItems';
 import BuyChat from './BuyChat';
+import BuyRecords from './BuyRecords';
 import BuyWelcome from './BuyWelcome';
 import BuyLogin from './BuyLogin';
 import BuySplash from './BuySplash';
@@ -12,10 +13,11 @@ import BuyInstallGate from './BuyInstallGate';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
-    { k: 'home',  t: 'الرئيسية',   icon: Home },
-    { k: 'new',   t: 'فاتورة',     icon: FilePlus },
-    { k: 'items', t: 'الأسعار',    icon: Package },
-    { k: 'chat',  t: 'المساعد',    icon: Bot },
+    { k: 'home',    t: 'الرئيسية', icon: Home },
+    { k: 'new',     t: 'فاتورة',   icon: FilePlus },
+    { k: 'records', t: 'السجلات',  icon: FileText },
+    { k: 'items',   t: 'الأسعار',  icon: Package },
+    { k: 'chat',    t: 'المساعد',  icon: Bot },
 ];
 
 // بطاقة تعريف مستقلة حتى يظهر التطبيق باسمه وأيقونته على الشاشة الرئيسية
@@ -146,12 +148,13 @@ export default function BuyApp() {
             <main className="flex-1 overflow-y-auto pb-24">
                 {tab === 'home'  && <BuyHome  onNew={() => setTab('new')} />}
                 {tab === 'new'   && <BuyInvoice onDone={() => setTab('home')} />}
+                {tab === 'records' && <BuyRecords />}
                 {tab === 'items' && <BuyItems />}
                 {tab === 'chat'  && <BuyChat userName={user?.name || ''} />}
             </main>
 
             <nav className="fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur border-t border-white/10 z-30">
-                <div className="grid grid-cols-4">
+                <div className="grid grid-cols-5">
                     {TABS.map(t => {
                         const Icon = t.icon;
                         const on = tab === t.k;

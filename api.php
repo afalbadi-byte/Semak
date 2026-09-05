@@ -6810,6 +6810,53 @@ switch ($action) {
         break;
     }
 
+    case 'buy_list': {
+        // سجلات التطبيق: الفواتير والموردون ببحث وترقيم صفحات
+        $kind = (string)($_GET['kind'] ?? 'invoices');
+        $q    = trim((string)($_GET['q'] ?? ''));
+        $lim  = min(100, max(5, (int)($_GET['limit'] ?? 30)));
+        $off  = max(0, (int)($_GET['offset'] ?? 0));
+        $E    = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $Q    = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+
+        if ($kind === 'suppliers') {
+            $w = $q === '' ? "supplier <> ''" : "supplier LIKE '%" . $E($q) . "%'";
+            $rows = $Q("SELECT supplier AS name, COUNT(*) invoices, ROUND(SUM(total),2) gross,
+                        ROUND(SUM(total - paid),2) outstanding, MAX(date) last_date
+                    FROM dmirror_purchases WHERE $w
+                    GROUP BY supplier ORDER BY gross DESC LIMIT $lim OFFSET $off");
+            echo json_encode(['success'=>true, 'kind'=>'suppliers', 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        $c = ['1'];
+        if ($q !== '') $c[] = "(p.supplier LIKE '%" . $E($q) . "%' OR p.no LIKE '%" . $E($q) . "%')";
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['from'] ?? ''))) $c[] = "p.date >= '" . $E($_GET['from']) . "'";
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['to'] ?? '')))   $c[] = "p.date <= '" . $E($_GET['to']) . "'";
+        if ((int)($_GET['project_id'] ?? 0) > 0) $c[] = "pp.project_id = " . (int)$_GET['project_id'];
+        if (!empty($_GET['unpaid']))   $c[] = "p.total > p.paid + 0.5";
+        if (!empty($_GET['no_docs']))  $c[] = "COALESCE(d.n,0) = 0";
+        $W = implode(' AND ', $c);
+        $rows = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.paid,2) paid,
+                    ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project, COALESCE(d.n,0) docs,
+                    COALESCE(p.origin,'daftra') origin
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
+                  ON d.purchase_id = p.id
+                WHERE $W ORDER BY p.date DESC, p.id DESC LIMIT $lim OFFSET $off");
+        $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(p.total),2) gross, ROUND(SUM(p.total - p.paid),2) outstanding
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
+                  ON d.purchase_id = p.id
+                WHERE $W");
+        echo json_encode(['success'=>true, 'kind'=>'invoices', 'data'=>$rows,
+            'summary'=>$sum ? $sum[0] : null], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_suggest': {
         // اقتراحات الإدخال: الموردون والأصناف بآخر أسعارها — لتسريع الكتابة من الجوال
         $kind = (string)($_GET['kind'] ?? 'supplier');
