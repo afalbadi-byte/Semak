@@ -7250,6 +7250,60 @@ switch ($action) {
         break;
     }
 
+    case 'pay_receipt_set': {
+        // إرفاق إيصال لدفعة مسجّلة سلفاً — دفعاتنا ودفعات دفترة سواء
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية إرفاق الإيصالات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E   = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $src = (($b['src'] ?? '') === 'daftra') ? 'daftra' : 'app';
+        $id  = (int)($b['id'] ?? 0);
+        $url = trim((string)($b['receipt_url'] ?? ''));
+        if (!$id || $url === '') {
+            echo json_encode(['success'=>false,'message'=>'الدفعة ورابط الإيصال مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+
+        $pid = 0; $amt = 0; $pdate = '';
+        if ($src === 'app') {
+            if ($r = $conn->query("SELECT purchase_id, amount, pay_date FROM purchase_payments WHERE id=$id LIMIT 1"))
+                if ($x = $r->fetch_assoc()) { $pid = (int)$x['purchase_id']; $amt = (float)$x['amount']; $pdate = (string)$x['pay_date']; }
+        } else {
+            if ($r = $conn->query("SELECT purchase_id, amount, date FROM dmirror_payments WHERE id=$id LIMIT 1"))
+                if ($x = $r->fetch_assoc()) { $pid = (int)$x['purchase_id']; $amt = (float)$x['amount']; $pdate = (string)$x['date']; }
+        }
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'الدفعة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $det = is_array($b['receipt_details'] ?? null)
+             ? mb_substr(json_encode($b['receipt_details'], JSON_UNESCAPED_UNICODE), 0, 4000) : '';
+        if ($src === 'app') {
+            $conn->query("UPDATE purchase_payments SET receipt_url='" . $E($url) . "'"
+                . ($det !== '' ? ", details='" . $E($det) . "'" : '') . " WHERE id=$id");
+        } else {
+            $conn->query("UPDATE dmirror_payments SET receipt_url='" . $E($url) . "' WHERE id=$id");
+        }
+        // ويُسجَّل مستنداً على الفاتورة ليظهر في قسم المستندات وينزّل مع الباقي
+        $sup = '';
+        if ($r = $conn->query("SELECT supplier FROM dmirror_purchases WHERE id=$pid LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $sup = (string)$x['supplier'];
+        $name = 'إيصال سداد ' . number_format($amt, 2) . ($pdate !== '' ? ' — ' . $pdate : '')
+              . ($sup !== '' ? ' — ' . $sup : '');
+        $conn->query("INSERT INTO purchase_documents (purchase_id, supplier, doc_type, file_name, drive_url,
+                source, created_by)
+            VALUES ($pid, '" . $E($sup) . "', 'receipt', '" . $E($name) . "', '" . $E($url) . "', 'mobile', '"
+            . $E($u['name'] ?? '') . "')
+            ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url)");
+        acc_audit($conn, 1, 'purchase', $pid, 'receipt_attach',
+            'إرفاق إيصال لدفعة ' . number_format($amt, 2) . ' (' . $src . '#' . $id . ')', $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'purchase_id'=>$pid, 'message'=>'أُرفق الإيصال بالدفعة'],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pay_proofs': {
         // تدقيق: أي دفعة بلا إيصال يثبتها — الإيصال إمّا رابط على الدفعة أو مستند على فاتورتها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -7262,8 +7316,10 @@ switch ($action) {
         $src = "(SELECT id, purchase_id, supplier, amount, method, pay_date, reference, bank, receipt_url,
                         'التطبيق' src FROM purchase_payments
                  UNION ALL
-                 SELECT m.id, m.purchase_id, COALESCE(dp.supplier,'') supplier, m.amount, '' method,
-                        m.date pay_date, '' reference, '' bank, '' receipt_url, 'دفترة' src
+                 SELECT m.id, m.purchase_id, COALESCE(dp.supplier,'') supplier, m.amount,
+                        COALESCE(m.payment_method,'') method,
+                        m.date pay_date, COALESCE(m.transaction_id,'') reference, '' bank,
+                        COALESCE(m.receipt_url,'') receipt_url, 'دفترة' src
                    FROM dmirror_payments m
                    LEFT JOIN dmirror_purchases dp ON dp.id = m.purchase_id)";
         $base = "FROM $src pp
@@ -8424,24 +8480,31 @@ switch ($action) {
                     'rows'=>(function() use ($Q, $pid) {
                         $map = ['transfer'=>'تحويل','cash'=>'نقدي','cheque'=>'شيك','card'=>'بطاقة','other'=>'أخرى'];
                         $rows = []; $seen = [];
-                        foreach ($Q("SELECT pay_date, ROUND(amount,2) amount, method, COALESCE(bank,'') bank,
+                        foreach ($Q("SELECT id, pay_date, ROUND(amount,2) amount, method, COALESCE(bank,'') bank,
                                     COALESCE(beneficiary,'') beneficiary, COALESCE(from_account,'') from_account,
                                     COALESCE(reference,'') reference, COALESCE(receipt_url,'') receipt_url,
                                     COALESCE(created_by,'') created_by
                                 FROM purchase_payments WHERE purchase_id=$pid ORDER BY pay_date, id") as $p) {
                             $p['method_ar'] = $map[$p['method']] ?? $p['method'];
                             $p['source']    = 'التطبيق';
+                            $p['src']       = 'app';
                             $seen[$p['pay_date'] . '|' . number_format((float)$p['amount'], 2, '.', '')] = 1;
                             $rows[] = $p;
                         }
                         // دفعات دفترة — تُعرض ما لم تكن هي نفسها مسجّلة عندنا بنفس اليوم والمبلغ
-                        foreach ($Q("SELECT date pay_date, ROUND(amount,2) amount, treasury_id
+                        foreach ($Q("SELECT id, date pay_date, ROUND(amount,2) amount, treasury_id,
+                                        COALESCE(payment_method,'') payment_method,
+                                        COALESCE(receipt_url,'') receipt_url,
+                                        COALESCE(receipt_notes,'') receipt_notes
                                      FROM dmirror_payments WHERE purchase_id=$pid ORDER BY date, id") as $p) {
                             $key = $p['pay_date'] . '|' . number_format((float)$p['amount'], 2, '.', '');
                             if (isset($seen[$key])) continue;
-                            $rows[] = ['pay_date'=>$p['pay_date'], 'amount'=>$p['amount'], 'method'=>'',
-                                'method_ar'=>'—', 'source'=>'دفترة', 'bank'=>'', 'beneficiary'=>'',
-                                'from_account'=>'', 'reference'=>'', 'receipt_url'=>'', 'created_by'=>''];
+                            $rows[] = ['id'=>(int)$p['id'], 'src'=>'daftra',
+                                'pay_date'=>$p['pay_date'], 'amount'=>$p['amount'], 'method'=>'',
+                                'method_ar'=>($p['payment_method'] !== '' ? $p['payment_method'] : '—'),
+                                'source'=>'دفترة', 'bank'=>'', 'beneficiary'=>'',
+                                'from_account'=>'', 'reference'=>'',
+                                'receipt_url'=>$p['receipt_url'], 'created_by'=>''];
                         }
                         usort($rows, function($a, $b) { return strcmp((string)$a['pay_date'], (string)$b['pay_date']); });
                         return $rows;

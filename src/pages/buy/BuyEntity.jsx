@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2, Receipt } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
@@ -21,11 +21,14 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [edit, setEdit] = useState(null);   // نسخة قابلة للتحرير من الفاتورة
     const [pay,  setPay]  = useState(null);   // دفعة على مستوى المورد
     const [payRes, setPayRes] = useState(null);
+    const [rcpt, setRcpt] = useState(null);   // إرفاق إيصال لدفعة قائمة
     const [busy, setBusy] = useState(false);
     const [tick, setTick] = useState(0);      // لإعادة الجلب بعد الإلغاء
 
-    useDepthGuard((del ? 1 : 0) + (edit ? 1 : 0) + (pay ? 1 : 0),
-        () => { pay ? (payRes ? (setPay(null), setPayRes(null)) : setPay(null)) : edit ? setEdit(null) : setDel(null); });
+    useDepthGuard((del ? 1 : 0) + (edit ? 1 : 0) + (pay ? 1 : 0) + (rcpt ? 1 : 0),
+        () => { rcpt ? setRcpt(null)
+              : pay ? (payRes ? (setPay(null), setPayRes(null)) : setPay(null))
+              : edit ? setEdit(null) : setDel(null); });
 
     const post = (action, body) => fetch(`${API_URL}?action=${action}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
@@ -77,6 +80,22 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     };
 
     const today = () => new Date().toISOString().slice(0, 10);
+
+    // إرفاق إيصال لدفعة مسجّلة — يرفع الملف ثم يربطه بالدفعة وبفاتورتها
+    const saveReceipt = async () => {
+        if (!rcpt?.file) return;
+        setBusy(true); setErr('');
+        try {
+            const url = await uploadReceipt(rcpt.file);
+            if (!url) { setErr('تعذر رفع الإيصال'); return; }
+            const r = await post('pay_receipt_set', {
+                src: rcpt.src, id: rcpt.id, receipt_url: url, receipt_details: rcpt.details || null,
+            });
+            if (!r.success) { setErr(r.message || 'تعذر الحفظ'); return; }
+            setRcpt(null); setTick(t => t + 1);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
 
     // دفعة للمورد: توزَّع على المستحق من الأقدم، أو تُقيَّد مقدَّمة بالكامل
     const savePay = async () => {
@@ -162,6 +181,45 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
 
             {err && <div className="rounded-xl bg-red-500/15 text-red-300 p-3 text-xs font-bold">{err}</div>}
             {!data && !err && <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-[#c5a059]" /></div>}
+
+            {rcpt && (
+                <div className="fixed inset-0 bg-black/70 z-[86] flex items-end justify-center p-0 sm:p-4"
+                    onClick={() => !busy && setRcpt(null)}>
+                    <div dir="rtl" onClick={e => e.stopPropagation()}
+                        className="bg-[#0f1e36] rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+                        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-black text-[15px] flex items-center gap-2">
+                                <Receipt size={16} className="text-[#c5a059]" /> إيصال الدفعة
+                            </h3>
+                            <button onClick={() => setRcpt(null)} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="rounded-xl bg-white/[0.06] border border-white/10 p-3 text-[12px] space-y-1">
+                            <div className="flex justify-between"><span className="text-slate-400">المبلغ</span>
+                                <span className="font-black tabular-nums text-[#c5a059]">{money(rcpt.amount)}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">التاريخ</span>
+                                <span className="font-bold">{rcpt.pay_date || '—'}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">المصدر</span>
+                                <span className="font-bold">{rcpt.source}</span></div>
+                        </div>
+                        <ReceiptCapture
+                            file={rcpt.file}
+                            expectedAmount={Number(rcpt.amount) || 0}
+                            onFile={f2 => setRcpt(v => ({ ...v, file: f2, details: f2 ? v.details : null }))}
+                            onError={m => setErr(m)}
+                            onApply={f2 => setRcpt(v => ({ ...v, details: f2.details }))} />
+                        {rcpt.details && (
+                            <p className="text-[11px] text-emerald-300 font-bold">قُرئ الإيصال — بياناته ستُحفظ مع الدفعة</p>
+                        )}
+                        <button onClick={saveReceipt} disabled={busy || !rcpt.file}
+                            className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1628] text-sm font-black flex items-center justify-center gap-2 disabled:opacity-40">
+                            {busy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} احفظ الإيصال
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {pay && (
                 <div className="fixed inset-0 bg-black/70 z-[85] flex items-end justify-center p-0 sm:p-4"
@@ -493,7 +551,10 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                     )}
 
                     {(data.sections || []).map((sec, si) => (
-                        <Section key={si} sec={sec} onOpen={onOpen} />
+                        <Section key={si} onOpen={onOpen}
+                            sec={sec.title === 'الدفعات'
+                                ? { ...sec, attach: true, onAttach: r => { setErr(''); setRcpt({ ...r, file: null, details: null }); } }
+                                : sec} />
                     ))}
                 </>
             )}
@@ -601,6 +662,12 @@ function Section({ sec, onOpen }) {
                                                 className="text-[11px] text-sky-300 flex items-center gap-1">
                                                 <ExternalLink size={12} /> فتح
                                             </a>
+                                        )}
+                                        {sec.attach && !r[sec.url_col] && r.src && (
+                                            <button onClick={() => sec.onAttach(r)}
+                                                className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
+                                                <Receipt size={13} /> أرفق إيصالاً
+                                            </button>
                                         )}
                                     </span>
                                 </div>
