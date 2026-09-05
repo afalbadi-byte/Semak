@@ -120,7 +120,15 @@ function Section({ sec }) {
                                                         <a href={`${API_URL}?action=doc_get&id=${r.id}`} download
                                                             className="text-emerald-700 inline-flex items-center gap-1 font-bold"><Download size={13} /> تنزيل</a>
                                                     ) : null}
-                                                    {sec.download && Number(r.downloadable) !== 1 ? (
+                                                    {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) === 1 ? (
+                                                        <>
+                                                            <a href={`${API_URL}?action=doc_daftra&id=${r.id}&view=1`} target="_blank" rel="noopener noreferrer"
+                                                                className="text-sky-700 inline-flex items-center gap-1"><ExternalLink size={13} /> استعراض</a>
+                                                            <a href={`${API_URL}?action=doc_daftra&id=${r.id}`} download
+                                                                className="text-emerald-700 inline-flex items-center gap-1 font-bold"><Download size={13} /> تنزيل</a>
+                                                        </>
+                                                    ) : null}
+                                                    {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) !== 1 ? (
                                                         <span className="text-slate-400 text-xs">في أرشيف الدرايف</span>
                                                     ) : null}
                                                     {!v && !sec.download ? '—' : null}

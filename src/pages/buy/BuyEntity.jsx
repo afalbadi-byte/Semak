@@ -228,7 +228,19 @@ function Section({ sec, onOpen }) {
                                                 <Download size={13} /> تنزيل
                                             </a>
                                         )}
-                                        {sec.download && Number(r.downloadable) !== 1 && (
+                                        {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) === 1 && (
+                                            <>
+                                                <a href={`${API_URL}?action=doc_daftra&id=${r.id}&view=1`} target="_blank" rel="noopener noreferrer"
+                                                    className="text-[11px] font-bold text-sky-300 flex items-center gap-1">
+                                                    <ExternalLink size={12} /> استعراض
+                                                </a>
+                                                <a href={`${API_URL}?action=doc_daftra&id=${r.id}`} download
+                                                    className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
+                                                    <Download size={13} /> تنزيل
+                                                </a>
+                                            </>
+                                        )}
+                                        {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) !== 1 && (
                                             <span className="text-[10px] text-slate-500">في أرشيف الدرايف</span>
                                         )}
                                         {sec.url_col && r[sec.url_col] && !sec.download && (

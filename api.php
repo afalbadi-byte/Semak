@@ -6846,6 +6846,76 @@ switch ($action) {
         exit;
     }
 
+    case 'doc_daftra': {
+        // استعراض وتنزيل مرفقات دفترة عبر الخادم — الجلسة تبقى عندنا لا في الجوال
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $du = null;
+        if ($r = $conn->query("SELECT role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $du = $r->fetch_assoc();
+        $dp = json_decode((string)($du['permissions'] ?? '[]'), true); if (!is_array($dp)) $dp = [];
+        if (!$du || (($du['role'] ?? '') !== 'admin' && !in_array('finance', $dp, true) && !in_array('accounting', $dp, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية عرض المستندات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $id  = (int)($_GET['id'] ?? 0);          // معرّف المستند عندنا
+        $fid = (int)($_GET['file_id'] ?? 0);     // أو معرّف الملف في دفترة مباشرة
+        $doc = null;
+        if ($id && ($r = $conn->query("SELECT d.*, p.no AS inv_no, p.supplier FROM purchase_documents d
+                                       LEFT JOIN dmirror_purchases p ON p.id = d.purchase_id
+                                       WHERE d.id=$id LIMIT 1"))) $doc = $r->fetch_assoc();
+        if ($doc && !$fid) $fid = (int)($doc['daftra_file_id'] ?? 0);
+        if (!$fid) { echo json_encode(['success'=>false,'message'=>'لا يوجد ملف مرتبط في دفترة'], JSON_UNESCAPED_UNICODE); break; }
+
+        set_time_limit(60);
+        $cookie = daftra_session_cookie($conn);
+        $ch = curl_init("https://semak.daftra.com/v2/owner/entity/files/preview/$fid");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,          // دفترة تحوّل إلى تخزين موقّع
+            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_TIMEOUT        => 45,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HTTPHEADER     => ['Cookie: ' . $cookie, 'Accept: */*',
+                                       'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)'],
+        ]);
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $ctype = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+
+        // جلسة منتهية ترد صفحة دخول HTML لا ملفا
+        $isHtml = stripos($ctype, 'text/html') !== false || strncmp((string)$body, '<!DOCTYPE', 9) === 0;
+        if ($code !== 200 || $body === false || $body === '' || $isHtml) {
+            echo json_encode(['success'=>false,
+                'message'=>'تعذر جلب المرفق من دفترة — جلسة دفترة منتهية، حدّثها من إعدادات الربط',
+                'http'=>$code], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $ext = 'pdf';
+        if (stripos($ctype, 'png') !== false)  $ext = 'png';
+        elseif (stripos($ctype, 'jpeg') !== false || stripos($ctype, 'jpg') !== false) $ext = 'jpg';
+        elseif (!empty($doc['file_name'])) {
+            $e2 = strtolower(pathinfo($doc['file_name'], PATHINFO_EXTENSION));
+            if ($e2 !== '') $ext = $e2;
+        }
+        $kind = (($doc['doc_type'] ?? '') === 'receipt') ? 'إيصال' : 'مستند';
+        $name = $doc
+            ? ($kind . ' ' . ($doc['inv_no'] ?: $doc['invoice_no'] ?: '') . ($doc['supplier'] ? ' - ' . $doc['supplier'] : '') . '.' . $ext)
+            : ('مرفق-' . $fid . '.' . $ext);
+        $name = str_replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], ' ', $name);
+        $name = trim($name);
+        if ($name === '' || $name === '.' . $ext) $name = 'مرفق-' . $fid . '.' . $ext;
+
+        $inline = !empty($_GET['view']);            // استعراض بدل تنزيل
+        header('Content-Type: ' . ($ctype ?: 'application/octet-stream'));
+        header('Content-Length: ' . strlen($body));
+        header(($inline ? 'Content-Disposition: inline' : 'Content-Disposition: attachment')
+            . "; filename=\"doc-$fid.$ext\"; filename*=UTF-8''" . rawurlencode($name));
+        header('Cache-Control: private, max-age=300');
+        echo $body;
+        exit;
+    }
+
     case 'doc_zip': {
         // كل مستندات فاتورة في ملف واحد
         $pid = (int)($_GET['purchase_id'] ?? 0);
@@ -7229,9 +7299,11 @@ switch ($action) {
                         $m = ['invoice'=>'فاتورة', 'receipt'=>'إيصال سداد', 'other'=>'مستند آخر'];
                         $d['doc_type_ar'] = $m[$d['doc_type']] ?? $d['doc_type'];
                         $d['downloadable'] = ($d['drive_url'] !== '' && $d['drive_url'] !== null) ? 1 : 0;
+                        // مرفقات دفترة تُجلب عبر الخادم بمعرّف ملفها
+                        $d['daftra'] = (!$d['downloadable'] && (int)$d['daftra_file_id'] > 0) ? 1 : 0;
                         return $d;
                     }, $Q("SELECT id, file_name, doc_type, LEFT(created_at,10) created_at,
-                                  COALESCE(drive_url,'') drive_url
+                                  COALESCE(drive_url,'') drive_url, COALESCE(daftra_file_id,0) daftra_file_id
                            FROM purchase_documents WHERE purchase_id=$pid ORDER BY id"))];
             }
         }
