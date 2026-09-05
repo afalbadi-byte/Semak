@@ -71,6 +71,8 @@ export default function BuyInvoice({ onDone }) {
     const [receipt, setReceipt] = useState(null);   // صورة الإيصال
     const [rScan, setRScan] = useState(null);       // قراءة الإيصال قبل الاعتماد
     const [rScanning, setRScanning] = useState(false);
+    const [rDetails, setRDetails] = useState(null);  // تفاصيل الإيصال المعتمدة، تبقى ظاهرة وتُحفظ
+    const [payBenef, setPayBenef] = useState('');
     const [busy, setBusy]   = useState(false);
     const [msg, setMsg]     = useState(null);
 
@@ -127,11 +129,13 @@ export default function BuyInvoice({ onDone }) {
 
     const applyReceiptScan = () => {
         if (!rScan) return;
+        setRDetails(rScan);
         if (rScan.amount) setPaid(String(rScan.amount));
         if (rScan.method) setPayMethod(rScan.method);
         if (rScan.bank) setPayBank(String(rScan.bank));
         if (rScan.reference) setPayRef(String(rScan.reference));
-        if (/^d{4}-d{2}-d{2}$/.test(String(rScan.pay_date || ''))) setPayDate(rScan.pay_date);
+        if (rScan.beneficiary) setPayBenef(String(rScan.beneficiary));
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(rScan.pay_date || ''))) setPayDate(rScan.pay_date);
         setRScan(null);
         setMsg({ t: 'نُقلت بيانات الإيصال — راجعها ثم احفظ' });
     };
@@ -156,7 +160,7 @@ export default function BuyInvoice({ onDone }) {
         if (!scan) return;
         if (scan.supplier_matched || scan.supplier) setSupplier(scan.supplier_matched || scan.supplier);
         if (scan.no) setNo(String(scan.no));
-        if (/^d{4}-d{2}-d{2}$/.test(String(scan.date || ''))) setDate(scan.date);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(scan.date || ''))) setDate(scan.date);
         const its = (scan.items || []).map(it => ({
             name: it.use_name || it.match_name || it.name,
             qty: String(it.qty || ''), price: String(it.price || ''),
@@ -203,12 +207,16 @@ export default function BuyInvoice({ onDone }) {
                     paid: payOn ? (Number(paid) || 0) : 0, note, doc_url: docUrl,
                     pay_method: payMethod, pay_reference: payRef, pay_bank: payBank,
                     pay_date: payDate, receipt_url: rcptUrl,
+                    pay_beneficiary: payBenef || (rDetails && rDetails.beneficiary) || '',
+                    pay_from_account: (rDetails && rDetails.from_account) || '',
+                    receipt_details: rDetails || null,
                 }),
             }).then(x => x.json());
             if (!r.success) { setMsg({ e: 1, t: r.message || 'تعذر الحفظ' }); return; }
             setMsg({ t: `حُفظت الفاتورة ${r.no} بمبلغ ${money(r.total)}` });
             setSupplier(''); setNo(''); setItems([]); setManual(''); setPaid(''); setNote(''); setPhoto(null);
             setPayOn(false); setReceipt(null); setPayRef(''); setPayBank('');
+            setRDetails(null); setRScan(null); setPayBenef('');
             setTimeout(() => onDone && onDone(), 1200);
         } catch (e) {
             setMsg({ e: 1, t: 'تعذر الاتصال — حاول مرة أخرى' });
@@ -340,6 +348,37 @@ export default function BuyInvoice({ onDone }) {
                         </div>
                         <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="مرجع العملية أو رقم الشيك"
                             className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                        <input value={payBenef} onChange={e => setPayBenef(e.target.value)} placeholder="المستفيد (اسم المستلم أو الحساب)"
+                            className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                        {payDate && date && payDate < date && (
+                            <div className="rounded-xl bg-amber-500/15 text-amber-300 p-2.5 text-[11px] font-bold flex items-start gap-1.5">
+                                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                                تاريخ السداد ({payDate}) قبل تاريخ الفاتورة ({date}) — تأكد أن الإيصال لهذه الفاتورة
+                            </div>
+                        )}
+
+                        {rDetails && (
+                            <div className="rounded-xl bg-black/25 border border-white/10 p-3 space-y-1.5">
+                                <div className="text-[11px] font-black text-[#c5a059] flex items-center gap-1.5">
+                                    <Receipt size={13} /> تفاصيل الإيصال كما قُرئت
+                                </div>
+                                {[
+                                    ['المبلغ',        rDetails.amount != null ? money(rDetails.amount) : null],
+                                    ['تاريخ السداد',  rDetails.pay_date],
+                                    ['الطريقة',       ({ transfer: 'تحويل', cash: 'نقدي', cheque: 'شيك', card: 'بطاقة', other: 'أخرى' })[rDetails.method]],
+                                    ['البنك',         rDetails.bank],
+                                    ['المستفيد',      rDetails.beneficiary],
+                                    ['الحساب المحوَّل منه', rDetails.from_account],
+                                    ['المرجع',        rDetails.reference],
+                                ].filter(([, v]) => v).map(([k, v]) => (
+                                    <div key={k} className="flex justify-between text-[11px] gap-2">
+                                        <span className="text-slate-400 shrink-0">{k}</span>
+                                        <span className="font-bold text-left truncate">{String(v)}</span>
+                                    </div>
+                                ))}
+                                <p className="text-[10px] text-slate-500 pt-1">تُحفظ مع الدفعة وتظهر في بطاقة الفاتورة</p>
+                            </div>
+                        )}
                         {receipt ? (
                             <div className="space-y-2">
                                 <div className="rounded-xl border border-white/15 p-2.5 flex items-center gap-2">

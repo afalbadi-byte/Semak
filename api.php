@@ -1173,6 +1173,13 @@ $conn->query("CREATE TABLE IF NOT EXISTS purchase_payments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (28)");
 } // end DDL v28
+// ─── DDL v29: تفاصيل الإيصال كاملة مع الدفعة (المستفيد والحساب والقراءة) ────
+if ($__sv < 29) {
+ensure_column($conn, 'purchase_payments', 'beneficiary',  "beneficiary VARCHAR(200) DEFAULT NULL");
+ensure_column($conn, 'purchase_payments', 'from_account', "from_account VARCHAR(120) DEFAULT NULL");
+ensure_column($conn, 'purchase_payments', 'details',      "details TEXT");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (29)");
+} // end DDL v29
 
 
 
@@ -6129,13 +6136,18 @@ switch ($action) {
         // الدفعة إن سُدِّدت مع الفاتورة: سجل مستقل بطريقتها ومرجعها وإيصالها
         if ($paid > 0) {
             $meth = in_array(($b['pay_method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['pay_method'] : 'transfer';
-            $pdt  = preg_match('/^d{4}-d{2}-d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : $date;
+            $pdt  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : $date;
             $rcpt = trim((string)($b['receipt_url'] ?? ''));
+            $det = is_array($b['receipt_details'] ?? null)
+                ? mb_substr(json_encode($b['receipt_details'], JSON_UNESCAPED_UNICODE), 0, 4000) : '';
             $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date, reference,
-                    bank, receipt_url, note, created_by)
+                    bank, beneficiary, from_account, details, receipt_url, note, created_by)
                 VALUES ($newId, '" . $E($sup) . "', $paid, '" . $E($meth) . "', '$pdt', '"
                 . $E(mb_substr((string)($b['pay_reference'] ?? ''), 0, 110)) . "', '"
-                . $E(mb_substr((string)($b['pay_bank'] ?? ''), 0, 110)) . "', '" . $E($rcpt) . "', '', '"
+                . $E(mb_substr((string)($b['pay_bank'] ?? ''), 0, 110)) . "', '"
+                . $E(mb_substr((string)($b['pay_beneficiary'] ?? ''), 0, 190)) . "', '"
+                . $E(mb_substr((string)($b['pay_from_account'] ?? ''), 0, 110)) . "', '"
+                . $E($det) . "', '" . $E($rcpt) . "', '', '"
                 . $E($u['name'] ?? '') . "')");
             if ($rcpt !== '') {
                 $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, doc_type, file_name, drive_url,
@@ -6445,10 +6457,14 @@ switch ($action) {
             echo json_encode(['success'=>false,'message'=>'المبلغ أكبر من المتبقي على الفاتورة (' . number_format($remain, 2) . ')'], JSON_UNESCAPED_UNICODE); break; }
         $method = in_array(($b['method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['method'] : 'transfer';
         $pdate  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : date('Y-m-d');
+        $det = is_array($b['receipt_details'] ?? null)
+            ? mb_substr(json_encode($b['receipt_details'], JSON_UNESCAPED_UNICODE), 0, 4000) : '';
         $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date, reference, bank,
-                receipt_url, note, created_by)
+                beneficiary, from_account, details, receipt_url, note, created_by)
             VALUES ($pid, '" . $E($iv['supplier']) . "', $amt, '" . $E($method) . "', '$pdate', '"
             . $E(mb_substr((string)($b['reference'] ?? ''), 0, 110)) . "', '" . $E(mb_substr((string)($b['bank'] ?? ''), 0, 110)) . "', '"
+            . $E(mb_substr((string)($b['beneficiary'] ?? ''), 0, 190)) . "', '"
+            . $E(mb_substr((string)($b['from_account'] ?? ''), 0, 110)) . "', '" . $E($det) . "', '"
             . $E($b['receipt_url'] ?? '') . "', '" . $E(mb_substr((string)($b['note'] ?? ''), 0, 380)) . "', '" . $E($u['name'] ?? '') . "')");
         if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
         $payId = (int)$conn->insert_id;
@@ -6658,6 +6674,20 @@ switch ($action) {
                     'link'=>['col'=>'item','type'=>'product','value_col'=>'product_id'],
                     'rows'=>$Q("SELECT item, product_id, quantity, unit_price, subtotal
                                 FROM dmirror_purchase_items WHERE purchase_id=$pid ORDER BY id")];
+                $out['sections'][] = ['title'=>'الدفعات',
+                    'cols'=>[['k'=>'pay_date','t'=>'التاريخ'],['k'=>'amount','t'=>'المبلغ'],['k'=>'method_ar','t'=>'الطريقة'],
+                             ['k'=>'bank','t'=>'البنك'],['k'=>'beneficiary','t'=>'المستفيد'],
+                             ['k'=>'reference','t'=>'المرجع'],['k'=>'receipt_url','t'=>'الإيصال']],
+                    'url_col'=>'receipt_url',
+                    'rows'=>array_map(function($p) {
+                        $map = ['transfer'=>'تحويل','cash'=>'نقدي','cheque'=>'شيك','card'=>'بطاقة','other'=>'أخرى'];
+                        $p['method_ar'] = $map[$p['method']] ?? $p['method'];
+                        return $p;
+                    }, $Q("SELECT pay_date, ROUND(amount,2) amount, method, COALESCE(bank,'') bank,
+                            COALESCE(beneficiary,'') beneficiary, COALESCE(from_account,'') from_account,
+                            COALESCE(reference,'') reference, COALESCE(receipt_url,'') receipt_url,
+                            COALESCE(created_by,'') created_by
+                        FROM purchase_payments WHERE purchase_id=$pid ORDER BY pay_date, id"))];
                 $out['sections'][] = ['title'=>'المستندات',
                     'cols'=>[['k'=>'file_name','t'=>'المستند'],['k'=>'doc_type','t'=>'النوع'],
                              ['k'=>'created_at','t'=>'أضيف'],['k'=>'drive_url','t'=>'الرابط']],
