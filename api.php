@@ -1249,6 +1249,16 @@ ensure_column($conn, 'dmirror_attachments', 'archive_fail', "archive_fail INT NO
 ensure_column($conn, 'dmirror_attachments', 'archive_note', "archive_note VARCHAR(300) DEFAULT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (36)");
 } // end DDL v36
+// ─── DDL v37: إيصال الدفعة وبياناته كما تحفظها دفترة ────────────────────────
+if ($__sv < 37) {
+ensure_column($conn, 'dmirror_payments', 'attachment',     "attachment VARCHAR(400) DEFAULT NULL");
+ensure_column($conn, 'dmirror_payments', 'payment_method', "payment_method VARCHAR(80) DEFAULT NULL");
+ensure_column($conn, 'dmirror_payments', 'transaction_id', "transaction_id VARCHAR(120) DEFAULT NULL");
+ensure_column($conn, 'dmirror_payments', 'receipt_notes',  "receipt_notes VARCHAR(500) DEFAULT NULL");
+ensure_column($conn, 'dmirror_payments', 'notes',          "notes VARCHAR(500) DEFAULT NULL");
+ensure_column($conn, 'dmirror_payments', 'receipt_url',    "receipt_url VARCHAR(600) DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (37)");
+} // end DDL v37
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -9135,7 +9145,7 @@ switch ($action) {
         $need = array_slice(array_values(array_unique($need)), 0, max(12, $redetail));
 
         // جلب تفاصيل كل فاتورة محتاجة: البنود والدفعات والمرفقات + تغذية متابعة الأسعار
-        $items_done = 0; $payKeys = [];
+        $items_done = 0; $payKeys = []; $payAtt = [];
         foreach ($need as $pid) {
             $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
             curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
@@ -9189,10 +9199,19 @@ switch ($action) {
                 }
                 foreach (array_keys($pay) as $pk) $payKeys[] = $pk;
                 $pd = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($pay['date'] ?? '')) ? "'" . substr($pay['date'],0,10) . "'" : 'NULL';
-                $conn->query("REPLACE INTO dmirror_payments (id,purchase_id,amount,date,treasury_id,created) VALUES ("
+                $att = trim((string)($pay['attachment'] ?? ''));
+                if ($att !== '') $payAtt[] = $att;
+                $conn->query("REPLACE INTO dmirror_payments
+                        (id,purchase_id,amount,date,treasury_id,created,
+                         attachment,payment_method,transaction_id,receipt_notes,notes) VALUES ("
                     . (int)$pay['id'] . ", $pid, " . (float)($pay['amount'] ?? 0) . ", $pd, "
                     . (int)($pay['treasury_id'] ?? 0) . ", "
-                    . (!empty($pay['created']) ? "'" . $conn->real_escape_string($pay['created']) . "'" : 'NULL') . ")");
+                    . (!empty($pay['created']) ? "'" . $conn->real_escape_string($pay['created']) . "'" : 'NULL') . ", '"
+                    . $conn->real_escape_string(mb_substr($att, 0, 390)) . "', '"
+                    . $conn->real_escape_string(mb_substr((string)($pay['payment_method'] ?? ''), 0, 70)) . "', '"
+                    . $conn->real_escape_string(mb_substr((string)($pay['transaction_id'] ?? ''), 0, 110)) . "', '"
+                    . $conn->real_escape_string(mb_substr((string)($pay['receipt_notes'] ?? ''), 0, 490)) . "', '"
+                    . $conn->real_escape_string(mb_substr((string)($pay['notes'] ?? ''), 0, 490)) . "')");
             }
             $att = (array)($o['Attachments'] ?? []);
             foreach ($att as $a) {
@@ -9214,7 +9233,12 @@ switch ($action) {
                       ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW(), synced_by=VALUES(synced_by)");
         $out = ['success'=>true, 'checked'=>$seen, 'added'=>$added, 'updated'=>$updated,
                 'items_synced'=>$items_done];
-        if ($redetail > 0) $out['payment_keys'] = array_values(array_unique($payKeys));
+        if ($redetail > 0) {
+            $out['payment_keys'] = array_values(array_unique($payKeys));
+            $out['payment_attachments'] = array_slice(array_values(array_unique($payAtt)), 0, 8);
+        }
+        if ($r2 = $conn->query("SELECT COUNT(*) n FROM dmirror_payments WHERE COALESCE(attachment,'') <> ''"))
+            if ($x2 = $r2->fetch_assoc()) $out['payments_with_attachment'] = (int)$x2['n'];
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
         break;
     }
