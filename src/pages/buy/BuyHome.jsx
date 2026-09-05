@@ -45,13 +45,20 @@ export default function BuyHome({ onNew }) {
         try {
             const t2 = getAdminToken();
             const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
-            for (let i = 0; i < 12; i++) {
-                const r = await fetch(`${API_URL}?action=daftra_doc_archive&limit=15`, { headers: h2 })
-                    .then(x => x.json());
+            let idle = 0;
+            for (let i = 0; i < 30; i++) {
+                const r = await fetch(`${API_URL}?action=daftra_doc_archive&limit=15`,
+                    { headers: h2, cache: 'no-store' }).then(x => x.json());
                 if (!r.success) { setDocs(d => ({ ...(d || {}), err: r.message, diag: r.detail || '' })); break; }
                 setDocs(d => ({ ...(d || {}), archived: (d?.total || 0) - r.remaining, remaining: r.remaining,
-                    err: r.failed && !r.archived ? r.message : '', diag: r.failed ? (r.detail || '') : '' }));
-                if (r.remaining === 0 || (!r.archived && r.failed)) break;
+                    stuck: r.stuck || 0, err: '', diag: r.failed ? (r.detail || '') : '' }));
+                if (r.remaining === 0) break;
+                // ملف متعثر ينزل آخر الطابور، فالدفعة التالية تكمل. نتوقف حين يتوقف التقدّم
+                idle = r.archived > 0 ? 0 : idle + 1;
+                if (idle >= 3) {
+                    setDocs(d => ({ ...(d || {}), err: r.message }));
+                    break;
+                }
             }
         } finally { setArch(false); }
     };
@@ -86,6 +93,11 @@ export default function BuyHome({ onNew }) {
                         نسخ المرفقات إلى تخزيننا يجعلها تُفتح فوراً بلا اعتماد على جلسة دفترة.
                     </p>
                     {docs.err && <p className="text-[11px] text-amber-300 font-bold">{docs.err}</p>}
+                    {docs.stuck > 0 && (
+                        <p className="text-[11px] text-slate-400">
+                            {docs.stuck} مرفقا تعذّر جلبه بعد ثلاث محاولات — تُعاد المحاولة مع أي ضغطة لاحقة
+                        </p>
+                    )}
                     {docs.diag && (
                         <pre dir="ltr" className="text-[9px] text-slate-400 bg-black/30 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">
                             {docs.diag}

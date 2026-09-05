@@ -1243,6 +1243,12 @@ ensure_column($conn, 'purchase_documents', 'supplier', "supplier VARCHAR(255) DE
 $conn->query("ALTER TABLE purchase_documents ADD INDEX idx_pd_supplier (supplier)");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (35)");
 } // end DDL v35
+// ─── DDL v36: تتبّع إخفاق أرشفة المرفق ──────────────────────────────────────
+if ($__sv < 36) {
+ensure_column($conn, 'dmirror_attachments', 'archive_fail', "archive_fail INT NOT NULL DEFAULT 0");
+ensure_column($conn, 'dmirror_attachments', 'archive_note', "archive_note VARCHAR(300) DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (36)");
+} // end DDL v36
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -7155,7 +7161,7 @@ switch ($action) {
                 LEFT JOIN purchase_documents pd
                   ON pd.daftra_file_id = at.file_id AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
                 WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
-                ORDER BY at.file_id DESC LIMIT $take"))
+                ORDER BY at.archive_fail ASC, at.file_id DESC LIMIT $take"))
             while ($x = $r->fetch_assoc()) $todo[] = $x;
 
         $dir = __DIR__ . '/qdocs';
@@ -7163,7 +7169,14 @@ switch ($action) {
         $done = 0; $failed = 0; $why = '';
         foreach ($todo as $t) {
             [$body, $ct, $route] = daftra_file_bytes($conn, (int)$t['file_id']);
-            if ($body === null) { $failed++; if ($why === '') $why = (string)$route; continue; }
+            if ($body === null) {
+                $failed++;
+                if ($why === '') $why = (string)$route;
+                $conn->query("UPDATE dmirror_attachments SET archive_fail = archive_fail + 1,
+                        archive_note='" . $conn->real_escape_string(mb_substr((string)$route, 0, 290)) . "'
+                    WHERE file_id=" . (int)$t['file_id']);
+                continue;
+            }
             $ext   = daftra_ext_of($ct, $t['name']);
             $token = bin2hex(random_bytes(16));
             file_put_contents("$dir/$token.$ext", $body);
@@ -7187,10 +7200,19 @@ switch ($action) {
                 WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL"))
             if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
 
+        $stuck = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
+                LEFT JOIN purchase_documents pd
+                  ON pd.daftra_file_id = at.file_id AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
+                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
+                  AND at.archive_fail >= 3"))
+            if ($x = $r->fetch_assoc()) $stuck = (int)$x['n'];
         echo json_encode(['success'=>true, 'archived'=>$done, 'failed'=>$failed, 'remaining'=>$left,
+            'stuck'=>$stuck,
             'detail'=>mb_substr($why, 0, 400),
-            'message'=>$done ? ("أُرشف $done مرفقا، وبقي $left")
-                             : ($failed ? 'تعذر جلب المرفقات — جلسة دفترة منتهية' : 'لا مرفقات جديدة')],
+            'message'=>$done ? ("أُرشف $done مرفقا، وبقي $left" . ($stuck ? " — منها $stuck متعثرة" : ''))
+                             : ($failed ? 'تعذر جلب المرفقات — جلسة دفترة منتهية أو ملفات متعذرة'
+                                        : 'لا مرفقات جديدة')],
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         break;
     }
