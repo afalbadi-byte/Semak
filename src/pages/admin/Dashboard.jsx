@@ -70,6 +70,7 @@ import { ToastProvider, useToast, ThemeToggle } from '../../components/ui';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import AiAssistant from '../../components/AiAssistant';
 import Breadcrumbs from '../../components/Breadcrumbs';
+import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { parseEntity, ENTITY_LABEL } from '../../lib/entity';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
@@ -1639,7 +1640,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'leads'       && hasPermission('leads')       && <div className="animate-fadeIn p-6 md:p-8"><LeadsManage showToast={showToast} /></div>}
                 {activeTab === 'whatsapp'    && hasPermission('whatsapp')    && <div className="animate-fadeIn"><PlanGate plan={branding?.plan} required="starter" featureName="صندوق الرسائل" onUpgrade={() => setActiveTab('subscription')}><WhatsAppInbox /></PlanGate></div>}
                 {activeTab === 'activity_log'&& hasPermission('activity_log')&& <div className="animate-fadeIn p-6 md:p-8"><ActivityLog /></div>}
-                {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SecuritySettings showToast={showToast} /></div>}
+                {activeTab === 'security'    && hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8 space-y-4"><div className="max-w-md"><PasskeySetupCard /></div><SecuritySettings showToast={showToast} /></div>}
                 {activeTab === 'subscription'&& hasPermission('all')         && <div className="animate-fadeIn p-6 md:p-8"><SubscriptionPage /></div>}
                 </Suspense>
                 </ErrorBoundary>

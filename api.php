@@ -1188,6 +1188,30 @@ $conn->query("UPDATE users SET permissions = '[\"projects\",\"units\",\"units_ed
     . " WHERE id = 4 AND (permissions IS NULL OR permissions = '' OR permissions = '[]')");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (30)");
 } // end DDL v30
+// ─── DDL v31: مفاتيح الدخول بالبصمة (WebAuthn) ───────────────────────────────
+if ($__sv < 31) {
+$conn->query("CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT NOT NULL,
+    cred_id     VARCHAR(255) NOT NULL,
+    public_key  TEXT NOT NULL,
+    alg         VARCHAR(10) NOT NULL DEFAULT 'ES256',
+    sign_count  BIGINT NOT NULL DEFAULT 0,
+    device_name VARCHAR(120) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used   DATETIME DEFAULT NULL,
+    UNIQUE KEY uniq_cred (cred_id), INDEX (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS webauthn_challenges (
+    id         VARCHAR(64) PRIMARY KEY,
+    user_id    INT DEFAULT NULL,
+    challenge  VARCHAR(255) NOT NULL,
+    purpose    VARCHAR(12) NOT NULL DEFAULT 'auth',
+    expires_at DATETIME NOT NULL,
+    INDEX (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (31)");
+} // end DDL v31
 
 
 
@@ -1275,6 +1299,102 @@ function tenant_user_limit($conn, $tid) {
 }
 
 // ─── JWT (HS256 بدون مكتبة خارجية) ──────────────────────────────────────────
+// ─── دخول بالمؤشرات الحيوية (بصمة/وجه) عبر WebAuthn ──────────────────────────
+// لا كلمة مرور تُرسل ولا بصمة تُخزَّن: الجهاز يحتفظ بالمفتاح الخاص محمياً
+// بحساسه، ونحن نخزّن المفتاح العام فقط ونتحقق من التوقيع.
+define('WA_RP_ID',  'semak.sa');
+define('WA_ORIGIN', 'https://semak.sa');
+
+function wa_b64u_enc($b) { return rtrim(strtr(base64_encode($b), '+/', '-_'), '='); }
+function wa_b64u_dec($s) {
+    $s = strtr((string)$s, '-_', '+/');
+    $p = strlen($s) % 4;
+    if ($p) $s .= str_repeat('=', 4 - $p);
+    return base64_decode($s);
+}
+
+// مفكك CBOR مصغّر: يكفي لبنية بيانات المصادقة ومفتاح COSE
+function wa_cbor(&$d, &$i) {
+    $b  = ord($d[$i]); $i++;
+    $mt = $b >> 5; $ai = $b & 31;
+    $val = 0;
+    if ($ai < 24)       $val = $ai;
+    elseif ($ai === 24) { $val = ord($d[$i]); $i += 1; }
+    elseif ($ai === 25) { $val = unpack('n', substr($d, $i, 2))[1]; $i += 2; }
+    elseif ($ai === 26) { $val = unpack('N', substr($d, $i, 4))[1]; $i += 4; }
+    elseif ($ai === 27) { $h = unpack('N2', substr($d, $i, 8)); $val = $h[1] * 4294967296 + $h[2]; $i += 8; }
+    switch ($mt) {
+        case 0: return $val;                       // عدد موجب
+        case 1: return -1 - $val;                  // عدد سالب
+        case 2: { $s = substr($d, $i, $val); $i += $val; return $s; }   // سلسلة بايتات
+        case 3: { $s = substr($d, $i, $val); $i += $val; return $s; }   // نص
+        case 4: { $a = []; for ($k = 0; $k < $val; $k++) $a[] = wa_cbor($d, $i); return $a; }
+        case 5: { $m = []; for ($k = 0; $k < $val; $k++) { $kk = wa_cbor($d, $i); $m[is_int($kk) ? $kk : (string)$kk] = wa_cbor($d, $i); } return $m; }
+        case 6: return wa_cbor($d, $i);            // وسم
+        case 7: return $val;                       // بسيط
+    }
+    return null;
+}
+
+// طول DER لقيمة
+function wa_der_len($n) {
+    if ($n < 128) return chr($n);
+    $s = ''; while ($n > 0) { $s = chr($n & 0xFF) . $s; $n >>= 8; }
+    return chr(0x80 | strlen($s)) . $s;
+}
+function wa_der_int($b) {
+    $b = ltrim($b, "\x00");
+    if ($b === '') $b = "\x00";
+    if (ord($b[0]) & 0x80) $b = "\x00" . $b;
+    return "\x02" . wa_der_len(strlen($b)) . $b;
+}
+function wa_pem($der, $label) {
+    return "-----BEGIN $label-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END $label-----\n";
+}
+
+// مفتاح COSE إلى PEM — يدعم ES256 (P-256) وRS256
+function wa_cose_to_pem($cose) {
+    $kty = $cose[1] ?? null; $alg = $cose[3] ?? null;
+    if ($kty === 2) {                                   // EC2
+        $x = $cose[-2] ?? ''; $y = $cose[-3] ?? '';
+        if (strlen($x) !== 32 || strlen($y) !== 32) return null;
+        $point = "\x04" . $x . $y;
+        // AlgorithmIdentifier: id-ecPublicKey + prime256v1
+        $algId = "\x30\x13\x06\x07\x2a\x86\x48\xce\x3d\x02\x01\x06\x08\x2a\x86\x48\xce\x3d\x03\x01\x07";
+        $bit   = "\x03" . wa_der_len(strlen($point) + 1) . "\x00" . $point;
+        $spki  = "\x30" . wa_der_len(strlen($algId) + strlen($bit)) . $algId . $bit;
+        return ['pem' => wa_pem($spki, 'PUBLIC KEY'), 'alg' => 'ES256'];
+    }
+    if ($kty === 3) {                                   // RSA
+        $n = $cose[-1] ?? ''; $e = $cose[-2] ?? '';
+        if ($n === '' || $e === '') return null;
+        $seq   = "\x30" . wa_der_len(strlen(wa_der_int($n)) + strlen(wa_der_int($e))) . wa_der_int($n) . wa_der_int($e);
+        $algId = "\x30\x0d\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x01\x05\x00";
+        $bit   = "\x03" . wa_der_len(strlen($seq) + 1) . "\x00" . $seq;
+        $spki  = "\x30" . wa_der_len(strlen($algId) + strlen($bit)) . $algId . $bit;
+        return ['pem' => wa_pem($spki, 'PUBLIC KEY'), 'alg' => 'RS256'];
+    }
+    return null;
+}
+
+// تحليل authenticatorData: تجزئة النطاق، الرايات، العدّاد، وبيانات الاعتماد
+function wa_parse_auth_data($ad) {
+    if (strlen($ad) < 37) return null;
+    $out = [
+        'rpIdHash' => substr($ad, 0, 32),
+        'flags'    => ord($ad[32]),
+        'signCount'=> unpack('N', substr($ad, 33, 4))[1],
+    ];
+    if ($out['flags'] & 0x40) {                          // AT: بيانات اعتماد مرفقة
+        $i = 37 + 16;                                    // نتجاوز معرّف الجهاز
+        $len = unpack('n', substr($ad, $i, 2))[1]; $i += 2;
+        $out['credId'] = substr($ad, $i, $len); $i += $len;
+        $rest = substr($ad, $i); $j = 0;
+        $out['cose'] = wa_cbor($rest, $j);
+    }
+    return $out;
+}
+
 function jwt_b64($d) { return rtrim(strtr(base64_encode($d), '+/', '-_'), '='); }
 function jwt_sign($payload, $secret = null) {
     if ($secret === null) $secret = TOKEN_SECRET;
@@ -3744,6 +3864,177 @@ switch ($action) {
         break;
 
     // ─── الموظفون ────────────────────────────────────────────────────────────
+
+    case 'wa_reg_start': {
+        // بدء تسجيل بصمة على هذا الجهاز — يتطلب جلسة قائمة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub'];
+        $u = null;
+        if ($r = $conn->query("SELECT id,name,email FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM webauthn_challenges WHERE expires_at < NOW()");
+        $chal = wa_b64u_enc(random_bytes(32));
+        $cid  = bin2hex(random_bytes(16));
+        $conn->query("INSERT INTO webauthn_challenges (id,user_id,challenge,purpose,expires_at)
+            VALUES ('$cid', $uid, '" . $conn->real_escape_string($chal) . "', 'reg', DATE_ADD(NOW(), INTERVAL 5 MINUTE))");
+        $ex = [];
+        if ($r2 = $conn->query("SELECT cred_id FROM webauthn_credentials WHERE user_id=$uid"))
+            while ($x = $r2->fetch_assoc()) $ex[] = ['type'=>'public-key', 'id'=>$x['cred_id']];
+        echo json_encode(['success'=>true, 'session'=>$cid, 'options'=>[
+            'challenge' => $chal,
+            'rp'   => ['name'=>'سماك العقارية', 'id'=>WA_RP_ID],
+            'user' => ['id'=>wa_b64u_enc('u' . $uid), 'name'=>$u['email'], 'displayName'=>$u['name']],
+            'pubKeyCredParams' => [['type'=>'public-key','alg'=>-7], ['type'=>'public-key','alg'=>-257]],
+            'timeout' => 60000,
+            'attestation' => 'none',
+            'excludeCredentials' => $ex,
+            'authenticatorSelection' => ['residentKey'=>'preferred', 'userVerification'=>'required'],
+        ]], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'wa_reg_finish': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub'];
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $sid = $conn->real_escape_string((string)($b['session'] ?? ''));
+        $ch = null;
+        if ($r = $conn->query("SELECT * FROM webauthn_challenges WHERE id='$sid' AND purpose='reg' AND user_id=$uid AND expires_at > NOW() LIMIT 1"))
+            $ch = $r->fetch_assoc();
+        if (!$ch) { echo json_encode(['success'=>false,'message'=>'انتهت مهلة التسجيل، أعد المحاولة'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM webauthn_challenges WHERE id='$sid'");
+
+        $clientData = wa_b64u_dec($b['clientDataJSON'] ?? '');
+        $cd = json_decode($clientData, true);
+        if (!is_array($cd) || ($cd['type'] ?? '') !== 'webauthn.create'
+            || ($cd['challenge'] ?? '') !== $ch['challenge'] || ($cd['origin'] ?? '') !== WA_ORIGIN) {
+            echo json_encode(['success'=>false,'message'=>'بيانات التحقق غير مطابقة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $att = wa_b64u_dec($b['attestationObject'] ?? '');
+        $i = 0; $obj = wa_cbor($att, $i);
+        $ad = wa_parse_auth_data($obj['authData'] ?? '');
+        if (!$ad || empty($ad['credId']) || empty($ad['cose'])) {
+            echo json_encode(['success'=>false,'message'=>'تعذر قراءة بيانات الجهاز'], JSON_UNESCAPED_UNICODE); break; }
+        if ($ad['rpIdHash'] !== hash('sha256', WA_RP_ID, true)) {
+            echo json_encode(['success'=>false,'message'=>'النطاق غير مطابق'], JSON_UNESCAPED_UNICODE); break; }
+        if (!($ad['flags'] & 0x01)) { echo json_encode(['success'=>false,'message'=>'لم يتم التحقق من المستخدم'], JSON_UNESCAPED_UNICODE); break; }
+        $key = wa_cose_to_pem($ad['cose']);
+        if (!$key) { echo json_encode(['success'=>false,'message'=>'نوع مفتاح غير مدعوم'], JSON_UNESCAPED_UNICODE); break; }
+
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $credId = wa_b64u_enc($ad['credId']);
+        $dev = mb_substr(trim((string)($b['device_name'] ?? 'جهاز')), 0, 110);
+        $conn->query("INSERT INTO webauthn_credentials (user_id, cred_id, public_key, alg, sign_count, device_name)
+            VALUES ($uid, '" . $E($credId) . "', '" . $E($key['pem']) . "', '" . $E($key['alg']) . "', "
+            . (int)$ad['signCount'] . ", '" . $E($dev) . "')
+            ON DUPLICATE KEY UPDATE public_key=VALUES(public_key), alg=VALUES(alg), device_name=VALUES(device_name)");
+        acc_audit($conn, 1, 'auth', $uid, 'passkey_add', 'تفعيل الدخول بالبصمة · ' . $dev, '', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true, 'message'=>'فُعّل الدخول بالبصمة على هذا الجهاز'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'wa_auth_start': {
+        // بدء دخول بالبصمة — بلا جلسة قائمة
+        $conn->query("DELETE FROM webauthn_challenges WHERE expires_at < NOW()");
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $ident = trim((string)($b['identifier'] ?? ''));
+        $uid = 0; $allow = [];
+        if ($ident !== '') {
+            $E = $conn->real_escape_string($ident);
+            if ($r = $conn->query("SELECT id FROM users WHERE email='$E' OR phone='$E' LIMIT 1")) {
+                if ($row = $r->fetch_assoc()) $uid = (int)$row['id'];
+            }
+            if ($uid && ($r2 = $conn->query("SELECT cred_id FROM webauthn_credentials WHERE user_id=$uid")))
+                while ($x = $r2->fetch_assoc()) $allow[] = ['type'=>'public-key', 'id'=>$x['cred_id']];
+            if ($uid && !$allow) {
+                echo json_encode(['success'=>false,'message'=>'لا توجد بصمة مفعّلة لهذا الحساب'], JSON_UNESCAPED_UNICODE); break; }
+        }
+        $chal = wa_b64u_enc(random_bytes(32));
+        $cid  = bin2hex(random_bytes(16));
+        $conn->query("INSERT INTO webauthn_challenges (id,user_id,challenge,purpose,expires_at)
+            VALUES ('$cid', " . ($uid ?: 'NULL') . ", '" . $conn->real_escape_string($chal) . "', 'auth', DATE_ADD(NOW(), INTERVAL 5 MINUTE))");
+        echo json_encode(['success'=>true, 'session'=>$cid, 'options'=>[
+            'challenge' => $chal,
+            'rpId' => WA_RP_ID,
+            'timeout' => 60000,
+            'userVerification' => 'required',
+            'allowCredentials' => $allow,
+        ]], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'wa_auth_finish': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $sid = $conn->real_escape_string((string)($b['session'] ?? ''));
+        $ch = null;
+        if ($r = $conn->query("SELECT * FROM webauthn_challenges WHERE id='$sid' AND purpose='auth' AND expires_at > NOW() LIMIT 1"))
+            $ch = $r->fetch_assoc();
+        if (!$ch) { echo json_encode(['success'=>false,'message'=>'انتهت مهلة الدخول، أعد المحاولة'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM webauthn_challenges WHERE id='$sid'");
+
+        $credId = $conn->real_escape_string((string)($b['id'] ?? ''));
+        $cred = null;
+        if ($r = $conn->query("SELECT * FROM webauthn_credentials WHERE cred_id='$credId' LIMIT 1")) $cred = $r->fetch_assoc();
+        if (!$cred) { echo json_encode(['success'=>false,'message'=>'هذه البصمة غير مسجلة'], JSON_UNESCAPED_UNICODE); break; }
+        if ($ch['user_id'] !== null && (int)$ch['user_id'] !== (int)$cred['user_id']) {
+            echo json_encode(['success'=>false,'message'=>'البصمة لا تعود لهذا الحساب'], JSON_UNESCAPED_UNICODE); break; }
+
+        $clientData = wa_b64u_dec($b['clientDataJSON'] ?? '');
+        $cd = json_decode($clientData, true);
+        if (!is_array($cd) || ($cd['type'] ?? '') !== 'webauthn.get'
+            || ($cd['challenge'] ?? '') !== $ch['challenge'] || ($cd['origin'] ?? '') !== WA_ORIGIN) {
+            echo json_encode(['success'=>false,'message'=>'بيانات التحقق غير مطابقة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $authData = wa_b64u_dec($b['authenticatorData'] ?? '');
+        $ad = wa_parse_auth_data($authData);
+        if (!$ad || $ad['rpIdHash'] !== hash('sha256', WA_RP_ID, true)) {
+            echo json_encode(['success'=>false,'message'=>'النطاق غير مطابق'], JSON_UNESCAPED_UNICODE); break; }
+        if (!($ad['flags'] & 0x01) || !($ad['flags'] & 0x04)) {
+            echo json_encode(['success'=>false,'message'=>'لم يتم التحقق منك على الجهاز'], JSON_UNESCAPED_UNICODE); break; }
+
+        $sig = wa_b64u_dec($b['signature'] ?? '');
+        $ok  = openssl_verify($authData . hash('sha256', $clientData, true), $sig, $cred['public_key'], OPENSSL_ALGO_SHA256);
+        if ($ok !== 1) { echo json_encode(['success'=>false,'message'=>'فشل التحقق من التوقيع'], JSON_UNESCAPED_UNICODE); break; }
+        if ((int)$ad['signCount'] > 0 && (int)$ad['signCount'] <= (int)$cred['sign_count']) {
+            echo json_encode(['success'=>false,'message'=>'محاولة دخول غير صالحة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $uid = (int)$cred['user_id'];
+        $conn->query("UPDATE webauthn_credentials SET sign_count=" . (int)$ad['signCount'] . ", last_used=NOW() WHERE id=" . (int)$cred['id']);
+        $row = null;
+        if ($r = $conn->query("SELECT * FROM users WHERE id=$uid LIMIT 1")) $row = $r->fetch_assoc();
+        if (!$row) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        unset($row['password']);
+        $jwt = jwt_sign(['sub'=>$uid, 'tid'=>(int)($row['tenant_id'] ?? 1), 'role'=>$row['role'] ?? 'employee',
+                         'iat'=>time(), 'exp'=>time() + 28800]);
+        acc_audit($conn, 1, 'auth', $uid, 'login_passkey', 'دخول بالبصمة', $row['email'] ?? '', $_clientIp, $_clientUa);
+        echo json_encode(['success'=>true, 'data'=>$row, 'jwt'=>$jwt], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'wa_list': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub'];
+        $rows = [];
+        if ($r = $conn->query("SELECT id, device_name, created_at, last_used FROM webauthn_credentials WHERE user_id=$uid ORDER BY id DESC"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'wa_delete': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub'];
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM webauthn_credentials WHERE id=$id AND user_id=$uid");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
 
     case 'me': {
         // هوية صاحب الجلسة من الرمز نفسه — لا تعتمد على معرّف يُمرَّر من العميل

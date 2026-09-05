@@ -3,6 +3,7 @@ import { User, Lock, RefreshCw, ArrowRight, ShieldCheck, Mail, MessageCircle, Ke
 
 import { API_URL, LS_ADMIN_JWT } from '../../lib/api/client';
 import InstallApp from '../../components/InstallApp';
+import { PasskeyLoginButton } from '../../components/PasskeyButton';
 import { AppContext } from '../../context/AppContext';
 
 const DEVICE_KEY = 'semak_device_token';
@@ -400,6 +401,12 @@ export default function AdminLogin({ setUser, showToast }) {
             </button>
           </>
         )}
+
+        <div className="mt-5">
+          <PasskeyLoginButton identifier={email}
+            className="!bg-slate-100 dark:!bg-brand-800 !text-brand-900 dark:!text-brand-50"
+            onSuccess={data => finalizeLogin(data.data, data.jwt)} />
+        </div>
 
         <div className="mt-6 pt-5 border-t border-slate-100 dark:border-brand-700">
           <InstallApp

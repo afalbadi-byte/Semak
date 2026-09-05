@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
+import { PasskeySetupCard } from '../../components/PasskeyButton';
+import { passkeyEnrolledHere } from '../../lib/passkey';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
@@ -9,6 +11,7 @@ export default function BuyHome({ onNew }) {
     const [k, setK]       = useState(null);
     const [last, setLast] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [askPk, setAskPk] = useState(() => !passkeyEnrolledHere());
 
     const load = useCallback(async () => {
         setBusy(true);
@@ -40,6 +43,8 @@ export default function BuyHome({ onNew }) {
                 className="w-full py-4 rounded-2xl bg-gold-500 text-slate-900 font-black flex items-center justify-center gap-2 shadow-lg active:scale-[.99] transition">
                 <FilePlus size={20} /> فاتورة جديدة
             </button>
+
+            {askPk && <PasskeySetupCard onDone={() => setAskPk(false)} />}
 
             <div className="grid grid-cols-2 gap-3">
                 {cards.map((c, i) => {

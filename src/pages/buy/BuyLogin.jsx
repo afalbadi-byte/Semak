@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Loader2, LogIn, KeyRound } from 'lucide-react';
 import { API_URL, LS_ADMIN_JWT } from '../../lib/api/client';
 import InstallApp from '../../components/InstallApp';
+import { PasskeyLoginButton } from '../../components/PasskeyButton';
 
 const DEVICE_KEY = 'semak_device_token';
 
@@ -107,6 +108,7 @@ export default function BuyLogin({ onDone }) {
                         className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1220] text-[16px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                         {busy ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />} دخول
                     </button>
+                    <PasskeyLoginButton identifier={email.trim()} onSuccess={() => onDone && onDone()} />
                     <button type="button" onClick={codeLogin} disabled={busy || !email.trim()}
                         className="w-full min-h-[48px] rounded-2xl bg-white/10 text-[14px] font-bold flex items-center justify-center gap-2 disabled:opacity-40">
                         <KeyRound size={16} /> دخول برمز بدل كلمة المرور
