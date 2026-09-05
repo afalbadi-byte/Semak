@@ -3916,6 +3916,12 @@ switch ($action) {
     }
 
     case 'update_permissions':
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $__me = null;
+        if ($__r2 = $conn->query("SELECT role FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $__me = $__r2->fetch_assoc();
+        if (!$__me || ($__me['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'الصلاحيات تُمنح من مدير النظام فقط'], JSON_UNESCAPED_UNICODE); break; }
         $user_id = (int)($input_data['user_id'] ?? 0);
         $perms   = $input_data['permissions'] ?? [];
         if (!$user_id) {

@@ -13,6 +13,8 @@ export default function BuyLogin({ onDone }) {
     const [pass, setPass]     = useState('');
     const [code, setCode]     = useState('');
     const [ticket, setTicket] = useState(null);
+    const [flow, setFlow]     = useState('password');   // password | identifier
+    const [sentTo, setSentTo] = useState('');
     const [busy, setBusy]     = useState(false);
     const [err, setErr]       = useState('');
 
@@ -43,12 +45,33 @@ export default function BuyLogin({ onDone }) {
         finally { setBusy(false); }
     };
 
+    const codeLogin = async e => {
+        e.preventDefault();
+        if (!email.trim()) return;
+        setBusy(true); setErr('');
+        try {
+            let device_token;
+            try { device_token = localStorage.getItem(DEVICE_KEY) || undefined; } catch { device_token = undefined; }
+            const r = await fetch(`${API_URL}?action=auth_otp_start`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier: email.trim(), scope: 'staff', device_token }),
+            }).then(x => x.json());
+            if (r.success && r.data) finish(r.data, r.jwt);          // جهاز موثوق
+            else if (r.otp_required) {
+                setFlow('identifier'); setTicket(r.ticket);
+                setSentTo(r.masked_email || r.masked_phone || '');
+            } else setErr(r.message || 'تعذر إرسال الرمز');
+        } catch { setErr('تعذر الاتصال بالخادم'); }
+        finally { setBusy(false); }
+    };
+
     const verify = async e => {
         e.preventDefault();
         if (!code.trim()) return;
         setBusy(true); setErr('');
         try {
-            const r = await fetch(`${API_URL}?action=verify_login_otp`, {
+            const act = flow === 'identifier' ? 'auth_otp_verify' : 'verify_login_otp';
+            const r = await fetch(`${API_URL}?action=${act}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ticket, code: code.trim(), remember_device: true }),
             }).then(x => x.json());
@@ -84,10 +107,16 @@ export default function BuyLogin({ onDone }) {
                         className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1220] text-[16px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                         {busy ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />} دخول
                     </button>
+                    <button type="button" onClick={codeLogin} disabled={busy || !email.trim()}
+                        className="w-full min-h-[48px] rounded-2xl bg-white/10 text-[14px] font-bold flex items-center justify-center gap-2 disabled:opacity-40">
+                        <KeyRound size={16} /> دخول برمز بدل كلمة المرور
+                    </button>
                 </form>
             ) : (
                 <form onSubmit={verify} className="space-y-3">
-                    <p className="text-[13px] text-slate-300 text-center">أرسلنا رمز التحقق — أدخله للمتابعة</p>
+                    <p className="text-[13px] text-slate-300 text-center">
+                        أرسلنا رمز التحقق{sentTo ? ' إلى ' + sentTo : ''} — أدخله للمتابعة
+                    </p>
                     <input inputMode="numeric" autoComplete="one-time-code" value={code}
                         onChange={e => setCode(e.target.value.replace(/\D/g, ''))} placeholder="رمز التحقق"
                         className={field + ' text-center tracking-[0.4em] font-black'} />
@@ -96,7 +125,7 @@ export default function BuyLogin({ onDone }) {
                         className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1220] text-[16px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                         {busy ? <Loader2 size={18} className="animate-spin" /> : <KeyRound size={18} />} تأكيد
                     </button>
-                    <button type="button" onClick={() => { setTicket(null); setCode(''); setErr(''); }}
+                    <button type="button" onClick={() => { setTicket(null); setCode(''); setErr(''); setFlow('password'); }}
                         className="w-full min-h-[44px] text-xs font-bold text-slate-400">رجوع</button>
                 </form>
             )}
