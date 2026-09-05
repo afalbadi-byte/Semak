@@ -48,9 +48,9 @@ export default function BuyHome({ onNew }) {
             for (let i = 0; i < 12; i++) {
                 const r = await fetch(`${API_URL}?action=daftra_doc_archive&limit=15`, { headers: h2 })
                     .then(x => x.json());
-                if (!r.success) { setDocs(d => ({ ...(d || {}), err: r.message })); break; }
+                if (!r.success) { setDocs(d => ({ ...(d || {}), err: r.message, diag: r.detail || '' })); break; }
                 setDocs(d => ({ ...(d || {}), archived: (d?.total || 0) - r.remaining, remaining: r.remaining,
-                    err: r.failed && !r.archived ? r.message : '' }));
+                    err: r.failed && !r.archived ? r.message : '', diag: r.failed ? (r.detail || '') : '' }));
                 if (r.remaining === 0 || (!r.archived && r.failed)) break;
             }
         } finally { setArch(false); }
@@ -86,6 +86,11 @@ export default function BuyHome({ onNew }) {
                         نسخ المرفقات إلى تخزيننا يجعلها تُفتح فوراً بلا اعتماد على جلسة دفترة.
                     </p>
                     {docs.err && <p className="text-[11px] text-amber-300 font-bold">{docs.err}</p>}
+                    {docs.diag && (
+                        <pre dir="ltr" className="text-[9px] text-slate-400 bg-black/30 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                            {docs.diag}
+                        </pre>
+                    )}
                     <button onClick={archive} disabled={arch}
                         className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                         {arch ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}

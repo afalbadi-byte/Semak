@@ -1250,6 +1250,11 @@ function daftra_file_bytes($conn, $fid, $probeOnly = false) {
     $fid = (int)$fid;
     if ($fid <= 0) return [null, null, 'no_file_id'];
     $key = "__DAFTRA_KEY__";
+    // مسار الملف كما سجّلته دفترة — قد يفتح باباً مباشراً للتخزين
+    $fpath = ''; $fname = '';
+    if ($r = $conn->query("SELECT COALESCE(path,'') p, COALESCE(name,'') n FROM dmirror_attachments
+                           WHERE file_id=$fid LIMIT 1"))
+        if ($x = $r->fetch_assoc()) { $fpath = (string)$x['p']; $fname = (string)$x['n']; }
     $try = function($url, $hdrs) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -1273,7 +1278,14 @@ function daftra_file_bytes($conn, $fid, $probeOnly = false) {
         "https://semak.daftra.com/api2/attachments/$fid/download",
         "https://semak.daftra.com/api2/attachments/$fid.json",
         "https://semak.daftra.com/v2/api/entity/files/download/$fid",
+        "https://semak.daftra.com/v2/owner/entity/files/preview/$fid",
+        "https://semak.daftra.com/owner/entity/files/download/$fid",
     ];
+    if ($fpath !== '') {
+        $enc = implode('/', array_map('rawurlencode', explode('/', ltrim($fpath, '/'))));
+        $byKey[] = "https://semak.daftra.com/files/$enc";
+        $byKey[] = "https://semak.daftra.com/" . ltrim($fpath, '/');
+    }
     $notes = [];
     foreach ($byKey as $u) {
         [$ok, $body, $ct, $code, $why] = $try($u, ["APIKEY: $key", 'Accept: */*', $ua]);
@@ -1286,7 +1298,11 @@ function daftra_file_bytes($conn, $fid, $probeOnly = false) {
         ['Cookie: ' . $ck, 'Accept: */*', $ua]);
     $notes[] = ['route'=>'cookie', 'http'=>$code, 'ct'=>$ct, 'why'=>$why];
     if ($ok) return $probeOnly ? [null, $ct, 'cookie'] : [$body, $ct ?: 'application/pdf', 'cookie'];
-    return [null, null, json_encode($notes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)];
+    $brief = ['file'=>$fname, 'path'=>$fpath];
+    foreach ($notes as $n)
+        $brief[] = ($n['route'] === 'cookie' ? 'cookie' : basename((string)($n['url'] ?? '')))
+                 . ':' . $n['http'] . ($n['why'] !== '' ? '/' . $n['why'] : '');
+    return [null, null, json_encode($brief, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)];
 }
 
 // مُساعد: امتداد الملف من نوع محتواه
