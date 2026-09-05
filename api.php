@@ -5377,19 +5377,32 @@ switch ($action) {
         $esc = $conn->real_escape_string($cookie);
         $conn->query("INSERT INTO daftra_config (k,v) VALUES ('session_cookie','$esc')
                       ON DUPLICATE KEY UPDATE v='$esc'");
-        // اختبار فوري على فاتورة معروفة (id=13) للتأكد أن الكوكي صالح
-        $ok = false; $ctype = '';
-        $ch = curl_init("https://semak.daftra.com/owner/invoices/view/13.pdf");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
-            CURLOPT_HTTPHEADER=>["Cookie: $cookie"], CURLOPT_USERAGENT=>'Mozilla/5.0 SemakProxy']);
-        $b = curl_exec($ch); $ctype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE); curl_close($ch);
-        $ok = ($b && (stripos($ctype,'pdf')!==false || substr($b,0,4)==='%PDF'));
+        // اختبار على مرفق حقيقي من مرفقاتنا — هو الغرض من الجلسة أصلاً
+        $ok = false; $why = ''; $tfid = 0;
+        if ($r = $conn->query("SELECT file_id FROM dmirror_attachments
+                WHERE entity_key IN ('purchase_order','purchase_invoice') ORDER BY file_id DESC LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $tfid = (int)$x['file_id'];
+        if ($tfid > 0) {
+            [$tb, $tc, $tr] = daftra_file_bytes($conn, $tfid);
+            $ok  = ($tb !== null);
+            $why = $ok ? (string)$tr : mb_substr((string)$tr, 0, 300);
+        } else {
+            // لا مرفقات في المرآة بعد — نكتفي بفحص صفحة تتطلب دخولاً
+            $ch = curl_init("https://semak.daftra.com/owner/invoices/index");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>false, CURLOPT_TIMEOUT=>20,
+                CURLOPT_HTTPHEADER=>["Cookie: $cookie"], CURLOPT_USERAGENT=>'Mozilla/5.0 SemakProxy']);
+            $tb2 = curl_exec($ch); $c2 = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            $ok  = ($c2 === 200 && $tb2 && stripos((string)$tb2, 'login') === false);
+            $why = 'index:' . $c2;
+        }
         acc_audit($conn, 1, 'settings', 0, 'daftra_cookie',
             'تحديث جلسة دفترة — ' . ($ok ? 'صالحة' : 'غير مؤكدة') . ' — ' . implode(', ', $names),
             (string)($cu['name'] ?? ''));
-        echo json_encode(['success'=>true, 'valid'=>$ok, 'cookies'=>$names,
-            'message'=>($ok ? 'تم الحفظ والكوكي صالح ✓' : 'تم الحفظ لكن الكوكي قد يكون غير صالح')
-                     . ' — قرأت: ' . implode('، ', $names)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true, 'valid'=>$ok, 'cookies'=>$names, 'tested_file'=>$tfid,
+            'detail'=>$why,
+            'message'=>($ok ? ('تم الحفظ والكوكي صالح ✓ — جلبت مرفقاً تجريبياً بنجاح')
+                            : ('تم الحفظ لكن تعذر جلب مرفق تجريبي — ' . $why)),
+            'read'=>count($names)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         break;
     }
 
