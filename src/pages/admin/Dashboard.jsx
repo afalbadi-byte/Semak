@@ -72,6 +72,7 @@ import AiAssistant from '../../components/AiAssistant';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { parseEntity, ENTITY_LABEL } from '../../lib/entity';
+import { sessionMessage } from '../../lib/docs';
 
 // ─── ألوان الأقسام (ثابتة لدعم Tailwind purge) ─────────────────────────────
 const DEPT_PALETTE = {
@@ -1580,6 +1581,16 @@ function DashboardInner({ onLogout }) {
                     </div>
                     );
                 })()}
+
+                {sessionMessage() && (
+                    <div className="mx-6 md:mx-8 mt-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 flex items-center justify-between gap-3 no-print">
+                        <span className="text-sm font-bold">{sessionMessage()} — التنزيل والمستندات لن تعمل قبل ذلك</span>
+                        <button onClick={() => { window.location.href = '/login?next=' + window.location.pathname; }}
+                            className="px-3 py-2 rounded-lg bg-amber-500 text-white text-xs font-black shrink-0">
+                            تسجيل الدخول
+                        </button>
+                    </div>
+                )}
 
                 <Breadcrumbs trail={crumbs} />
 

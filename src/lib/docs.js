@@ -2,14 +2,39 @@ import { API_URL, getAdminToken } from './api/client';
 
 // ─── فتح المستندات ──────────────────────────────────────────────────────────
 // الروابط لا تستطيع حمل ترويسة التفويض، فنطلب تذكرة قصيرة العمر ثم نفتح بها.
+// عمر الجلسة ثماني ساعات؛ نفحصها هنا لنقول للمستخدم سببا مفهوما لا رسالة خام
+function sessionState() {
+    const t = getAdminToken();
+    if (!t) return 'none';
+    try {
+        const p = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (p && p.exp && p.exp * 1000 < Date.now()) return 'expired';
+    } catch { /* رمز غير مقروء — ندع الخادم يحكم */ }
+    return 'ok';
+}
+
+export function sessionMessage() {
+    const st = sessionState();
+    if (st === 'none')    return 'لم تسجّل الدخول — افتح صفحة الدخول ثم أعد المحاولة';
+    if (st === 'expired') return 'انتهت جلستك — سجّل الدخول من جديد ثم أعد المحاولة';
+    return null;
+}
+
 async function ticket(kind, id) {
+    const bad = sessionMessage();
+    if (bad) throw new Error(bad);
     const t = getAdminToken();
     const r = await fetch(`${API_URL}?action=doc_ticket`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) },
         body: JSON.stringify({ kind, id }),
     }).then(x => x.json());
-    if (!r.success) throw new Error(r.message || 'تعذر فتح المستند');
+    if (!r.success) {
+        const m = String(r.message || '');
+        if (m.includes('تسجيل الدخول') || m.includes('انتهت الجلسة'))
+            throw new Error('انتهت جلستك — سجّل الدخول من جديد ثم أعد المحاولة');
+        throw new Error(m || 'تعذر فتح المستند');
+    }
     return r.k;
 }
 
