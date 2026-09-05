@@ -7248,12 +7248,24 @@ switch ($action) {
         $only = trim((string)($_GET['only'] ?? ''));   // '' | missing
 
         // إثبات الدفعة: رابط إيصال عليها، أو مستند من نوع إيصال على نفس الفاتورة
-        $base = "FROM purchase_payments pp
+        // دفعاتنا ودفعات دفترة في مصدر واحد — الأخيرة بلا حقول إيصال
+        $src = "(SELECT id, purchase_id, supplier, amount, method, pay_date, reference, bank, receipt_url,
+                        'التطبيق' src FROM purchase_payments
+                 UNION ALL
+                 SELECT m.id, m.purchase_id, COALESCE(dp.supplier,'') supplier, m.amount, '' method,
+                        m.date pay_date, '' reference, '' bank, '' receipt_url, 'دفترة' src
+                   FROM dmirror_payments m
+                   LEFT JOIN dmirror_purchases dp ON dp.id = m.purchase_id)";
+        $base = "FROM $src pp
                  LEFT JOIN dmirror_purchases d ON d.id = pp.purchase_id
                  LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents
                             WHERE doc_type='receipt' GROUP BY purchase_id) rc
-                   ON rc.purchase_id = pp.purchase_id";
-        $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(rc.n,0) > 0)";
+                   ON rc.purchase_id = pp.purchase_id
+                 LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
+                            WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) at
+                   ON at.entity_id = pp.purchase_id";
+        // إثبات: إيصال على الدفعة، أو مستند إيصال على الفاتورة، أو مرفق في دفترة عليها
+        $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(rc.n,0) > 0 OR COALESCE(at.n,0) > 0)";
 
         $sum = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(pp.amount),0),2) amount,
                         SUM(CASE WHEN $has THEN 1 ELSE 0 END) with_proof,
@@ -7269,10 +7281,11 @@ switch ($action) {
             'amount_without_proof' => round((float)($s['amount'] ?? 0) - (float)($s['amount_with_proof'] ?? 0), 2),
         ];
         $where = ($only === 'missing') ? "WHERE NOT $has" : '';
-        $out['rows'] = $Q("SELECT pp.id, pp.purchase_id, COALESCE(d.no,'') invoice_no,
+        $out['rows'] = $Q("SELECT pp.id, pp.purchase_id, COALESCE(d.no,'') invoice_no, pp.src source,
                     COALESCE(pp.supplier,'') supplier, ROUND(pp.amount,2) amount, pp.pay_date, pp.method,
                     COALESCE(pp.reference,'') reference, COALESCE(pp.bank,'') bank,
                     COALESCE(pp.receipt_url,'') receipt_url, COALESCE(rc.n,0) receipt_docs,
+                    COALESCE(at.n,0) daftra_files,
                     CASE WHEN $has THEN 1 ELSE 0 END has_proof
                 $base $where ORDER BY has_proof ASC, pp.amount DESC LIMIT 300");
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
@@ -8392,18 +8405,35 @@ switch ($action) {
                                 FROM dmirror_purchase_items WHERE purchase_id=$pid ORDER BY id")];
                 $out['sections'][] = ['title'=>'الدفعات',
                     'cols'=>[['k'=>'pay_date','t'=>'التاريخ'],['k'=>'amount','t'=>'المبلغ'],['k'=>'method_ar','t'=>'الطريقة'],
+                             ['k'=>'source','t'=>'المصدر'],
                              ['k'=>'bank','t'=>'البنك'],['k'=>'beneficiary','t'=>'المستفيد'],
                              ['k'=>'reference','t'=>'المرجع'],['k'=>'receipt_url','t'=>'الإيصال']],
                     'url_col'=>'receipt_url',
-                    'rows'=>array_map(function($p) {
+                    'rows'=>(function() use ($Q, $pid) {
                         $map = ['transfer'=>'تحويل','cash'=>'نقدي','cheque'=>'شيك','card'=>'بطاقة','other'=>'أخرى'];
-                        $p['method_ar'] = $map[$p['method']] ?? $p['method'];
-                        return $p;
-                    }, $Q("SELECT pay_date, ROUND(amount,2) amount, method, COALESCE(bank,'') bank,
-                            COALESCE(beneficiary,'') beneficiary, COALESCE(from_account,'') from_account,
-                            COALESCE(reference,'') reference, COALESCE(receipt_url,'') receipt_url,
-                            COALESCE(created_by,'') created_by
-                        FROM purchase_payments WHERE purchase_id=$pid ORDER BY pay_date, id"))];
+                        $rows = []; $seen = [];
+                        foreach ($Q("SELECT pay_date, ROUND(amount,2) amount, method, COALESCE(bank,'') bank,
+                                    COALESCE(beneficiary,'') beneficiary, COALESCE(from_account,'') from_account,
+                                    COALESCE(reference,'') reference, COALESCE(receipt_url,'') receipt_url,
+                                    COALESCE(created_by,'') created_by
+                                FROM purchase_payments WHERE purchase_id=$pid ORDER BY pay_date, id") as $p) {
+                            $p['method_ar'] = $map[$p['method']] ?? $p['method'];
+                            $p['source']    = 'التطبيق';
+                            $seen[$p['pay_date'] . '|' . number_format((float)$p['amount'], 2, '.', '')] = 1;
+                            $rows[] = $p;
+                        }
+                        // دفعات دفترة — تُعرض ما لم تكن هي نفسها مسجّلة عندنا بنفس اليوم والمبلغ
+                        foreach ($Q("SELECT date pay_date, ROUND(amount,2) amount, treasury_id
+                                     FROM dmirror_payments WHERE purchase_id=$pid ORDER BY date, id") as $p) {
+                            $key = $p['pay_date'] . '|' . number_format((float)$p['amount'], 2, '.', '');
+                            if (isset($seen[$key])) continue;
+                            $rows[] = ['pay_date'=>$p['pay_date'], 'amount'=>$p['amount'], 'method'=>'',
+                                'method_ar'=>'—', 'source'=>'دفترة', 'bank'=>'', 'beneficiary'=>'',
+                                'from_account'=>'', 'reference'=>'', 'receipt_url'=>'', 'created_by'=>''];
+                        }
+                        usort($rows, function($a, $b) { return strcmp((string)$a['pay_date'], (string)$b['pay_date']); });
+                        return $rows;
+                    })()];
                 $out['sections'][] = ['title'=>'المستندات',
                     'cols'=>[['k'=>'file_name','t'=>'المستند'],['k'=>'doc_type_ar','t'=>'النوع'],
                              ['k'=>'created_at','t'=>'أضيف'],['k'=>'drive_url','t'=>'الرابط']],
