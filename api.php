@@ -1180,6 +1180,14 @@ ensure_column($conn, 'purchase_payments', 'from_account', "from_account VARCHAR(
 ensure_column($conn, 'purchase_payments', 'details',      "details TEXT");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (29)");
 } // end DDL v29
+// ─── DDL v30: استعادة صلاحيات مدير المشتريات بعد مسحها بالخطأ ───────────────
+// أُفرغت أثناء اختبار حارس نقطة الصلاحيات، وهذه استعادة لمرة واحدة لا تمس
+// أي حساب آخر ولا تكتب فوق صلاحيات قائمة.
+if ($__sv < 30) {
+$conn->query("UPDATE users SET permissions = '[\"projects\",\"units\",\"units_edit\",\"feasibility\",\"qs\",\"inspection\",\"snaglist\",\"maintenance\",\"leads\",\"finance\",\"whatsapp\",\"letters\",\"accounting\",\"ai_assistant\"]'"
+    . " WHERE id = 4 AND (permissions IS NULL OR permissions = '' OR permissions = '[]')");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (30)");
+} // end DDL v30
 
 
 
