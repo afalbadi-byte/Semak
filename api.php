@@ -7250,6 +7250,29 @@ switch ($action) {
         break;
     }
 
+    case 'pdoc_type_set': {
+        // تصنيف المستند: دفترة تُرفق كل شيء على الفاتورة، فنحتاج تمييز الإيصال يدوياً
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تصنيف المستندات'], JSON_UNESCAPED_UNICODE); break; }
+        $b  = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? 0);
+        $ty = in_array(($b['doc_type'] ?? ''), ['invoice','receipt','other'], true) ? $b['doc_type'] : '';
+        if (!$id || $ty === '') { echo json_encode(['success'=>false,'message'=>'المستند والنوع مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $old = null;
+        if ($r = $conn->query("SELECT purchase_id, doc_type, file_name FROM purchase_documents WHERE id=$id LIMIT 1")) $old = $r->fetch_assoc();
+        if (!$old) { echo json_encode(['success'=>false,'message'=>'المستند غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("UPDATE purchase_documents SET doc_type='" . $conn->real_escape_string($ty) . "' WHERE id=$id");
+        acc_audit($conn, 1, 'purchase', (int)$old['purchase_id'], 'doc_retype',
+            'تصنيف المستند ' . $old['file_name'] . ': ' . $old['doc_type'] . ' ← ' . $ty, $u['name'] ?? '');
+        echo json_encode(['success'=>true,'message'=>'حُدّث تصنيف المستند'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pay_receipt_set': {
         // إرفاق إيصال لدفعة مسجّلة سلفاً — دفعاتنا ودفعات دفترة سواء
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {

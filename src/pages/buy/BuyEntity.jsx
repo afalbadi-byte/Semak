@@ -554,6 +554,16 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                         <Section key={si} onOpen={onOpen}
                             sec={sec.title === 'الدفعات'
                                 ? { ...sec, attach: true, onAttach: r => { setErr(''); setRcpt({ ...r, file: null, details: null }); } }
+                                : sec.title === 'المستندات'
+                                ? { ...sec, retype: async (r, ty) => {
+                                        setBusy(true); setErr('');
+                                        try {
+                                            const x = await post('pdoc_type_set', { id: r.id, doc_type: ty });
+                                            if (!x.success) setErr(x.message || 'تعذر التصنيف');
+                                            else setTick(v => v + 1);
+                                        } catch { setErr('تعذر الاتصال'); }
+                                        finally { setBusy(false); }
+                                  } }
                                 : sec} />
                     ))}
                 </>
@@ -656,6 +666,12 @@ function Section({ sec, onOpen }) {
                                         )}
                                         {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) !== 1 && (
                                             <span className="text-[10px] text-slate-500">في أرشيف الدرايف</span>
+                                        )}
+                                        {sec.retype && Number(r.id) > 0 && (
+                                            <button onClick={() => sec.retype(r, r.doc_type === 'receipt' ? 'invoice' : 'receipt')}
+                                                className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                                                {r.doc_type === 'receipt' ? 'اجعله فاتورة' : 'اجعله إيصالاً'}
+                                            </button>
                                         )}
                                         {sec.url_col && r[sec.url_col] && !sec.download && (
                                             <a href={r[sec.url_col]} target="_blank" rel="noopener noreferrer"
