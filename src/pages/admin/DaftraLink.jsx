@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link2, CheckCircle2, AlertTriangle, RefreshCw, Save, ExternalLink, ShieldCheck, Clock } from 'lucide-react';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
+
+// جلسة دفترة إعداد حساس — الطلب يحمل تفويض المستخدم
+const authHeaders = () => { const t = getAdminToken(); return t ? { Authorization: 'Bearer ' + t } : {}; };
 
 export default function DaftraLink() {
   const [status, setStatus]   = useState(null);
@@ -12,7 +15,7 @@ export default function DaftraLink() {
 
   const loadStatus = () => {
     setLoading(true);
-    fetch(`${API_URL}?action=daftra_cookie_status`)
+    fetch(`${API_URL}?action=daftra_cookie_status`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => { if (d.success) setStatus(d); })
       .catch(() => {})
@@ -27,7 +30,7 @@ export default function DaftraLink() {
     try {
       const res = await fetch(`${API_URL}?action=daftra_save_cookie`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ cookie: cookie.trim() }),
       });
       const d = await res.json();

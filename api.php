@@ -5307,7 +5307,16 @@ switch ($action) {
     // إعدادات الربط — حفظ/حالة كوكي جلسة دفترة (خدمة ذاتية بدون redeploy)
     // ══════════════════════════════════════════════════════════════════════
 
-    case 'daftra_save_cookie':
+    case 'daftra_save_cookie': {
+        // جلسة دفترة مفتاح لكل مستنداتنا — لا تُكتب إلا بصلاحية مالية مؤكدة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $cu = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $cu = $r->fetch_assoc();
+        $cp = json_decode((string)($cu['permissions'] ?? '[]'), true); if (!is_array($cp)) $cp = [];
+        if (!$cu || (($cu['role'] ?? '') !== 'admin' && !in_array('finance', $cp, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تعديل الربط'], JSON_UNESCAPED_UNICODE); break; }
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
         $cookie = trim($body['cookie'] ?? '');
         if ($cookie === '') { echo json_encode(['success'=>false,'message'=>'الكوكي فارغ']); break; }
@@ -5321,10 +5330,15 @@ switch ($action) {
             CURLOPT_HTTPHEADER=>["Cookie: $cookie"], CURLOPT_USERAGENT=>'Mozilla/5.0 SemakProxy']);
         $b = curl_exec($ch); $ctype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE); curl_close($ch);
         $ok = ($b && (stripos($ctype,'pdf')!==false || substr($b,0,4)==='%PDF'));
+        acc_audit($conn, 1, 'settings', 0, 'daftra_cookie',
+            'تحديث جلسة دفترة — ' . ($ok ? 'صالحة' : 'غير مؤكدة'), (string)($cu['name'] ?? ''));
         echo json_encode(['success'=>true,'valid'=>$ok,'message'=>$ok?'تم الحفظ والكوكي صالح ✓':'تم الحفظ لكن الكوكي قد يكون غير صالح'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     case 'daftra_cookie_status':
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $r = $conn->query("SELECT v, updated_at FROM daftra_config WHERE k='session_cookie' LIMIT 1");
         $row = $r ? $r->fetch_assoc() : null;
         $set = $row && !empty(trim($row['v']));
