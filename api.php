@@ -6978,12 +6978,17 @@ switch ($action) {
         $E    = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $Q    = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
 
+        $dir = (strtolower((string)($_GET['dir'] ?? 'desc')) === 'asc') ? 'ASC' : 'DESC';
+
         if ($kind === 'suppliers') {
             $w = $q === '' ? "supplier <> ''" : "supplier LIKE '%" . $E($q) . "%'";
+            $smap = ['gross'=>'gross', 'invoices'=>'invoices', 'outstanding'=>'outstanding',
+                     'last_date'=>'last_date', 'name'=>'name'];
+            $sk = $smap[(string)($_GET['sort'] ?? '')] ?? 'gross';
             $rows = $Q("SELECT supplier AS name, COUNT(*) invoices, ROUND(SUM(total),2) gross,
-                        ROUND(SUM(total - paid),2) outstanding, MAX(date) last_date
+                        ROUND(SUM(GREATEST(total - paid, 0)),2) outstanding, MAX(date) last_date
                     FROM dmirror_purchases WHERE $w
-                    GROUP BY supplier ORDER BY gross DESC LIMIT $lim OFFSET $off");
+                    GROUP BY supplier ORDER BY $sk $dir LIMIT $lim OFFSET $off");
             echo json_encode(['success'=>true, 'kind'=>'suppliers', 'data'=>$rows], JSON_UNESCAPED_UNICODE);
             break;
         }
@@ -6996,6 +7001,9 @@ switch ($action) {
         if (!empty($_GET['unpaid']))   $c[] = "p.total > p.paid + 0.5";
         if (!empty($_GET['no_docs']))  $c[] = "COALESCE(d.n,0) = 0";
         $W = implode(' AND ', $c);
+        $imap = ['date'=>'p.date', 'gross'=>'p.total', 'remaining'=>'(p.total - p.paid)', 'paid'=>'p.paid',
+                 'supplier'=>'p.supplier', 'no'=>'p.no', 'docs'=>'COALESCE(d.n,0)'];
+        $isk = $imap[(string)($_GET['sort'] ?? '')] ?? 'p.date';
         $rows = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.paid,2) paid,
                     ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project, COALESCE(d.n,0) docs,
                     COALESCE(p.origin,'daftra') origin
@@ -7004,8 +7012,11 @@ switch ($action) {
                 LEFT JOIN project_budgets b ON b.project_id = pp.project_id
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
                   ON d.purchase_id = p.id
-                WHERE $W ORDER BY p.date DESC, p.id DESC LIMIT $lim OFFSET $off");
-        $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(p.total),2) gross, ROUND(SUM(p.total - p.paid),2) outstanding
+                WHERE $W ORDER BY $isk $dir, p.id DESC LIMIT $lim OFFSET $off");
+        $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(p.total),2) gross,
+                    ROUND(SUM(GREATEST(p.total - p.paid, 0)),2) outstanding,
+                    SUM(CASE WHEN p.total > p.paid + 0.5 THEN 1 ELSE 0 END) unpaid_n,
+                    ROUND(SUM(GREATEST(p.paid - p.total, 0)),2) overpaid
                 FROM dmirror_purchases p
                 LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d

@@ -3,7 +3,6 @@ import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet } from 'lucide-react'
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyEntity from './BuyEntity';
 import { SortBar } from '../../components/SortHeader';
-import { useSort, smartFirstDir } from '../../lib/sortable';
 import { useDepthGuard } from '../../lib/backstack';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,25 +18,34 @@ export default function BuyRecords() {
     const [busy, setBusy]   = useState(false);
     const [filter, setFilter] = useState('');        // '' | unpaid | no_docs
     const [stack, setStack] = useState([]);          // مكدس البطاقات المفتوحة
-    const { sorted: view, key: sortKey, dir: sortDir, toggle, setDir } = useSort(rows);
+    const [sortKey, setSortKey] = useState('date');
+    const [sortDir, setSortDir] = useState('desc');
+    const [more, setMore] = useState(false);
+    const view = rows;
     const SORTS = tab === 'invoices'
         ? [{ k: 'date', t: 'التاريخ' }, { k: 'gross', t: 'المبلغ' }, { k: 'remaining', t: 'المتبقي' },
            { k: 'supplier', t: 'المورد' }, { k: 'no', t: 'رقم الفاتورة' }, { k: 'docs', t: 'المستندات' }]
         : [{ k: 'gross', t: 'القيمة' }, { k: 'invoices', t: 'عدد الفواتير' }, { k: 'outstanding', t: 'المتبقي' },
            { k: 'last_date', t: 'آخر تعامل' }, { k: 'name', t: 'الاسم' }];
 
-    const load = useCallback(async () => {
+    const PAGE = 40;
+    const load = useCallback(async (append = false) => {
         setBusy(true);
         try {
-            const extra = filter ? `&${filter}=1` : '';
-            const r = await fetch(`${API_URL}?action=buy_list&kind=${tab}&q=${encodeURIComponent(q)}&limit=60${extra}`,
+            const extra  = filter ? `&${filter}=1` : '';
+            const offset = append ? rows.length : 0;
+            const r = await fetch(`${API_URL}?action=buy_list&kind=${tab}&q=${encodeURIComponent(q)}`
+                + `&limit=${PAGE}&offset=${offset}&sort=${sortKey}&dir=${sortDir}${extra}`,
                 { headers: auth() }).then(x => x.json());
-            setRows(r.data || []); setSum(r.summary || null);
-        } catch { setRows([]); }
+            const got = r.data || [];
+            setRows(prev => (append ? prev.concat(got) : got));
+            if (r.summary) setSum(r.summary);
+            setMore(got.length === PAGE);
+        } catch { if (!append) setRows([]); }
         finally { setBusy(false); }
-    }, [tab, q, filter]);
+    }, [tab, q, filter, sortKey, sortDir, rows.length]);
 
-    useEffect(() => { load(); }, [tab, filter]);     // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { load(false); }, [tab, filter, sortKey, sortDir]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const open = (type, value) => setStack(s => s.concat({ type, value }));
     const back = () => setStack(s => s.slice(0, -1));
@@ -86,16 +94,25 @@ export default function BuyRecords() {
             )}
 
             {tab === 'invoices' && sum && (
-                <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3 flex justify-between text-[12px]">
-                    <span className="text-slate-400">{sum.n} فاتورة</span>
-                    <span className="font-black tabular-nums">{short(sum.gross)}</span>
-                    <span className="text-amber-300 font-bold tabular-nums">متبقٍ {short(sum.outstanding)}</span>
-                </div>
+                <button onClick={() => setFilter(filter === 'unpaid' ? '' : 'unpaid')}
+                    className="w-full rounded-xl bg-white/[0.04] border border-white/10 p-3 text-right active:bg-white/10">
+                    <div className="flex justify-between items-center text-[12px]">
+                        <span className="text-slate-400">{sum.n} فاتورة</span>
+                        <span className="font-black tabular-nums">{short(sum.gross)}</span>
+                        <span className="text-amber-300 font-bold tabular-nums">متبقٍ {short(sum.outstanding)}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1">
+                        {Number(sum.unpaid_n) > 0
+                            ? `على ${sum.unpaid_n} فاتورة — اضغط لعرضها`
+                            : 'كل الفواتير مسددة'}
+                        {Number(sum.overpaid) > 0.5 ? ` · سداد زائد ${short(sum.overpaid)}` : ''}
+                    </div>
+                </button>
             )}
 
             <SortBar cols={SORTS} sortKey={sortKey} dir={sortDir}
-                onSort={k => toggle(k, smartFirstDir(rows, k))}
-                onDir={() => setDir(d => (d === 'asc' ? 'desc' : 'asc'))} />
+                onSort={k => setSortKey(k || (tab === 'invoices' ? 'date' : 'gross'))}
+                onDir={() => setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))} />
 
             <div className="space-y-2">
                 {tab === 'invoices' && view.map(r => (
@@ -151,6 +168,16 @@ export default function BuyRecords() {
                 ))}
 
                 {!rows.length && !busy && <p className="text-center text-slate-500 text-sm py-8">لا نتائج</p>}
+
+                {more && (
+                    <button onClick={() => load(true)} disabled={busy}
+                        className="w-full min-h-[48px] rounded-xl bg-white/10 text-[13px] font-bold disabled:opacity-50">
+                        {busy ? 'جارٍ التحميل...' : 'تحميل المزيد'}
+                    </button>
+                )}
+                {rows.length > 0 && !more && (
+                    <p className="text-center text-[11px] text-slate-600 py-2">عُرضت كل النتائج ({rows.length})</p>
+                )}
             </div>
         </div>
     );
