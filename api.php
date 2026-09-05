@@ -7267,12 +7267,16 @@ switch ($action) {
         // حالة الفحص لكل وحدة: المنجز والمطابق والملاحظات والمتبقي
         $tid = $_jwt_tid ?? 1;
         $rows = [];
-        $r = $conn->query("SELECT u.unit_code, COALESCE(u.status,'') status, i.id insp_id,
-                                  i.inspection_data, i.updated_at, i.status insp_status
-                           FROM units u
-                           LEFT JOIN inspections i ON i.unit = u.unit_code AND i.tenant_id = $tid
-                           WHERE u.tenant_id = $tid ORDER BY u.unit_code");
-        if ($r) while ($x = $r->fetch_assoc()) {
+        // بلا وصل: الوحدات وقوائم الفحص تُقرأ منفصلتين ثم تُدمجان
+        $insp = [];
+        if ($ri = $conn->query("SELECT id, unit, inspection_data, updated_at, status FROM inspections WHERE tenant_id=$tid"))
+            while ($xi = $ri->fetch_assoc()) $insp[$xi['unit']] = $xi;
+        $r = $conn->query("SELECT unit_code, COALESCE(status,'') status FROM units WHERE tenant_id=$tid ORDER BY unit_code");
+        if ($r) while ($u0 = $r->fetch_assoc()) {
+            $x = $insp[$u0['unit_code']] ?? [];
+            $x['unit_code'] = $u0['unit_code'];
+            $x['status']    = $u0['status'];
+            $x['insp_id']   = $x['id'] ?? 0;
             $data = json_decode((string)($x['inspection_data'] ?? '{}'), true);
             $sel = 0; $pass = 0; $fail = 0; $pend = 0;
             if (is_array($data)) foreach ($data as $v) {
