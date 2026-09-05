@@ -40,9 +40,12 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/semak\.sa\/api\.php/,
+            // القراءات وحدها تُخزَّن. النداءات التي تكتب أو تطول (سحب المرفقات،
+            // المزامنة، قراءة الفاتورة والإيصال) تتجاوز الكاش — وإلا انتهت المهلة
+            // فعُرض ردٌّ قديم محفوظ وبدا كأنه فشلٌ حاضر.
+            urlPattern: /^https:\/\/semak\.sa\/api\.php\?(?!.*action=(daftra_doc_archive|daftra_save_cookie|daftra_link_status|daftra_doc_|dmirror_sync|purchase_create|purchase_update|purchase_delete|sup_pay_|sup_advance_|invoice_scan|receipt_scan|doc_))/,
             handler: 'NetworkFirst',
-            options: { cacheName: 'api-cache', networkTimeoutSeconds: 10 }
+            options: { cacheName: 'api-cache', networkTimeoutSeconds: 30 }
           },
           {
             // شاشات التطبيق تُخزَّن أول ما تُفتح فتصير فورية بعدها
