@@ -1,0 +1,14 @@
+{
+  "name": "مشاريع سماك",
+  "short_name": "مشاريع",
+  "description": "المشاريع ونسب الإنجاز والوحدات والسجلات",
+  "lang": "ar", "dir": "rtl",
+  "display": "standalone", "orientation": "portrait",
+  "scope": "/proj", "start_url": "/proj", "id": "/proj",
+  "theme_color": "#1a365d", "background_color": "#0b1220",
+  "icons": [
+    { "src": "/images/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/images/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/images/app-icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

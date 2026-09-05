@@ -7263,6 +7263,152 @@ switch ($action) {
         break;
     }
 
+    case 'qc_units': {
+        // حالة الفحص لكل وحدة: المنجز والمطابق والملاحظات والمتبقي
+        $tid = $_jwt_tid ?? 1;
+        $rows = [];
+        $r = $conn->query("SELECT u.unit_code, COALESCE(u.status,'') status, i.id insp_id,
+                                  i.inspection_data, i.updated_at, i.status insp_status
+                           FROM units u
+                           LEFT JOIN inspections i ON i.unit = u.unit_code AND i.tenant_id = $tid
+                           WHERE u.tenant_id = $tid ORDER BY u.unit_code");
+        if ($r) while ($x = $r->fetch_assoc()) {
+            $data = json_decode((string)($x['inspection_data'] ?? '{}'), true);
+            $sel = 0; $pass = 0; $fail = 0; $pend = 0;
+            if (is_array($data)) foreach ($data as $v) {
+                if (empty($v['isSelected'])) continue;
+                $sel++;
+                if (($v['passed'] ?? null) === true)  $pass++;
+                elseif (($v['passed'] ?? null) === false) $fail++;
+                else $pend++;
+            }
+            $rows[] = [
+                'unit'       => $x['unit_code'],
+                'status'     => $x['status'],
+                'insp_id'    => (int)($x['insp_id'] ?? 0),
+                'items'      => $sel,
+                'passed'     => $pass,
+                'failed'     => $fail,
+                'pending'    => $pend,
+                'progress'   => $sel ? round(($pass + $fail) / $sel * 100) : 0,
+                'updated_at' => $x['updated_at'],
+            ];
+        }
+        echo json_encode(['success'=>true, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'qc_unit': {
+        // قائمة فحص وحدة مرتبة: منطقة ثم عنصر ثم بنودها
+        $tid  = $_jwt_tid ?? 1;
+        $unit = $conn->real_escape_string((string)($_GET['unit'] ?? ''));
+        if ($unit === '') { echo json_encode(['success'=>false,'message'=>'unit مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $row = null;
+        if ($r = $conn->query("SELECT * FROM inspections WHERE unit='$unit' AND tenant_id=$tid LIMIT 1")) $row = $r->fetch_assoc();
+        if (!$row) { echo json_encode(['success'=>false,'message'=>'لا توجد قائمة فحص لهذه الوحدة'], JSON_UNESCAPED_UNICODE); break; }
+        $data = json_decode((string)$row['inspection_data'], true);
+        $areas = [];
+        if (is_array($data)) foreach ($data as $k => $v) {
+            if (empty($v['isSelected'])) continue;
+            $p = explode('_', $k);
+            $area = $p[0] ?? 'عام';
+            $elem = $p[1] ?? 'عام';
+            $item = $p[2] ?? $k;
+            if (!isset($areas[$area])) $areas[$area] = [];
+            if (!isset($areas[$area][$elem])) $areas[$area][$elem] = [];
+            $areas[$area][$elem][] = [
+                'key'    => $k,
+                'text'   => $item,
+                'passed' => $v['passed'] ?? null,
+                'notes'  => (string)($v['notes'] ?? ''),
+                'photo'  => (string)($v['photo'] ?? ''),
+            ];
+        }
+        $out = [];
+        foreach ($areas as $area => $elems) {
+            $els = [];
+            $n = 0; $done = 0; $bad = 0;
+            foreach ($elems as $el => $items) {
+                foreach ($items as $it) { $n++; if ($it['passed'] !== null) $done++; if ($it['passed'] === false) $bad++; }
+                $els[] = ['element'=>$el, 'items'=>$items];
+            }
+            $out[] = ['area'=>$area, 'count'=>$n, 'done'=>$done, 'failed'=>$bad, 'elements'=>$els];
+        }
+        echo json_encode(['success'=>true, 'unit'=>$unit, 'areas'=>$out], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'qc_mark': {
+        // تعليم بند: مطابق أو ملاحظة، مع نص وصورة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        $can = $u && ((($u['role'] ?? '') === 'admin') || in_array('inspection', $pm, true)
+                      || in_array('snaglist', $pm, true) || in_array('projects', $pm, true));
+        if (!$can) { echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الجودة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $tid  = $_jwt_tid ?? 1;
+        $b    = json_decode(file_get_contents('php://input'), true) ?: [];
+        $unit = $conn->real_escape_string((string)($b['unit'] ?? ''));
+        $key  = (string)($b['key'] ?? '');
+        if ($unit === '' || $key === '') { echo json_encode(['success'=>false,'message'=>'unit وkey مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $row = null;
+        if ($r = $conn->query("SELECT id, inspection_data FROM inspections WHERE unit='$unit' AND tenant_id=$tid LIMIT 1"))
+            $row = $r->fetch_assoc();
+        if (!$row) { echo json_encode(['success'=>false,'message'=>'لا توجد قائمة فحص لهذه الوحدة'], JSON_UNESCAPED_UNICODE); break; }
+        $data = json_decode((string)$row['inspection_data'], true);
+        if (!is_array($data) || !isset($data[$key])) {
+            echo json_encode(['success'=>false,'message'=>'البند غير موجود في القائمة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $passed = $b['passed'] ?? null;
+        $data[$key]['passed'] = ($passed === true || $passed === false) ? $passed : null;
+        if (isset($b['notes'])) $data[$key]['notes'] = mb_substr((string)$b['notes'], 0, 500);
+        if (isset($b['photo'])) $data[$key]['photo'] = mb_substr((string)$b['photo'], 0, 600);
+        $data[$key]['by'] = $u['name'] ?? '';
+        $data[$key]['at'] = date('Y-m-d H:i');
+
+        $sel = 0; $done = 0;
+        foreach ($data as $v) { if (empty($v['isSelected'])) continue; $sel++; if (($v['passed'] ?? null) !== null) $done++; }
+        $prog = $sel ? round($done / $sel * 100) : 0;
+        $json = $conn->real_escape_string(json_encode($data, JSON_UNESCAPED_UNICODE));
+        $conn->query("UPDATE inspections SET inspection_data='$json', progress=$prog, updated_at=NOW()
+                      WHERE id=" . (int)$row['id']);
+        echo json_encode(['success'=>true, 'progress'=>$prog, 'done'=>$done, 'items'=>$sel], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'qc_notes': {
+        // كل الملاحظات (البنود غير المطابقة) عبر الوحدات
+        $tid  = $_jwt_tid ?? 1;
+        $only = trim((string)($_GET['unit'] ?? ''));
+        $rows = [];
+        $w = $only !== '' ? " AND unit='" . $conn->real_escape_string($only) . "'" : '';
+        $r = $conn->query("SELECT unit, inspection_data, updated_at FROM inspections WHERE tenant_id=$tid$w ORDER BY unit");
+        if ($r) while ($x = $r->fetch_assoc()) {
+            $data = json_decode((string)$x['inspection_data'], true);
+            if (!is_array($data)) continue;
+            foreach ($data as $k => $v) {
+                if (empty($v['isSelected']) || ($v['passed'] ?? null) !== false) continue;
+                $p = explode('_', $k);
+                $rows[] = [
+                    'unit'    => $x['unit'],
+                    'area'    => $p[0] ?? '',
+                    'element' => $p[1] ?? '',
+                    'item'    => $p[2] ?? $k,
+                    'notes'   => (string)($v['notes'] ?? ''),
+                    'photo'   => (string)($v['photo'] ?? ''),
+                    'by'      => (string)($v['by'] ?? ''),
+                    'at'      => (string)($v['at'] ?? ''),
+                    'key'     => $k,
+                ];
+            }
+        }
+        echo json_encode(['success'=>true, 'count'=>count($rows), 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_list': {
         // سجلات التطبيق: الفواتير والموردون ببحث وترقيم صفحات
         $kind = (string)($_GET['kind'] ?? 'invoices');

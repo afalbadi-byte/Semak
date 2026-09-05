@@ -42,6 +42,8 @@ const PlatformDashboard = lazy(() => import('./pages/platform/PlatformDashboard'
 // سماك التقنية
 const TechApp = lazy(() => import('./pages/tech/TechApp'));
 const BuyApp  = lazy(() => import('./pages/buy/BuyApp'));
+const ProjApp = lazy(() => import('./pages/apps/ProjApp'));
+const QcApp   = lazy(() => import('./pages/apps/QcApp'));
 const BrandSocialKit = lazy(() => import('./pages/BrandSocialKit'));
 
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -186,6 +188,10 @@ const TechShell = () => {
       <Routes>
         <Route path="/buy/*"  element={<BuyApp />} />
         <Route path="/buy"    element={<BuyApp />} />
+        <Route path="/proj/*" element={<ProjApp />} />
+        <Route path="/proj"   element={<ProjApp />} />
+        <Route path="/qc/*"   element={<QcApp />} />
+        <Route path="/qc"     element={<QcApp />} />
         <Route path="/tech/*" element={<TechApp />} />
         <Route path="/tech"   element={<TechApp />} />
       </Routes>
@@ -235,6 +241,8 @@ const AppRoot = () => {
   useEffect(() => { bootstrapBranding(); }, [bootstrapBranding]);
 
   if (location.pathname.startsWith('/buy'))      return <TechShell />;
+  if (location.pathname.startsWith('/proj'))     return <TechShell />;
+  if (location.pathname.startsWith('/qc'))       return <TechShell />;
   if (location.pathname.startsWith('/tech'))     return <TechShell />;
   if (location.pathname.startsWith('/platform')) return <PlatformShell />;
   return <MainShell />;
