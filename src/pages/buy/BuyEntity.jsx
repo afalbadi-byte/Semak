@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save } from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
@@ -18,10 +18,13 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [err, setErr]   = useState('');
     const [del, setDel]   = useState(null);   // { blockers } أو { ask: true }
     const [edit, setEdit] = useState(null);   // نسخة قابلة للتحرير من الفاتورة
+    const [pay,  setPay]  = useState(null);   // دفعة على مستوى المورد
+    const [payRes, setPayRes] = useState(null);
     const [busy, setBusy] = useState(false);
     const [tick, setTick] = useState(0);      // لإعادة الجلب بعد الإلغاء
 
-    useDepthGuard((del ? 1 : 0) + (edit ? 1 : 0), () => { edit ? setEdit(null) : setDel(null); });
+    useDepthGuard((del ? 1 : 0) + (edit ? 1 : 0) + (pay ? 1 : 0),
+        () => { pay ? (payRes ? (setPay(null), setPayRes(null)) : setPay(null)) : edit ? setEdit(null) : setDel(null); });
 
     const post = (action, body) => fetch(`${API_URL}?action=${action}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
@@ -72,6 +75,34 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
         finally { setBusy(false); }
     };
 
+    const today = () => new Date().toISOString().slice(0, 10);
+
+    // دفعة للمورد: توزَّع على المستحق من الأقدم، أو تُقيَّد مقدَّمة بالكامل
+    const savePay = async () => {
+        setBusy(true); setErr('');
+        try {
+            const r = await post('sup_pay_settle', {
+                supplier: value, amount: Number(pay.amount) || 0, mode: pay.mode,
+                method: pay.method, pay_date: pay.pay_date, reference: pay.reference || '',
+                bank: pay.bank || '', beneficiary: pay.beneficiary || '',
+                from_account: pay.from_account || '', note: pay.note || '',
+            });
+            if (!r.success) { setErr(r.message || 'تعذر الحفظ'); return; }
+            setPayRes(r); setTick(t => t + 1);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
+
+    const applyAdvance = async () => {
+        setBusy(true); setErr('');
+        try {
+            const r = await post('sup_advance_apply', { supplier: value });
+            if (!r.success) { setErr(r.message || 'تعذر التطبيق'); return; }
+            setPayRes(r); setTick(t => t + 1);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
+
     const editNet = (edit && (edit.items || []).some(i => Number(i.qty) > 0))
         ? (edit.items || []).reduce((a, i) => a + (Number(i.qty) || 0) * (Number(i.price) || 0), 0)
         : Number(edit?.subtotal) || 0;
@@ -95,6 +126,17 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                 <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] font-bold text-slate-400 min-h-[44px]">
                     <ArrowRight size={16} /> رجوع
                 </button>
+                {type === 'supplier' && data && data.balance && (
+                    <button onClick={() => setPay({
+                        mode: data.balance.outstanding > 0 ? 'settle' : 'advance',
+                        amount: data.balance.net_due > 0 ? String(data.balance.net_due) : '',
+                        method: 'transfer', pay_date: today(), reference: '', bank: '',
+                        beneficiary: value, from_account: '', note: '',
+                    })} disabled={busy}
+                        className="min-h-[44px] px-3 rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-bold flex items-center gap-1.5">
+                        <Wallet size={14} /> دفعة للمورد
+                    </button>
+                )}
                 {type === 'purchase' && data && data.edit && (
                     <button onClick={() => setEdit({ ...data.edit, items: (data.edit.items || []).map(i => ({ ...i })) })}
                         disabled={busy}
@@ -112,6 +154,133 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
 
             {err && <div className="rounded-xl bg-red-500/15 text-red-300 p-3 text-xs font-bold">{err}</div>}
             {!data && !err && <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-[#c5a059]" /></div>}
+
+            {pay && (
+                <div className="fixed inset-0 bg-black/70 z-[85] flex items-end justify-center p-0 sm:p-4"
+                    onClick={() => !busy && (setPay(null), setPayRes(null))}>
+                    <div dir="rtl" onClick={e => e.stopPropagation()}
+                        className="bg-[#0f1e36] rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+                        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-black text-[15px] flex items-center gap-2">
+                                <Wallet size={16} className="text-[#c5a059]" /> دفعة للمورد
+                            </h3>
+                            <button onClick={() => { setPay(null); setPayRes(null); }}
+                                className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {payRes ? (
+                            <>
+                                <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-3 text-[13px] font-bold flex items-start gap-2">
+                                    <CheckCircle2 size={16} className="shrink-0 mt-0.5" /> {payRes.message}
+                                </div>
+                                {!!(payRes.allocated || payRes.applied || []).length && (
+                                    <div className="space-y-1.5">
+                                        <div className="text-[11px] font-bold text-slate-400">التوزيع على الفواتير</div>
+                                        {(payRes.allocated || payRes.applied).map((a, i) => (
+                                            <div key={i} className="rounded-xl bg-black/25 border border-white/10 p-2.5 flex items-center gap-2 text-[12px]">
+                                                <button onClick={() => { setPay(null); setPayRes(null); onOpen('purchase', a.id); }}
+                                                    className="font-bold text-[#c5a059] underline decoration-dotted underline-offset-4">
+                                                    فاتورة {a.no}
+                                                </button>
+                                                <span className="mr-auto font-black tabular-nums">{money(a.amount)}</span>
+                                                {a.remaining > 0 && <span className="text-[10px] text-amber-300">بقي {money(a.remaining)}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {payRes.advance > 0 && (
+                                    <p className="text-[12px] text-amber-300 font-bold">
+                                        رصيد مقدَّم للمورد: {money(payRes.advance)} — يُطبَّق على أول فاتورة قادمة بزر «تطبيق الرصيد المقدَّم».
+                                    </p>
+                                )}
+                                <button onClick={() => { setPay(null); setPayRes(null); }}
+                                    className="w-full min-h-[52px] rounded-2xl bg-white/10 text-sm font-black">تم</button>
+                            </>
+                        ) : (
+                            <>
+                                <div className="rounded-xl bg-white/[0.06] border border-white/10 p-3 text-[12px] space-y-1">
+                                    <div className="flex justify-between"><span className="text-slate-400">المستحق على الفواتير</span>
+                                        <span className="font-black tabular-nums">{money(data?.balance?.outstanding)}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-400">رصيد مقدَّم</span>
+                                        <span className="font-black tabular-nums">{money(data?.balance?.advance)}</span></div>
+                                    <div className="flex justify-between text-[#c5a059]"><span>صافي المستحق</span>
+                                        <span className="font-black tabular-nums">{money(data?.balance?.net_due)}</span></div>
+                                </div>
+
+                                {data?.balance?.advance > 0 && data?.balance?.outstanding > 0 && (
+                                    <button onClick={applyAdvance} disabled={busy}
+                                        className="w-full min-h-[48px] rounded-2xl bg-emerald-500/15 text-emerald-300 text-[13px] font-black disabled:opacity-60">
+                                        تطبيق الرصيد المقدَّم على المستحق
+                                    </button>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[['settle', 'إقفال حساب'], ['advance', 'دفعة مقدمة']].map(([k, t]) => (
+                                        <button key={k} onClick={() => setPay({ ...pay, mode: k })}
+                                            className={'min-h-[48px] rounded-2xl text-[13px] font-black border ' +
+                                                (pay.mode === k ? 'bg-[#c5a059] text-[#0b1628] border-[#c5a059]'
+                                                                : 'bg-white/5 border-white/10 text-slate-300')}>
+                                            {t}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                    {pay.mode === 'settle'
+                                        ? 'تُوزَّع الدفعة على الفواتير المستحقة من الأقدم للأحدث، وأي فائض يُقيَّد رصيداً مقدَّماً.'
+                                        : 'يُقيَّد كامل المبلغ رصيداً مقدَّماً للمورد بلا ربط بفاتورة، ويُطبَّق لاحقاً.'}
+                                </p>
+
+                                <Field label="المبلغ">
+                                    <input type="number" inputMode="decimal" value={pay.amount}
+                                        onChange={e => setPay({ ...pay, amount: e.target.value })} className={INP} />
+                                </Field>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Field label="التاريخ">
+                                        <input type="date" value={pay.pay_date}
+                                            onChange={e => setPay({ ...pay, pay_date: e.target.value })} className={INP} />
+                                    </Field>
+                                    <Field label="الطريقة">
+                                        <select value={pay.method} onChange={e => setPay({ ...pay, method: e.target.value })} className={INP}>
+                                            <option value="transfer">تحويل</option>
+                                            <option value="cash">نقدي</option>
+                                            <option value="cheque">شيك</option>
+                                            <option value="card">بطاقة</option>
+                                            <option value="other">أخرى</option>
+                                        </select>
+                                    </Field>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Field label="البنك">
+                                        <input value={pay.bank} onChange={e => setPay({ ...pay, bank: e.target.value })} className={INP} />
+                                    </Field>
+                                    <Field label="المرجع">
+                                        <input value={pay.reference} onChange={e => setPay({ ...pay, reference: e.target.value })} className={INP} />
+                                    </Field>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Field label="المستفيد">
+                                        <input value={pay.beneficiary} onChange={e => setPay({ ...pay, beneficiary: e.target.value })} className={INP} />
+                                    </Field>
+                                    <Field label="من حساب">
+                                        <input value={pay.from_account} onChange={e => setPay({ ...pay, from_account: e.target.value })} className={INP} />
+                                    </Field>
+                                </div>
+                                <Field label="ملاحظة">
+                                    <input value={pay.note} onChange={e => setPay({ ...pay, note: e.target.value })} className={INP} />
+                                </Field>
+
+                                <button onClick={savePay} disabled={busy || !(Number(pay.amount) > 0)}
+                                    className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1628] text-sm font-black flex items-center justify-center gap-2 disabled:opacity-40">
+                                    {busy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} تسجيل الدفعة
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {edit && (
                 <div className="fixed inset-0 bg-black/70 z-[85] flex items-end justify-center p-0 sm:p-4"

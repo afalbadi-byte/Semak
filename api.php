@@ -1229,6 +1229,42 @@ $conn->query("CREATE TABLE IF NOT EXISTS download_tickets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (33)");
 } // end DDL v33
+// ─── DDL v34: دفعات على مستوى المورد (إقفال حساب / دفعة مقدمة) ──────────────
+if ($__sv < 34) {
+ensure_column($conn, 'purchase_payments', 'kind',        "kind VARCHAR(16) NOT NULL DEFAULT 'invoice'");
+ensure_column($conn, 'purchase_payments', 'alloc_group', "alloc_group VARCHAR(40) DEFAULT NULL");
+$conn->query("ALTER TABLE purchase_payments ADD INDEX idx_pp_supplier (supplier)");
+$conn->query("ALTER TABLE purchase_payments ADD INDEX idx_pp_kind (kind)");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (34)");
+} // end DDL v34
+
+// مُساعد: رصيد المورد — المستحق على فواتيره مقابل رصيده المقدَّم
+function sup_balance($conn, $sup) {
+    $e = $conn->real_escape_string($sup);
+    $o = ['supplier'=>$sup, 'invoices'=>0, 'open_invoices'=>0, 'gross'=>0, 'paid'=>0,
+          'outstanding'=>0, 'advance'=>0, 'net_due'=>0];
+    if ($r = $conn->query("SELECT COUNT(*) n, ROUND(COALESCE(SUM(total),0),2) g, ROUND(COALESCE(SUM(paid),0),2) p
+                           FROM dmirror_purchases WHERE supplier='$e'"))
+        if ($x = $r->fetch_assoc()) {
+            $o['invoices'] = (int)$x['n'];
+            $o['gross']    = round((float)$x['g'], 2);
+            $o['paid']     = round((float)$x['p'], 2);
+        }
+    if ($r = $conn->query("SELECT COUNT(*) n, ROUND(COALESCE(SUM(rem),0),2) s FROM (
+                SELECT d.id, (ROUND(d.total,2) - GREATEST(ROUND(d.paid,2), ROUND(COALESCE(SUM(pp.amount),0),2))) rem
+                FROM dmirror_purchases d
+                LEFT JOIN purchase_payments pp ON pp.purchase_id = d.id
+                WHERE d.supplier='$e' GROUP BY d.id, d.total, d.paid HAVING rem > 0.009) t"))
+        if ($x = $r->fetch_assoc()) {
+            $o['open_invoices'] = (int)$x['n'];
+            $o['outstanding']   = round((float)$x['s'], 2);
+        }
+    if ($r = $conn->query("SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM purchase_payments
+                           WHERE supplier='$e' AND purchase_id=0 AND kind='advance'"))
+        if ($x = $r->fetch_assoc()) $o['advance'] = round((float)$x['s'], 2);
+    $o['net_due'] = round($o['outstanding'] - $o['advance'], 2);
+    return $o;
+}
 
 // مُساعد: استرجاع كوكي جلسة دفترة (من قاعدة البيانات أولاً ثم من السيكرت)
 function daftra_session_cookie($conn) {
@@ -6885,6 +6921,177 @@ switch ($action) {
         break;
     }
 
+    case 'sup_balance': {
+        // رصيد المورد: المستحق على الفواتير مقابل ما دُفع مقدماً ولم يُطبَّق بعد
+        $sup = trim((string)($_GET['supplier'] ?? ''));
+        if ($sup === '') { echo json_encode(['success'=>false,'message'=>'المورد مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        echo json_encode(['success'=>true] + sup_balance($conn, $sup), JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sup_pay_settle': {
+        // دفعة على مستوى المورد: تُوزَّع على الفواتير المستحقة من الأقدم، والباقي يُقيَّد مقدَّماً
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسجيل الدفعات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E   = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $sup = trim((string)($b['supplier'] ?? ''));
+        $amt = round((float)($b['amount'] ?? 0), 2);
+        $mode = in_array(($b['mode'] ?? ''), ['settle','advance'], true) ? $b['mode'] : 'settle';
+        if ($sup === '' || $amt <= 0) {
+            echo json_encode(['success'=>false,'message'=>'المورد والمبلغ مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $ex = $conn->query("SELECT 1 FROM dmirror_purchases WHERE supplier='" . $E($sup) . "' LIMIT 1");
+        if (!$ex || !$ex->num_rows) {
+            echo json_encode(['success'=>false,'message'=>'لا توجد تعاملات بهذا الاسم — تأكد من اسم المورد'], JSON_UNESCAPED_UNICODE); break; }
+
+        $method = in_array(($b['method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['method'] : 'transfer';
+        $pdate  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : date('Y-m-d');
+        $det    = is_array($b['receipt_details'] ?? null)
+                ? mb_substr(json_encode($b['receipt_details'], JSON_UNESCAPED_UNICODE), 0, 4000) : '';
+        $grp    = 'g' . date('YmdHis') . substr(bin2hex(random_bytes(3)), 0, 6);
+        $ref    = mb_substr((string)($b['reference'] ?? ''), 0, 110);
+        $bank   = mb_substr((string)($b['bank'] ?? ''), 0, 110);
+        $bene   = mb_substr((string)($b['beneficiary'] ?? ''), 0, 190);
+        $from   = mb_substr((string)($b['from_account'] ?? ''), 0, 110);
+        $rurl   = (string)($b['receipt_url'] ?? '');
+        $note   = mb_substr((string)($b['note'] ?? ''), 0, 380);
+
+        $write = function($pid, $part, $kind) use ($conn, $E, $sup, $method, $pdate, $ref, $bank,
+                                                   $bene, $from, $det, $rurl, $note, $grp, $u) {
+            $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date, reference,
+                    bank, beneficiary, from_account, details, receipt_url, note, created_by, kind, alloc_group)
+                VALUES ($pid, '" . $E($sup) . "', $part, '" . $E($method) . "', '$pdate', '" . $E($ref) . "', '"
+                . $E($bank) . "', '" . $E($bene) . "', '" . $E($from) . "', '" . $E($det) . "', '" . $E($rurl) . "', '"
+                . $E($note) . "', '" . $E($u['name'] ?? '') . "', '" . $E($kind) . "', '" . $E($grp) . "')");
+            return (int)$conn->insert_id;
+        };
+
+        $left = $amt; $alloc = []; $ids = [];
+        if ($mode === 'settle') {
+            // الأقدم أولاً — المستحق يُحتسب من دفعاتنا المسجلة ومن مسدد دفترة أيهما أكبر
+            $open = [];
+            $q = $conn->query("SELECT d.id, d.no, d.date, ROUND(d.total,2) total,
+                        GREATEST(ROUND(d.paid,2), ROUND(COALESCE(SUM(pp.amount),0),2)) paid
+                    FROM dmirror_purchases d
+                    LEFT JOIN purchase_payments pp ON pp.purchase_id = d.id
+                    WHERE d.supplier='" . $E($sup) . "'
+                    GROUP BY d.id, d.no, d.date, d.total, d.paid
+                    HAVING (total - paid) > 0.009
+                    ORDER BY d.date ASC, d.id ASC");
+            if ($q) while ($x = $q->fetch_assoc()) $open[] = $x;
+            foreach ($open as $iv) {
+                if ($left <= 0.009) break;
+                $remain = round((float)$iv['total'] - (float)$iv['paid'], 2);
+                $part   = min($left, $remain);
+                $part   = round($part, 2);
+                if ($part <= 0.009) continue;
+                $ids[]  = $write((int)$iv['id'], $part, 'invoice');
+                $left   = round($left - $part, 2);
+                $newPaid = round((float)$iv['paid'] + $part, 2);
+                $conn->query("UPDATE dmirror_purchases SET paid=$newPaid WHERE id=" . (int)$iv['id']);
+                $alloc[] = ['id'=>(int)$iv['id'], 'no'=>$iv['no'], 'date'=>$iv['date'],
+                            'amount'=>$part, 'remaining'=>round($remain - $part, 2)];
+            }
+        }
+        // الفائض (أو كامل المبلغ في وضع الدفعة المقدمة) يُقيَّد رصيداً للمورد
+        $advance = 0;
+        if ($left > 0.009) { $advance = $left; $ids[] = $write(0, $left, 'advance'); }
+
+        if ($rurl !== '' && $alloc)
+            $conn->query("INSERT INTO purchase_documents (purchase_id, doc_type, file_name, drive_url, source, created_by)
+                VALUES (" . (int)$alloc[0]['id'] . ", 'receipt', '" . $E('إيصال سداد ' . $amt . ' — ' . $sup) . "', '"
+                . $E($rurl) . "', 'mobile', '" . $E($u['name'] ?? '') . "')");
+
+        acc_audit($conn, 1, 'supplier', 0, 'settle',
+            'دفعة مورد ' . $sup . ' · ' . number_format($amt, 2)
+            . ' · وُزّعت على ' . count($alloc) . ' فاتورة' . ($advance > 0 ? ' · مقدَّم ' . number_format($advance, 2) : ''),
+            $u['name'] ?? '');
+
+        $bal = sup_balance($conn, $sup);
+        echo json_encode(['success'=>true, 'group'=>$grp, 'ids'=>$ids, 'amount'=>$amt,
+            'allocated'=>$alloc, 'advance'=>$advance, 'balance'=>$bal,
+            'message'=>$alloc
+                ? ('وُزّعت الدفعة على ' . count($alloc) . ' فاتورة'
+                   . ($advance > 0 ? ' وبقي ' . number_format($advance, 2) . ' رصيداً مقدَّماً' : ''))
+                : ('قُيّدت ' . number_format($advance, 2) . ' دفعةً مقدَّمة للمورد')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sup_advance_apply': {
+        // تطبيق الرصيد المقدَّم على الفواتير المستحقة — يُستدعى بعد ورود فواتير جديدة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسجيل الدفعات'], JSON_UNESCAPED_UNICODE); break; }
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E   = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $sup = trim((string)($b['supplier'] ?? ''));
+        if ($sup === '') { echo json_encode(['success'=>false,'message'=>'المورد مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+
+        // أقدم الأرصدة المقدَّمة أولاً
+        $advs = [];
+        if ($q = $conn->query("SELECT id, ROUND(amount,2) amount, pay_date, method, reference, bank, beneficiary,
+                    from_account, receipt_url, note, alloc_group
+                FROM purchase_payments WHERE supplier='" . $E($sup) . "' AND purchase_id=0 AND kind='advance'
+                ORDER BY pay_date ASC, id ASC"))
+            while ($x = $q->fetch_assoc()) $advs[] = $x;
+        if (!$advs) { echo json_encode(['success'=>false,'message'=>'لا يوجد رصيد مقدَّم لهذا المورد'], JSON_UNESCAPED_UNICODE); break; }
+
+        $open = [];
+        if ($q = $conn->query("SELECT d.id, d.no, d.date, ROUND(d.total,2) total,
+                    GREATEST(ROUND(d.paid,2), ROUND(COALESCE(SUM(pp.amount),0),2)) paid
+                FROM dmirror_purchases d
+                LEFT JOIN purchase_payments pp ON pp.purchase_id = d.id
+                WHERE d.supplier='" . $E($sup) . "'
+                GROUP BY d.id, d.no, d.date, d.total, d.paid
+                HAVING (total - paid) > 0.009
+                ORDER BY d.date ASC, d.id ASC"))
+            while ($x = $q->fetch_assoc()) $open[] = $x;
+        if (!$open) { echo json_encode(['success'=>false,'message'=>'لا فواتير مستحقة لهذا المورد'], JSON_UNESCAPED_UNICODE); break; }
+
+        $applied = []; $used = 0;
+        foreach ($advs as $ad) {
+            $left = (float)$ad['amount'];
+            foreach ($open as &$iv) {
+                if ($left <= 0.009) break;
+                $remain = round((float)$iv['total'] - (float)$iv['paid'], 2);
+                if ($remain <= 0.009) continue;
+                $part = round(min($left, $remain), 2);
+                $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date, reference,
+                        bank, beneficiary, from_account, receipt_url, note, created_by, kind, alloc_group)
+                    VALUES (" . (int)$iv['id'] . ", '" . $E($sup) . "', $part, '" . $E($ad['method']) . "', '"
+                    . $E($ad['pay_date']) . "', '" . $E($ad['reference']) . "', '" . $E($ad['bank']) . "', '"
+                    . $E($ad['beneficiary']) . "', '" . $E($ad['from_account']) . "', '" . $E($ad['receipt_url']) . "', '"
+                    . $E(mb_substr('من رصيد مقدَّم · ' . (string)$ad['note'], 0, 380)) . "', '" . $E($u['name'] ?? '')
+                    . "', 'invoice', '" . $E((string)$ad['alloc_group']) . "')");
+                $iv['paid'] = round((float)$iv['paid'] + $part, 2);
+                $conn->query("UPDATE dmirror_purchases SET paid=" . $iv['paid'] . " WHERE id=" . (int)$iv['id']);
+                $left = round($left - $part, 2);
+                $used = round($used + $part, 2);
+                $applied[] = ['id'=>(int)$iv['id'], 'no'=>$iv['no'], 'amount'=>$part];
+            }
+            unset($iv);
+            if ($left <= 0.009) $conn->query("DELETE FROM purchase_payments WHERE id=" . (int)$ad['id']);
+            else $conn->query("UPDATE purchase_payments SET amount=$left WHERE id=" . (int)$ad['id']);
+        }
+        acc_audit($conn, 1, 'supplier', 0, 'advance_apply',
+            'تطبيق رصيد مقدَّم للمورد ' . $sup . ' · ' . number_format($used, 2) . ' على ' . count($applied) . ' فاتورة',
+            $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'used'=>$used, 'applied'=>$applied,
+            'balance'=>sup_balance($conn, $sup),
+            'message'=>'طُبّق ' . number_format($used, 2) . ' على ' . count($applied) . ' فاتورة'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'sup_pay_list': {
         $pid = (int)($_GET['purchase_id'] ?? 0);
         $sup = trim((string)($_GET['supplier'] ?? ''));
@@ -7706,13 +7913,17 @@ switch ($action) {
                         ROUND(SUM(paid),2) paid, ROUND(SUM(total-paid),2) outstanding, MAX(date) last_date
                      FROM dmirror_purchases WHERE supplier='$v'");
             $s = $s ? $s[0] : [];
+            $bal = sup_balance($conn, $val);
             $out['subtitle'] = 'مورد';
+            $out['balance']  = $bal;          // يفتح زر «دفعة للمورد» في التطبيق
             $out['stats'] = [
                 ['label'=>'عدد الفواتير', 'value'=>(int)($s['invoices'] ?? 0)],
                 ['label'=>'شامل الضريبة', 'value'=>(float)($s['gross'] ?? 0), 'money'=>1],
                 ['label'=>'قبل الضريبة',  'value'=>(float)($s['net'] ?? 0), 'money'=>1],
                 ['label'=>'المسدد',       'value'=>(float)($s['paid'] ?? 0), 'money'=>1],
-                ['label'=>'المتبقي',      'value'=>(float)($s['outstanding'] ?? 0), 'money'=>1],
+                ['label'=>'المستحق',      'value'=>$bal['outstanding'], 'money'=>1],
+                ['label'=>'رصيد مقدَّم',   'value'=>$bal['advance'], 'money'=>1],
+                ['label'=>'صافي المستحق', 'value'=>$bal['net_due'], 'money'=>1],
                 ['label'=>'آخر تعامل',    'value'=>$s['last_date'] ?? '—'],
             ];
             $out['sections'][] = ['title'=>'الفواتير',
@@ -7727,6 +7938,22 @@ switch ($action) {
                     LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
                       ON d.purchase_id = p.id
                     WHERE p.supplier='$v' ORDER BY p.date DESC, p.id DESC LIMIT 200")];
+            $out['sections'][] = ['title'=>'دفعاتنا للمورد',
+                'cols'=>[['k'=>'pay_date','t'=>'التاريخ'],['k'=>'amount','t'=>'المبلغ'],
+                         ['k'=>'target','t'=>'مقابل'],['k'=>'method_ar','t'=>'الطريقة'],
+                         ['k'=>'bank','t'=>'البنك'],['k'=>'reference','t'=>'المرجع']],
+                'rows'=>array_map(function($x) {
+                    $map = ['transfer'=>'تحويل','cash'=>'نقدي','cheque'=>'شيك','card'=>'بطاقة','other'=>'أخرى'];
+                    $x['method_ar'] = $map[$x['method']] ?? $x['method'];
+                    $x['target'] = ((int)$x['purchase_id'] === 0)
+                        ? 'رصيد مقدَّم' : ('فاتورة ' . ($x['invoice_no'] ?: $x['purchase_id']));
+                    unset($x['purchase_id'], $x['invoice_no'], $x['method']);
+                    return $x;
+                }, $Q("SELECT pp.id, pp.purchase_id, d.no invoice_no, ROUND(pp.amount,2) amount, pp.method,
+                            pp.pay_date, COALESCE(pp.bank,'') bank, COALESCE(pp.reference,'') reference
+                        FROM purchase_payments pp
+                        LEFT JOIN dmirror_purchases d ON d.id = pp.purchase_id
+                        WHERE pp.supplier='$v' ORDER BY pp.pay_date DESC, pp.id DESC LIMIT 200"))];
             $out['sections'][] = ['title'=>'الأصناف المشتراة منه',
                 'cols'=>[['k'=>'name','t'=>'الصنف'],['k'=>'qty','t'=>'الكمية'],['k'=>'amount','t'=>'القيمة'],['k'=>'avg_price','t'=>'متوسط السعر']],
                 'link'=>['col'=>'name','type'=>'product','value_col'=>'product_id'],
