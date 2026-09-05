@@ -4,6 +4,8 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const today = () => new Date().toISOString().slice(0, 10);
+// كل حقول النموذج بمقاس واحد: 52 ارتفاعا كحد اللمس، وmin-w-0 يمنع تجاوز البطاقة
+const FIELD = 'w-full min-w-0 h-[52px] px-3 rounded-xl bg-white/[0.06] border border-white/10 text-[15px] text-white placeholder-slate-500 outline-none focus:border-[#c5a059] transition';
 const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
 
 // حقل باقتراحات من بياناتنا — يختصر الكتابة على الجوال ويمنع تعدد صيغ الاسم
@@ -30,7 +32,7 @@ function Suggest({ kind, value, onChange, placeholder, onPick }) {
             <input value={value} onChange={e => onChange(e.target.value)}
                 onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 200)}
                 placeholder={placeholder}
-                className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500" />
+                className={FIELD} />
             {open && !!list.length && (
                 <div className="absolute z-30 inset-x-0 mt-1 bg-slate-800 border border-white/10 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
                     {list.map((s, i) => (
@@ -269,48 +271,57 @@ export default function BuyInvoice({ onDone }) {
 
             <div className="grid grid-cols-2 gap-2">
                 <input value={no} onChange={e => setNo(e.target.value)} placeholder="رقم الفاتورة"
-                    className="px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500" />
+                    className={FIELD} />
                 <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                    className="px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500" />
+                    className={FIELD} />
             </div>
 
             <select value={project} onChange={e => setProject(e.target.value)}
-                className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500">
+                className={FIELD}>
                 <option value="" className="bg-slate-800">بلا مشروع</option>
                 {projects.map(p => <option key={p.project_id} value={p.project_id} className="bg-slate-800">{p.name}</option>)}
             </select>
 
-            <div className="rounded-2xl bg-white/5 p-3 space-y-2">
+            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
                     <span className="text-xs font-black">البنود</span>
                     <button onClick={() => setItems(a => a.concat({ name: '', qty: '', price: '' }))}
                         className="text-[11px] font-bold text-gold-500 flex items-center gap-1"><Plus size={13} /> بند</button>
                 </div>
-                {items.map((it, i) => (
-                    <div key={i} className="space-y-1.5 border-t border-white/5 pt-2">
-                        <Suggest kind="product" value={it.name} onChange={v => setItem(i, { name: v })}
-                            placeholder="الصنف"
-                            onPick={s => s.last_price && setItem(i, { price: String(s.last_price) })} />
-                        <div className="flex gap-2">
-                            <input inputMode="decimal" value={it.qty} onChange={e => setItem(i, { qty: e.target.value })}
-                                placeholder="الكمية"
-                                className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
-                            <input inputMode="decimal" value={it.price} onChange={e => setItem(i, { price: e.target.value })}
-                                placeholder="سعر الوحدة"
-                                className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
-                            <button onClick={() => setItems(a => a.filter((_, k) => k !== i))}
-                                className="px-2 text-red-400"><Trash2 size={16} /></button>
+                {items.map((it, i) => {
+                    const line = (Number(it.qty) || 0) * (Number(it.price) || 0);
+                    return (
+                        <div key={i} className="rounded-xl border border-white/10 bg-black/20 p-2.5 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-slate-400">بند {i + 1}</span>
+                                <div className="flex items-center gap-2">
+                                    {line > 0 && <span className="text-[11px] font-black text-[#c5a059] tabular-nums">{money(line)}</span>}
+                                    <button onClick={() => setItems(a => a.filter((_, k) => k !== i))}
+                                        className="w-9 h-9 rounded-lg bg-white/5 text-red-400 flex items-center justify-center shrink-0">
+                                        <Trash2 size={15} />
+                                    </button>
+                                </div>
+                            </div>
+                            <Suggest kind="product" value={it.name} onChange={v => setItem(i, { name: v })}
+                                placeholder="الصنف"
+                                onPick={s => s.last_price && setItem(i, { price: String(s.last_price) })} />
+                            <div className="grid grid-cols-2 gap-2">
+                                <input inputMode="decimal" value={it.qty} onChange={e => setItem(i, { qty: e.target.value })}
+                                    placeholder="الكمية" className={FIELD} />
+                                <input inputMode="decimal" value={it.price} onChange={e => setItem(i, { price: e.target.value })}
+                                    placeholder="سعر الوحدة" className={FIELD} />
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
                 {!items.length && (
                     <input inputMode="decimal" value={manual} onChange={e => setManual(e.target.value)}
                         placeholder="المبلغ قبل الضريبة"
-                        className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500" />
+                        className={FIELD} />
                 )}
             </div>
 
-            <div className="rounded-2xl bg-white/5 p-3 text-sm space-y-1">
+            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-3.5 text-sm space-y-1.5">
                 <div className="flex justify-between"><span className="text-slate-400">قبل الضريبة</span><span className="tabular-nums">{money(net)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">ضريبة 15%</span><span className="tabular-nums">{money(vat)}</span></div>
                 <div className="flex justify-between font-black text-gold-500 border-t border-white/10 pt-1">
@@ -318,7 +329,7 @@ export default function BuyInvoice({ onDone }) {
                 </div>
             </div>
 
-            <div className="rounded-2xl bg-white/5 p-3 space-y-2">
+            <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-3.5 space-y-2.5">
                 <button onClick={() => { setPayOn(v => !v); if (!payOn && !paid) setPaid(String(total || '')); }}
                     className="w-full flex items-center justify-between min-h-[44px]">
                     <span className="flex items-center gap-2 text-sm font-black"><Wallet size={16} className="text-[#c5a059]" /> سُدِّدت الفاتورة</span>
@@ -330,11 +341,11 @@ export default function BuyInvoice({ onDone }) {
                 {payOn && (
                     <div className="space-y-2 pt-1">
                         <input inputMode="decimal" value={paid} onChange={e => setPaid(e.target.value)} placeholder="المبلغ المسدد"
-                            className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-[#c5a059]" />
+                            className={FIELD} />
                         <div className="grid grid-cols-4 gap-1.5">
                             {[['transfer','تحويل'],['cash','نقدي'],['cheque','شيك'],['card','بطاقة']].map(([k, t]) => (
                                 <button key={k} onClick={() => setPayMethod(k)}
-                                    className={'min-h-[44px] rounded-xl text-xs font-bold border ' +
+                                    className={'h-[52px] rounded-xl text-[13px] font-bold border ' +
                                         (payMethod === k ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]' : 'bg-white/5 border-white/10 text-slate-300')}>
                                     {t}
                                 </button>
@@ -342,14 +353,14 @@ export default function BuyInvoice({ onDone }) {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <input value={payBank} onChange={e => setPayBank(e.target.value)} placeholder="البنك / الخزنة"
-                                className="px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                                className={FIELD} />
                             <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
-                                className="px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                                className={FIELD} />
                         </div>
                         <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="مرجع العملية أو رقم الشيك"
-                            className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                            className={FIELD} />
                         <input value={payBenef} onChange={e => setPayBenef(e.target.value)} placeholder="المستفيد (اسم المستلم أو الحساب)"
-                            className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none" />
+                            className={FIELD} />
                         {payDate && date && payDate < date && (
                             <div className="rounded-xl bg-amber-500/15 text-amber-300 p-2.5 text-[11px] font-bold flex items-start gap-1.5">
                                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
@@ -446,7 +457,7 @@ export default function BuyInvoice({ onDone }) {
                 )}
             </div>
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="ملاحظة (اختياري)"
-                className="w-full px-3 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-gold-500" />
+                className={FIELD} />
 
             {msg && (
                 <div className={'rounded-xl p-3 text-xs font-bold ' + (msg.e ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300')}>
