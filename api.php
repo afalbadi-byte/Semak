@@ -1244,6 +1244,61 @@ $conn->query("ALTER TABLE purchase_documents ADD INDEX idx_pd_supplier (supplier
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (35)");
 } // end DDL v35
 
+// مُساعد: جلب مرفق من دفترة — يجرّب مفتاح الـAPI أولاً (لا ينتهي) ثم كوكي الجلسة
+// يعيد [bytes, content_type, route] أو [null, null, سبب الفشل]
+function daftra_file_bytes($conn, $fid, $probeOnly = false) {
+    $fid = (int)$fid;
+    if ($fid <= 0) return [null, null, 'no_file_id'];
+    $key = "__DAFTRA_KEY__";
+    $try = function($url, $hdrs) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+            CURLOPT_TIMEOUT => 45, CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HTTPHEADER => $hdrs,
+        ]);
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $ct   = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+        $html = stripos($ct, 'text/html') !== false || strncmp((string)$body, '<!DOCTYPE', 9) === 0;
+        $json = stripos($ct, 'json') !== false;
+        $ok   = ($code === 200 && $body !== false && $body !== '' && !$html && !$json);
+        return [$ok, $body, $ct, $code, ($html ? 'html' : ($json ? 'json' : ''))];
+    };
+
+    $ua = 'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)';
+    // مسارات مفتاح الـAPI — لا تنتهي صلاحيتها، فهي الأفضل إن عملت
+    $byKey = [
+        "https://semak.daftra.com/api2/attachments/$fid/download",
+        "https://semak.daftra.com/api2/attachments/$fid.json",
+        "https://semak.daftra.com/v2/api/entity/files/download/$fid",
+    ];
+    $notes = [];
+    foreach ($byKey as $u) {
+        [$ok, $body, $ct, $code, $why] = $try($u, ["APIKEY: $key", 'Accept: */*', $ua]);
+        $notes[] = ['route'=>'apikey', 'url'=>$u, 'http'=>$code, 'ct'=>$ct, 'why'=>$why];
+        if ($ok) return $probeOnly ? [null, $ct, 'apikey:' . $u] : [$body, $ct ?: 'application/pdf', 'apikey'];
+    }
+    // كوكي الجلسة — يعمل لكنه ينتهي ويحتاج تحديثاً يدوياً
+    $ck = daftra_session_cookie($conn);
+    [$ok, $body, $ct, $code, $why] = $try("https://semak.daftra.com/v2/owner/entity/files/preview/$fid",
+        ['Cookie: ' . $ck, 'Accept: */*', $ua]);
+    $notes[] = ['route'=>'cookie', 'http'=>$code, 'ct'=>$ct, 'why'=>$why];
+    if ($ok) return $probeOnly ? [null, $ct, 'cookie'] : [$body, $ct ?: 'application/pdf', 'cookie'];
+    return [null, null, json_encode($notes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)];
+}
+
+// مُساعد: امتداد الملف من نوع محتواه
+function daftra_ext_of($ct, $fallbackName = '') {
+    $ct = strtolower((string)$ct);
+    if (strpos($ct, 'pdf') !== false)  return 'pdf';
+    if (strpos($ct, 'png') !== false)  return 'png';
+    if (strpos($ct, 'jpeg') !== false || strpos($ct, 'jpg') !== false) return 'jpg';
+    $e = strtolower(pathinfo((string)$fallbackName, PATHINFO_EXTENSION));
+    return $e !== '' ? $e : 'pdf';
+}
+
 // مُساعد: رصيد المورد — المستحق على فواتيره مقابل رصيده المقدَّم
 function sup_balance($conn, $sup) {
     $e = $conn->real_escape_string($sup);
@@ -6927,6 +6982,107 @@ switch ($action) {
         break;
     }
 
+    case 'daftra_doc_probe': {
+        // فحص أي مسار يصلح لجلب المرفقات — للمدير فقط، قراءة فقط بلا أي كتابة في دفترة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $du = null;
+        if ($r = $conn->query("SELECT role FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $du = $r->fetch_assoc();
+        if (!$du || ($du['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(120);
+        $fid = (int)($_GET['file_id'] ?? 0);
+        if (!$fid && ($r = $conn->query("SELECT file_id FROM dmirror_attachments
+                WHERE entity_key IN ('purchase_order','purchase_invoice') ORDER BY file_id DESC LIMIT 1")))
+            if ($x = $r->fetch_assoc()) $fid = (int)$x['file_id'];
+        [$b, $ct, $route] = daftra_file_bytes($conn, $fid, true);
+        echo json_encode(['success'=>true, 'file_id'=>$fid, 'works'=>($ct !== null),
+            'route'=>$route, 'content_type'=>$ct], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        break;
+    }
+
+    case 'daftra_doc_archive': {
+        // نسخ مرفقات دفترة إلى تخزيننا مرة واحدة — بعدها تُفتح بلا أي اعتماد على دفترة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية أرشفة المستندات'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(240);
+        $take = min(40, max(1, (int)($_GET['limit'] ?? 15)));
+
+        // المرفقات التي لم نحفظ نسختها عندنا بعد
+        $todo = [];
+        if ($r = $conn->query("SELECT at.file_id, at.entity_id, COALESCE(at.name,'') name
+                FROM dmirror_attachments at
+                LEFT JOIN purchase_documents pd
+                  ON pd.daftra_file_id = at.file_id AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
+                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
+                ORDER BY at.file_id DESC LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $todo[] = $x;
+
+        $dir = __DIR__ . '/qdocs';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $done = 0; $failed = 0; $why = '';
+        foreach ($todo as $t) {
+            [$body, $ct, $route] = daftra_file_bytes($conn, (int)$t['file_id']);
+            if ($body === null) { $failed++; if ($why === '') $why = (string)$route; continue; }
+            $ext   = daftra_ext_of($ct, $t['name']);
+            $token = bin2hex(random_bytes(16));
+            file_put_contents("$dir/$token.$ext", $body);
+            $url   = 'https://' . $_SERVER['HTTP_HOST'] . "/qdocs/$token.$ext";
+            $pid   = (int)$t['entity_id'];
+            $nm    = $t['name'] !== '' ? $t['name'] : ('مرفق ' . $t['file_id'] . '.' . $ext);
+            $conn->query("INSERT INTO purchase_documents (purchase_id, doc_type, file_name, drive_url,
+                    daftra_file_id, file_size, source, created_by, note)
+                VALUES ($pid, 'invoice', '" . $conn->real_escape_string($nm) . "', '"
+                . $conn->real_escape_string($url) . "', " . (int)$t['file_id'] . ", " . strlen($body) . ",
+                    'daftra', '" . $conn->real_escape_string($u['name'] ?? '') . "', 'أُرشف من دفترة')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), daftra_file_id=VALUES(daftra_file_id),
+                    file_size=VALUES(file_size), source=VALUES(source)");
+            $done++;
+        }
+        // كم بقي
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
+                LEFT JOIN purchase_documents pd
+                  ON pd.daftra_file_id = at.file_id AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
+                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+
+        echo json_encode(['success'=>true, 'archived'=>$done, 'failed'=>$failed, 'remaining'=>$left,
+            'detail'=>mb_substr($why, 0, 400),
+            'message'=>$done ? ("أُرشف $done مرفقا، وبقي $left")
+                             : ($failed ? 'تعذر جلب المرفقات — جلسة دفترة منتهية' : 'لا مرفقات جديدة')],
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        break;
+    }
+
+    case 'daftra_link_status': {
+        // حالة الربط: هل الكوكي مضبوط، وكم مرفقا صار عندنا نسخة منه
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $out = ['success'=>true];
+        $ck = daftra_session_cookie($conn);
+        $out['cookie_set'] = (trim($ck) !== '' && strpos($ck, '__DAFTRA') === false);
+        foreach ([
+            'total'    => "SELECT COUNT(*) n FROM dmirror_attachments
+                           WHERE entity_key IN ('purchase_order','purchase_invoice')",
+            'archived' => "SELECT COUNT(*) n FROM dmirror_attachments at
+                           JOIN purchase_documents pd ON pd.daftra_file_id = at.file_id
+                                AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
+                           WHERE at.entity_key IN ('purchase_order','purchase_invoice')",
+        ] as $k => $sql) {
+            $out[$k] = 0;
+            if ($r = $conn->query($sql)) if ($x = $r->fetch_assoc()) $out[$k] = (int)$x['n'];
+        }
+        $out['remaining'] = max(0, $out['total'] - $out['archived']);
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'sup_balance': {
         // رصيد المورد: المستحق على الفواتير مقابل ما دُفع مقدماً ولم يُطبَّق بعد
         $sup = trim((string)($_GET['supplier'] ?? ''));
@@ -7318,36 +7474,23 @@ switch ($action) {
         if (!$fid) { echo json_encode(['success'=>false,'message'=>'لا يوجد ملف مرتبط في دفترة'], JSON_UNESCAPED_UNICODE); break; }
 
         set_time_limit(60);
-        $cookie = daftra_session_cookie($conn);
-        $ch = curl_init("https://semak.daftra.com/v2/owner/entity/files/preview/$fid");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,          // دفترة تحوّل إلى تخزين موقّع
-            CURLOPT_MAXREDIRS      => 5,
-            CURLOPT_TIMEOUT        => 45,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_HTTPHEADER     => ['Cookie: ' . $cookie, 'Accept: */*',
-                                       'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)'],
-        ]);
-        $body = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $ctype = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        curl_close($ch);
-
-        // جلسة منتهية ترد صفحة دخول HTML لا ملفا
-        $isHtml = stripos($ctype, 'text/html') !== false || strncmp((string)$body, '<!DOCTYPE', 9) === 0;
-        if ($code !== 200 || $body === false || $body === '' || $isHtml) {
+        [$body, $ctype, $route] = daftra_file_bytes($conn, $fid);
+        if ($body === null) {
             echo json_encode(['success'=>false,
                 'message'=>'جلسة دفترة منتهية أو غير مضبوطة — حدّثها من: لوحة الإدارة ← تقنية المعلومات ← ربط دفترة',
-                'http'=>$code], JSON_UNESCAPED_UNICODE); break;
+                'detail'=>mb_substr((string)$route, 0, 300)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); break;
         }
+        $ext = daftra_ext_of($ctype, $doc['file_name'] ?? '');
 
-        $ext = 'pdf';
-        if (stripos($ctype, 'png') !== false)  $ext = 'png';
-        elseif (stripos($ctype, 'jpeg') !== false || stripos($ctype, 'jpg') !== false) $ext = 'jpg';
-        elseif (!empty($doc['file_name'])) {
-            $e2 = strtolower(pathinfo($doc['file_name'], PATHINFO_EXTENSION));
-            if ($e2 !== '') $ext = $e2;
+        // ما جُلب مرة يُحفظ عندنا، فلا يُطلب من دفترة مرة أخرى
+        if (!empty($doc['id']) && empty($doc['drive_url'])) {
+            $adir = __DIR__ . '/qdocs';
+            if (!is_dir($adir)) mkdir($adir, 0755, true);
+            $tk = bin2hex(random_bytes(16));
+            if (@file_put_contents("$adir/$tk.$ext", $body) !== false)
+                $conn->query("UPDATE purchase_documents SET drive_url='https://"
+                    . $conn->real_escape_string($_SERVER['HTTP_HOST']) . "/qdocs/$tk.$ext',
+                    file_size=" . strlen($body) . " WHERE id=" . (int)$doc['id']);
         }
         $kind = (($doc['doc_type'] ?? '') === 'receipt') ? 'إيصال' : 'مستند';
         $name = $doc

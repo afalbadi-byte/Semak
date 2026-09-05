@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp } from 'lucide-react';
+import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { passkeyEnrolledHere } from '../../lib/passkey';
@@ -15,6 +15,8 @@ export default function BuyHome({ onNew }) {
     const [askPk, setAskPk] = useState(() => !passkeyEnrolledHere());
 
     const [sync, setSync] = useState(null);
+    const [docs, setDocs] = useState(null);      // حالة أرشفة مرفقات دفترة
+    const [arch, setArch] = useState(false);
 
     const load = useCallback(async (force = false) => {
         setBusy(true);
@@ -30,10 +32,29 @@ export default function BuyHome({ onNew }) {
             ]);
             if (a && a.success !== false) setK(a.data || a);
             if (b && b.success) setLast((b.rows || []).slice(0, 12));
+            fetch(`${API_URL}?action=daftra_link_status`, { headers: h })
+                .then(r => r.json()).then(r => r.success && setDocs(r)).catch(() => {});
         } finally { setBusy(false); }
     }, []);
 
     useEffect(() => { load(); }, [load]);
+
+    // سحب مرفقات دفترة إلى تخزيننا — دفعة كل ضغطة حتى تنتهي
+    const archive = async () => {
+        setArch(true);
+        try {
+            const t2 = getAdminToken();
+            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
+            for (let i = 0; i < 12; i++) {
+                const r = await fetch(`${API_URL}?action=daftra_doc_archive&limit=15`, { headers: h2 })
+                    .then(x => x.json());
+                if (!r.success) { setDocs(d => ({ ...(d || {}), err: r.message })); break; }
+                setDocs(d => ({ ...(d || {}), archived: (d?.total || 0) - r.remaining, remaining: r.remaining,
+                    err: r.failed && !r.archived ? r.message : '' }));
+                if (r.remaining === 0 || (!r.archived && r.failed)) break;
+            }
+        } finally { setArch(false); }
+    };
 
     const p = k?.purchases || {};
     const cards = [
@@ -51,6 +72,32 @@ export default function BuyHome({ onNew }) {
             </button>
 
             {askPk && <PasskeySetupCard onDone={() => setAskPk(false)} />}
+
+            {docs && docs.total > 0 && docs.remaining > 0 && (
+                <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <Archive size={15} className="text-[#c5a059]" />
+                        <span className="text-[12px] font-black">مرفقات دفترة</span>
+                        <span className="text-[11px] text-slate-400 mr-auto">
+                            {docs.archived} من {docs.total} عندنا
+                        </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                        نسخ المرفقات إلى تخزيننا يجعلها تُفتح فوراً بلا اعتماد على جلسة دفترة.
+                    </p>
+                    {docs.err && <p className="text-[11px] text-amber-300 font-bold">{docs.err}</p>}
+                    <button onClick={archive} disabled={arch}
+                        className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                        {arch ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
+                        {arch ? 'يسحب المرفقات...' : `اسحب ${docs.remaining} مرفقا إلى تخزيننا`}
+                    </button>
+                </div>
+            )}
+            {docs && docs.total > 0 && docs.remaining === 0 && (
+                <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold flex items-center gap-2">
+                    <CheckCircle2 size={14} /> كل مرفقات دفترة ({docs.total}) محفوظة عندنا وتُفتح بلا جلسة
+                </div>
+            )}
 
             {sync && (sync.added > 0 || sync.updated > 0) && (
                 <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold">
