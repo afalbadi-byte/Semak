@@ -7,6 +7,7 @@ import BuyItems from './BuyItems';
 import BuyChat from './BuyChat';
 import BuyWelcome from './BuyWelcome';
 import BuyLogin from './BuyLogin';
+import BuySplash from './BuySplash';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
@@ -53,6 +54,9 @@ function useBuyManifest() {
 export default function BuyApp() {
     const [tab, setTab]   = useState('home');
     // الترحيب يُعرض أول مرة فقط لكل جهاز
+    const [splash, setSplash] = useState(() => {
+        try { return sessionStorage.getItem('buy_splash') !== '1'; } catch { return true; }
+    });
     const [welcome, setWelcome] = useState(() => {
         try { return localStorage.getItem('buy_seen') !== '1'; } catch { return true; }
     });
@@ -82,6 +86,10 @@ export default function BuyApp() {
         setUser(null); setState('anon');
     };
 
+    if (splash) return (
+        <BuySplash userName={user?.name || ''}
+            onDone={() => { try { sessionStorage.setItem('buy_splash', '1'); } catch { /* تجاهل */ } setSplash(false); }} />
+    );
     if (state === 'loading') return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center">
             <RefreshCw className="animate-spin text-gold-500" size={28} />
