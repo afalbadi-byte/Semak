@@ -7262,9 +7262,11 @@ switch ($action) {
                             WHERE doc_type='receipt' GROUP BY purchase_id) rc
                    ON rc.purchase_id = pp.purchase_id
                  LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
-                            WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) at
+                            WHERE entity_key NOT IN ('purchase_order','purchase_invoice')
+                            GROUP BY entity_id) at
                    ON at.entity_id = pp.purchase_id";
-        // إثبات: إيصال على الدفعة، أو مستند إيصال على الفاتورة، أو مرفق في دفترة عليها
+        // إثبات السداد = إيصال، لا الفاتورة. مرفق الفاتورة نفسه لا يُحتسب إثباتاً
+        // للدفع، وإلا بدت كل فاتورة لها صورة كأنها مسدّدة بإثبات.
         $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(rc.n,0) > 0 OR COALESCE(at.n,0) > 0)";
 
         $sum = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(pp.amount),0),2) amount,
@@ -9333,6 +9335,10 @@ switch ($action) {
         }
         $r = $conn->query("SELECT COALESCE(SUM(total),0) s FROM dmirror_purchases");
         $out['total_value'] = $r ? round((float)$r->fetch_assoc()['s'], 2) : 0;
+        $out['attachment_kinds'] = [];
+        if ($kr = $conn->query("SELECT COALESCE(entity_key,'—') k, COUNT(*) n FROM dmirror_attachments
+                                GROUP BY entity_key ORDER BY n DESC"))
+            while ($kx = $kr->fetch_assoc()) $out['attachment_kinds'][$kx['k']] = (int)$kx['n'];
         // كم مرفقاً من دفترة صار عندنا نسخة منه — لمتابعة الأرشفة
         if ($ar = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
                 JOIN purchase_documents pd ON pd.daftra_file_id = at.file_id
