@@ -35,6 +35,7 @@ export default function DaftraLink() {
       });
       const d = await res.json();
       setResult({ ok: d.valid, msg: d.message || (d.success ? 'تم الحفظ' : 'فشل') });
+      if (d.success && !d.valid) setResult(r => ({ ...r, hint: 'تأكد أنك نسخت السطر كاملاً، وأن جلستك في دفترة ما زالت مفتوحة' }));
       if (d.success) { setCookie(''); loadStatus(); }
     } catch {
       setResult({ ok: false, msg: 'خطأ في الاتصال بالخادم' });

@@ -1244,6 +1244,34 @@ $conn->query("ALTER TABLE purchase_documents ADD INDEX idx_pd_supplier (supplier
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (35)");
 } // end DDL v35
 
+// مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
+// يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
+// يُسقط خصائص الكوكي (expires, path, httponly …) ويُبقي name=value فقط، بلا تكرار.
+function daftra_normalize_cookie($raw) {
+    $attrs = ['expires','max-age','path','domain','secure','httponly','samesite','partitioned','priority'];
+    $out = [];   // الاسم => القيمة، آخر قيمة تغلب
+    $lines = preg_split('/[' . "\r\n" . ']+/', (string)$raw);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
+        // ترويسات ملصوقة بأسمائها
+        $line = preg_replace('/^\s*(set-)?cookie\s*:?\s*/i', '', $line);
+        if (trim($line) === '') continue;
+        foreach (explode(';', $line) as $part) {
+            $part = trim($part);
+            if ($part === '' || strpos($part, '=') === false) continue;
+            $k = trim(substr($part, 0, strpos($part, '=')));
+            $v = trim(substr($part, strpos($part, '=') + 1));
+            if ($k === '' || in_array(strtolower($k), $attrs, true)) continue;
+            if (!preg_match('/^[A-Za-z0-9_\-.]+$/', $k)) continue;   // اسم كوكي معقول فقط
+            $out[$k] = $v;
+        }
+    }
+    $pairs = [];
+    foreach ($out as $k => $v) $pairs[] = $k . '=' . $v;
+    return [implode('; ', $pairs), array_keys($out)];
+}
+
 // مُساعد: جلب مرفق من دفترة — يجرّب مفتاح الـAPI أولاً (لا ينتهي) ثم كوكي الجلسة
 // يعيد [bytes, content_type, route] أو [null, null, سبب الفشل]
 function daftra_file_bytes($conn, $fid, $probeOnly = false) {
@@ -5338,7 +5366,13 @@ switch ($action) {
             echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تعديل الربط'], JSON_UNESCAPED_UNICODE); break; }
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
         $cookie = trim($body['cookie'] ?? '');
-        if ($cookie === '') { echo json_encode(['success'=>false,'message'=>'الكوكي فارغ']); break; }
+        if ($cookie === '') { echo json_encode(['success'=>false,'message'=>'الكوكي فارغ'], JSON_UNESCAPED_UNICODE); break; }
+        [$cookie, $names] = daftra_normalize_cookie($cookie);
+        if ($cookie === '') {
+            echo json_encode(['success'=>false,
+                'message'=>'ما وجدت أي كوكي في النص — انسخ سطر Cookie أو كتلة set-cookie كاملة'],
+                JSON_UNESCAPED_UNICODE); break;
+        }
         $esc = $conn->real_escape_string($cookie);
         $conn->query("INSERT INTO daftra_config (k,v) VALUES ('session_cookie','$esc')
                       ON DUPLICATE KEY UPDATE v='$esc'");
@@ -5350,8 +5384,11 @@ switch ($action) {
         $b = curl_exec($ch); $ctype = curl_getinfo($ch, CURLINFO_CONTENT_TYPE); curl_close($ch);
         $ok = ($b && (stripos($ctype,'pdf')!==false || substr($b,0,4)==='%PDF'));
         acc_audit($conn, 1, 'settings', 0, 'daftra_cookie',
-            'تحديث جلسة دفترة — ' . ($ok ? 'صالحة' : 'غير مؤكدة'), (string)($cu['name'] ?? ''));
-        echo json_encode(['success'=>true,'valid'=>$ok,'message'=>$ok?'تم الحفظ والكوكي صالح ✓':'تم الحفظ لكن الكوكي قد يكون غير صالح'], JSON_UNESCAPED_UNICODE);
+            'تحديث جلسة دفترة — ' . ($ok ? 'صالحة' : 'غير مؤكدة') . ' — ' . implode(', ', $names),
+            (string)($cu['name'] ?? ''));
+        echo json_encode(['success'=>true, 'valid'=>$ok, 'cookies'=>$names,
+            'message'=>($ok ? 'تم الحفظ والكوكي صالح ✓' : 'تم الحفظ لكن الكوكي قد يكون غير صالح')
+                     . ' — قرأت: ' . implode('، ', $names)], JSON_UNESCAPED_UNICODE);
         break;
     }
 
