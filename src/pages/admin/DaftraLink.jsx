@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link2, CheckCircle2, AlertTriangle, RefreshCw, Save, ExternalLink, ShieldCheck, Clock } from 'lucide-react';
 
-import { API_URL, getAdminToken } from '../../lib/api/client';
+import { API_URL, getAdminToken, getPlatformToken } from '../../lib/api/client';
 
-// جلسة دفترة إعداد حساس — الطلب يحمل تفويض المستخدم
-const authHeaders = () => { const t = getAdminToken(); return t ? { Authorization: 'Bearer ' + t } : {}; };
+// جلسة دفترة إعداد حساس — الطلب يحمل تفويض المستخدم أياً كان باب دخوله
+const authHeaders = () => {
+  const t = getPlatformToken() || getAdminToken();
+  return t ? { Authorization: 'Bearer ' + t } : {};
+};
 
 export default function DaftraLink() {
   const [status, setStatus]   = useState(null);

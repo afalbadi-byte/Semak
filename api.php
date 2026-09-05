@@ -1263,7 +1263,8 @@ function daftra_normalize_cookie($raw) {
             $k = trim(substr($part, 0, strpos($part, '=')));
             $v = trim(substr($part, strpos($part, '=') + 1));
             if ($k === '' || in_array(strtolower($k), $attrs, true)) continue;
-            if (!preg_match('/^[A-Za-z0-9_\-.]+$/', $k)) continue;   // اسم كوكي معقول فقط
+            // أسماء دفترة تحوي أقواساً مثل CakeCookie[User_hash] فلا تُرفض
+            if (!preg_match('/^[A-Za-z0-9._%\[\]-]+$/', $k)) continue;
             $out[$k] = $v;
         }
     }
