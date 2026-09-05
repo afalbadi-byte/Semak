@@ -7790,19 +7790,25 @@ switch ($action) {
         if ((int)($_GET['project_id'] ?? 0) > 0) $c[] = "pp.project_id = " . (int)$_GET['project_id'];
         if (!empty($_GET['unpaid']))   $c[] = "p.total > p.paid + 0.5";
         if (!empty($_GET['no_docs']))  $c[] = "COALESCE(d.n,0) = 0 AND COALESCE(a.n,0) = 0";
-        if (!empty($_GET['has_doc']))   $c[] = "(COALESCE(d.n,0) + COALESCE(a.n,0)) > 0";
+        if (!empty($_GET['has_doc']))   $c[] = "(COALESCE(d.n,0) + COALESCE(a2.n,0)) > 0";
         if (!empty($_GET['daftra_doc'])) $c[] = "COALESCE(a.n,0) > 0";
         $W = implode(' AND ', $c);
         $imap = ['date'=>'p.date', 'gross'=>'p.total', 'remaining'=>'(p.total - p.paid)', 'paid'=>'p.paid',
                  'supplier'=>'p.supplier', 'no'=>'p.no',
-                 'docs'=>'(COALESCE(d.n,0) + COALESCE(a.n,0))'];
+                 'docs'=>'(COALESCE(d.n,0) + COALESCE(a2.n,0))'];
         $isk = $imap[(string)($_GET['sort'] ?? '')] ?? 'p.date';
         $ATT = "LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
                            WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
-                  ON a.entity_id = p.id";
+                  ON a.entity_id = p.id
+                LEFT JOIN (SELECT at.entity_id, COUNT(*) n FROM dmirror_attachments at
+                           LEFT JOIN purchase_documents pdx
+                             ON pdx.purchase_id = at.entity_id AND pdx.daftra_file_id = at.file_id
+                           WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pdx.id IS NULL
+                           GROUP BY at.entity_id) a2
+                  ON a2.entity_id = p.id";
         $rows = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.paid,2) paid,
                     ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project,
-                    (COALESCE(d.n,0) + COALESCE(a.n,0)) docs, COALESCE(a.n,0) daftra_docs,
+                    (COALESCE(d.n,0) + COALESCE(a2.n,0)) docs, COALESCE(a.n,0) daftra_docs,
                     COALESCE(p.origin,'daftra') origin
                 FROM dmirror_purchases p
                 LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
