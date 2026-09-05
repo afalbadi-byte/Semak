@@ -9240,6 +9240,12 @@ switch ($action) {
         }
         $r = $conn->query("SELECT COALESCE(SUM(total),0) s FROM dmirror_purchases");
         $out['total_value'] = $r ? round((float)$r->fetch_assoc()['s'], 2) : 0;
+        // كم مرفقاً من دفترة صار عندنا نسخة منه — لمتابعة الأرشفة
+        if ($ar = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
+                JOIN purchase_documents pd ON pd.daftra_file_id = at.file_id
+                     AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
+                WHERE at.entity_key IN ('purchase_order','purchase_invoice')"))
+            $out['counts']['attachments_archived'] = (int)$ar->fetch_assoc()['n'];
         $r = $conn->query("SELECT * FROM dmirror_runs ORDER BY id DESC LIMIT 5");
         $out['runs'] = []; if ($r) while ($x = $r->fetch_assoc()) $out['runs'][] = $x;
         $r = $conn->query("SELECT * FROM dmirror_changes ORDER BY id DESC LIMIT 30");
