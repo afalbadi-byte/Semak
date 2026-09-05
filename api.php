@@ -8254,6 +8254,76 @@ switch ($action) {
         break;
     }
 
+    case 'dmirror_sync_lite': {
+        // مزامنة خفيفة: أحدث صفحة من دفترة فقط — تُستدعى مع كل فتح للتطبيق
+        // المزامنة الكاملة تبقى في dmirror_sync للمراجعات الدورية.
+        set_time_limit(60);
+        $dk    = "__DAFTRA_KEY__";
+        $take  = min(100, max(10, (int)($_GET['limit'] ?? 40)));
+        $force = !empty($_GET['force']);
+
+        // خانق: لا نطرق دفترة أكثر من مرة كل دقيقتين إلا بطلب صريح
+        $last = null;
+        if ($r = $conn->query("SELECT synced_at FROM daftra_sync_log WHERE entity='purchases_lite' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $last = $x['synced_at'];
+        if (!$force && $last && (time() - strtotime($last)) < 120) {
+            echo json_encode(['success'=>true, 'skipped'=>true, 'last'=>$last,
+                'message'=>'آخر مزامنة قبل قليل'], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices.json?page=1&limit=$take");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>25,
+            CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+        $res  = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code !== 200 || !$res) {
+            echo json_encode(['success'=>false, 'message'=>'تعذر الاتصال بدفترة', 'http'=>$code], JSON_UNESCAPED_UNICODE); break;
+        }
+        $d = json_decode($res, true) ?: [];
+        $added = 0; $updated = 0; $seen = 0;
+
+        foreach (($d['data'] ?? []) as $it) {
+            $p = $it['PurchaseOrder'] ?? $it['PurchaseInvoice'] ?? $it;
+            if (empty($p['id'])) continue;
+            $id = (int)$p['id']; $seen++;
+            $no   = $conn->real_escape_string((string)($p['no'] ?? ''));
+            $date = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($p['date'] ?? '')) ? substr($p['date'], 0, 10)
+                  : (preg_match('#^(\d{2})/(\d{2})/(\d{4})#', (string)($p['date'] ?? ''), $m) ? "$m[3]-$m[2]-$m[1]" : null);
+            $sid  = (int)($p['supplier_id'] ?? 0);
+            $sup  = $conn->real_escape_string((string)($p['supplier_business_name'] ?? $p['supplier'] ?? ''));
+            $tot  = (float)($p['summary_total'] ?? 0);
+            $sub  = (float)($p['summary_subtotal'] ?? 0);
+            $paid = (float)($p['summary_paid'] ?? 0);
+            $wo   = isset($p['work_order_id']) && $p['work_order_id'] !== null ? (int)$p['work_order_id'] : 'NULL';
+            $cr   = !empty($p['created'])  ? "'" . $conn->real_escape_string($p['created'])  . "'" : 'NULL';
+            $mo   = !empty($p['modified']) ? "'" . $conn->real_escape_string($p['modified']) . "'" : 'NULL';
+            $raw  = $conn->real_escape_string(json_encode($p, JSON_UNESCAPED_UNICODE));
+            $dsql = $date ? "'$date'" : 'NULL';
+
+            $old = null;
+            if ($r = $conn->query("SELECT total, paid FROM dmirror_purchases WHERE id=$id LIMIT 1")) $old = $r->fetch_assoc();
+            $conn->query("INSERT INTO dmirror_purchases
+                    (id,no,date,supplier_id,supplier,total,subtotal,paid,work_order_id,created,modified,raw,origin)
+                VALUES ($id,'$no',$dsql,$sid,'$sup',$tot,$sub,$paid,$wo,$cr,$mo,'$raw','daftra')
+                ON DUPLICATE KEY UPDATE no=VALUES(no), date=VALUES(date), supplier_id=VALUES(supplier_id),
+                    supplier=VALUES(supplier), total=VALUES(total), subtotal=VALUES(subtotal), paid=VALUES(paid),
+                    work_order_id=VALUES(work_order_id), modified=VALUES(modified), raw=VALUES(raw)");
+            if (!$old) $added++;
+            elseif (abs((float)$old['total'] - $tot) > 0.009 || abs((float)$old['paid'] - $paid) > 0.009) $updated++;
+            // فاتورة جديدة ترث تسكين دفترة إن وُجد
+            if ($wo !== 'NULL')
+                $conn->query("INSERT IGNORE INTO purchase_project (purchase_id, project_id, note, set_by)
+                              VALUES ($id, $wo, 'موروث من دفترة عند المزامنة', 'system')");
+        }
+        $conn->query("INSERT INTO daftra_sync_log (entity, count, synced_at, synced_by)
+                      VALUES ('purchases_lite', $seen, NOW(), 'app')
+                      ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW(), synced_by=VALUES(synced_by)");
+        echo json_encode(['success'=>true, 'checked'=>$seen, 'added'=>$added, 'updated'=>$updated],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'dmirror_sync': {
         set_time_limit(300);
         $dk   = "__DAFTRA_KEY__";

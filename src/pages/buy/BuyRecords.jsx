@@ -4,6 +4,7 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyEntity from './BuyEntity';
 import { SortBar } from '../../components/SortHeader';
 import { useDepthGuard } from '../../lib/backstack';
+import { syncDaftra } from '../../lib/sync';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const short = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -29,9 +30,10 @@ export default function BuyRecords() {
            { k: 'last_date', t: 'آخر تعامل' }, { k: 'name', t: 'الاسم' }];
 
     const PAGE = 40;
-    const load = useCallback(async (append = false) => {
+    const load = useCallback(async (append = false, force = false) => {
         setBusy(true);
         try {
+            if (!append) await syncDaftra({ force });
             const extra  = filter ? `&${filter}=1` : '';
             const offset = append ? rows.length : 0;
             const r = await fetch(`${API_URL}?action=buy_list&kind=${tab}&q=${encodeURIComponent(q)}`
@@ -76,7 +78,7 @@ export default function BuyRecords() {
                         placeholder={tab === 'invoices' ? 'ابحث برقم الفاتورة أو المورد' : 'ابحث عن مورد'}
                         className="w-full min-w-0 h-[52px] pr-9 pl-3 rounded-xl bg-white/[0.06] border border-white/10 text-[15px] outline-none focus:border-[#c5a059]" />
                 </div>
-                <button onClick={load} className="w-[52px] h-[52px] rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                <button onClick={() => load(false, true)} className="w-[52px] h-[52px] rounded-xl bg-white/10 flex items-center justify-center shrink-0">
                     <RefreshCw size={17} className={busy ? 'animate-spin' : ''} />
                 </button>
             </div>

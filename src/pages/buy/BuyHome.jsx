@@ -3,6 +3,7 @@ import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp } fro
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { passkeyEnrolledHere } from '../../lib/passkey';
+import { syncDaftra } from '../../lib/sync';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
@@ -13,9 +14,14 @@ export default function BuyHome({ onNew }) {
     const [busy, setBusy] = useState(false);
     const [askPk, setAskPk] = useState(() => !passkeyEnrolledHere());
 
-    const load = useCallback(async () => {
+    const [sync, setSync] = useState(null);
+
+    const load = useCallback(async (force = false) => {
         setBusy(true);
         try {
+            // نجلب من دفترة أولا ثم نعرض، فالأرقام تكون أحدث ما لديها
+            const s = await syncDaftra({ force });
+            if (s && s.success && !s.skipped) setSync(s);
             const t = getAdminToken();
             const h = t ? { Authorization: `Bearer ${t}` } : {};
             const [a, b] = await Promise.all([
@@ -46,6 +52,12 @@ export default function BuyHome({ onNew }) {
 
             {askPk && <PasskeySetupCard onDone={() => setAskPk(false)} />}
 
+            {sync && (sync.added > 0 || sync.updated > 0) && (
+                <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold">
+                    وصل من دفترة: {sync.added} فاتورة جديدة · {sync.updated} محدَّثة
+                </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
                 {cards.map((c, i) => {
                     const Icon = c.icon;
@@ -61,7 +73,9 @@ export default function BuyHome({ onNew }) {
 
             <div className="flex items-center justify-between">
                 <h3 className="font-black text-sm">آخر فواتير الشهر</h3>
-                <button onClick={load} className="text-slate-400"><RefreshCw size={15} className={busy ? 'animate-spin' : ''} /></button>
+                <button onClick={() => load(true)} className="text-slate-400">
+                    <RefreshCw size={15} className={busy ? 'animate-spin' : ''} />
+                </button>
             </div>
 
             <div className="space-y-2">

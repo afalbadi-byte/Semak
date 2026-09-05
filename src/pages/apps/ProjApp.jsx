@@ -6,6 +6,7 @@ import BuyEntity from '../buy/BuyEntity';
 import BuyRecords from '../buy/BuyRecords';
 import BuyChat from '../buy/BuyChat';
 import { useDepthGuard } from '../../lib/backstack';
+import { syncDaftra } from '../../lib/sync';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
@@ -39,9 +40,10 @@ function Projects() {
     const [busy, setBusy] = useState(false);
     const [stack, setStack] = useState([]);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (force = false) => {
         setBusy(true);
         try {
+            await syncDaftra({ force });   // الأرقام تُبنى على أحدث ما في دفترة
             const r = await fetch(`${API_URL}?action=pbudget_list`, { headers: auth() }).then(x => x.json());
             setRows(r.data || []);
         } catch { setRows([]); }
@@ -62,7 +64,7 @@ function Projects() {
         <div className="p-4 space-y-3">
             <div className="flex items-center justify-between">
                 <h2 className="font-black text-[15px]">المشاريع ونسب الإنجاز</h2>
-                <button onClick={load} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                <button onClick={() => load(true)} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
                     <RefreshCw size={16} className={busy ? 'animate-spin' : ''} />
                 </button>
             </div>
