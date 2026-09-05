@@ -1237,6 +1237,12 @@ $conn->query("ALTER TABLE purchase_payments ADD INDEX idx_pp_supplier (supplier)
 $conn->query("ALTER TABLE purchase_payments ADD INDEX idx_pp_kind (kind)");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (34)");
 } // end DDL v34
+// ─── DDL v35: إيصال على مستوى المورد (بلا فاتورة) ───────────────────────────
+if ($__sv < 35) {
+ensure_column($conn, 'purchase_documents', 'supplier', "supplier VARCHAR(255) DEFAULT NULL");
+$conn->query("ALTER TABLE purchase_documents ADD INDEX idx_pd_supplier (supplier)");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (35)");
+} // end DDL v35
 
 // مُساعد: رصيد المورد — المستحق على فواتيره مقابل رصيده المقدَّم
 function sup_balance($conn, $sup) {
@@ -7003,10 +7009,23 @@ switch ($action) {
         $advance = 0;
         if ($left > 0.009) { $advance = $left; $ids[] = $write(0, $left, 'advance'); }
 
-        if ($rurl !== '' && $alloc)
-            $conn->query("INSERT INTO purchase_documents (purchase_id, doc_type, file_name, drive_url, source, created_by)
-                VALUES (" . (int)$alloc[0]['id'] . ", 'receipt', '" . $E('إيصال سداد ' . $amt . ' — ' . $sup) . "', '"
-                . $E($rurl) . "', 'mobile', '" . $E($u['name'] ?? '') . "')");
+        if ($rurl !== '') {
+            $anchor = $alloc ? (int)$alloc[0]['id'] : 0;
+            $label  = ($alloc ? 'إيصال سداد ' : 'إيصال دفعة مقدمة ') . number_format($amt, 2) . ' — ' . $sup
+                    . ' — ' . $pdate;
+            $conn->query("INSERT INTO purchase_documents (purchase_id, supplier, doc_type, file_name, drive_url,
+                    source, created_by)
+                VALUES ($anchor, '" . $E($sup) . "', 'receipt', '" . $E($label) . "', '" . $E($rurl) . "',
+                    'mobile', '" . $E($u['name'] ?? '') . "')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url)");
+            // الإيصال نفسه يُربط بكل فاتورة أخذت نصيباً منه ليظهر في بطاقتها
+            foreach (array_slice($alloc, 1) as $a)
+                $conn->query("INSERT INTO purchase_documents (purchase_id, supplier, doc_type, file_name, drive_url,
+                        source, created_by)
+                    VALUES (" . (int)$a['id'] . ", '" . $E($sup) . "', 'receipt', '" . $E($label) . "', '" . $E($rurl) . "',
+                        'mobile', '" . $E($u['name'] ?? '') . "')
+                    ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url)");
+        }
 
         acc_audit($conn, 1, 'supplier', 0, 'settle',
             'دفعة مورد ' . $sup . ' · ' . number_format($amt, 2)
@@ -7941,7 +7960,9 @@ switch ($action) {
             $out['sections'][] = ['title'=>'دفعاتنا للمورد',
                 'cols'=>[['k'=>'pay_date','t'=>'التاريخ'],['k'=>'amount','t'=>'المبلغ'],
                          ['k'=>'target','t'=>'مقابل'],['k'=>'method_ar','t'=>'الطريقة'],
-                         ['k'=>'bank','t'=>'البنك'],['k'=>'reference','t'=>'المرجع']],
+                         ['k'=>'bank','t'=>'البنك'],['k'=>'beneficiary','t'=>'المستفيد'],
+                         ['k'=>'reference','t'=>'المرجع'],['k'=>'receipt_url','t'=>'الإيصال']],
+                'url_col'=>'receipt_url',
                 'rows'=>array_map(function($x) {
                     $map = ['transfer'=>'تحويل','cash'=>'نقدي','cheque'=>'شيك','card'=>'بطاقة','other'=>'أخرى'];
                     $x['method_ar'] = $map[$x['method']] ?? $x['method'];
@@ -7950,7 +7971,8 @@ switch ($action) {
                     unset($x['purchase_id'], $x['invoice_no'], $x['method']);
                     return $x;
                 }, $Q("SELECT pp.id, pp.purchase_id, d.no invoice_no, ROUND(pp.amount,2) amount, pp.method,
-                            pp.pay_date, COALESCE(pp.bank,'') bank, COALESCE(pp.reference,'') reference
+                            pp.pay_date, COALESCE(pp.bank,'') bank, COALESCE(pp.reference,'') reference,
+                            COALESCE(pp.beneficiary,'') beneficiary, COALESCE(pp.receipt_url,'') receipt_url
                         FROM purchase_payments pp
                         LEFT JOIN dmirror_purchases d ON d.id = pp.purchase_id
                         WHERE pp.supplier='$v' ORDER BY pp.pay_date DESC, pp.id DESC LIMIT 200"))];

@@ -5,6 +5,7 @@ import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
 import { useDepthGuard } from '../../lib/backstack';
 import { openDoc, openDaftraDoc, openDocsZip } from '../../lib/docs';
+import ReceiptCapture, { uploadReceipt } from '../../components/ReceiptCapture';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
     ? String(v ?? '—') : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -81,11 +82,17 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const savePay = async () => {
         setBusy(true); setErr('');
         try {
+            let rurl = '';
+            if (pay.receipt) {
+                rurl = await uploadReceipt(pay.receipt);
+                if (!rurl) setErr('تعذر رفع الإيصال — ستُحفظ الدفعة بدونه');
+            }
             const r = await post('sup_pay_settle', {
                 supplier: value, amount: Number(pay.amount) || 0, mode: pay.mode,
                 method: pay.method, pay_date: pay.pay_date, reference: pay.reference || '',
                 bank: pay.bank || '', beneficiary: pay.beneficiary || '',
                 from_account: pay.from_account || '', note: pay.note || '',
+                receipt_url: rurl, receipt_details: pay.details || null,
             });
             if (!r.success) { setErr(r.message || 'تعذر الحفظ'); return; }
             setPayRes(r); setTick(t => t + 1);
@@ -132,6 +139,7 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                         amount: data.balance.net_due > 0 ? String(data.balance.net_due) : '',
                         method: 'transfer', pay_date: today(), reference: '', bank: '',
                         beneficiary: value, from_account: '', note: '',
+                        receipt: null, details: null,
                     })} disabled={busy}
                         className="min-h-[44px] px-3 rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-bold flex items-center gap-1.5">
                         <Wallet size={14} /> دفعة للمورد
@@ -232,6 +240,31 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                                         ? 'تُوزَّع الدفعة على الفواتير المستحقة من الأقدم للأحدث، وأي فائض يُقيَّد رصيداً مقدَّماً.'
                                         : 'يُقيَّد كامل المبلغ رصيداً مقدَّماً للمورد بلا ربط بفاتورة، ويُطبَّق لاحقاً.'}
                                 </p>
+
+                                <div className="space-y-2 pt-1">
+                                    <div className="text-[11px] font-bold text-slate-400">إيصال السداد</div>
+                                    <ReceiptCapture
+                                        file={pay.receipt}
+                                        expectedAmount={Number(pay.amount) || 0}
+                                        onFile={f => setPay(v => ({ ...v, receipt: f, details: f ? v.details : null }))}
+                                        onError={m => setErr(m)}
+                                        onApply={f => setPay(v => ({
+                                            ...v,
+                                            amount:       f.amount       ?? v.amount,
+                                            method:       f.method       ?? v.method,
+                                            pay_date:     f.pay_date     ?? v.pay_date,
+                                            bank:         f.bank         ?? v.bank,
+                                            reference:    f.reference    ?? v.reference,
+                                            beneficiary:  f.beneficiary  ?? v.beneficiary,
+                                            from_account: f.from_account ?? v.from_account,
+                                            details:      f.details,
+                                        }))} />
+                                    {pay.details && (
+                                        <p className="text-[11px] text-emerald-300 font-bold">
+                                            نُقلت بيانات الإيصال — راجعها ثم سجّل الدفعة
+                                        </p>
+                                    )}
+                                </div>
 
                                 <Field label="المبلغ">
                                     <input type="number" inputMode="decimal" value={pay.amount}
