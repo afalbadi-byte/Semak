@@ -7,6 +7,13 @@ import InstallApp from '../../components/InstallApp';
 // ولا تضيع بين تبويبات المتصفح. أما الحاسب فيُستخدم من اللوحة لا من هنا.
 export default function BuyInstallGate() {
     const [checking, setChecking] = useState(false);
+    const [oneTap, setOneTap] = useState(() => (typeof window !== 'undefined' && !!window.__bip));
+    useEffect(() => {
+        const on = () => setOneTap(true);
+        window.addEventListener('bip-ready', on);
+        window.addEventListener('beforeinstallprompt', on);
+        return () => { window.removeEventListener('bip-ready', on); window.removeEventListener('beforeinstallprompt', on); };
+    }, []);
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -46,7 +53,12 @@ export default function BuyInstallGate() {
             </div>
 
             <div className="mt-7">
-                <InstallApp label={ios ? 'كيف أثبّته على الآيفون؟' : 'ثبّت التطبيق الآن'} />
+                <InstallApp label={ios ? 'كيف أثبّته على الآيفون؟' : (oneTap ? 'ثبّت التطبيق الآن' : 'كيف أثبّته؟')} />
+                {!ios && !oneTap && (
+                    <p className="text-[11px] text-slate-500 text-center mt-2">
+                        إن لم يظهر التثبيت بنقرة واحدة فحدّث الصفحة، أو ثبّته من قائمة كروم
+                    </p>
+                )}
                 <button onClick={() => { setChecking(true); window.location.reload(); }}
                     className="w-full min-h-[48px] mt-3 rounded-2xl bg-white/10 text-sm font-bold flex items-center justify-center gap-2">
                     {checking ? <RefreshCw size={15} className="animate-spin" /> : null} ثبّتُّه — افتح التطبيق

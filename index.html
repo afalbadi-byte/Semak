@@ -6,6 +6,18 @@
     <link rel="apple-touch-icon" href="/logo.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // تطبيق المشتريات يحتاج بطاقة تعريفه قبل أن يقيّم المتصفح قابلية التثبيت،
+      // وإلا لم يظهر زر التثبيت بنقرة واحدة أو ثبّت الموقع بدل التطبيق.
+      (function () {
+        if (location.pathname.indexOf("/buy") !== 0) return;
+        var m = document.querySelector("link[rel=manifest]");
+        if (m) m.setAttribute("href", "/buy.webmanifest");
+        var a = document.querySelector("link[rel=apple-touch-icon]");
+        if (a) a.setAttribute("href", "/images/app-icon-512.png");
+      })();
+    </script>
+
     
     <title>سماك العقارية | سقف يعلو برؤيتك ومسكن يحكي قصتك</title>
 
