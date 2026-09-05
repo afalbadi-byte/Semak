@@ -6505,7 +6505,10 @@ switch ($action) {
                 ROUND(p.total,2) gross, ROUND(p.paid,2) paid FROM dmirror_purchases p
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
                   ON d.purchase_id = p.id
-                WHERE COALESCE(d.n,0)=0 ORDER BY p.total DESC")];
+                    LEFT JOIN (SELECT entity_id FROM dmirror_attachments
+                        WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                      ON a.entity_id = p.id
+                WHERE COALESCE(d.n,0)=0 AND a.entity_id IS NULL ORDER BY p.total DESC")];
         } elseif ($k === 'avg_invoice' || $k === 'docs_coverage' || $k === 'paid_pct') {
             $out = ['title'=>'كل فواتير الشراء'] + $INV + ['rows'=>$Q("SELECT id, no, date, supplier,
                 ROUND(total,2) gross, ROUND(paid,2) paid FROM dmirror_purchases ORDER BY date DESC LIMIT 400")];
@@ -8582,8 +8585,17 @@ switch ($action) {
                     WHERE date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY) GROUP BY supplier ORDER BY amount DESC LIMIT 5"),
             'docs_missing' => (int)$one("SELECT COUNT(*) FROM dmirror_purchases p
                     LEFT JOIN (SELECT purchase_id FROM purchase_documents GROUP BY purchase_id) d ON d.purchase_id=p.id
-                    WHERE d.purchase_id IS NULL"),
-            'docs_coverage' => (float)$one("SELECT ROUND(100 * COUNT(DISTINCT d.purchase_id) / NULLIF(COUNT(DISTINCT p.id),0), 1) FROM dmirror_purchases p LEFT JOIN purchase_documents d ON d.purchase_id = p.id"),
+                    LEFT JOIN (SELECT entity_id FROM dmirror_attachments
+                        WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                      ON a.entity_id = p.id
+                    WHERE d.purchase_id IS NULL AND a.entity_id IS NULL"),
+            'docs_coverage' => (float)$one("SELECT ROUND(100 * COUNT(DISTINCT COALESCE(d.purchase_id, a.entity_id))
+                    / NULLIF(COUNT(DISTINCT p.id),0), 1)
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_documents d ON d.purchase_id = p.id
+                    LEFT JOIN (SELECT entity_id FROM dmirror_attachments
+                        WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                      ON a.entity_id = p.id"),
             'paid_pct'      => (float)$one("SELECT ROUND(100 * SUM(paid) / NULLIF(SUM(total),0), 1) FROM dmirror_purchases"),
             'avg_invoice'   => (float)$one("SELECT ROUND(AVG(total),0) FROM dmirror_purchases"),
             'active_suppliers' => (int)$one("SELECT COUNT(DISTINCT supplier) FROM dmirror_purchases WHERE date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)"),
