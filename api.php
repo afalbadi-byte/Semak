@@ -9117,6 +9117,12 @@ switch ($action) {
                 $conn->query("INSERT IGNORE INTO purchase_project (purchase_id, project_id, note, set_by)
                               VALUES ($id, $wo, 'موروث من دفترة عند المزامنة', 'system')");
         }
+        // إعادة تفصيل صريحة لأحدث الفواتير — لالتقاط ما استُجدّ عليها
+        $redetail = min(20, max(0, (int)($_GET['redetail'] ?? 0)));
+        if ($redetail > 0 && ($q = $conn->query("SELECT id FROM dmirror_purchases
+                WHERE COALESCE(origin,'daftra')='daftra' ORDER BY id DESC LIMIT $redetail")))
+            while ($r = $q->fetch_assoc()) $need[] = (int)$r['id'];
+
         // فواتير مرآتنا بلا بنود (تشمل ما وصل سابقاً من المزامنة الخفيفة)
         if (count($need) < 12) {
             if ($q = $conn->query("SELECT p.id FROM dmirror_purchases p
@@ -9126,10 +9132,10 @@ switch ($action) {
                 while ($r = $q->fetch_assoc()) $need[] = (int)$r['id'];
             }
         }
-        $need = array_slice(array_values(array_unique($need)), 0, 12);
+        $need = array_slice(array_values(array_unique($need)), 0, max(12, $redetail));
 
         // جلب تفاصيل كل فاتورة محتاجة: البنود والدفعات والمرفقات + تغذية متابعة الأسعار
-        $items_done = 0;
+        $items_done = 0; $payKeys = [];
         foreach ($need as $pid) {
             $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
             curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
@@ -9168,7 +9174,20 @@ switch ($action) {
                             inv_date=VALUES(inv_date), supplier=VALUES(supplier)");
             }
             foreach ((array)($o['PurchaseOrderPayment'] ?? []) as $pay) {
+                $pay = $pay['PurchaseOrderPayment'] ?? $pay;
                 if (!isset($pay['id'])) continue;
+                // إيصال السداد قد يكون مرفقاً على الدفعة نفسها
+                foreach ((array)($pay['Attachments'] ?? $pay['attachments'] ?? []) as $pa) {
+                    if (!isset($pa['id'])) continue;
+                    $conn->query("REPLACE INTO dmirror_attachments
+                        (file_id,name,path,entity_key,entity_id,file_size,mime_type,created_at) VALUES ("
+                        . (int)$pa['id'] . ", '" . $conn->real_escape_string((string)($pa['name'] ?? '')) . "', '"
+                        . $conn->real_escape_string((string)($pa['path'] ?? '')) . "', 'purchase_order_payment', "
+                        . (int)$pay['id'] . ", " . (int)($pa['file_size'] ?? 0) . ", '"
+                        . $conn->real_escape_string((string)($pa['mime_type'] ?? '')) . "', "
+                        . (!empty($pa['created_at']) ? "'" . $conn->real_escape_string($pa['created_at']) . "'" : 'NULL') . ")");
+                }
+                foreach (array_keys($pay) as $pk) $payKeys[] = $pk;
                 $pd = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($pay['date'] ?? '')) ? "'" . substr($pay['date'],0,10) . "'" : 'NULL';
                 $conn->query("REPLACE INTO dmirror_payments (id,purchase_id,amount,date,treasury_id,created) VALUES ("
                     . (int)$pay['id'] . ", $pid, " . (float)($pay['amount'] ?? 0) . ", $pd, "
@@ -9193,8 +9212,10 @@ switch ($action) {
         $conn->query("INSERT INTO daftra_sync_log (entity, count, synced_at, synced_by)
                       VALUES ('purchases_lite', $seen, NOW(), 'app')
                       ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW(), synced_by=VALUES(synced_by)");
-        echo json_encode(['success'=>true, 'checked'=>$seen, 'added'=>$added, 'updated'=>$updated,
-            'items_synced'=>$items_done], JSON_UNESCAPED_UNICODE);
+        $out = ['success'=>true, 'checked'=>$seen, 'added'=>$added, 'updated'=>$updated,
+                'items_synced'=>$items_done];
+        if ($redetail > 0) $out['payment_keys'] = array_values(array_unique($payKeys));
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
         break;
     }
 
