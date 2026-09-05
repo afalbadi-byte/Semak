@@ -8,6 +8,7 @@ import BuyChat from './BuyChat';
 import BuyWelcome from './BuyWelcome';
 import BuyLogin from './BuyLogin';
 import BuySplash from './BuySplash';
+import BuyInstallGate from './BuyInstallGate';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
@@ -51,6 +52,17 @@ function useBuyManifest() {
     }, []);
 }
 
+const isStandalone = () => {
+    try {
+        return window.matchMedia('(display-mode: standalone)').matches
+            || window.matchMedia('(display-mode: fullscreen)').matches
+            || window.navigator.standalone === true;
+    } catch { return false; }
+};
+const isPhone = () => {
+    try { return /iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent); } catch { return false; }
+};
+
 export default function BuyApp() {
     const [tab, setTab]   = useState('home');
     // الترحيب يُعرض أول مرة فقط لكل جهاز
@@ -85,6 +97,9 @@ export default function BuyApp() {
         try { localStorage.removeItem(LS_ADMIN_JWT); } catch { /* تجاهل */ }
         setUser(null); setState('anon');
     };
+
+    // الهاتف يلزمه التثبيت؛ الحاسب يُستخدم من لوحة الإدارة أصلاً
+    if (isPhone() && !isStandalone()) return <BuyInstallGate />;
 
     if (splash) return (
         <BuySplash userName={user?.name || ''}

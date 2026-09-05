@@ -37,6 +37,14 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
       <script>
+      // الحدث يصل قبل إقلاع الواجهة، فنلتقطه هنا وإلا ضاع زر التثبيت
+      window.addEventListener("beforeinstallprompt", function (e) {
+        e.preventDefault();
+        window.__bip = e;
+        window.dispatchEvent(new Event("bip-ready"));
+      });
+      window.addEventListener("appinstalled", function () { window.__bip = null; });
+
       // التسجيل من index.html لأنه وحده غير مخزَّن، فيصل التحديث دائما
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
