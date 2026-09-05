@@ -734,10 +734,16 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
                         key={p.id}
                         className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/50 dark:hover:bg-brand-800 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}
                       >
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <EntityLink type="purchase" value={p.id} className="bg-gold-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-lg text-xs font-black no-underline">
                             #{p.no || p.id}
                           </EntityLink>
+                          {p.origin === 'local' && (
+                            <span title="أُدخلت من تطبيق المشتريات"
+                              className="mr-1.5 inline-block bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded-md text-[10px] font-bold align-middle">
+                              من التطبيق
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{p.date || '—'}</td>
                         <td className="px-4 py-3">

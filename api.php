@@ -7741,6 +7741,36 @@ switch ($action) {
             ];
         }
 
+        // ─── فواتير أُدخلت من تطبيق المشتريات: تعيش عندنا لا في دفترة ─────────
+        // القائمة تُبنى من دفترة، فلولا هذا الدمج لاختفت الفاتورة التي يحفظها
+        // مدير المشتريات من جواله رغم أنها محفوظة فعلاً.
+        $seen = [];
+        foreach ($rows as $r0) $seen[(int)$r0['id']] = 1;
+        $lw = ["origin = 'local'"];
+        if (preg_match('/^d{4}-d{2}-d{2}$/', (string)$from)) $lw[] = "date >= '" . $conn->real_escape_string($from) . "'";
+        if (preg_match('/^d{4}-d{2}-d{2}$/', (string)$to))   $lw[] = "date <= '" . $conn->real_escape_string($to) . "'";
+        if ($supplier_id_filter) $lw[] = "supplier_id = $supplier_id_filter";
+        $lr = $conn->query("SELECT id, no, date, supplier_id, supplier, total, paid, work_order_id
+                            FROM dmirror_purchases WHERE " . implode(' AND ', $lw) . " ORDER BY date DESC, id DESC LIMIT 200");
+        if ($lr) while ($lx = $lr->fetch_assoc()) {
+            if (isset($seen[(int)$lx['id']])) continue;
+            $rows[] = [
+                'id'           => (int)$lx['id'],
+                'no'           => $lx['no'] ?? '',
+                'date'         => $lx['date'] ?? '',
+                'supplier_id'  => $lx['supplier_id'] ?? '',
+                'supplier'     => $lx['supplier'] ?? '',
+                'total'        => (float)$lx['total'],
+                'paid'         => (float)$lx['paid'],
+                'work_order_id'=> $lx['work_order_id'],
+                'origin'       => 'local',
+            ];
+        }
+        usort($rows, function($a, $b) {
+            $c = strcmp((string)($b['date'] ?? ''), (string)($a['date'] ?? ''));
+            return $c !== 0 ? $c : ((int)$b['id'] <=> (int)$a['id']);
+        });
+
         // ─── تصنيف تلقائي: الفاتورة الجديدة ترث البند الغالب لموردها ──────────
         // (البوابة تبقى محدثة: أي فاتورة تدخل دفترة تُصنَّف فور أول عرض للقائمة،
         //  والمورد الجديد كلياً يبقى «غير مصنف» بانتظار قرار يدوي)
