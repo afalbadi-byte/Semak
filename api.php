@@ -7240,6 +7240,45 @@ switch ($action) {
         break;
     }
 
+    case 'pay_proofs': {
+        // تدقيق: أي دفعة بلا إيصال يثبتها — الإيصال إمّا رابط على الدفعة أو مستند على فاتورتها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $Q = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $only = trim((string)($_GET['only'] ?? ''));   // '' | missing
+
+        // إثبات الدفعة: رابط إيصال عليها، أو مستند من نوع إيصال على نفس الفاتورة
+        $base = "FROM purchase_payments pp
+                 LEFT JOIN dmirror_purchases d ON d.id = pp.purchase_id
+                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents
+                            WHERE doc_type='receipt' GROUP BY purchase_id) rc
+                   ON rc.purchase_id = pp.purchase_id";
+        $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(rc.n,0) > 0)";
+
+        $sum = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(pp.amount),0),2) amount,
+                        SUM(CASE WHEN $has THEN 1 ELSE 0 END) with_proof,
+                        ROUND(COALESCE(SUM(CASE WHEN $has THEN pp.amount ELSE 0 END),0),2) amount_with_proof
+                   $base");
+        $s = $sum ? $sum[0] : [];
+        $out = ['success'=>true,
+            'payments'      => (int)($s['n'] ?? 0),
+            'amount'        => (float)($s['amount'] ?? 0),
+            'with_proof'    => (int)($s['with_proof'] ?? 0),
+            'without_proof' => (int)($s['n'] ?? 0) - (int)($s['with_proof'] ?? 0),
+            'amount_with_proof'    => (float)($s['amount_with_proof'] ?? 0),
+            'amount_without_proof' => round((float)($s['amount'] ?? 0) - (float)($s['amount_with_proof'] ?? 0), 2),
+        ];
+        $where = ($only === 'missing') ? "WHERE NOT $has" : '';
+        $out['rows'] = $Q("SELECT pp.id, pp.purchase_id, COALESCE(d.no,'') invoice_no,
+                    COALESCE(pp.supplier,'') supplier, ROUND(pp.amount,2) amount, pp.pay_date, pp.method,
+                    COALESCE(pp.reference,'') reference, COALESCE(pp.bank,'') bank,
+                    COALESCE(pp.receipt_url,'') receipt_url, COALESCE(rc.n,0) receipt_docs,
+                    CASE WHEN $has THEN 1 ELSE 0 END has_proof
+                $base $where ORDER BY has_proof ASC, pp.amount DESC LIMIT 300");
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'sup_balance': {
         // رصيد المورد: المستحق على الفواتير مقابل ما دُفع مقدماً ولم يُطبَّق بعد
         $sup = trim((string)($_GET['supplier'] ?? ''));
@@ -7494,9 +7533,11 @@ switch ($action) {
         $name = trim($name);
         if ($name === '') $name = 'مستند-' . $id . '.' . $ext;
         $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg'][$ext] ?? 'application/octet-stream';
+        $inline = !empty($_GET['view']);            // استعراض في تبويب بدل تنزيل
         header('Content-Type: ' . $mime);
         header('Content-Length: ' . filesize($local));
-        header("Content-Disposition: attachment; filename=\"doc.$ext\"; filename*=UTF-8''" . rawurlencode($name));
+        header(($inline ? 'Content-Disposition: inline' : 'Content-Disposition: attachment')
+            . "; filename=\"doc.$ext\"; filename*=UTF-8''" . rawurlencode($name));
         header('Cache-Control: private, max-age=600');
         readfile($local);
         exit;

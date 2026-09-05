@@ -47,10 +47,10 @@ const go = (url, newTab) => {
     }
 };
 
-// تنزيل مستند مستضاف عندنا
-export async function openDoc(id) {
+// مستند مستضاف عندنا: استعراض في تبويب أو تنزيل
+export async function openDoc(id, view = false) {
     const k = await ticket('get', id);
-    go(`${API_URL}?action=doc_get&id=${id}&k=${k}`, false);
+    go(`${API_URL}?action=doc_get&id=${id}&k=${k}${view ? '&view=1' : ''}`, view);
 }
 
 // مرفق دفترة عبر سجل عندنا: استعراض في تبويب أو تنزيل

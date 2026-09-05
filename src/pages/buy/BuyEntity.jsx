@@ -568,10 +568,16 @@ function Section({ sec, onOpen }) {
                                         : <span className="text-[13px] font-bold">{String(val ?? '—')}</span>}
                                     <span className="flex items-center gap-2 shrink-0">
                                         {sec.download && Number(r.id) > 0 && Number(r.downloadable) === 1 && (
-                                            <button onClick={() => openDoc(r.id).catch(e => alert(e.message))}
-                                                className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
-                                                <Download size={13} /> تنزيل
-                                            </button>
+                                            <>
+                                                <button onClick={() => openDoc(r.id, true).catch(e => alert(e.message))}
+                                                    className="text-[11px] font-bold text-sky-300 flex items-center gap-1">
+                                                    <ExternalLink size={12} /> استعراض
+                                                </button>
+                                                <button onClick={() => openDoc(r.id, false).catch(e => alert(e.message))}
+                                                    className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
+                                                    <Download size={13} /> تنزيل
+                                                </button>
+                                            </>
                                         )}
                                         {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) === 1 && (
                                             <>
