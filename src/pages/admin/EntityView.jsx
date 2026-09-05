@@ -5,6 +5,7 @@ import EntityLink from '../../components/EntityLink';
 import { ENTITY_LABEL } from '../../lib/entity';
 import SortHeader from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
+import { openDoc, openDaftraDoc, openDocsZip } from '../../lib/docs';
 
 const money = v => {
     const n = Number(v);
@@ -86,10 +87,10 @@ function Section({ sec }) {
                 <h3 className="font-black text-sm text-brand-900 dark:text-brand-50">{sec.title}</h3>
                 <span className="text-[11px] text-slate-400 mr-auto">{rows.length} صف</span>
                 {sec.download && rows.some(r => Number(r.downloadable) === 1) && (
-                    <a href={`${API_URL}?action=doc_zip&purchase_id=${sec.purchase_id}`}
+                    <button onClick={() => openDocsZip(sec.purchase_id).catch(e => alert(e.message))}
                         className="text-xs font-bold text-brand-700 inline-flex items-center gap-1">
                         <Archive size={14} /> تنزيل الكل
-                    </a>
+                    </button>
                 )}
             </div>
             {!raw.length ? (
@@ -117,15 +118,15 @@ function Section({ sec }) {
                                                     {v ? <a href={v} target="_blank" rel="noopener noreferrer"
                                                         className="text-brand-700 inline-flex items-center gap-1"><ExternalLink size={13} /> فتح</a> : null}
                                                     {sec.download && r.id && Number(r.downloadable) === 1 ? (
-                                                        <a href={`${API_URL}?action=doc_get&id=${r.id}`} download
-                                                            className="text-emerald-700 inline-flex items-center gap-1 font-bold"><Download size={13} /> تنزيل</a>
+                                                        <button onClick={() => openDoc(r.id).catch(e => alert(e.message))}
+                                                            className="text-emerald-700 inline-flex items-center gap-1 font-bold"><Download size={13} /> تنزيل</button>
                                                     ) : null}
                                                     {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) === 1 ? (
                                                         <>
-                                                            <a href={`${API_URL}?action=doc_daftra&id=${r.id}&view=1`} target="_blank" rel="noopener noreferrer"
-                                                                className="text-sky-700 inline-flex items-center gap-1"><ExternalLink size={13} /> استعراض</a>
-                                                            <a href={`${API_URL}?action=doc_daftra&id=${r.id}`} download
-                                                                className="text-emerald-700 inline-flex items-center gap-1 font-bold"><Download size={13} /> تنزيل</a>
+                                                            <button onClick={() => openDaftraDoc(r.id, true).catch(e => alert(e.message))}
+                                                                className="text-sky-700 inline-flex items-center gap-1"><ExternalLink size={13} /> استعراض</button>
+                                                            <button onClick={() => openDaftraDoc(r.id, false).catch(e => alert(e.message))}
+                                                                className="text-emerald-700 inline-flex items-center gap-1 font-bold"><Download size={13} /> تنزيل</button>
                                                         </>
                                                     ) : null}
                                                     {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) !== 1 ? (

@@ -4,6 +4,7 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
 import { useDepthGuard } from '../../lib/backstack';
+import { openDoc, openDaftraDoc, openDocsZip } from '../../lib/docs';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
     ? String(v ?? '—') : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -187,10 +188,10 @@ function Section({ sec, onOpen }) {
                 <span className="text-[11px] text-slate-500 mr-auto">{rows.length}</span>
             </button>
             {sec.download && rows.some(r => Number(r.downloadable) === 1) && (
-                <a href={`${API_URL}?action=doc_zip&purchase_id=${sec.purchase_id}`}
-                    className="mx-3 mb-2 h-[44px] rounded-xl bg-white/10 flex items-center justify-center gap-1.5 text-[12px] font-bold">
+                <button onClick={() => openDocsZip(sec.purchase_id).catch(e => alert(e.message))}
+                    className="mx-3 mb-2 h-[44px] rounded-xl bg-white/10 flex items-center justify-center gap-1.5 text-[12px] font-bold w-[calc(100%-1.5rem)]">
                     <Archive size={14} className="text-[#c5a059]" /> تنزيل كل المستندات
-                </a>
+                </button>
             )}
 
             {open && (
@@ -223,21 +224,21 @@ function Section({ sec, onOpen }) {
                                         : <span className="text-[13px] font-bold">{String(val ?? '—')}</span>}
                                     <span className="flex items-center gap-2 shrink-0">
                                         {sec.download && r.id && Number(r.downloadable) === 1 && (
-                                            <a href={`${API_URL}?action=doc_get&id=${r.id}`} download
+                                            <button onClick={() => openDoc(r.id).catch(e => alert(e.message))}
                                                 className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
                                                 <Download size={13} /> تنزيل
-                                            </a>
+                                            </button>
                                         )}
                                         {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) === 1 && (
                                             <>
-                                                <a href={`${API_URL}?action=doc_daftra&id=${r.id}&view=1`} target="_blank" rel="noopener noreferrer"
+                                                <button onClick={() => openDaftraDoc(r.id, true).catch(e => alert(e.message))}
                                                     className="text-[11px] font-bold text-sky-300 flex items-center gap-1">
                                                     <ExternalLink size={12} /> استعراض
-                                                </a>
-                                                <a href={`${API_URL}?action=doc_daftra&id=${r.id}`} download
+                                                </button>
+                                                <button onClick={() => openDaftraDoc(r.id, false).catch(e => alert(e.message))}
                                                     className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
                                                     <Download size={13} /> تنزيل
-                                                </a>
+                                                </button>
                                             </>
                                         )}
                                         {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) !== 1 && (

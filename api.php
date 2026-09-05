@@ -162,6 +162,15 @@ function daftra_session_cookie($conn) {
 
 // ─── قراءة مستند وتحقق من انتمائه لفاتورته ──────────────────────────────────
 // الربط الحالي للمستندات المسترجعة استُنتج من التوقيت، وهذا يقرأ الملف نفسه.
+// تذكرة تنزيل صالحة تُغني عن ترويسة التفويض التي لا تحملها الروابط
+function dl_ticket_ok($conn, $k, $kind, $ref) {
+    $k = preg_replace("/[^a-f0-9]/", "", (string)$k);
+    if ($k === "" || !$ref) return false;
+    $r = $conn->query("SELECT user_id FROM download_tickets WHERE k='$k' AND kind='" .
+         $conn->real_escape_string($kind) . "' AND ref_id=" . (int)$ref . " AND expires_at > NOW() LIMIT 1");
+    return (bool)($r && $r->num_rows);
+}
+
 function doc_fetch_bytes($conn, $doc) {
     $url = (string)($doc['drive_url'] ?? '');
     if ($url !== '') {
@@ -1277,6 +1286,18 @@ ensure_column($conn, 'purchase_documents', 'suggest_purchase_id', "suggest_purch
 $conn->query("UPDATE purchase_documents SET confidence='مستنتج' WHERE source='recovered' AND confidence='مؤكد'");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (32)");
 } // end DDL v32
+// ─── DDL v33: تذاكر تنزيل قصيرة العمر — الروابط لا تحمل ترويسة تفويض ────────
+if ($__sv < 33) {
+$conn->query("CREATE TABLE IF NOT EXISTS download_tickets (
+    k          VARCHAR(64) PRIMARY KEY,
+    user_id    INT NOT NULL,
+    kind       VARCHAR(16) NOT NULL,
+    ref_id     INT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    INDEX (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (33)");
+} // end DDL v33
 
 
 
@@ -6875,9 +6896,37 @@ switch ($action) {
         break;
     }
 
+    case '__dl_helper_never__': break;   // ما بعده دوال مساعدة للتنزيل
+
+    case 'doc_ticket': {
+        // الروابط لا تحمل ترويسة تفويض، فنمنحها تذكرة قصيرة العمر لمورد بعينه
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub'];
+        $du = null;
+        if ($r = $conn->query("SELECT role, permissions FROM users WHERE id=$uid LIMIT 1")) $du = $r->fetch_assoc();
+        $dp = json_decode((string)($du['permissions'] ?? '[]'), true); if (!is_array($dp)) $dp = [];
+        if (!$du || (($du['role'] ?? '') !== 'admin' && !in_array('finance', $dp, true) && !in_array('accounting', $dp, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية عرض المستندات'], JSON_UNESCAPED_UNICODE); break; }
+        $b    = json_decode(file_get_contents('php://input'), true) ?: [];
+        $kind = in_array(($b['kind'] ?? ''), ['get','zip','daftra'], true) ? $b['kind'] : 'get';
+        $ref  = (int)($b['id'] ?? 0);
+        if (!$ref) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM download_tickets WHERE expires_at < NOW()");
+        $k = bin2hex(random_bytes(24));
+        $conn->query("INSERT INTO download_tickets (k, user_id, kind, ref_id, expires_at)
+                      VALUES ('" . $conn->real_escape_string($k) . "', $uid, '" . $conn->real_escape_string($kind) . "',
+                              $ref, DATE_ADD(NOW(), INTERVAL 5 MINUTE))");
+        echo json_encode(['success'=>true, 'k'=>$k], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'doc_get': {
         // تنزيل مستند باسمه العربي بدل الرمز العشوائي في الرابط
         $id = (int)($_GET['id'] ?? 0);
+        // الرابط يحمل تذكرة لا ترويسة؛ وإن جاء من طلب مبرمج تكفي الجلسة
+        if (!dl_ticket_ok($conn, $_GET['k'] ?? '', 'get', $id) && !$_jwt_claims) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
         $doc = null;
         if ($r = $conn->query("SELECT d.*, p.no AS inv_no, p.supplier FROM purchase_documents d
@@ -7017,13 +7066,15 @@ switch ($action) {
 
     case 'doc_daftra': {
         // استعراض وتنزيل مرفقات دفترة عبر الخادم — الجلسة تبقى عندنا لا في الجوال
-        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+        $__tk = dl_ticket_ok($conn, $_GET['k'] ?? '', 'daftra', (int)($_GET['id'] ?? 0));
+        if (!$__tk && (!$_jwt_claims || empty($_jwt_claims['sub']))) {
             echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $du = null;
         if ($r = $conn->query("SELECT role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
             $du = $r->fetch_assoc();
         $dp = json_decode((string)($du['permissions'] ?? '[]'), true); if (!is_array($dp)) $dp = [];
-        if (!$du || (($du['role'] ?? '') !== 'admin' && !in_array('finance', $dp, true) && !in_array('accounting', $dp, true))) {
+        if (!$__tk && (!$du || (($du['role'] ?? '') !== 'admin' && !in_array('finance', $dp, true)
+                                && !in_array('accounting', $dp, true)))) {
             echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية عرض المستندات'], JSON_UNESCAPED_UNICODE); break; }
 
         $id  = (int)($_GET['id'] ?? 0);          // معرّف المستند عندنا
@@ -7088,6 +7139,8 @@ switch ($action) {
     case 'doc_zip': {
         // كل مستندات فاتورة في ملف واحد
         $pid = (int)($_GET['purchase_id'] ?? 0);
+        if (!dl_ticket_ok($conn, $_GET['k'] ?? '', 'zip', $pid) && !$_jwt_claims) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         if (!$pid) { echo json_encode(['success'=>false,'message'=>'purchase_id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
         if (!class_exists('ZipArchive')) {
             echo json_encode(['success'=>false,'message'=>'الضغط غير متاح على الخادم — نزّل المستندات فرادى'],
