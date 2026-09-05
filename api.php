@@ -1294,11 +1294,12 @@ function daftra_file_bytes($conn, $fid, $probeOnly = false) {
         $body = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $ct   = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $eff  = (string)curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
         curl_close($ch);
         $html = stripos($ct, 'text/html') !== false || strncmp((string)$body, '<!DOCTYPE', 9) === 0;
         $json = stripos($ct, 'json') !== false;
         $ok   = ($code === 200 && $body !== false && $body !== '' && !$html && !$json);
-        return [$ok, $body, $ct, $code, ($html ? 'html' : ($json ? 'json' : ''))];
+        return [$ok, $body, $ct, $code, ($html ? 'html' : ($json ? 'json' : '')), $eff];
     };
 
     $ua = 'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)';
@@ -1321,18 +1322,18 @@ function daftra_file_bytes($conn, $fid, $probeOnly = false) {
     $notes = [];
     foreach ($byKey as $u) {
         [$ok, $body, $ct, $code, $why] = $try($u, ["APIKEY: $key", 'Accept: */*', $ua]);
-        $notes[] = ['route'=>'apikey', 'url'=>$u, 'http'=>$code, 'ct'=>$ct, 'why'=>$why];
+        $notes[] = ['route'=>'apikey', 'url'=>$u, 'http'=>$code, 'ct'=>$ct, 'why'=>$why, 'eff'=>''];
         if ($ok) return $probeOnly ? [null, $ct, 'apikey:' . $u] : [$body, $ct ?: 'application/pdf', 'apikey'];
     }
     // كوكي الجلسة — يعمل لكنه ينتهي ويحتاج تحديثاً يدوياً
     $ck = daftra_session_cookie($conn);
-    [$ok, $body, $ct, $code, $why] = $try("https://semak.daftra.com/v2/owner/entity/files/preview/$fid",
+    [$ok, $body, $ct, $code, $why, $eff] = $try("https://semak.daftra.com/v2/owner/entity/files/preview/$fid",
         ['Cookie: ' . $ck, 'Accept: */*', $ua]);
-    $notes[] = ['route'=>'cookie', 'http'=>$code, 'ct'=>$ct, 'why'=>$why];
+    $notes[] = ['route'=>'cookie', 'http'=>$code, 'ct'=>$ct, 'why'=>$why, 'eff'=>$eff];
     if ($ok) return $probeOnly ? [null, $ct, 'cookie'] : [$body, $ct ?: 'application/pdf', 'cookie'];
     $brief = ['file'=>$fname, 'path'=>$fpath];
     foreach ($notes as $n)
-        $brief[] = ($n['route'] === 'cookie' ? 'cookie' : basename((string)($n['url'] ?? '')))
+        $brief[] = ($n['route'] === 'cookie' ? ('cookie->' . parse_url((string)($n['eff'] ?? ''), PHP_URL_PATH)) : basename((string)($n['url'] ?? '')))
                  . ':' . $n['http'] . ($n['why'] !== '' ? '/' . $n['why'] : '');
     return [null, null, json_encode($brief, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)];
 }
@@ -5368,12 +5369,20 @@ switch ($action) {
         $body   = json_decode(file_get_contents('php://input'), true) ?? [];
         $cookie = trim($body['cookie'] ?? '');
         if ($cookie === '') { echo json_encode(['success'=>false,'message'=>'الكوكي فارغ'], JSON_UNESCAPED_UNICODE); break; }
-        [$cookie, $names] = daftra_normalize_cookie($cookie);
-        if ($cookie === '') {
+        [$fresh, $names] = daftra_normalize_cookie($cookie);
+        if ($fresh === '') {
             echo json_encode(['success'=>false,
                 'message'=>'ما وجدت أي كوكي في النص — انسخ سطر Cookie أو كتلة set-cookie كاملة'],
                 JSON_UNESCAPED_UNICODE); break;
         }
+        // دفترة تطبيقان: /owner يعمل بـ CAKEPHP و/v2 بـ laravel_session.
+        // لصقة من أحدهما لا يجوز أن تمحو كوكيز الآخر، فندمج والأحدث يغلب.
+        if (empty($body['replace'])) {
+            [$old] = daftra_normalize_cookie(daftra_session_cookie($conn));
+            if ($old !== '') {
+                [$cookie, $names] = daftra_normalize_cookie($old . '; ' . $fresh);
+            } else { $cookie = $fresh; }
+        } else { $cookie = $fresh; }
         $esc = $conn->real_escape_string($cookie);
         $conn->query("INSERT INTO daftra_config (k,v) VALUES ('session_cookie','$esc')
                       ON DUPLICATE KEY UPDATE v='$esc'");
@@ -5398,10 +5407,20 @@ switch ($action) {
         acc_audit($conn, 1, 'settings', 0, 'daftra_cookie',
             'تحديث جلسة دفترة — ' . ($ok ? 'صالحة' : 'غير مؤكدة') . ' — ' . implode(', ', $names),
             (string)($cu['name'] ?? ''));
+        $hasCake = false; $hasLar = false;
+        foreach ($names as $n) {
+            if (strcasecmp($n, 'CAKEPHP') === 0) $hasCake = true;
+            if (strcasecmp($n, 'laravel_session') === 0) $hasLar = true;
+        }
+        $missing = [];
+        if (!$hasCake) $missing[] = 'CAKEPHP (تطبيق /owner)';
+        if (!$hasLar)  $missing[] = 'laravel_session (تطبيق /v2 — مصدر المرفقات)';
         echo json_encode(['success'=>true, 'valid'=>$ok, 'cookies'=>$names, 'tested_file'=>$tfid,
-            'detail'=>$why,
-            'message'=>($ok ? ('تم الحفظ والكوكي صالح ✓ — جلبت مرفقاً تجريبياً بنجاح')
-                            : ('تم الحفظ لكن تعذر جلب مرفق تجريبي — ' . $why)),
+            'detail'=>$why, 'has_cakephp'=>$hasCake, 'has_laravel'=>$hasLar,
+            'missing'=>$missing,
+            'message'=>($ok ? 'تم الحفظ والكوكي صالح ✓ — جلبت مرفقاً تجريبياً بنجاح'
+                            : ('تم الحفظ لكن تعذر جلب مرفق تجريبي'
+                               . ($missing ? ' — ناقص: ' . implode('، ', $missing) : ' — ' . $why))),
             'read'=>count($names)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         break;
     }
