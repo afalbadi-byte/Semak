@@ -6810,6 +6810,80 @@ switch ($action) {
         break;
     }
 
+    case 'doc_get': {
+        // تنزيل مستند باسمه العربي بدل الرمز العشوائي في الرابط
+        $id = (int)($_GET['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $doc = null;
+        if ($r = $conn->query("SELECT d.*, p.no AS inv_no, p.supplier FROM purchase_documents d
+                               LEFT JOIN dmirror_purchases p ON p.id = d.purchase_id
+                               WHERE d.id=$id LIMIT 1")) $doc = $r->fetch_assoc();
+        if (!$doc) { echo json_encode(['success'=>false,'message'=>'المستند غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $url = (string)($doc['drive_url'] ?? '');
+        if ($url === '') {
+            echo json_encode(['success'=>false,'message'=>'هذا المستند غير مرفوع على الخادم — موجود في أرشيف الدرايف'],
+                JSON_UNESCAPED_UNICODE); break;
+        }
+        // ملفاتنا المستضافة تُقدَّم من القرص باسم مفهوم؛ الروابط الخارجية تُحوَّل
+        $path = parse_url($url, PHP_URL_PATH);
+        $local = ($path && strpos($path, '/qdocs/') === 0) ? __DIR__ . $path : null;
+        if (!$local || !is_file($local)) { header('Location: ' . $url); break; }
+
+        $ext  = strtolower(pathinfo($local, PATHINFO_EXTENSION)) ?: 'pdf';
+        $kind = ($doc['doc_type'] === 'receipt') ? 'إيصال' : 'فاتورة';
+        $name = $kind . ' ' . ($doc['inv_no'] ?: $doc['invoice_no'] ?: $doc['purchase_id'])
+              . ($doc['supplier'] ? ' - ' . $doc['supplier'] : '') . '.' . $ext;
+        $name = preg_replace('/[\\\/:*?"<>|]+/u', ' ', $name);
+        $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg'][$ext] ?? 'application/octet-stream';
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . filesize($local));
+        header("Content-Disposition: attachment; filename=\"doc.$ext\"; filename*=UTF-8''" . rawurlencode($name));
+        header('Cache-Control: private, max-age=600');
+        readfile($local);
+        exit;
+    }
+
+    case 'doc_zip': {
+        // كل مستندات فاتورة في ملف واحد
+        $pid = (int)($_GET['purchase_id'] ?? 0);
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'purchase_id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        if (!class_exists('ZipArchive')) {
+            echo json_encode(['success'=>false,'message'=>'الضغط غير متاح على الخادم — نزّل المستندات فرادى'],
+                JSON_UNESCAPED_UNICODE); break;
+        }
+        $inv = null;
+        if ($r = $conn->query("SELECT no, supplier FROM dmirror_purchases WHERE id=$pid LIMIT 1")) $inv = $r->fetch_assoc();
+        $docs = [];
+        if ($r = $conn->query("SELECT id, doc_type, drive_url FROM purchase_documents WHERE purchase_id=$pid ORDER BY id"))
+            while ($x = $r->fetch_assoc()) $docs[] = $x;
+        $files = [];
+        foreach ($docs as $d) {
+            $p = parse_url((string)$d['drive_url'], PHP_URL_PATH);
+            if ($p && strpos($p, '/qdocs/') === 0 && is_file(__DIR__ . $p)) $files[] = [$d, __DIR__ . $p];
+        }
+        if (!$files) { echo json_encode(['success'=>false,'message'=>'لا مستندات مرفوعة لهذه الفاتورة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $tmp = tempnam(sys_get_temp_dir(), 'sdoc');
+        $zip = new ZipArchive();
+        if ($zip->open($tmp, ZipArchive::OVERWRITE) !== true) {
+            echo json_encode(['success'=>false,'message'=>'تعذر إنشاء الملف'], JSON_UNESCAPED_UNICODE); break; }
+        $k = 0;
+        foreach ($files as [$d, $abs]) {
+            $k++;
+            $ext = strtolower(pathinfo($abs, PATHINFO_EXTENSION)) ?: 'pdf';
+            $nm  = (($d['doc_type'] === 'receipt') ? 'إيصال' : 'فاتورة') . ' ' . $k . '.' . $ext;
+            $zip->addFile($abs, $nm);
+        }
+        $zip->close();
+        $zname = 'مستندات فاتورة ' . ($inv['no'] ?? $pid) . '.zip';
+        header('Content-Type: application/zip');
+        header('Content-Length: ' . filesize($tmp));
+        header("Content-Disposition: attachment; filename=\"docs-$pid.zip\"; filename*=UTF-8''" . rawurlencode($zname));
+        readfile($tmp);
+        @unlink($tmp);
+        exit;
+    }
+
     case 'buy_list': {
         // سجلات التطبيق: الفواتير والموردون ببحث وترقيم صفحات
         $kind = (string)($_GET['kind'] ?? 'invoices');
@@ -7049,11 +7123,19 @@ switch ($action) {
                             COALESCE(created_by,'') created_by
                         FROM purchase_payments WHERE purchase_id=$pid ORDER BY pay_date, id"))];
                 $out['sections'][] = ['title'=>'المستندات',
-                    'cols'=>[['k'=>'file_name','t'=>'المستند'],['k'=>'doc_type','t'=>'النوع'],
+                    'cols'=>[['k'=>'file_name','t'=>'المستند'],['k'=>'doc_type_ar','t'=>'النوع'],
                              ['k'=>'created_at','t'=>'أضيف'],['k'=>'drive_url','t'=>'الرابط']],
                     'url_col'=>'drive_url',
-                    'rows'=>$Q("SELECT file_name, doc_type, LEFT(created_at,10) created_at, drive_url
-                                FROM purchase_documents WHERE purchase_id=$pid ORDER BY id")];
+                    'download'=>true,            // كل صف له id يُنزَّل عبر doc_get
+                    'purchase_id'=>$pid,
+                    'rows'=>array_map(function($d) {
+                        $m = ['invoice'=>'فاتورة', 'receipt'=>'إيصال سداد', 'other'=>'مستند آخر'];
+                        $d['doc_type_ar'] = $m[$d['doc_type']] ?? $d['doc_type'];
+                        $d['downloadable'] = ($d['drive_url'] !== '' && $d['drive_url'] !== null) ? 1 : 0;
+                        return $d;
+                    }, $Q("SELECT id, file_name, doc_type, LEFT(created_at,10) created_at,
+                                  COALESCE(drive_url,'') drive_url
+                           FROM purchase_documents WHERE purchase_id=$pid ORDER BY id"))];
             }
         }
         elseif ($type === 'product') {

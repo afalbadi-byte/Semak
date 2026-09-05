@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, ExternalLink, Layers } from 'lucide-react';
+import { Loader2, ExternalLink, Layers, Download, Archive } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
 import EntityLink from '../../components/EntityLink';
 import { ENTITY_LABEL } from '../../lib/entity';
@@ -81,6 +81,12 @@ function Section({ sec }) {
                 <Layers size={15} className="text-gold-500" />
                 <h3 className="font-black text-sm text-brand-900 dark:text-brand-50">{sec.title}</h3>
                 <span className="text-[11px] text-slate-400 mr-auto">{rows.length} صف</span>
+                {sec.download && rows.some(r => Number(r.downloadable) === 1) && (
+                    <a href={`${API_URL}?action=doc_zip&purchase_id=${sec.purchase_id}`}
+                        className="text-xs font-bold text-brand-700 inline-flex items-center gap-1">
+                        <Archive size={14} /> تنزيل الكل
+                    </a>
+                )}
             </div>
             {!rows.length ? (
                 <p className="text-sm text-slate-400 text-center py-8">لا بيانات</p>
@@ -100,8 +106,18 @@ function Section({ sec }) {
                                         const lk = linkFor(c.k);
                                         if (sec.url_col === c.k) {
                                             return <td key={c.k} className="py-2 px-3">
-                                                {v ? <a href={v} target="_blank" rel="noopener noreferrer"
-                                                    className="text-brand-700 inline-flex items-center gap-1"><ExternalLink size={13} /> فتح</a> : '—'}
+                                                <span className="inline-flex items-center gap-3">
+                                                    {v ? <a href={v} target="_blank" rel="noopener noreferrer"
+                                                        className="text-brand-700 inline-flex items-center gap-1"><ExternalLink size={13} /> فتح</a> : null}
+                                                    {sec.download && r.id && Number(r.downloadable) === 1 ? (
+                                                        <a href={`${API_URL}?action=doc_get&id=${r.id}`} download
+                                                            className="text-emerald-700 inline-flex items-center gap-1 font-bold"><Download size={13} /> تنزيل</a>
+                                                    ) : null}
+                                                    {sec.download && Number(r.downloadable) !== 1 ? (
+                                                        <span className="text-slate-400 text-xs">في أرشيف الدرايف</span>
+                                                    ) : null}
+                                                    {!v && !sec.download ? '—' : null}
+                                                </span>
                                             </td>;
                                         }
                                         return (

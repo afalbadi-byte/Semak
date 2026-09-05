@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers } from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
@@ -89,6 +89,12 @@ function Section({ sec, onOpen }) {
                 <span className="font-black text-[13px]">{sec.title}</span>
                 <span className="text-[11px] text-slate-500 mr-auto">{rows.length}</span>
             </button>
+            {sec.download && rows.some(r => Number(r.downloadable) === 1) && (
+                <a href={`${API_URL}?action=doc_zip&purchase_id=${sec.purchase_id}`}
+                    className="mx-3 mb-2 h-[44px] rounded-xl bg-white/10 flex items-center justify-center gap-1.5 text-[12px] font-bold">
+                    <Archive size={14} className="text-[#c5a059]" /> تنزيل كل المستندات
+                </a>
+            )}
 
             {open && (
                 <div className="px-3 pb-3 space-y-2">
@@ -105,12 +111,23 @@ function Section({ sec, onOpen }) {
                                             {String(val ?? '—')}
                                           </button>
                                         : <span className="text-[13px] font-bold">{String(val ?? '—')}</span>}
-                                    {sec.url_col && r[sec.url_col] && (
-                                        <a href={r[sec.url_col]} target="_blank" rel="noopener noreferrer"
-                                            className="text-[11px] text-sky-300 flex items-center gap-1 shrink-0">
-                                            <ExternalLink size={12} /> فتح
-                                        </a>
-                                    )}
+                                    <span className="flex items-center gap-2 shrink-0">
+                                        {sec.download && r.id && Number(r.downloadable) === 1 && (
+                                            <a href={`${API_URL}?action=doc_get&id=${r.id}`} download
+                                                className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
+                                                <Download size={13} /> تنزيل
+                                            </a>
+                                        )}
+                                        {sec.download && Number(r.downloadable) !== 1 && (
+                                            <span className="text-[10px] text-slate-500">في أرشيف الدرايف</span>
+                                        )}
+                                        {sec.url_col && r[sec.url_col] && !sec.download && (
+                                            <a href={r[sec.url_col]} target="_blank" rel="noopener noreferrer"
+                                                className="text-[11px] text-sky-300 flex items-center gap-1">
+                                                <ExternalLink size={12} /> فتح
+                                            </a>
+                                        )}
+                                    </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1.5">
                                     {rest.filter(c => c.k !== sec.url_col).map(c => {
