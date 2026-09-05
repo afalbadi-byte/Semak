@@ -4,7 +4,7 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
 import { useDepthGuard } from '../../lib/backstack';
-import { openDoc, openDaftraDoc, openDocsZip } from '../../lib/docs';
+import { openDoc, openDaftraDoc, openDaftraFile, openDocsZip } from '../../lib/docs';
 import ReceiptCapture, { uploadReceipt } from '../../components/ReceiptCapture';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
@@ -567,7 +567,7 @@ function Section({ sec, onOpen }) {
                                           </button>
                                         : <span className="text-[13px] font-bold">{String(val ?? '—')}</span>}
                                     <span className="flex items-center gap-2 shrink-0">
-                                        {sec.download && r.id && Number(r.downloadable) === 1 && (
+                                        {sec.download && Number(r.id) > 0 && Number(r.downloadable) === 1 && (
                                             <button onClick={() => openDoc(r.id).catch(e => alert(e.message))}
                                                 className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
                                                 <Download size={13} /> تنزيل
@@ -575,11 +575,13 @@ function Section({ sec, onOpen }) {
                                         )}
                                         {sec.download && Number(r.downloadable) !== 1 && Number(r.daftra) === 1 && (
                                             <>
-                                                <button onClick={() => openDaftraDoc(r.id, true).catch(e => alert(e.message))}
+                                                <button onClick={() => (Number(r.id) > 0 ? openDaftraDoc(r.id, true)
+                                                                                        : openDaftraFile(r.file_id, true)).catch(e => alert(e.message))}
                                                     className="text-[11px] font-bold text-sky-300 flex items-center gap-1">
                                                     <ExternalLink size={12} /> استعراض
                                                 </button>
-                                                <button onClick={() => openDaftraDoc(r.id, false).catch(e => alert(e.message))}
+                                                <button onClick={() => (Number(r.id) > 0 ? openDaftraDoc(r.id, false)
+                                                                                        : openDaftraFile(r.file_id, false)).catch(e => alert(e.message))}
                                                     className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
                                                     <Download size={13} /> تنزيل
                                                 </button>

@@ -20,14 +20,14 @@ export function sessionMessage() {
     return null;
 }
 
-async function ticket(kind, id) {
+async function ticket(kind, id, extra) {
     const bad = sessionMessage();
     if (bad) throw new Error(bad);
     const t = getAdminToken();
     const r = await fetch(`${API_URL}?action=doc_ticket`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) },
-        body: JSON.stringify({ kind, id }),
+        body: JSON.stringify({ kind, id, ...(extra || {}) }),
     }).then(x => x.json());
     if (!r.success) {
         const m = String(r.message || '');
@@ -53,10 +53,16 @@ export async function openDoc(id) {
     go(`${API_URL}?action=doc_get&id=${id}&k=${k}`, false);
 }
 
-// مرفق دفترة: استعراض في تبويب أو تنزيل
+// مرفق دفترة عبر سجل عندنا: استعراض في تبويب أو تنزيل
 export async function openDaftraDoc(id, view = false) {
     const k = await ticket('daftra', id);
     go(`${API_URL}?action=doc_daftra&id=${id}&k=${k}${view ? '&view=1' : ''}`, view);
+}
+
+// مرفق موجود في دفترة بلا سجل عندنا — نفتحه بمعرّف ملفه مباشرة
+export async function openDaftraFile(fileId, view = false) {
+    const k = await ticket('daftra', 0, { file_id: fileId });
+    go(`${API_URL}?action=doc_daftra&file_id=${fileId}&k=${k}${view ? '&view=1' : ''}`, view);
 }
 
 // كل مستندات فاتورة في ملف مضغوط

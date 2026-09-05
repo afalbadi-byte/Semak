@@ -7139,6 +7139,7 @@ switch ($action) {
         $b    = json_decode(file_get_contents('php://input'), true) ?: [];
         $kind = in_array(($b['kind'] ?? ''), ['get','zip','daftra'], true) ? $b['kind'] : 'get';
         $ref  = (int)($b['id'] ?? 0);
+        if (!$ref && $kind === 'daftra') $ref = (int)($b['file_id'] ?? 0);   // مرفق دفترة بلا سجل عندنا
         if (!$ref) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
         $conn->query("DELETE FROM download_tickets WHERE expires_at < NOW()");
         $k = bin2hex(random_bytes(24));
@@ -7294,11 +7295,13 @@ switch ($action) {
 
     case 'doc_daftra': {
         // استعراض وتنزيل مرفقات دفترة عبر الخادم — الجلسة تبقى عندنا لا في الجوال
-        $__tk = dl_ticket_ok($conn, $_GET['k'] ?? '', 'daftra', (int)($_GET['id'] ?? 0));
+        $__tk = dl_ticket_ok($conn, $_GET['k'] ?? '', 'daftra',
+            (int)($_GET['id'] ?? 0) ?: (int)($_GET['file_id'] ?? 0));
         if (!$__tk && (!$_jwt_claims || empty($_jwt_claims['sub']))) {
             echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $du = null;
-        if ($r = $conn->query("SELECT role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+        if (!empty($_jwt_claims['sub'])
+            && ($r = $conn->query("SELECT role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")))
             $du = $r->fetch_assoc();
         $dp = json_decode((string)($du['permissions'] ?? '[]'), true); if (!is_array($dp)) $dp = [];
         if (!$__tk && (!$du || (($du['role'] ?? '') !== 'admin' && !in_array('finance', $dp, true)
@@ -7786,19 +7789,27 @@ switch ($action) {
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['to'] ?? '')))   $c[] = "p.date <= '" . $E($_GET['to']) . "'";
         if ((int)($_GET['project_id'] ?? 0) > 0) $c[] = "pp.project_id = " . (int)$_GET['project_id'];
         if (!empty($_GET['unpaid']))   $c[] = "p.total > p.paid + 0.5";
-        if (!empty($_GET['no_docs']))  $c[] = "COALESCE(d.n,0) = 0";
+        if (!empty($_GET['no_docs']))  $c[] = "COALESCE(d.n,0) = 0 AND COALESCE(a.n,0) = 0";
+        if (!empty($_GET['has_doc']))   $c[] = "(COALESCE(d.n,0) + COALESCE(a.n,0)) > 0";
+        if (!empty($_GET['daftra_doc'])) $c[] = "COALESCE(a.n,0) > 0";
         $W = implode(' AND ', $c);
         $imap = ['date'=>'p.date', 'gross'=>'p.total', 'remaining'=>'(p.total - p.paid)', 'paid'=>'p.paid',
-                 'supplier'=>'p.supplier', 'no'=>'p.no', 'docs'=>'COALESCE(d.n,0)'];
+                 'supplier'=>'p.supplier', 'no'=>'p.no',
+                 'docs'=>'(COALESCE(d.n,0) + COALESCE(a.n,0))'];
         $isk = $imap[(string)($_GET['sort'] ?? '')] ?? 'p.date';
+        $ATT = "LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
+                           WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                  ON a.entity_id = p.id";
         $rows = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.paid,2) paid,
-                    ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project, COALESCE(d.n,0) docs,
+                    ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project,
+                    (COALESCE(d.n,0) + COALESCE(a.n,0)) docs, COALESCE(a.n,0) daftra_docs,
                     COALESCE(p.origin,'daftra') origin
                 FROM dmirror_purchases p
                 LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
                 LEFT JOIN project_budgets b ON b.project_id = pp.project_id
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
                   ON d.purchase_id = p.id
+                $ATT
                 WHERE $W ORDER BY $isk $dir, p.id DESC LIMIT $lim OFFSET $off");
         $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(p.total),2) gross,
                     ROUND(SUM(GREATEST(p.total - p.paid, 0)),2) outstanding,
@@ -7808,6 +7819,7 @@ switch ($action) {
                 LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
                   ON d.purchase_id = p.id
+                $ATT
                 WHERE $W");
         echo json_encode(['success'=>true, 'kind'=>'invoices', 'data'=>$rows,
             'summary'=>$sum ? $sum[0] : null], JSON_UNESCAPED_UNICODE);
@@ -8051,16 +8063,35 @@ switch ($action) {
                     'url_col'=>'drive_url',
                     'download'=>true,            // كل صف له id يُنزَّل عبر doc_get
                     'purchase_id'=>$pid,
-                    'rows'=>array_map(function($d) {
+                    'rows'=>(function() use ($Q, $pid) {
                         $m = ['invoice'=>'فاتورة', 'receipt'=>'إيصال سداد', 'other'=>'مستند آخر'];
-                        $d['doc_type_ar'] = $m[$d['doc_type']] ?? $d['doc_type'];
-                        $d['downloadable'] = ($d['drive_url'] !== '' && $d['drive_url'] !== null) ? 1 : 0;
-                        // مرفقات دفترة تُجلب عبر الخادم بمعرّف ملفها
-                        $d['daftra'] = (!$d['downloadable'] && (int)$d['daftra_file_id'] > 0) ? 1 : 0;
-                        return $d;
-                    }, $Q("SELECT id, file_name, doc_type, LEFT(created_at,10) created_at,
-                                  COALESCE(drive_url,'') drive_url, COALESCE(daftra_file_id,0) daftra_file_id
-                           FROM purchase_documents WHERE purchase_id=$pid ORDER BY id"))];
+                        $rows = []; $seenFile = [];
+                        foreach ($Q("SELECT id, file_name, doc_type, LEFT(created_at,10) created_at,
+                                        COALESCE(drive_url,'') drive_url, COALESCE(daftra_file_id,0) daftra_file_id
+                                     FROM purchase_documents WHERE purchase_id=$pid ORDER BY id") as $d) {
+                            $d['doc_type_ar']  = $m[$d['doc_type']] ?? $d['doc_type'];
+                            $d['downloadable'] = ($d['drive_url'] !== '' && $d['drive_url'] !== null) ? 1 : 0;
+                            $d['file_id']      = (int)$d['daftra_file_id'];
+                            $d['daftra']       = (!$d['downloadable'] && $d['file_id'] > 0) ? 1 : 0;
+                            if ($d['file_id'] > 0) $seenFile[$d['file_id']] = 1;
+                            $rows[] = $d;
+                        }
+                        // مرفقات دفترة المرآة — ملفات موجودة فعلاً على الفاتورة في دفترة
+                        foreach ($Q("SELECT file_id, COALESCE(name,'') name, COALESCE(mime_type,'') mime_type,
+                                        file_size, LEFT(COALESCE(created_at, synced_at),10) created_at
+                                     FROM dmirror_attachments
+                                     WHERE entity_id=$pid AND entity_key IN ('purchase_order','purchase_invoice')
+                                     ORDER BY file_id") as $a) {
+                            if (isset($seenFile[(int)$a['file_id']])) continue;
+                            $rows[] = ['id'=>0, 'file_id'=>(int)$a['file_id'],
+                                'file_name'=>($a['name'] !== '' ? $a['name'] : ('مرفق ' . $a['file_id'])),
+                                'doc_type'=>'daftra', 'doc_type_ar'=>'مرفق دفترة',
+                                'created_at'=>$a['created_at'], 'drive_url'=>'',
+                                'size_kb'=>round(((float)$a['file_size']) / 1024, 1),
+                                'downloadable'=>0, 'daftra'=>1];
+                        }
+                        return $rows;
+                    })()];
             }
         }
         elseif ($type === 'product') {

@@ -17,7 +17,7 @@ export default function BuyRecords() {
     const [rows, setRows]   = useState([]);
     const [sum, setSum]     = useState(null);
     const [busy, setBusy]   = useState(false);
-    const [filter, setFilter] = useState('');        // '' | unpaid | no_docs
+    const [filter, setFilter] = useState('');        // '' | unpaid | no_docs | daftra_doc
     const [stack, setStack] = useState([]);          // مكدس البطاقات المفتوحة
     const [sortKey, setSortKey] = useState('date');
     const [sortDir, setSortDir] = useState('desc');
@@ -85,7 +85,8 @@ export default function BuyRecords() {
 
             {tab === 'invoices' && (
                 <div className="grid grid-cols-3 gap-2">
-                    {[['', 'الكل'], ['unpaid', 'غير مسددة'], ['no_docs', 'بلا مستند']].map(([k, t]) => (
+                    {[['', 'الكل'], ['unpaid', 'غير مسددة'], ['no_docs', 'بلا مستند'],
+                      ['daftra_doc', 'لها مرفق بدفترة']].map(([k, t]) => (
                         <button key={k} onClick={() => setFilter(k)}
                             className={'h-[44px] rounded-xl text-[12px] font-bold border ' +
                                 (filter === k ? 'bg-white/15 border-white/20' : 'bg-white/5 border-white/10 text-slate-400')}>
