@@ -6833,7 +6833,10 @@ switch ($action) {
         $kind = ($doc['doc_type'] === 'receipt') ? 'إيصال' : 'فاتورة';
         $name = $kind . ' ' . ($doc['inv_no'] ?: $doc['invoice_no'] ?: $doc['purchase_id'])
               . ($doc['supplier'] ? ' - ' . $doc['supplier'] : '') . '.' . $ext;
-        $name = preg_replace('/[\\\/:*?"<>|]+/u', ' ', $name);
+        // تنظيف بلا تعبير نمطي: فشله كان يُفرغ الاسم بصمت
+        $name = str_replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], ' ', $name);
+        $name = trim($name);
+        if ($name === '') $name = 'مستند-' . $id . '.' . $ext;
         $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg'][$ext] ?? 'application/octet-stream';
         header('Content-Type: ' . $mime);
         header('Content-Length: ' . filesize($local));
