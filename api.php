@@ -1275,8 +1275,11 @@ function daftra_file_bytes($conn, $fid, $probeOnly = false) {
     $ua = 'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)';
     // مسارات مفتاح الـAPI — لا تنتهي صلاحيتها، فهي الأفضل إن عملت
     $byKey = [
-        "https://semak.daftra.com/api2/attachments/$fid/download",
         "https://semak.daftra.com/api2/attachments/$fid.json",
+        "https://semak.daftra.com/api2/attachment/$fid.json",
+        "https://semak.daftra.com/api2/entity_attachments/$fid.json",
+        "https://semak.daftra.com/api2/files/$fid.json",
+        "https://semak.daftra.com/api2/documents/$fid.json",
         "https://semak.daftra.com/v2/api/entity/files/download/$fid",
         "https://semak.daftra.com/v2/owner/entity/files/preview/$fid",
         "https://semak.daftra.com/owner/entity/files/download/$fid",
@@ -7009,6 +7012,35 @@ switch ($action) {
             'warning'=>$overBy > 0
                 ? ('الدفعة تتجاوز المتبقي بـ' . number_format($overBy, 2) . ' — حُفظت كما في الإيصال')
                 : ''], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'daftra_doc_raw': {
+        // ما تقوله دفترة عن مرفقاتها — للمدير فقط، قراءة محضة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $du = null;
+        if ($r = $conn->query("SELECT role FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $du = $r->fetch_assoc();
+        if (!$du || ($du['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        $out = ['success'=>true];
+        $out['mirror'] = [];
+        if ($r = $conn->query("SELECT file_id, name, path, entity_key, entity_id, mime_type, file_size
+                               FROM dmirror_attachments ORDER BY file_id DESC LIMIT 3"))
+            while ($x = $r->fetch_assoc()) $out['mirror'][] = $x;
+        // ما ترجعه دفترة الآن لفاتورة لها مرفق
+        $pid = (int)($out['mirror'][0]['entity_id'] ?? 0);
+        if ($pid > 0) {
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
+                CURLOPT_HTTPHEADER=>['APIKEY: __DAFTRA_KEY__', 'Accept: application/json']]);
+            $rr = curl_exec($ch); curl_close($ch);
+            $dd = json_decode($rr, true) ?: [];
+            $o  = $dd['data']['PurchaseOrder'] ?? $dd['data']['PurchaseInvoice'] ?? [];
+            $out['daftra_attachments'] = $o['Attachments'] ?? $o['attachments'] ?? null;
+            $out['top_keys'] = array_slice(array_keys((array)$o), 0, 40);
+        }
+        echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         break;
     }
 
