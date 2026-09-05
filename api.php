@@ -9128,9 +9128,15 @@ switch ($action) {
                               VALUES ($id, $wo, 'موروث من دفترة عند المزامنة', 'system')");
         }
         // إعادة تفصيل صريحة لأحدث الفواتير — لالتقاط ما استُجدّ عليها
-        $redetail = min(20, max(0, (int)($_GET['redetail'] ?? 0)));
+        $redetail = min(60, max(0, (int)($_GET['redetail'] ?? 0)));
+        $roff     = max(0, (int)($_GET['roffset'] ?? 0));
+        // scope=paid يقصر المسح على الفواتير التي عليها دفعات — وهي محل الإثبات
+        $rwhere   = (((string)($_GET['rscope'] ?? '')) === 'paid')
+                  ? "AND EXISTS (SELECT 1 FROM dmirror_payments mp WHERE mp.purchase_id = dmirror_purchases.id)"
+                  : '';
         if ($redetail > 0 && ($q = $conn->query("SELECT id FROM dmirror_purchases
-                WHERE COALESCE(origin,'daftra')='daftra' ORDER BY id DESC LIMIT $redetail")))
+                WHERE COALESCE(origin,'daftra')='daftra' $rwhere
+                ORDER BY id DESC LIMIT $redetail OFFSET $roff")))
             while ($r = $q->fetch_assoc()) $need[] = (int)$r['id'];
 
         // فواتير مرآتنا بلا بنود (تشمل ما وصل سابقاً من المزامنة الخفيفة)
