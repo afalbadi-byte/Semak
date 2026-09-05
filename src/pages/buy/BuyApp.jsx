@@ -6,6 +6,7 @@ import BuyInvoice from './BuyInvoice';
 import BuyItems from './BuyItems';
 import BuyChat from './BuyChat';
 import BuyWelcome from './BuyWelcome';
+import BuyLogin from './BuyLogin';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
@@ -78,7 +79,7 @@ export default function BuyApp() {
 
     const logout = () => {
         try { localStorage.removeItem(LS_ADMIN_JWT); } catch { /* تجاهل */ }
-        window.location.href = '/login?next=/buy';
+        setUser(null); setState('anon');
     };
 
     if (state === 'loading') return (
@@ -86,7 +87,7 @@ export default function BuyApp() {
             <RefreshCw className="animate-spin text-gold-500" size={28} />
         </div>
     );
-    if (state === 'anon') { window.location.href = '/login?next=/buy'; return null; }
+    if (state === 'anon') return <BuyLogin onDone={() => { setState('loading'); check(); }} />;
     if (state === 'denied') return (
         <div dir="rtl" className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-3 p-8 font-cairo">
             <p className="font-black">لا تملك صلاحية المشتريات</p>
