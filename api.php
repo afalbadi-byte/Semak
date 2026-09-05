@@ -153,76 +153,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS daftra_config (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-// مُساعد: استرجاع كوكي جلسة دفترة (من قاعدة البيانات أولاً ثم من السيكرت)
-function daftra_session_cookie($conn) {
-    $r = $conn->query("SELECT v FROM daftra_config WHERE k='session_cookie' LIMIT 1");
-    if ($r && ($row = $r->fetch_assoc()) && !empty(trim($row['v']))) return trim($row['v']);
-    return "__DAFTRA_SESSION__";
-}
 
-// ─── قراءة مستند وتحقق من انتمائه لفاتورته ──────────────────────────────────
-// الربط الحالي للمستندات المسترجعة استُنتج من التوقيت، وهذا يقرأ الملف نفسه.
-// تذكرة تنزيل صالحة تُغني عن ترويسة التفويض التي لا تحملها الروابط
-function dl_ticket_ok($conn, $k, $kind, $ref) {
-    $k = preg_replace("/[^a-f0-9]/", "", (string)$k);
-    if ($k === "" || !$ref) return false;
-    $r = $conn->query("SELECT user_id FROM download_tickets WHERE k='$k' AND kind='" .
-         $conn->real_escape_string($kind) . "' AND ref_id=" . (int)$ref . " AND expires_at > NOW() LIMIT 1");
-    return (bool)($r && $r->num_rows);
-}
-
-function doc_fetch_bytes($conn, $doc) {
-    $url = (string)($doc['drive_url'] ?? '');
-    if ($url !== '') {
-        $p = parse_url($url, PHP_URL_PATH);
-        if ($p && strpos($p, '/qdocs/') === 0 && is_file(__DIR__ . $p))
-            return [file_get_contents(__DIR__ . $p), mime_content_type(__DIR__ . $p) ?: 'application/pdf'];
-    }
-    $fid = (int)($doc['daftra_file_id'] ?? 0);
-    if (!$fid) return [null, null];
-    $ch = curl_init("https://semak.daftra.com/v2/owner/entity/files/preview/$fid");
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
-        CURLOPT_TIMEOUT => 45, CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_HTTPHEADER => ['Cookie: ' . daftra_session_cookie($conn), 'Accept: */*',
-                              'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)'],
-    ]);
-    $body = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $ct   = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    curl_close($ch);
-    if ($code !== 200 || !$body || stripos($ct, 'text/html') !== false) return [null, null];
-    return [$body, $ct ?: 'application/pdf'];
-}
-
-// استخراج بيانات مستند (فاتورة أو إيصال) بالرؤية
-function doc_read_fields($bytes, $mime) {
-    $isPdf = stripos($mime, 'pdf') !== false;
-    if (!$isPdf && stripos($mime, 'image/') !== 0) return null;         // docx وغيرها لا تُقرأ
-    $sys = "أنت قارئ مستندات مالية سعودية (فاتورة مورد أو إيصال سداد). أعد JSON فقط:\n"
-         . "{\"kind\":\"invoice\" أو \"receipt\", \"supplier\":اسم المورد أو المستفيد, \"no\":رقم الفاتورة إن وُجد, "
-         . "\"date\":\"YYYY-MM-DD\", \"total\":المبلغ الإجمالي رقما}\n"
-         . "الأرقام بلا فواصل. ما لا تجده null. لا تخترع شيئا.";
-    $block = $isPdf
-        ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>base64_encode($bytes)]]
-        : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mime,'data'=>base64_encode($bytes)]];
-    $pl = ['model'=>'claude-haiku-4-5', 'max_tokens'=>600, 'system'=>$sys,
-           'messages'=>[['role'=>'user','content'=>[$block, ['type'=>'text','text'=>'استخرج الحقول.']]]]];
-    $ch = curl_init('https://api.anthropic.com/v1/messages');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode($pl, JSON_UNESCAPED_UNICODE),
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
-        CURLOPT_TIMEOUT => 60,
-    ]);
-    $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-    if ($code !== 200) return null;
-    $d = json_decode($res, true); $txt = '';
-    foreach ((array)($d['content'] ?? []) as $b) if (($b['type'] ?? '') === 'text') $txt .= $b['text'];
-    if (preg_match('/\{[\s\S]*\}/', $txt, $m)) $txt = $m[0];
-    $out = json_decode($txt, true);
-    return is_array($out) ? $out : null;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // محرّك المحاسبة المستقل (Semak Ledger) — قاعدة بياناتنا، كودنا، صفر دفترة
@@ -1298,6 +1229,77 @@ $conn->query("CREATE TABLE IF NOT EXISTS download_tickets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (33)");
 } // end DDL v33
+
+// مُساعد: استرجاع كوكي جلسة دفترة (من قاعدة البيانات أولاً ثم من السيكرت)
+function daftra_session_cookie($conn) {
+    $r = $conn->query("SELECT v FROM daftra_config WHERE k='session_cookie' LIMIT 1");
+    if ($r && ($row = $r->fetch_assoc()) && !empty(trim($row['v']))) return trim($row['v']);
+    return "__DAFTRA_SESSION__";
+}
+
+// ─── قراءة مستند وتحقق من انتمائه لفاتورته ──────────────────────────────────
+// الربط الحالي للمستندات المسترجعة استُنتج من التوقيت، وهذا يقرأ الملف نفسه.
+// تذكرة تنزيل صالحة تُغني عن ترويسة التفويض التي لا تحملها الروابط
+function dl_ticket_ok($conn, $k, $kind, $ref) {
+    $k = preg_replace("/[^a-f0-9]/", "", (string)$k);
+    if ($k === "" || !$ref) return false;
+    $r = $conn->query("SELECT user_id FROM download_tickets WHERE k='$k' AND kind='" .
+         $conn->real_escape_string($kind) . "' AND ref_id=" . (int)$ref . " AND expires_at > NOW() LIMIT 1");
+    return (bool)($r && $r->num_rows);
+}
+
+function doc_fetch_bytes($conn, $doc) {
+    $url = (string)($doc['drive_url'] ?? '');
+    if ($url !== '') {
+        $p = parse_url($url, PHP_URL_PATH);
+        if ($p && strpos($p, '/qdocs/') === 0 && is_file(__DIR__ . $p))
+            return [file_get_contents(__DIR__ . $p), mime_content_type(__DIR__ . $p) ?: 'application/pdf'];
+    }
+    $fid = (int)($doc['daftra_file_id'] ?? 0);
+    if (!$fid) return [null, null];
+    $ch = curl_init("https://semak.daftra.com/v2/owner/entity/files/preview/$fid");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => 45, CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_HTTPHEADER => ['Cookie: ' . daftra_session_cookie($conn), 'Accept: */*',
+                              'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)'],
+    ]);
+    $body = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $ct   = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    curl_close($ch);
+    if ($code !== 200 || !$body || stripos($ct, 'text/html') !== false) return [null, null];
+    return [$body, $ct ?: 'application/pdf'];
+}
+
+// استخراج بيانات مستند (فاتورة أو إيصال) بالرؤية
+function doc_read_fields($bytes, $mime) {
+    $isPdf = stripos($mime, 'pdf') !== false;
+    if (!$isPdf && stripos($mime, 'image/') !== 0) return null;         // docx وغيرها لا تُقرأ
+    $sys = "أنت قارئ مستندات مالية سعودية (فاتورة مورد أو إيصال سداد). أعد JSON فقط:\n"
+         . "{\"kind\":\"invoice\" أو \"receipt\", \"supplier\":اسم المورد أو المستفيد, \"no\":رقم الفاتورة إن وُجد, "
+         . "\"date\":\"YYYY-MM-DD\", \"total\":المبلغ الإجمالي رقما}\n"
+         . "الأرقام بلا فواصل. ما لا تجده null. لا تخترع شيئا.";
+    $block = $isPdf
+        ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>base64_encode($bytes)]]
+        : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mime,'data'=>base64_encode($bytes)]];
+    $pl = ['model'=>'claude-haiku-4-5', 'max_tokens'=>600, 'system'=>$sys,
+           'messages'=>[['role'=>'user','content'=>[$block, ['type'=>'text','text'=>'استخرج الحقول.']]]]];
+    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($pl, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__','anthropic-version: 2023-06-01'],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+    $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+    if ($code !== 200) return null;
+    $d = json_decode($res, true); $txt = '';
+    foreach ((array)($d['content'] ?? []) as $b) if (($b['type'] ?? '') === 'text') $txt .= $b['text'];
+    if (preg_match('/\{[\s\S]*\}/', $txt, $m)) $txt = $m[0];
+    $out = json_decode($txt, true);
+    return is_array($out) ? $out : null;
+}
 
 
 
