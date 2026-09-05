@@ -6887,6 +6887,88 @@ switch ($action) {
         exit;
     }
 
+    case 'purchase_delete': {
+        // حذف فاتورة شراء — لا يمر إلا بعد إلغاء ما هو مرتبط بها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية حذف المشتريات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $pid = (int)($b['id'] ?? 0);
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $inv = null;
+        if ($r = $conn->query("SELECT id, no, supplier, total, COALESCE(origin,'daftra') origin
+                               FROM dmirror_purchases WHERE id=$pid LIMIT 1")) $inv = $r->fetch_assoc();
+        if (!$inv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        if ($inv['origin'] !== 'local') {
+            echo json_encode(['success'=>false,'message'=>'هذه الفاتورة مصدرها دفترة — تُحذف من دفترة لا من هنا، وإلا عادت مع أول مزامنة'],
+                JSON_UNESCAPED_UNICODE); break;
+        }
+
+        // الموانع: ما يجب إلغاؤه أولا
+        $blockers = [];
+        $pr = $conn->query("SELECT id, ROUND(amount,2) amount, method, pay_date FROM purchase_payments
+                            WHERE purchase_id=$pid ORDER BY id");
+        if ($pr) while ($x = $pr->fetch_assoc()) {
+            $map = ['transfer'=>'تحويل','cash'=>'نقدي','cheque'=>'شيك','card'=>'بطاقة','other'=>'أخرى'];
+            $blockers[] = ['kind'=>'payment', 'id'=>(int)$x['id'], 'action'=>'sup_pay_delete',
+                'label'=>'دفعة ' . number_format((float)$x['amount'], 2) . ' · '
+                       . ($map[$x['method']] ?? $x['method']) . ' · ' . $x['pay_date']];
+        }
+        $dr = $conn->query("SELECT id, file_name, doc_type FROM purchase_documents WHERE purchase_id=$pid ORDER BY id");
+        if ($dr) while ($x = $dr->fetch_assoc()) {
+            $blockers[] = ['kind'=>'document', 'id'=>(int)$x['id'], 'action'=>'pdocs_delete',
+                'label'=>(($x['doc_type'] === 'receipt') ? 'إيصال سداد' : 'مستند') . ' · ' . $x['file_name']];
+        }
+        if ($blockers) {
+            echo json_encode(['success'=>false, 'blocked'=>true, 'blockers'=>$blockers,
+                'message'=>'لا يمكن الحذف قبل إلغاء ' . count($blockers) . ' عنصرا مرتبطا بالفاتورة'],
+                JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $conn->query("DELETE FROM dmirror_purchase_items   WHERE purchase_id=$pid");
+        $conn->query("DELETE FROM purchase_product_items   WHERE ref_id=$pid");
+        $conn->query("DELETE FROM purchase_class_items     WHERE ref_id=$pid");
+        $conn->query("DELETE FROM purchase_classification  WHERE kind='purchase' AND ref_id=$pid");
+        $conn->query("DELETE FROM purchase_project         WHERE purchase_id=$pid");
+        $conn->query("DELETE FROM dmirror_purchases        WHERE id=$pid");
+        acc_audit($conn, 1, 'purchase', $pid, 'delete',
+            'حذف فاتورة ' . $inv['no'] . ' · ' . $inv['supplier'] . ' · ' . $inv['total'], $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'message'=>'حُذفت الفاتورة ' . $inv['no']], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'sup_pay_delete': {
+        // إلغاء دفعة وإعادة حساب المسدد على الفاتورة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية إلغاء الدفعات'], JSON_UNESCAPED_UNICODE); break; }
+        $b  = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $pay = null;
+        if ($r = $conn->query("SELECT purchase_id, amount FROM purchase_payments WHERE id=$id LIMIT 1")) $pay = $r->fetch_assoc();
+        if (!$pay) { echo json_encode(['success'=>false,'message'=>'الدفعة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $pid = (int)$pay['purchase_id'];
+        $conn->query("DELETE FROM purchase_payments WHERE id=$id");
+        $sum = 0;
+        if ($r = $conn->query("SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM purchase_payments WHERE purchase_id=$pid"))
+            if ($x = $r->fetch_assoc()) $sum = (float)$x['s'];
+        $conn->query("UPDATE dmirror_purchases SET paid=$sum WHERE id=$pid AND COALESCE(origin,'daftra')='local'");
+        acc_audit($conn, 1, 'purchase', $pid, 'payment_delete',
+            'إلغاء دفعة ' . number_format((float)$pay['amount'], 2), $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'paid'=>$sum], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_list': {
         // سجلات التطبيق: الفواتير والموردون ببحث وترقيم صفحات
         $kind = (string)($_GET['kind'] ?? 'invoices');
@@ -7095,6 +7177,7 @@ switch ($action) {
                 $h = $h[0];
                 $out['title']    = 'فاتورة شراء ' . $h['no'];
                 $out['subtitle'] = $h['supplier'];
+                $out['origin']   = $h['origin'] ?? 'daftra';
                 $out['links'][]  = ['label'=>$h['supplier'], 'type'=>'supplier', 'value'=>$h['supplier']];
                 if (!empty($h['project_id'])) $out['links'][] = ['label'=>$h['project'], 'type'=>'project', 'value'=>$h['project_id']];
                 $out['stats'] = [
@@ -7668,6 +7751,14 @@ switch ($action) {
     }
 
     case 'pdocs_delete': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $__du = null;
+        if ($__r = $conn->query("SELECT role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $__du = $__r->fetch_assoc();
+        $__dp = json_decode((string)($__du['permissions'] ?? '[]'), true); if (!is_array($__dp)) $__dp = [];
+        if (!$__du || (($__du['role'] ?? '') !== 'admin' && !in_array('finance', $__dp, true) && !in_array('accounting', $__dp, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية حذف المستندات'], JSON_UNESCAPED_UNICODE); break; }
         $b = json_decode(file_get_contents('php://input'), true) ?: [];
         $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
         if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }

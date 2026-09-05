@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive } from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 
 const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
@@ -12,6 +12,37 @@ const LABEL = { supplier: 'مورد', purchase: 'فاتورة شراء', product
 export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [data, setData] = useState(null);
     const [err, setErr]   = useState('');
+    const [del, setDel]   = useState(null);   // { blockers } أو { ask: true }
+    const [busy, setBusy] = useState(false);
+    const [tick, setTick] = useState(0);      // لإعادة الجلب بعد الإلغاء
+
+    const post = (action, body) => fetch(`${API_URL}?action=${action}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+        body: JSON.stringify(body),
+    }).then(r => r.json());
+
+    // الحذف يمر بفحص الموانع أولا: دفعات أو مستندات مرتبطة
+    const tryDelete = async () => {
+        setBusy(true);
+        try {
+            const r = await post('purchase_delete', { id: value });
+            if (r.success) { onBack(); return; }
+            if (r.blocked) setDel({ blockers: r.blockers, message: r.message });
+            else setErr(r.message || 'تعذر الحذف');
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
+
+    const clearBlocker = async bk => {
+        setBusy(true);
+        try {
+            const r = await post(bk.action, { id: bk.id });
+            if (!r.success) { setErr(r.message || 'تعذر الإلغاء'); return; }
+            setDel(d => ({ ...d, blockers: d.blockers.filter(x => !(x.kind === bk.kind && x.id === bk.id)) }));
+            setTick(t => t + 1);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
 
     useEffect(() => {
         let live = true;
@@ -22,16 +53,75 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
             .then(r => { if (!live) return; r.success ? setData(r) : setErr(r.message || 'تعذر الجلب'); })
             .catch(() => live && setErr('تعذر الاتصال'));
         return () => { live = false; };
-    }, [type, value]);
+    }, [type, value, tick]);
 
     return (
         <div className="p-4 space-y-3">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] font-bold text-slate-400 min-h-[44px]">
-                <ArrowRight size={16} /> رجوع
-            </button>
+            <div className="flex items-center justify-between">
+                <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] font-bold text-slate-400 min-h-[44px]">
+                    <ArrowRight size={16} /> رجوع
+                </button>
+                {type === 'purchase' && data && data.origin === 'local' && (
+                    <button onClick={() => setDel({ ask: true })} disabled={busy}
+                        className="min-h-[44px] px-3 rounded-xl bg-red-500/15 text-red-300 text-[12px] font-bold flex items-center gap-1.5">
+                        <Trash2 size={14} /> حذف الفاتورة
+                    </button>
+                )}
+            </div>
 
             {err && <div className="rounded-xl bg-red-500/15 text-red-300 p-3 text-xs font-bold">{err}</div>}
             {!data && !err && <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-[#c5a059]" /></div>}
+
+            {del && (
+                <div className="fixed inset-0 bg-black/60 z-[80] flex items-end justify-center p-4" onClick={() => setDel(null)}>
+                    <div dir="rtl" className="bg-[#0f1e36] rounded-3xl w-full max-w-sm p-5 space-y-3"
+                        onClick={e => e.stopPropagation()}
+                        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-black text-[15px] flex items-center gap-2">
+                                <AlertTriangle size={17} className="text-red-400" /> حذف الفاتورة
+                            </h3>
+                            <button onClick={() => setDel(null)} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {del.ask && (
+                            <>
+                                <p className="text-[13px] text-slate-300 leading-relaxed">
+                                    سيُحذف سجل الفاتورة وبنودها وأثرها في متابعة الأسعار وتكلفة المشروع. لا رجعة.
+                                </p>
+                                <button onClick={tryDelete} disabled={busy}
+                                    className="w-full min-h-[48px] rounded-2xl bg-red-500 text-white text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                                    {busy ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} احذف
+                                </button>
+                            </>
+                        )}
+
+                        {del.blockers && (
+                            <>
+                                <p className="text-[13px] text-amber-300 font-bold leading-relaxed">{del.message}</p>
+                                <p className="text-[12px] text-slate-400">ألغِ كل عنصر أولا ثم أعد الحذف:</p>
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                    {del.blockers.map(bk => (
+                                        <div key={bk.kind + bk.id} className="rounded-xl bg-white/5 border border-white/10 p-2.5 flex items-center gap-2">
+                                            <span className="text-[12px] font-bold flex-1 truncate">{bk.label}</span>
+                                            <button onClick={() => clearBlocker(bk)} disabled={busy}
+                                                className="px-2.5 h-9 rounded-lg bg-red-500/15 text-red-300 text-[11px] font-bold shrink-0">
+                                                إلغاء
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={tryDelete} disabled={busy || del.blockers.length > 0}
+                                    className="w-full min-h-[48px] rounded-2xl bg-red-500 text-white text-sm font-black disabled:opacity-40">
+                                    {del.blockers.length ? 'بقي ' + del.blockers.length + ' عنصرا' : 'احذف الفاتورة'}
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {data && (
                 <>
