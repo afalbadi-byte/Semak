@@ -13,6 +13,7 @@ const VERDICT = {
     'يحتاج مراجعة': 'bg-fuchsia-500/15 text-fuchsia-300',
     'مرشّح':    'bg-amber-500/15 text-amber-300',
     'متعدد':    'bg-sky-500/15 text-sky-300',
+    'نسخة مكررة': 'bg-slate-500/15 text-slate-300',
     'بلا دليل': 'bg-white/10 text-slate-400',
 };
 
