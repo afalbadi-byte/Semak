@@ -9611,7 +9611,7 @@ switch ($action) {
             $out['pay_ids'] = $payIds;
             // بدل تخمين مسار نافذة «عرض»: نقرؤه من كود الصفحة نفسها
             $pickPay = (int)($_GET['probe_pay'] ?? 0) ?: ($payIds ? $payIds[0] : 0);
-            $blkUrl = $pickPay ? "https://semak.daftra.com/owner/purchase_order_payments/view/" . $pickPay . "/$pidP" : "https://semak.daftra.com/owner/purchase_invoices/view/$pidP/payments_block:1";
+            $blkUrl = $pickPay ? "https://semak.daftra.com/owner/purchase_order_payments/view/" . $pickPay . "/$pidP&box=1" : "https://semak.daftra.com/owner/purchase_invoices/view/$pidP/payments_block:1";
             $c6 = curl_init($blkUrl);
             curl_setopt_array($c6, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
                 CURLOPT_TIMEOUT=>25, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
