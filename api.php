@@ -9610,7 +9610,8 @@ switch ($action) {
             }
             $out['pay_ids'] = $payIds;
             // بدل تخمين مسار نافذة «عرض»: نقرؤه من كود الصفحة نفسها
-            $c6 = curl_init("https://semak.daftra.com/owner/purchase_invoices/view/$pidP/payments_block:1");
+            $blkUrl = $payIds ? "https://semak.daftra.com/owner/purchase_order_payments/view/" . $payIds[0] . "/$pidP" : "https://semak.daftra.com/owner/purchase_invoices/view/$pidP/payments_block:1";
+            $c6 = curl_init($blkUrl);
             curl_setopt_array($c6, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
                 CURLOPT_TIMEOUT=>25, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
                 CURLOPT_HTTPHEADER=>['Cookie: ' . $ck2, 'Accept: */*', 'X-Requested-With: XMLHttpRequest',
@@ -9622,9 +9623,12 @@ switch ($action) {
                 $l = strtolower($uu);
                 if (strpos($l, '.css') !== false || strpos($l, '.js') !== false
                     || strpos($l, '.png') !== false || strpos($l, '.svg') !== false) continue;
-                if (strpos($l, 'payment') !== false || strpos($l, 'attach') !== false
-                    || strpos($l, 'file') !== false || strpos($l, 'entity') !== false) $urls[] = $uu;
+                if (strpos($l, 'attach') !== false || strpos($l, 'file') !== false
+                    || strpos($l, 'entity') !== false || strpos($l, 'preview') !== false
+                    || strpos($l, 'download') !== false || strpos($l, 'amazonaws') !== false
+                    || strpos($l, '.pdf') !== false) $urls[] = $uu;
             }
+            $out['block_src'] = $blkUrl;
             $out['block_urls'] = array_slice(array_values(array_unique($urls)), 0, 30);
             $out['pay_routes'] = $pv;
             $out['pay_probe'] = $probe;
