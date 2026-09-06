@@ -9800,12 +9800,14 @@ switch ($action) {
             // بدل تخمين مسار نافذة «عرض»: نقرؤه من كود الصفحة نفسها
             $pickPay = (int)($_GET['probe_pay'] ?? 0) ?: ($payIds ? $payIds[0] : 0);
             $variant = (string)($_GET['probe_variant'] ?? 'view');
-            $suffix  = $variant === 'log'
+            $suffix  = $variant === 'invpage'
+                     ? "/owner/purchase_invoices/view/$pidP"
+                     : ($variant === 'log'
                      ? "/v2/owner/activity_logs/entity/iframe?entity_key=purchase_order&entity_id=$pidP&sort=DESC&layout2022=1&iframe=1"
                      : ($variant === 'print' ? "/owner/purchase_order_payments/print/$pickPay?box=1"
                      : ($variant === 'edit' ? "/owner/purchase_order_payments/edit/$pickPay?box=1"
-                     : "/owner/purchase_order_payments/view/$pickPay/$pidP&box=1"));
-            $blkUrl = ($pickPay || $variant === 'log') ? ("https://semak.daftra.com" . $suffix) : "https://semak.daftra.com/owner/purchase_invoices/view/$pidP/payments_block:1";
+                     : "/owner/purchase_order_payments/view/$pickPay/$pidP&box=1")));
+            $blkUrl = ($pickPay || $variant === 'log' || $variant === 'invpage') ? ("https://semak.daftra.com" . $suffix) : "https://semak.daftra.com/owner/purchase_invoices/view/$pidP/payments_block:1";
             $c6 = curl_init($blkUrl);
             curl_setopt_array($c6, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
                 CURLOPT_TIMEOUT=>25, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
@@ -9829,7 +9831,7 @@ switch ($action) {
             $out['block_all_urls'] = array_slice(array_values(array_unique($mu[1] ?? [])), 0, 40);
             // الحقول المخفية لا تُلتقط كروابط — نبحث عن ذكر المرفق نصياً
             $hits = [];
-            foreach (['attachment','attach','file_id','entity_key','EntityAttachment','uuid'] as $kw) {
+            foreach (['مرفق','أرفق','ملف','attachment','EntityAttachment','file_id'] as $kw) {
                 $off = 0;
                 while (($pos = stripos($h6, $kw, $off)) !== false && count($hits) < 14) {
                     $hits[] = preg_replace('/\s+/', ' ', mb_substr(substr($h6, max(0, $pos - 60), 170), 0, 170));
