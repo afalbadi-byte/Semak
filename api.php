@@ -1436,15 +1436,24 @@ function recovery_match($invs, $sup, $tot, $dt) {
         $kind = $kg ?: $kn;
         if (!$kind) continue;
         $sim = daftra_name_sim($sn, daftra_norm_name($v['supplier']));
-        $okDate = true;
-        if ($dt && !empty($v['date']))
-            $okDate = abs(strtotime($dt) - strtotime($v['date'])) <= 45 * 86400;
-        $best[] = ['v'=>$v, 'sim'=>$sim, 'date'=>$okDate, 'amt'=>$kind,
+        $okDate = true; $gap = null;
+        if ($dt && !empty($v['date'])) {
+            $gap = (int)round(abs(strtotime($dt) - strtotime($v['date'])) / 86400);
+            $okDate = $gap <= 45;
+        }
+        $best[] = ['v'=>$v, 'sim'=>$sim, 'date'=>$okDate, 'amt'=>$kind, 'gap'=>$gap,
                    'diff'=>round($kg ? $dg : $dn, 2)];
     }
-    usort($best, function($a, $b) {
+    $sameDay = function($x) { return $x['gap'] !== null && $x['gap'] === 0; };
+    usort($best, function($a, $b) use ($sameDay) {
         if ($a['amt'] !== $b['amt']) return $a['amt'] === 'exact' ? -1 : 1;
-        return $b['sim'] <=> $a['sim'];
+        // إيصالات البنك لا تحمل اسم المورد، فالتاريخ وحده يفرز بين فواتير متساوية المبلغ
+        $sa = $sameDay($a) ? 1 : 0; $sb = $sameDay($b) ? 1 : 0;
+        if ($sa !== $sb) return $sb <=> $sa;
+        if ($a['sim'] !== $b['sim']) return $b['sim'] <=> $a['sim'];
+        $ga = $a['gap'] === null ? 9999 : $a['gap'];
+        $gb = $b['gap'] === null ? 9999 : $b['gap'];
+        return $ga <=> $gb;
     });
     $strong = array_values(array_filter($best, function($x) { return $x['sim'] >= 0.6 && $x['date']; }));
     $txt = function($x) {
@@ -1455,8 +1464,18 @@ function recovery_match($invs, $sup, $tot, $dt) {
     if (count($strong) === 1) {
         $verdict = $strong[0]['amt'] === 'exact' ? 'مؤكد' : 'فرق يسير';
         $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
-        $ev = $txt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '% · التاريخ ضمن المدى';
-    } elseif (count($strong) > 1) { $verdict = 'متعدد'; }
+        $ev = $txt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '%'
+            . ($sameDay($strong[0]) ? ' · نفس اليوم' : ' · التاريخ ضمن المدى');
+    } elseif (count($strong) > 1) {
+        $day = array_values(array_filter($strong, function($x) use ($sameDay) {
+            return $sameDay($x) && $x['amt'] === 'exact'; }));
+        if (count($day) === 1) {
+            $verdict = 'مؤكد';
+            $mid = (int)$day[0]['v']['id']; $mno = (string)$day[0]['v']['no'];
+            $ev = $txt($day[0]) . ' · المورد ' . round($day[0]['sim'] * 100)
+                . '% · نفس اليوم، وغيرها بتواريخ أخرى';
+        } else { $verdict = 'متعدد'; }
+    }
     elseif (count($best) >= 1) {
         $verdict = 'مرشّح'; $mid = (int)$best[0]['v']['id']; $mno = (string)$best[0]['v']['no'];
         $ev = $txt($best[0]) . ' · المورد ' . round($best[0]['sim'] * 100) . '%'
@@ -1465,7 +1484,7 @@ function recovery_match($invs, $sup, $tot, $dt) {
     $cands = array_map(function($x) {
         return ['id'=>(int)$x['v']['id'], 'no'=>$x['v']['no'], 'supplier'=>$x['v']['supplier'],
                 'gross'=>(float)$x['v']['gross'], 'date'=>$x['v']['date'],
-                'sim'=>round($x['sim'], 2), 'diff'=>$x['diff']];
+                'sim'=>round($x['sim'], 2), 'diff'=>$x['diff'], 'gap'=>$x['gap']];
     }, array_slice($best, 0, 6));
     return [$verdict, $mid, $mno, $ev, $cands];
 }
