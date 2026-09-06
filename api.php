@@ -1311,6 +1311,65 @@ $conn->query("CREATE TABLE IF NOT EXISTS recovery_files (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (42)");
 } // end DDL v42
+// ─── DDL v43: مرتجعات المشتريات — مرآة دفترة وتسجيل محلي ─────────────────────
+if ($__sv < 43) {
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_refunds (
+    id            INT PRIMARY KEY,
+    no            VARCHAR(40) DEFAULT NULL,
+    date          DATE DEFAULT NULL,
+    supplier_id   INT DEFAULT NULL,
+    supplier      VARCHAR(255) DEFAULT NULL,
+    total         DECIMAL(14,3) NOT NULL DEFAULT 0,
+    subtotal      DECIMAL(14,3) NOT NULL DEFAULT 0,
+    settled       DECIMAL(14,3) NOT NULL DEFAULT 0,
+    purchase_id   INT DEFAULT NULL,
+    purchase_no   VARCHAR(40) DEFAULT NULL,
+    work_order_id INT DEFAULT NULL,
+    reason        VARCHAR(255) DEFAULT NULL,
+    created       DATETIME DEFAULT NULL,
+    modified      DATETIME DEFAULT NULL,
+    items_count   INT NOT NULL DEFAULT 0,
+    attachments   INT NOT NULL DEFAULT 0,
+    raw           MEDIUMTEXT,
+    origin        VARCHAR(10) NOT NULL DEFAULT 'daftra',
+    created_by    VARCHAR(120) DEFAULT NULL,
+    note          VARCHAR(400) DEFAULT NULL,
+    synced_at     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (date), INDEX (supplier_id), INDEX (purchase_id), INDEX (work_order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_refund_items (
+    id           INT PRIMARY KEY,
+    refund_id    INT NOT NULL,
+    item         VARCHAR(255) DEFAULT NULL,
+    description  TEXT,
+    quantity     DECIMAL(14,3) NOT NULL DEFAULT 0,
+    unit_price   DECIMAL(14,3) NOT NULL DEFAULT 0,
+    discount     DECIMAL(14,3) NOT NULL DEFAULT 0,
+    tax1         VARCHAR(10) DEFAULT NULL,
+    subtotal     DECIMAL(14,3) NOT NULL DEFAULT 0,
+    product_id   INT DEFAULT NULL,
+    synced_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (refund_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// جدول مستقل لمستندات المرتجع كي لا نمسّ قيد التفرّد في مستندات الشراء
+$conn->query("CREATE TABLE IF NOT EXISTS refund_documents (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    refund_id    INT NOT NULL,
+    refund_no    VARCHAR(40) DEFAULT NULL,
+    doc_type     VARCHAR(20) NOT NULL DEFAULT 'refund',
+    file_name    VARCHAR(255) NOT NULL,
+    drive_url    VARCHAR(600) DEFAULT NULL,
+    daftra_file_id INT DEFAULT NULL,
+    file_size    BIGINT NOT NULL DEFAULT 0,
+    source       VARCHAR(20) NOT NULL DEFAULT 'manual',
+    note         VARCHAR(255) DEFAULT NULL,
+    created_by   VARCHAR(120) DEFAULT NULL,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_rdoc (refund_id, file_name),
+    INDEX (refund_id), INDEX (daftra_file_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (43)");
+} // end DDL v43
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -1460,12 +1519,21 @@ function recovery_match($invs, $sup, $tot, $dt) {
         return $x['amt'] === 'exact' ? 'المبلغ مطابق'
              : ('المبلغ يفرق ' . number_format($x['diff'], 2) . ' — تحقق من القيد');
     };
+    // وصف صريح للفجوة الزمنية: «ضمن المدى» كانت تُخفي شهراً كاملاً
+    $dtxt = function($x) {
+        if ($x['gap'] === null) return ' · بلا تاريخ';
+        if ($x['gap'] === 0) return ' · نفس اليوم';
+        if ($x['gap'] === 1) return ' · بفارق يوم';
+        return ' · بفارق ' . $x['gap'] . ' يوماً';
+    };
     $verdict = 'بلا دليل'; $mid = null; $mno = ''; $ev = '';
     if (count($strong) === 1) {
-        $verdict = $strong[0]['amt'] === 'exact' ? 'مؤكد' : 'فرق يسير';
+        // التاريخ المتباعد يُنزل الحكم من «مؤكد» إلى «مرجّح» — يظل قابلاً للربط بعد نظرة
+        $far = ($strong[0]['gap'] !== null && $strong[0]['gap'] > 7);
+        $verdict = $strong[0]['amt'] !== 'exact' ? 'فرق يسير' : ($far ? 'مرجّح' : 'مؤكد');
         $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
         $ev = $txt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '%'
-            . ($sameDay($strong[0]) ? ' · نفس اليوم' : ' · التاريخ ضمن المدى');
+            . $dtxt($strong[0]);
     } elseif (count($strong) > 1) {
         $day = array_values(array_filter($strong, function($x) use ($sameDay) {
             return $sameDay($x) && $x['amt'] === 'exact'; }));
@@ -1473,13 +1541,12 @@ function recovery_match($invs, $sup, $tot, $dt) {
             $verdict = 'مؤكد';
             $mid = (int)$day[0]['v']['id']; $mno = (string)$day[0]['v']['no'];
             $ev = $txt($day[0]) . ' · المورد ' . round($day[0]['sim'] * 100)
-                . '% · نفس اليوم، وغيرها بتواريخ أخرى';
+                . '% · نفس اليوم وحدها، وغيرها بتواريخ أخرى';
         } else { $verdict = 'متعدد'; }
     }
     elseif (count($best) >= 1) {
         $verdict = 'مرشّح'; $mid = (int)$best[0]['v']['id']; $mno = (string)$best[0]['v']['no'];
-        $ev = $txt($best[0]) . ' · المورد ' . round($best[0]['sim'] * 100) . '%'
-            . ($best[0]['date'] ? '' : ' · التاريخ بعيد');
+        $ev = $txt($best[0]) . ' · المورد ' . round($best[0]['sim'] * 100) . '%' . $dtxt($best[0]);
     }
     $cands = array_map(function($x) {
         return ['id'=>(int)$x['v']['id'], 'no'=>$x['v']['no'], 'supplier'=>$x['v']['supplier'],
@@ -8361,7 +8428,7 @@ switch ($action) {
         if (!$du || (($du['role'] ?? '') !== 'admin' && !in_array('finance', $dp, true) && !in_array('accounting', $dp, true))) {
             echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية عرض المستندات'], JSON_UNESCAPED_UNICODE); break; }
         $b    = json_decode(file_get_contents('php://input'), true) ?: [];
-        $kind = in_array(($b['kind'] ?? ''), ['get','zip','daftra'], true) ? $b['kind'] : 'get';
+        $kind = in_array(($b['kind'] ?? ''), ['get','zip','daftra','rget'], true) ? $b['kind'] : 'get';
         $ref  = (int)($b['id'] ?? 0);
         if (!$ref && $kind === 'daftra') $ref = (int)($b['file_id'] ?? 0);   // مرفق دفترة بلا سجل عندنا
         if (!$ref) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
@@ -8372,6 +8439,37 @@ switch ($action) {
                               $ref, DATE_ADD(NOW(), INTERVAL 5 MINUTE))");
         echo json_encode(['success'=>true, 'k'=>$k], JSON_UNESCAPED_UNICODE);
         break;
+    }
+
+    case 'doc_refund': {
+        // مستند مرتجع مستضاف عندنا — نفس منطق doc_get على جدول المرتجعات
+        $id = (int)($_GET['id'] ?? 0);
+        if (!dl_ticket_ok($conn, $_GET['k'] ?? '', 'rget', $id) && !$_jwt_claims) {
+            echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $doc = null;
+        if ($r = $conn->query("SELECT d.*, r.no AS rno, r.supplier FROM refund_documents d
+                               LEFT JOIN dmirror_refunds r ON r.id = d.refund_id
+                               WHERE d.id=$id LIMIT 1")) $doc = $r->fetch_assoc();
+        if (!$doc) { echo json_encode(['success'=>false,'message'=>'المستند غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $url = (string)($doc['drive_url'] ?? '');
+        if ($url === '') { echo json_encode(['success'=>false,'message'=>'المستند غير مرفوع على الخادم'], JSON_UNESCAPED_UNICODE); break; }
+        $path  = parse_url($url, PHP_URL_PATH);
+        $local = ($path && strpos($path, '/qdocs/') === 0) ? __DIR__ . $path : null;
+        if (!$local || !is_file($local)) { header('Location: ' . $url); break; }
+        $ext  = strtolower(pathinfo($local, PATHINFO_EXTENSION)) ?: 'pdf';
+        $name = 'مرتجع ' . ($doc['rno'] ?: $doc['refund_no'] ?: $doc['refund_id'])
+              . ($doc['supplier'] ? ' - ' . $doc['supplier'] : '') . '.' . $ext;
+        $name = trim(str_replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], ' ', $name));
+        if ($name === '') $name = 'مرتجع-' . $id . '.' . $ext;
+        $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg'][$ext] ?? 'application/octet-stream';
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . filesize($local));
+        header((!empty($_GET['view']) ? 'Content-Disposition: inline' : 'Content-Disposition: attachment')
+            . "; filename=\"doc.$ext\"; filename*=UTF-8''" . rawurlencode($name));
+        header('Cache-Control: private, max-age=600');
+        readfile($local);
+        exit;
     }
 
     case 'doc_get': {
@@ -8978,6 +9076,354 @@ switch ($action) {
                            FROM dmirror_purchases ORDER BY id");
         $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x;
         echo json_encode(['success'=>true, 'count'=>count($o), 'data'=>$o], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'refund_list': {
+        // سجل المرتجعات: مثل سجل المشتريات تماماً، مع عمود الفاتورة الأصل
+        $q   = trim((string)($_GET['q'] ?? ''));
+        $lim = min(100, max(5, (int)($_GET['limit'] ?? 30)));
+        $off = max(0, (int)($_GET['offset'] ?? 0));
+        $dir = (strtolower((string)($_GET['dir'] ?? 'desc')) === 'asc') ? 'ASC' : 'DESC';
+        $E   = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $Q   = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+
+        $c = ['1'];
+        if ($q !== '') $c[] = "(r.supplier LIKE '%" . $E($q) . "%' OR r.no LIKE '%" . $E($q) . "%'
+                                OR r.purchase_no LIKE '%" . $E($q) . "%')";
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['from'] ?? ''))) $c[] = "r.date >= '" . $E($_GET['from']) . "'";
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['to'] ?? '')))   $c[] = "r.date <= '" . $E($_GET['to']) . "'";
+        if (!empty($_GET['no_docs']))  $c[] = "(COALESCE(d.n,0) + COALESCE(a.n,0)) = 0";
+        if (!empty($_GET['no_link']))  $c[] = "r.purchase_id IS NULL";
+        $W = implode(' AND ', $c);
+        $map = ['date'=>'r.date', 'gross'=>'r.total', 'supplier'=>'r.supplier', 'no'=>'r.no',
+                'docs'=>'(COALESCE(d.n,0) + COALESCE(a.n,0))'];
+        $sk = $map[(string)($_GET['sort'] ?? '')] ?? 'r.date';
+
+        $J = "LEFT JOIN (SELECT refund_id, COUNT(*) n FROM refund_documents GROUP BY refund_id) d
+                ON d.refund_id = r.id
+              LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
+                         WHERE entity_key='purchase_refund' GROUP BY entity_id) a
+                ON a.entity_id = r.id";
+        $rows = $Q("SELECT r.id, r.no, r.date, r.supplier, ROUND(r.total,2) gross, ROUND(r.subtotal,2) net,
+                        ROUND(r.settled,2) settled, r.purchase_id, r.purchase_no, r.reason,
+                        (COALESCE(d.n,0) + COALESCE(a.n,0)) docs, COALESCE(a.n,0) daftra_docs,
+                        COALESCE(p.supplier,'') orig_supplier, ROUND(COALESCE(p.total,0),2) orig_total,
+                        COALESCE(r.origin,'daftra') origin
+                    FROM dmirror_refunds r
+                    LEFT JOIN dmirror_purchases p ON p.id = r.purchase_id
+                    $J WHERE $W ORDER BY $sk $dir, r.id DESC LIMIT $lim OFFSET $off");
+        $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(r.total),2) gross, ROUND(SUM(r.settled),2) settled,
+                        SUM(CASE WHEN r.purchase_id IS NULL THEN 1 ELSE 0 END) unlinked
+                    FROM dmirror_refunds r $J WHERE $W");
+        echo json_encode(['success'=>true, 'data'=>$rows, 'summary'=>$sum ? $sum[0] : null], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'refund_entity': {
+        // بطاقة المرتجع: بنوده ومستنداته والفاتورة التي رجع منها
+        $rid = (int)($_GET['id'] ?? 0);
+        if ($rid <= 0) { echo json_encode(['success'=>false,'message'=>'رقم المرتجع مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $Q = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $head = $Q("SELECT r.*, ROUND(r.total,2) gross, COALESCE(p.supplier,'') orig_supplier,
+                        ROUND(COALESCE(p.total,0),2) orig_total, p.date orig_date
+                    FROM dmirror_refunds r LEFT JOIN dmirror_purchases p ON p.id = r.purchase_id
+                    WHERE r.id=$rid LIMIT 1");
+        if (!$head) { echo json_encode(['success'=>false,'message'=>'المرتجع غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $h = $head[0]; unset($h['raw']);
+        echo json_encode(['success'=>true, 'head'=>$h,
+            'items'=>$Q("SELECT item, description, quantity, unit_price, ROUND(subtotal,2) subtotal
+                         FROM dmirror_refund_items WHERE refund_id=$rid ORDER BY id"),
+            'documents'=>$Q("SELECT id, file_name, drive_url, daftra_file_id, source, created_at, 'local' src
+                             FROM refund_documents WHERE refund_id=$rid
+                             UNION ALL
+                             SELECT file_id id, name file_name, drive_url, file_id daftra_file_id,
+                                    'daftra' source, created_at, 'daftra' src
+                             FROM dmirror_attachments WHERE entity_key='purchase_refund' AND entity_id=$rid
+                             ORDER BY created_at DESC")], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'refund_create': {
+        // تسجيل مرتجع من التطبيق — بياناتنا، ولا يُرسل لدفترة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة — سجّل الدخول مرة أخرى'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسجيل المرتجعات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $sup  = trim((string)($b['supplier'] ?? ''));
+        $no   = trim((string)($b['no'] ?? ''));
+        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['date'] ?? '')) ? $b['date'] : date('Y-m-d');
+        $pid  = (int)($b['purchase_id'] ?? 0);
+        $ono  = '';
+        // الفاتورة الأصل تملأ ما نقص: اسم المورد ورقمها
+        if ($pid > 0 && ($rq = $conn->query("SELECT no, supplier FROM dmirror_purchases WHERE id=$pid LIMIT 1")))
+            if ($xq = $rq->fetch_assoc()) { $ono = (string)$xq['no']; if ($sup === '') $sup = (string)$xq['supplier']; }
+        if ($sup === '') { echo json_encode(['success'=>false,'message'=>'اسم المورد مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        if ($no  === '') { echo json_encode(['success'=>false,'message'=>'رقم المرتجع مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+
+        $net = 0; $clean = [];
+        foreach ((array)($b['items'] ?? []) as $it) {
+            $nm = trim((string)($it['name'] ?? ''));
+            $qt = abs((float)($it['qty'] ?? 0));
+            $pr = abs((float)($it['price'] ?? 0));
+            if ($nm === '' || $qt <= 0) continue;
+            $line = round($qt * $pr, 2); $net += $line;
+            $clean[] = ['name'=>$nm, 'qty'=>$qt, 'price'=>$pr, 'line'=>$line];
+        }
+        $subtotal = $clean ? round($net, 2) : round(abs((float)($b['subtotal'] ?? 0)), 2);
+        $vat      = isset($b['vat']) && $b['vat'] !== '' ? round(abs((float)$b['vat']), 2) : round($subtotal * 0.15, 2);
+        $total    = round($subtotal + $vat, 2);
+        if ($total <= 0) { echo json_encode(['success'=>false,'message'=>'مبلغ المرتجع مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        // المرتجع لا يتجاوز أصله — خطأ صامت هنا يقلب رصيد المورد
+        if ($pid > 0 && ($rq = $conn->query("SELECT ROUND(total,2) t FROM dmirror_purchases WHERE id=$pid LIMIT 1")))
+            if (($xq = $rq->fetch_assoc()) && $total > (float)$xq['t'] + 0.5) {
+                echo json_encode(['success'=>false,
+                    'message'=>'مبلغ المرتجع ' . number_format($total, 2) . ' يتجاوز الفاتورة ' . number_format((float)$xq['t'], 2)],
+                    JSON_UNESCAPED_UNICODE); break; }
+
+        $dup = $conn->query("SELECT id FROM dmirror_refunds WHERE no='" . $E($no) . "' AND supplier='" . $E($sup) . "' LIMIT 1");
+        if ($dup && $dup->num_rows) {
+            $x = $dup->fetch_assoc();
+            echo json_encode(['success'=>false,'message'=>'المرتجع مسجّل مسبقاً بهذا الرقم لهذا المورد','id'=>(int)$x['id']],
+                JSON_UNESCAPED_UNICODE); break; }
+
+        $newId = 900001;
+        if ($mx = $conn->query("SELECT COALESCE(MAX(id),0) m FROM dmirror_refunds WHERE id >= 900000"))
+            if ($mr = $mx->fetch_assoc()) $newId = max(900001, (int)$mr['m'] + 1);
+
+        $conn->query("INSERT INTO dmirror_refunds (id,no,date,supplier,total,subtotal,settled,purchase_id,purchase_no,
+                work_order_id,reason,created,modified,items_count,origin,created_by,note)
+            VALUES ($newId, '" . $E($no) . "', '$date', '" . $E($sup) . "', $total, $subtotal, 0,
+                " . ($pid ?: 'NULL') . ", '" . $E($ono) . "', "
+            . ((int)($b['project_id'] ?? 0) ?: 'NULL') . ", '" . $E(mb_substr((string)($b['reason'] ?? ''), 0, 240)) . "',
+                NOW(), NOW(), " . count($clean) . ", 'local', '" . $E($u['name'] ?? '') . "', '"
+            . $E(mb_substr((string)($b['note'] ?? ''), 0, 380)) . "')");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+
+        $seq = $newId * 100;
+        foreach ($clean as $it) {
+            $seq++;
+            $conn->query("INSERT INTO dmirror_refund_items (id,refund_id,item,description,quantity,unit_price,
+                    discount,tax1,subtotal,product_id)
+                VALUES ($seq, $newId, '" . $E($it['name']) . "', '', " . $it['qty'] . ", " . $it['price'] . ",
+                    0, '15', " . $it['line'] . ", 0)");
+        }
+        $docUrl = trim((string)($b['doc_url'] ?? ''));
+        if ($docUrl !== '') {
+            $conn->query("INSERT INTO refund_documents (refund_id, refund_no, doc_type, file_name, drive_url, source, created_by)
+                VALUES ($newId, '" . $E($no) . "', 'refund', '" . $E('مرتجع ' . $no . ' — ' . $sup) . "', '"
+                . $E($docUrl) . "', 'mobile', '" . $E($u['name'] ?? '') . "')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url)");
+            $conn->query("UPDATE dmirror_refunds SET attachments=1 WHERE id=$newId");
+        }
+        acc_audit($conn, 1, 'purchase', $newId, 'refund_create',
+            "تسجيل مرتجع $no للمورد $sup بمبلغ " . number_format($total, 2), $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'id'=>$newId, 'total'=>$total,
+            'message'=>'سُجّل المرتجع'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'refund_doc_add': {
+        // إرفاق مستند بمرتجع قائم — نفس آلية مستندات الفاتورة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الإرفاق'], JSON_UNESCAPED_UNICODE); break; }
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $rid = (int)($b['refund_id'] ?? 0);
+        $url = trim((string)($b['drive_url'] ?? ''));
+        $nm  = trim((string)($b['file_name'] ?? ''));
+        if ($rid <= 0 || $url === '') { echo json_encode(['success'=>false,'message'=>'المرتجع والرابط مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $rno = '';
+        if ($rq = $conn->query("SELECT no FROM dmirror_refunds WHERE id=$rid LIMIT 1")) {
+            if ($xq = $rq->fetch_assoc()) $rno = (string)$xq['no'];
+            else { echo json_encode(['success'=>false,'message'=>'المرتجع غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        }
+        if ($nm === '') $nm = 'مستند مرتجع ' . $rno;
+        $conn->query("INSERT INTO refund_documents (refund_id, refund_no, doc_type, file_name, drive_url,
+                file_size, source, created_by)
+            VALUES ($rid, '" . $E($rno) . "', 'refund', '" . $E(mb_substr($nm, 0, 240)) . "', '" . $E($url) . "',
+                " . (int)($b['file_size'] ?? 0) . ", 'mobile', '" . $E($u['name'] ?? '') . "')
+            ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), file_size=VALUES(file_size)");
+        $conn->query("UPDATE dmirror_refunds SET attachments = (SELECT COUNT(*) FROM refund_documents WHERE refund_id=$rid)
+                      WHERE id=$rid");
+        echo json_encode(['success'=>true, 'message'=>'أُرفق المستند'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'refund_sync': {
+        // مزامنة مرتجعات المشتريات من دفترة.
+        // مسار المرتجعات في api2 غير موثّق، فنجرّب المرشّحات ونعتمد أول مسار يردّ قائمة،
+        // ثم نحفظ المسار الناجح كي لا نجرّب في المرة القادمة.
+        set_time_limit(90);
+        $dk   = "__DAFTRA_KEY__";
+        $base = "https://semak.daftra.com/api2";
+        $take = min(100, max(10, (int)($_GET['limit'] ?? 60)));
+        $E    = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+
+        $get = function($url) use ($dk) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
+                CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+            $r = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            return [$c, $r];
+        };
+
+        $saved = '';
+        if ($rq = $conn->query("SELECT synced_by FROM daftra_sync_log WHERE entity='refunds' LIMIT 1"))
+            if ($xq = $rq->fetch_assoc()) $saved = (string)$xq['synced_by'];
+        $cands = ['purchase_refunds', 'purchase_refund_invoices', 'purchase_returns',
+                  'purchase_credit_notes', 'purchase_invoice_refunds', 'refund_purchases'];
+        if ($saved !== '' && $saved !== 'app') array_unshift($cands, $saved);
+
+        $probe = []; $ep = ''; $rows = [];
+        foreach (array_values(array_unique($cands)) as $cnd) {
+            list($code, $body) = $get("$base/$cnd.json?page=1&limit=$take");
+            $d = $code === 200 ? (json_decode((string)$body, true) ?: []) : [];
+            $ok = ($code === 200 && isset($d['data']) && is_array($d['data']));
+            $probe[] = ['endpoint'=>$cnd, 'http'=>$code, 'rows'=>$ok ? count($d['data']) : 0];
+            if ($ok) { $ep = $cnd; $rows = $d['data']; break; }
+        }
+        if ($ep === '') {
+            echo json_encode(['success'=>false, 'probe'=>$probe,
+                'message'=>'دفترة لا تُتيح مرتجعات المشتريات عبر الـAPI — سجّلها هنا يدوياً'],
+                JSON_UNESCAPED_UNICODE); break;
+        }
+
+        $pick = function($a, $keys, $def = null) {
+            foreach ($keys as $k) if (isset($a[$k]) && $a[$k] !== '' && $a[$k] !== null) return $a[$k];
+            return $def;
+        };
+        $unwrap = function($it) {
+            foreach (['PurchaseRefund','PurchaseRefundInvoice','PurchaseReturn','PurchaseCreditNote',
+                      'RefundReceipt','PurchaseOrder','PurchaseInvoice'] as $k)
+                if (isset($it[$k]) && is_array($it[$k])) return $it[$k];
+            return $it;
+        };
+        $asDate = function($v) {
+            $v = (string)$v;
+            if (preg_match('/^\d{4}-\d{2}-\d{2}/', $v)) return substr($v, 0, 10);
+            if (preg_match('#^(\d{2})/(\d{2})/(\d{4})#', $v, $m)) return $m[3] . '-' . $m[2] . '-' . $m[1];
+            return null;
+        };
+
+        $added = 0; $updated = 0; $seen = 0; $need = [];
+        foreach ($rows as $it) {
+            $p = $unwrap($it);
+            if (empty($p['id'])) continue;
+            $id = (int)$p['id']; $seen++;
+            // المرتجع قد يصل بمبالغ سالبة؛ نخزّنه موجباً ونحمل إشارته في معناه لا في رقمه
+            $no   = (string)$pick($p, ['no','number','refund_no'], '');
+            $date = $asDate($pick($p, ['date','refund_date','created'], ''));
+            $sid  = (int)$pick($p, ['supplier_id','vendor_id','client_id'], 0);
+            $sup  = (string)$pick($p, ['supplier_business_name','supplier','vendor_name','client_business_name'], '');
+            $tot  = abs((float)$pick($p, ['summary_total','total','amount'], 0));
+            $sub  = abs((float)$pick($p, ['summary_subtotal','subtotal'], 0));
+            $set  = abs((float)$pick($p, ['summary_paid','paid','refunded'], 0));
+            $orig = (int)$pick($p, ['purchase_invoice_id','purchase_order_id','original_id','invoice_id','parent_id'], 0);
+            $ono  = (string)$pick($p, ['purchase_invoice_no','purchase_order_no','original_no'], '');
+            $wo   = $pick($p, ['work_order_id'], null);
+            $rsn  = (string)$pick($p, ['reason','refund_reason','notes','note'], '');
+            if ($orig === 0 && $ono !== '')
+                if ($rq = $conn->query("SELECT id FROM dmirror_purchases WHERE no='" . $E($ono) . "' LIMIT 1"))
+                    if ($xq = $rq->fetch_assoc()) $orig = (int)$xq['id'];
+            if ($orig > 0 && $ono === '')
+                if ($rq = $conn->query("SELECT no FROM dmirror_purchases WHERE id=$orig LIMIT 1"))
+                    if ($xq = $rq->fetch_assoc()) $ono = (string)$xq['no'];
+
+            $old = null;
+            if ($rq = $conn->query("SELECT total FROM dmirror_refunds WHERE id=$id LIMIT 1")) $old = $rq->fetch_assoc();
+            $conn->query("INSERT INTO dmirror_refunds
+                    (id,no,date,supplier_id,supplier,total,subtotal,settled,purchase_id,purchase_no,
+                     work_order_id,reason,created,modified,raw,origin)
+                VALUES ($id, '" . $E($no) . "', " . ($date ? "'$date'" : 'NULL') . ", $sid, '" . $E($sup) . "',
+                    $tot, $sub, $set, " . ($orig ?: 'NULL') . ", '" . $E($ono) . "',
+                    " . ($wo !== null ? (int)$wo : 'NULL') . ", '" . $E(mb_substr($rsn, 0, 240)) . "',
+                    " . (!empty($p['created'])  ? "'" . $E($p['created'])  . "'" : 'NULL') . ",
+                    " . (!empty($p['modified']) ? "'" . $E($p['modified']) . "'" : 'NULL') . ",
+                    '" . $E(json_encode($p, JSON_UNESCAPED_UNICODE)) . "', 'daftra')
+                ON DUPLICATE KEY UPDATE no=VALUES(no), date=VALUES(date), supplier_id=VALUES(supplier_id),
+                    supplier=VALUES(supplier), total=VALUES(total), subtotal=VALUES(subtotal),
+                    settled=VALUES(settled), purchase_id=VALUES(purchase_id), purchase_no=VALUES(purchase_no),
+                    work_order_id=VALUES(work_order_id), reason=VALUES(reason),
+                    modified=VALUES(modified), raw=VALUES(raw)");
+            if (!$old) { $added++; $need[] = $id; }
+            elseif (abs((float)$old['total'] - $tot) > 0.009) { $updated++; $need[] = $id; }
+        }
+
+        // مرتجعات بلا بنود — نكمل تفصيلها ولو لم تتغيّر
+        if (count($need) < 12 && ($q = $conn->query("SELECT r.id FROM dmirror_refunds r
+                LEFT JOIN dmirror_refund_items i ON i.refund_id = r.id
+                WHERE i.id IS NULL AND COALESCE(r.origin,'daftra')='daftra'
+                GROUP BY r.id ORDER BY r.id DESC LIMIT 12")))
+            while ($xq = $q->fetch_assoc()) $need[] = (int)$xq['id'];
+        $need = array_slice(array_values(array_unique($need)), 0, 25);
+
+        // التفاصيل: البنود والمرفقات — والمرفق هو مستند المرتجع الذي نريده
+        $items_done = 0; $docs = 0;
+        foreach ($need as $rid) {
+            list($cc, $rr) = $get("$base/$ep/$rid.json");
+            if ($cc !== 200 || !$rr) continue;
+            $dd = json_decode((string)$rr, true) ?: [];
+            $o  = is_array($dd['data'] ?? null) ? $unwrap($dd['data']) : null;
+            if (!$o) continue;
+
+            $items = [];
+            foreach (['PurchaseRefundItem','PurchaseReturnItem','PurchaseCreditNoteItem',
+                      'PurchaseOrderItem','PurchaseInvoiceItem','InvoiceItem','Item'] as $k)
+                if (!empty($o[$k]) && is_array($o[$k])) { $items = $o[$k]; break; }
+            foreach ($items as $itx) {
+                if (!is_array($itx)) continue;
+                $iv = $itx;
+                if (!isset($iv['id'])) { $first = reset($itx); if (is_array($first)) $iv = $first; }
+                if (!isset($iv['id'])) continue;
+                $qty  = abs((float)($iv['quantity'] ?? 0));
+                $up   = abs((float)($iv['unit_price'] ?? 0));
+                $line = abs((float)($iv['subtotal'] ?? 0));
+                if ($line <= 0) $line = $up * ($qty ?: 1);
+                $conn->query("REPLACE INTO dmirror_refund_items
+                    (id,refund_id,item,description,quantity,unit_price,discount,tax1,subtotal,product_id) VALUES ("
+                    . (int)$iv['id'] . ", $rid, '" . $E((string)($iv['item'] ?? $iv['name'] ?? '')) . "', '"
+                    . $E((string)($iv['description'] ?? '')) . "', $qty, $up, "
+                    . abs((float)($iv['discount'] ?? 0)) . ", '" . $E((string)($iv['tax1'] ?? '')) . "', "
+                    . $line . ", " . (int)($iv['product_id'] ?? 0) . ")");
+            }
+            $att = (array)($o['Attachments'] ?? $o['attachments'] ?? []);
+            foreach ($att as $a) {
+                if (!is_array($a)) continue;
+                $a = isset($a['Attachment']) && is_array($a['Attachment']) ? $a['Attachment'] : $a;
+                if (!isset($a['id'])) continue;
+                $conn->query("REPLACE INTO dmirror_attachments
+                    (file_id,name,path,entity_key,entity_id,file_size,mime_type,created_at) VALUES ("
+                    . (int)$a['id'] . ", '" . $E((string)($a['name'] ?? '')) . "', '"
+                    . $E((string)($a['path'] ?? '')) . "', 'purchase_refund', $rid, "
+                    . (int)($a['file_size'] ?? 0) . ", '" . $E((string)($a['mime_type'] ?? '')) . "', "
+                    . (!empty($a['created_at']) ? "'" . $E($a['created_at']) . "'" : 'NULL') . ")");
+                $docs++;
+            }
+            $conn->query("UPDATE dmirror_refunds SET items_count=" . count($items)
+                . ", attachments=" . count($att) . " WHERE id=$rid");
+            if ($items) $items_done++;
+        }
+
+        $conn->query("INSERT INTO daftra_sync_log (entity, count, synced_at, synced_by)
+                      VALUES ('refunds', $seen, NOW(), '" . $E($ep) . "')
+                      ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW(), synced_by=VALUES(synced_by)");
+        echo json_encode(['success'=>true, 'endpoint'=>$ep, 'probe'=>$probe, 'checked'=>$seen,
+            'added'=>$added, 'updated'=>$updated, 'items_synced'=>$items_done, 'attachments'=>$docs],
+            JSON_UNESCAPED_UNICODE);
         break;
     }
 

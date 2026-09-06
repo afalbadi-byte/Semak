@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyEntity from './BuyEntity';
+import BuyReturns from './BuyReturns';
 import { SortBar } from '../../components/SortHeader';
 import { useDepthGuard } from '../../lib/backstack';
 import { syncDaftra } from '../../lib/sync';
@@ -62,7 +63,7 @@ export default function BuyRecords() {
         finally { setBusy(false); }
     }, [tab, q, filter, sortKey, sortDir, rows.length]);
 
-    useEffect(() => { load(false); }, [tab, filter, sortKey, sortDir]);   // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { if (tab !== 'returns') load(false); }, [tab, filter, sortKey, sortDir]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const open = (type, value) => setStack(s => s.concat({ type, value }));
     const back = () => setStack(s => s.slice(0, -1));
@@ -76,17 +77,20 @@ export default function BuyRecords() {
 
     return (
         <div className="p-4 space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-                {[['invoices', 'الفواتير'], ['suppliers', 'الموردون'], ['payments', 'الدفعات']].map(([k, t]) => (
+            <div className="grid grid-cols-4 gap-2">
+                {[['invoices', 'الفواتير'], ['suppliers', 'الموردون'], ['payments', 'الدفعات'],
+                  ['returns', 'المرتجعات']].map(([k, t]) => (
                     <button key={k} onClick={() => { setTab(k); setRows([]); }}
-                        className={'h-[48px] rounded-xl text-[14px] font-black border ' +
+                        className={'h-[48px] rounded-xl text-[13px] font-black border ' +
                             (tab === k ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]' : 'bg-white/5 border-white/10 text-slate-300')}>
                         {t}
                     </button>
                 ))}
             </div>
 
-            {tab !== 'payments' && (
+            {tab === 'returns' && <BuyReturns />}
+
+            {tab !== 'payments' && tab !== 'returns' && (
             <div className="flex gap-2">
                 <div className="relative flex-1 min-w-0">
                     <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -195,7 +199,7 @@ export default function BuyRecords() {
                 </button>
             )}
 
-            {tab !== 'payments' && <SortBar cols={SORTS} sortKey={sortKey} dir={sortDir}
+            {tab !== 'payments' && tab !== 'returns' && <SortBar cols={SORTS} sortKey={sortKey} dir={sortDir}
                 onSort={k => setSortKey(k || (tab === 'invoices' ? 'date' : 'gross'))}
                 onDir={() => setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))} />}
 
@@ -252,15 +256,15 @@ export default function BuyRecords() {
                     </button>
                 ))}
 
-                {!rows.length && !busy && <p className="text-center text-slate-500 text-sm py-8">لا نتائج</p>}
+                {!rows.length && !busy && tab !== 'returns' && tab !== 'payments' && <p className="text-center text-slate-500 text-sm py-8">لا نتائج</p>}
 
-                {more && (
+                {more && tab !== 'returns' && (
                     <button onClick={() => load(true)} disabled={busy}
                         className="w-full min-h-[48px] rounded-xl bg-white/10 text-[13px] font-bold disabled:opacity-50">
                         {busy ? 'جارٍ التحميل...' : 'تحميل المزيد'}
                     </button>
                 )}
-                {rows.length > 0 && !more && (
+                {rows.length > 0 && !more && tab !== 'returns' && (
                     <p className="text-center text-[11px] text-slate-600 py-2">عُرضت كل النتائج ({rows.length})</p>
                 )}
             </div>

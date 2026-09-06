@@ -65,6 +65,12 @@ export async function openDaftraFile(fileId, view = false) {
     go(`${API_URL}?action=doc_daftra&file_id=${fileId}&k=${k}${view ? '&view=1' : ''}`, view);
 }
 
+// مستند مرتجع مستضاف عندنا
+export async function openRefundDoc(id, view = false) {
+    const k = await ticket('rget', id);
+    go(`${API_URL}?action=doc_refund&id=${id}&k=${k}${view ? '&view=1' : ''}`, view);
+}
+
 // كل مستندات فاتورة في ملف مضغوط
 export async function openDocsZip(purchaseId) {
     const k = await ticket('zip', purchaseId);
