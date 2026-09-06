@@ -9630,6 +9630,9 @@ switch ($action) {
                     || strpos($l, '.pdf') !== false) $urls[] = $uu;
             }
             $out['block_src'] = $blkUrl;
+            $out['block_len'] = strlen($h6);
+            $out['block_head'] = mb_substr(preg_replace('/\s+/', ' ', strip_tags($h6)), 0, 300);
+            $out['block_all_urls'] = array_slice(array_values(array_unique($mu[1] ?? [])), 0, 40);
             $out['block_urls'] = array_slice(array_values(array_unique($urls)), 0, 30);
             $out['pay_routes'] = $pv;
             $out['pay_probe'] = $probe;
