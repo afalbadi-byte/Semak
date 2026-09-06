@@ -8844,6 +8844,7 @@ switch ($action) {
                     ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project,
                     (COALESCE(d.n,0) + COALESCE(a2.n,0)) docs, COALESCE(a.n,0) daftra_docs,
                     (COALESCE(og.n,0) + COALESCE(a2.n,0)) orig_docs,
+                    p.created, p.modified,
                     COALESCE(p.origin,'daftra') origin
                 FROM dmirror_purchases p
                 LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
