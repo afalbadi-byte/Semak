@@ -8827,6 +8827,10 @@ switch ($action) {
                  'supplier'=>'p.supplier', 'no'=>'p.no',
                  'docs'=>'(COALESCE(d.n,0) + COALESCE(a2.n,0))'];
         $isk = $imap[(string)($_GET['sort'] ?? '')] ?? 'p.date';
+        // مستند أصلي = فاتورة مورد حقيقية، لا نسخة دفترة ولا إيصال سداد
+        $ORIG = "LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents
+                            WHERE doc_type='invoice' AND COALESCE(source,'') <> 'daftra_pdf'
+                            GROUP BY purchase_id) og ON og.purchase_id = p.id";
         $ATT = "LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
                            WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
                   ON a.entity_id = p.id
@@ -8839,13 +8843,14 @@ switch ($action) {
         $rows = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.paid,2) paid,
                     ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project,
                     (COALESCE(d.n,0) + COALESCE(a2.n,0)) docs, COALESCE(a.n,0) daftra_docs,
+                    (COALESCE(og.n,0) + COALESCE(a2.n,0)) orig_docs,
                     COALESCE(p.origin,'daftra') origin
                 FROM dmirror_purchases p
                 LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
                 LEFT JOIN project_budgets b ON b.project_id = pp.project_id
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
                   ON d.purchase_id = p.id
-                $ATT
+                $ATT $ORIG
                 WHERE $W ORDER BY $isk $dir, p.id DESC LIMIT $lim OFFSET $off");
         $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(p.total),2) gross,
                     ROUND(SUM(GREATEST(p.total - p.paid, 0)),2) outstanding,
