@@ -10092,6 +10092,15 @@ switch ($action) {
             $out['counts']['payment_receipts'] = (int)$pr2->fetch_assoc()['n'];
         if ($pr3 = $conn->query("SELECT COUNT(*) n FROM dmirror_payments WHERE receipt_pull_at IS NOT NULL"))
             $out['counts']['payments_checked'] = (int)$pr3->fetch_assoc()['n'];
+        // تقدّم استرجاع المرفقات — للمتابعة بلا جلسة
+        $out['recovery'] = ['files'=>0, 'scanned'=>0, 'linked'=>0, 'verdicts'=>[]];
+        if ($rv = $conn->query("SELECT COUNT(*) n, SUM(ocr_at IS NOT NULL) s,
+                    SUM(status='linked') l FROM recovery_files"))
+            if ($vx = $rv->fetch_assoc()) $out['recovery'] = ['files'=>(int)$vx['n'],
+                'scanned'=>(int)$vx['s'], 'linked'=>(int)$vx['l'], 'verdicts'=>[]];
+        if ($rv2 = $conn->query("SELECT COALESCE(verdict,'قيد القراءة') v, COUNT(*) n
+                    FROM recovery_files GROUP BY verdict"))
+            while ($vy = $rv2->fetch_assoc()) $out['recovery']['verdicts'][$vy['v']] = (int)$vy['n'];
         $out['attachment_kinds'] = [];
         if ($kr = $conn->query("SELECT COALESCE(entity_key,'—') k, COUNT(*) n FROM dmirror_attachments
                                 GROUP BY entity_key ORDER BY n DESC"))
