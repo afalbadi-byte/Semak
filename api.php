@@ -7826,7 +7826,9 @@ switch ($action) {
         $w  = "status='" . $conn->real_escape_string($st) . "'";
         if ($v !== '') $w .= " AND verdict='" . $conn->real_escape_string($v) . "'";
         $rows = []; $sum = [];
-        if ($r = $conn->query("SELECT verdict, COUNT(*) n FROM recovery_files GROUP BY verdict"))
+        // العدّاد يتبع القائمة في حالتها، وإلا ظهر المربوط سابقاً كأنه عمل باقٍ
+        if ($r = $conn->query("SELECT verdict, COUNT(*) n FROM recovery_files
+                               WHERE status='" . $conn->real_escape_string($st) . "' GROUP BY verdict"))
             while ($x = $r->fetch_assoc()) $sum[$x['verdict'] ?: 'قيد القراءة'] = (int)$x['n'];
         if ($r = $conn->query("SELECT id, file_name, drive_url, ocr_kind, ocr_sup, ocr_no, ocr_total, ocr_date,
                     verdict, match_id, match_no, evidence, cands, status
