@@ -9391,7 +9391,7 @@ switch ($action) {
                 'items_synced'=>$items_done];
         // فحص: نقطة الدفعات المستقلة قد تحمل المرفقات التي لا ترجع مع الفاتورة
         if (!empty($_GET['paysrc']) && $need) {
-            $probe = []; $pidP = (int)$need[0];
+            $probe = []; $pidP = (int)($_GET['probe_id'] ?? 0) ?: (int)$need[0];
             foreach (["purchase_invoice_payments.json?purchase_invoice_id=$pidP",
                       "purchase_invoice_payments.json?purchase_order_id=$pidP",
                       "purchase_invoice_payments.json?limit=3",
