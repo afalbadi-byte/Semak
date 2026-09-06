@@ -1285,6 +1285,32 @@ ensure_column($conn, 'dmirror_purchases', 'pdf_pull_at', "pdf_pull_at DATETIME D
 ensure_column($conn, 'dmirror_purchases', 'pdf_route',   "pdf_route VARCHAR(120) DEFAULT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (41)");
 } // end DDL v41
+// ─── DDL v42: استرجاع المرفقات المفقودة وربطها بأدلة من داخل الملف ──────────
+if ($__sv < 42) {
+$conn->query("CREATE TABLE IF NOT EXISTS recovery_files (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    file_name  VARCHAR(255) NOT NULL,
+    sha1       CHAR(40) NOT NULL,
+    drive_url  VARCHAR(600) DEFAULT NULL,
+    file_size  BIGINT NOT NULL DEFAULT 0,
+    ocr_at     DATETIME DEFAULT NULL,
+    ocr_kind   VARCHAR(16) DEFAULT NULL,
+    ocr_sup    VARCHAR(255) DEFAULT NULL,
+    ocr_no     VARCHAR(60) DEFAULT NULL,
+    ocr_total  DECIMAL(14,2) DEFAULT NULL,
+    ocr_date   DATE DEFAULT NULL,
+    verdict    VARCHAR(16) DEFAULT NULL,
+    match_id   INT DEFAULT NULL,
+    match_no   VARCHAR(40) DEFAULT NULL,
+    evidence   VARCHAR(400) DEFAULT NULL,
+    cands      TEXT DEFAULT NULL,
+    status     VARCHAR(12) NOT NULL DEFAULT 'pending',
+    decided_by VARCHAR(120) DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_sha (sha1), INDEX (status), INDEX (verdict)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (42)");
+} // end DDL v42
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -1388,6 +1414,33 @@ function daftra_ext_of($ct, $fallbackName = '') {
     if (strpos($ct, 'jpeg') !== false || strpos($ct, 'jpg') !== false) return 'jpg';
     $e = strtolower(pathinfo((string)$fallbackName, PATHINFO_EXTENSION));
     return $e !== '' ? $e : 'pdf';
+}
+
+// مُساعد: تطبيع اسم جهة — تُسقط الألفاظ العامة كي لا تتشابه الشركات ببعضها
+function daftra_norm_name($s) {
+    $s = (string)$s;
+    $s = strtr($s, ['٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9']);
+    $s = preg_replace('/[أإآ]/u', 'ا', $s);
+    $s = preg_replace('/ة/u', 'ه', $s);
+    $s = preg_replace('/ى/u', 'ي', $s);
+    $s = preg_replace('/[^\p{Arabic}\p{L}0-9 ]/u', ' ', $s);
+    $stop = ['شركه','مؤسسه','التجاريه','للتجاره','المحدوده','مصنع','ومقاولات','للمقاولات','العامه',
+             'الوطنيه','مجموعه','محل','ورشه','مكتب','السعوديه','العربيه','company','trading','est',
+             'llc','ltd','co','the','for'];
+    $w = array_values(array_filter(preg_split('/\s+/u', trim($s)), function($x) use ($stop) {
+        return mb_strlen($x) >= 3 && !in_array(mb_strtolower($x), $stop, true);
+    }));
+    return $w;
+}
+
+// مُساعد: تشابه اسمين بعد التطبيع — نسبة الكلمات المميِّزة المشتركة
+function daftra_name_sim($a, $b) {
+    if (!$a || !$b) return 0.0;
+    $hit = 0;
+    foreach ($a as $w) foreach ($b as $x) {
+        if ($w === $x || mb_strpos($x, $w) !== false || mb_strpos($w, $x) !== false) { $hit++; break; }
+    }
+    return $hit / max(count($a), count($b));
 }
 
 // مُساعد: رصيد المورد — المستحق على فواتيره مقابل رصيده المقدَّم
@@ -7395,6 +7448,208 @@ switch ($action) {
             'failed'=>$failed, 'remaining'=>$left, 'detail'=>$last,
             'message'=>$done ? "فُرز $done مستندا · $receipts إيصالا · رُبط $linked"
                              : ($failed ? 'تعذر الفرز' : 'لا مستندات جديدة')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'recover_upload': {
+        // رفع ملف مسترجَع ليُقرأ ويُقترح ربطه — لا يُربط بشيء الآن
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الاسترجاع'], JSON_UNESCAPED_UNICODE); break; }
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $nm  = trim((string)($b['filename'] ?? ''));
+        $bin = base64_decode((string)($b['data'] ?? ''), true);
+        if ($nm === '' || $bin === false || $bin === '') {
+            echo json_encode(['success'=>false,'message'=>'الملف غير صالح'], JSON_UNESCAPED_UNICODE); break; }
+        $ext = strtolower(pathinfo($nm, PATHINFO_EXTENSION));
+        if (!in_array($ext, ['pdf','png','jpg','jpeg'], true)) {
+            echo json_encode(['success'=>true,'skipped'=>true,'message'=>'نوع غير مدعوم'], JSON_UNESCAPED_UNICODE); break; }
+        $sha = sha1($bin);
+        if ($r = $conn->query("SELECT id FROM recovery_files WHERE sha1='$sha' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) {
+                echo json_encode(['success'=>true,'id'=>(int)$x['id'],'duplicate'=>true], JSON_UNESCAPED_UNICODE); break; }
+        $dir = __DIR__ . '/qdocs';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $tok = bin2hex(random_bytes(16));
+        file_put_contents("$dir/$tok.$ext", $bin);
+        $url = 'https://' . $_SERVER['HTTP_HOST'] . "/qdocs/$tok.$ext";
+        $conn->query("INSERT INTO recovery_files (file_name, sha1, drive_url, file_size)
+            VALUES ('" . $conn->real_escape_string($nm) . "', '$sha', '" . $conn->real_escape_string($url) . "', " . strlen($bin) . ")");
+        echo json_encode(['success'=>true, 'id'=>(int)$conn->insert_id], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'recover_scan': {
+        // قراءة بصرية لكل ملف ثم اقتراح فاتورته بثلاثة أدلة متوافقة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الاسترجاع'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(240);
+        $take = min(6, max(1, (int)($_GET['limit'] ?? 3)));
+
+        $todo = [];
+        if ($r = $conn->query("SELECT id, file_name, drive_url FROM recovery_files
+                               WHERE ocr_at IS NULL AND COALESCE(drive_url,'') <> '' ORDER BY id LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $todo[] = $x;
+
+        // الفواتير مرة واحدة لكل دفعة
+        $invs = [];
+        if ($r = $conn->query("SELECT id, no, date, supplier, ROUND(total,2) gross, ROUND(subtotal,2) net
+                               FROM dmirror_purchases"))
+            while ($x = $r->fetch_assoc()) $invs[] = $x;
+
+        $done = 0; $conf = 0; $last = '';
+        foreach ($todo as $d) {
+            $path  = parse_url($d['drive_url'], PHP_URL_PATH);
+            $local = ($path && strpos($path, '/qdocs/') === 0) ? __DIR__ . $path : null;
+            if (!$local || !is_file($local)) {
+                $conn->query("UPDATE recovery_files SET ocr_at=NOW(), verdict='مفقود' WHERE id=" . (int)$d['id']);
+                continue; }
+            $ext  = strtolower(pathinfo($local, PATHINFO_EXTENSION));
+            $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg'][$ext] ?? '';
+            $data = base64_encode((string)file_get_contents($local));
+            $blk  = ($mime === 'application/pdf')
+                  ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>$data]]
+                  : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mime,'data'=>$data]];
+            $sys  = "اقرأ المستند وأعد JSON فقط: {\"kind\":\"invoice|receipt|other\",\"supplier\":\"اسم الجهة المُصدِرة\","
+                  . "\"no\":\"رقم المستند\",\"total\":رقم,\"date\":\"YYYY-MM-DD\"}.\n"
+                  . "supplier = اسم الشركة التي أصدرت المستند، لا اسم المشتري (سماك الخير / سمك العمارة هي المشتري).\n"
+                  . "total = الإجمالي النهائي شامل الضريبة. ما لا تجده اجعله null. لا تخترع شيئاً.";
+            $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>400, 'system'=>$sys,
+                'messages'=>[['role'=>'user','content'=>[$blk, ['type'=>'text','text'=>'استخرج البيانات.']]]]];
+            $ch = curl_init('https://api.anthropic.com/v1/messages');
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_POST=>true,
+                CURLOPT_POSTFIELDS=>json_encode($payload, JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER=>['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__',
+                                     'anthropic-version: 2023-06-01'], CURLOPT_TIMEOUT=>120]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            if ($code !== 200) { $last = 'HTTP ' . $code; continue; }
+            $j = json_decode($res, true); $txt = '';
+            foreach ((array)($j['content'] ?? []) as $b2) if (($b2['type'] ?? '') === 'text') $txt .= $b2['text'];
+            if (preg_match('/\{[\s\S]*\}/', $txt, $m2)) $txt = $m2[0];
+            $o = json_decode($txt, true);
+            if (!is_array($o)) { $last = 'تعذر تفسير القراءة'; continue; }
+
+            $kind = in_array(($o['kind'] ?? ''), ['invoice','receipt','other'], true) ? $o['kind'] : 'other';
+            $sup  = mb_substr(trim((string)($o['supplier'] ?? '')), 0, 240);
+            $no   = mb_substr(trim((string)($o['no'] ?? '')), 0, 55);
+            $tot  = isset($o['total']) && is_numeric($o['total']) ? round((float)$o['total'], 2) : null;
+            $dt   = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($o['date'] ?? '')) ? $o['date'] : null;
+
+            // ── المطابقة: المبلغ يطابق، والمورد يتشابه، والتاريخ قريب ──
+            $best = []; $sn = daftra_norm_name($sup);
+            foreach ($invs as $v) {
+                $okAmt = $tot !== null && (abs((float)$v['gross'] - $tot) <= 0.01 || abs((float)$v['net'] - $tot) <= 0.01);
+                if (!$okAmt) continue;
+                $sim = daftra_name_sim($sn, daftra_norm_name($v['supplier']));
+                $okDate = true;
+                if ($dt && !empty($v['date']))
+                    $okDate = abs(strtotime($dt) - strtotime($v['date'])) <= 45 * 86400;
+                $best[] = ['v'=>$v, 'sim'=>$sim, 'date'=>$okDate];
+            }
+            usort($best, function($a, $b) { return $b['sim'] <=> $a['sim']; });
+            $strong = array_values(array_filter($best, function($x) { return $x['sim'] >= 0.6 && $x['date']; }));
+
+            $verdict = 'بلا دليل'; $mid = 'NULL'; $mno = ''; $ev = '';
+            if (count($strong) === 1) {
+                $verdict = 'مؤكد'; $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
+                $ev = 'المبلغ مطابق · المورد ' . round($strong[0]['sim'] * 100) . '% · التاريخ ضمن المدى';
+                $conf++;
+            } elseif (count($strong) > 1) {
+                $verdict = 'متعدد';
+            } elseif (count($best) >= 1) {
+                $verdict = 'مرشّح'; $mid = (int)$best[0]['v']['id']; $mno = (string)$best[0]['v']['no'];
+                $ev = 'المبلغ مطابق · المورد ' . round($best[0]['sim'] * 100) . '%'
+                    . ($best[0]['date'] ? '' : ' · التاريخ بعيد');
+            }
+            $cands = json_encode(array_map(function($x) {
+                return ['id'=>(int)$x['v']['id'], 'no'=>$x['v']['no'], 'supplier'=>$x['v']['supplier'],
+                        'gross'=>(float)$x['v']['gross'], 'date'=>$x['v']['date'], 'sim'=>round($x['sim'], 2)];
+            }, array_slice($best, 0, 6)), JSON_UNESCAPED_UNICODE);
+
+            $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+            $conn->query("UPDATE recovery_files SET ocr_at=NOW(), ocr_kind='" . $E($kind) . "',
+                    ocr_sup='" . $E($sup) . "', ocr_no='" . $E($no) . "',
+                    ocr_total=" . ($tot === null ? 'NULL' : $tot) . ",
+                    ocr_date=" . ($dt === null ? 'NULL' : "'" . $E($dt) . "'") . ",
+                    verdict='" . $E($verdict) . "', match_id=" . ($mid === 'NULL' ? 'NULL' : $mid) . ",
+                    match_no='" . $E($mno) . "', evidence='" . $E($ev) . "', cands='" . $E($cands) . "'
+                WHERE id=" . (int)$d['id']);
+            $done++;
+        }
+
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM recovery_files WHERE ocr_at IS NULL"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        echo json_encode(['success'=>true, 'scanned'=>$done, 'confirmed'=>$conf, 'remaining'=>$left,
+            'detail'=>$last, 'message'=>"قُرئ $done ملفا · $conf مؤكد · بقي $left"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'recover_list': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $v  = trim((string)($_GET['verdict'] ?? ''));
+        $st = trim((string)($_GET['status'] ?? 'pending'));
+        $w  = "status='" . $conn->real_escape_string($st) . "'";
+        if ($v !== '') $w .= " AND verdict='" . $conn->real_escape_string($v) . "'";
+        $rows = []; $sum = [];
+        if ($r = $conn->query("SELECT verdict, COUNT(*) n FROM recovery_files GROUP BY verdict"))
+            while ($x = $r->fetch_assoc()) $sum[$x['verdict'] ?: 'قيد القراءة'] = (int)$x['n'];
+        if ($r = $conn->query("SELECT id, file_name, drive_url, ocr_kind, ocr_sup, ocr_no, ocr_total, ocr_date,
+                    verdict, match_id, match_no, evidence, cands, status
+                FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'مؤكد','مرشّح','متعدد','بلا دليل'), id LIMIT 200"))
+            while ($x = $r->fetch_assoc()) { $x['cands'] = json_decode($x['cands'] ?: '[]', true); $rows[] = $x; }
+        echo json_encode(['success'=>true, 'summary'=>$sum, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'recover_decide': {
+        // الربط لا يتم إلا بتأكيد بشري صريح على فاتورة بعينها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الاعتماد'], JSON_UNESCAPED_UNICODE); break; }
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id  = (int)($b['id'] ?? 0);
+        $inv = (int)($b['invoice_id'] ?? 0);
+        $act = (($b['action'] ?? '') === 'reject') ? 'reject' : 'link';
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $row = null;
+        if ($r = $conn->query("SELECT * FROM recovery_files WHERE id=$id LIMIT 1")) $row = $r->fetch_assoc();
+        if (!$row) { echo json_encode(['success'=>false,'message'=>'الملف غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        if ($act === 'reject') {
+            $conn->query("UPDATE recovery_files SET status='rejected', decided_by='" . $E($u['name'] ?? '') . "' WHERE id=$id");
+            echo json_encode(['success'=>true,'message'=>'استُبعد الملف'], JSON_UNESCAPED_UNICODE); break;
+        }
+        if (!$inv) { echo json_encode(['success'=>false,'message'=>'اختر الفاتورة'], JSON_UNESCAPED_UNICODE); break; }
+        $iv = null;
+        if ($r = $conn->query("SELECT id, no, supplier FROM dmirror_purchases WHERE id=$inv LIMIT 1")) $iv = $r->fetch_assoc();
+        if (!$iv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $ty = (($row['ocr_kind'] ?? '') === 'receipt') ? 'receipt' : 'invoice';
+        $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, supplier, doc_type, file_name,
+                drive_url, file_size, source, created_by, note)
+            VALUES ($inv, '" . $E($iv['no']) . "', '" . $E($iv['supplier']) . "', '" . $E($ty) . "', '"
+            . $E($row['file_name']) . "', '" . $E($row['drive_url']) . "', " . (int)$row['file_size'] . ",
+                'recovered', '" . $E($u['name'] ?? '') . "', 'مسترجَع ومعتمد يدوياً')
+            ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), doc_type=VALUES(doc_type)");
+        $conn->query("UPDATE recovery_files SET status='linked', match_id=$inv, match_no='" . $E($iv['no']) . "',
+            decided_by='" . $E($u['name'] ?? '') . "' WHERE id=$id");
+        acc_audit($conn, 1, 'purchase', $inv, 'doc_recovered',
+            'ربط مرفق مسترجَع: ' . $row['file_name'], $u['name'] ?? '');
+        echo json_encode(['success'=>true,'message'=>'رُبط بالفاتورة ' . $iv['no']], JSON_UNESCAPED_UNICODE);
         break;
     }
 
