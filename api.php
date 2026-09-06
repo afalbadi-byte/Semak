@@ -1259,6 +1259,13 @@ ensure_column($conn, 'dmirror_payments', 'notes',          "notes VARCHAR(500) D
 ensure_column($conn, 'dmirror_payments', 'receipt_url',    "receipt_url VARCHAR(600) DEFAULT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (37)");
 } // end DDL v37
+// ─── DDL v38: ربط المستند بالدفعة التي يثبتها ───────────────────────────────
+if ($__sv < 38) {
+ensure_column($conn, 'purchase_documents', 'payment_id',  "payment_id INT DEFAULT NULL");
+ensure_column($conn, 'purchase_documents', 'payment_src', "payment_src VARCHAR(10) DEFAULT NULL");
+$conn->query("ALTER TABLE purchase_documents ADD INDEX idx_pd_payment (payment_id, payment_src)");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (38)");
+} // end DDL v38
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -7273,6 +7280,33 @@ switch ($action) {
         break;
     }
 
+    case 'pay_receipt_link': {
+        // ربط مستند موجود سلفاً بدفعة — للإيصالات التي أرفقتها دفترة على الفاتورة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية ربط الإيصالات'], JSON_UNESCAPED_UNICODE); break; }
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $doc = (int)($b['doc_id'] ?? 0);
+        $pay = (int)($b['payment_id'] ?? 0);
+        $src = (($b['src'] ?? '') === 'daftra') ? 'daftra' : 'app';
+        if (!$doc) { echo json_encode(['success'=>false,'message'=>'المستند مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        if ($pay > 0) {
+            $conn->query("UPDATE purchase_documents SET doc_type='receipt', payment_id=$pay,
+                payment_src='" . $conn->real_escape_string($src) . "' WHERE id=$doc");
+            $msg = 'رُبط الإيصال بالدفعة';
+        } else {
+            $conn->query("UPDATE purchase_documents SET payment_id=NULL, payment_src=NULL WHERE id=$doc");
+            $msg = 'فُكّ ربط الإيصال';
+        }
+        acc_audit($conn, 1, 'purchase', 0, 'receipt_link', $msg . " (doc#$doc → $src#$pay)", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'message'=>$msg], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pay_receipt_set': {
         // إرفاق إيصال لدفعة مسجّلة سلفاً — دفعاتنا ودفعات دفترة سواء
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -7316,10 +7350,11 @@ switch ($action) {
         $name = 'إيصال سداد ' . number_format($amt, 2) . ($pdate !== '' ? ' — ' . $pdate : '')
               . ($sup !== '' ? ' — ' . $sup : '');
         $conn->query("INSERT INTO purchase_documents (purchase_id, supplier, doc_type, file_name, drive_url,
-                source, created_by)
+                source, created_by, payment_id, payment_src)
             VALUES ($pid, '" . $E($sup) . "', 'receipt', '" . $E($name) . "', '" . $E($url) . "', 'mobile', '"
-            . $E($u['name'] ?? '') . "')
-            ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url)");
+            . $E($u['name'] ?? '') . "', $id, '" . $E($src) . "')
+            ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), doc_type='receipt',
+                payment_id=VALUES(payment_id), payment_src=VALUES(payment_src)");
         acc_audit($conn, 1, 'purchase', $pid, 'receipt_attach',
             'إرفاق إيصال لدفعة ' . number_format($amt, 2) . ' (' . $src . '#' . $id . ')', $u['name'] ?? '');
         echo json_encode(['success'=>true, 'purchase_id'=>$pid, 'message'=>'أُرفق الإيصال بالدفعة'],
@@ -8503,6 +8538,15 @@ switch ($action) {
                     'rows'=>(function() use ($Q, $pid) {
                         $map = ['transfer'=>'تحويل','cash'=>'نقدي','cheque'=>'شيك','card'=>'بطاقة','other'=>'أخرى'];
                         $rows = []; $seen = [];
+                        // إيصالات هذه الفاتورة: المربوطة بدفعة، والحرّة التي لم تُربط بعد
+                        $bound = []; $free = [];
+                        foreach ($Q("SELECT id, file_name, COALESCE(drive_url,'') drive_url,
+                                        COALESCE(payment_id,0) payment_id, COALESCE(payment_src,'') payment_src
+                                     FROM purchase_documents
+                                     WHERE purchase_id=$pid AND doc_type='receipt' ORDER BY id") as $rd) {
+                            if ((int)$rd['payment_id'] > 0) $bound[$rd['payment_src'] . '#' . (int)$rd['payment_id']] = $rd;
+                            else $free[] = $rd;
+                        }
                         foreach ($Q("SELECT id, pay_date, ROUND(amount,2) amount, method, COALESCE(bank,'') bank,
                                     COALESCE(beneficiary,'') beneficiary, COALESCE(from_account,'') from_account,
                                     COALESCE(reference,'') reference, COALESCE(receipt_url,'') receipt_url,
@@ -8512,6 +8556,12 @@ switch ($action) {
                             $p['source']    = 'التطبيق';
                             $p['src']       = 'app';
                             $seen[$p['pay_date'] . '|' . number_format((float)$p['amount'], 2, '.', '')] = 1;
+                            $bk = 'app#' . (int)$p['id'];
+                            if (isset($bound[$bk])) {
+                                $p['receipt_doc_id'] = (int)$bound[$bk]['id'];
+                                $p['receipt_name']   = $bound[$bk]['file_name'];
+                                if ($p['receipt_url'] === '') $p['receipt_url'] = $bound[$bk]['drive_url'];
+                            }
                             $rows[] = $p;
                         }
                         // دفعات دفترة — تُعرض ما لم تكن هي نفسها مسجّلة عندنا بنفس اليوم والمبلغ
@@ -8522,12 +8572,26 @@ switch ($action) {
                                      FROM dmirror_payments WHERE purchase_id=$pid ORDER BY date, id") as $p) {
                             $key = $p['pay_date'] . '|' . number_format((float)$p['amount'], 2, '.', '');
                             if (isset($seen[$key])) continue;
-                            $rows[] = ['id'=>(int)$p['id'], 'src'=>'daftra',
+                            $row = ['id'=>(int)$p['id'], 'src'=>'daftra',
                                 'pay_date'=>$p['pay_date'], 'amount'=>$p['amount'], 'method'=>'',
                                 'method_ar'=>($p['payment_method'] !== '' ? $p['payment_method'] : '—'),
                                 'source'=>'دفترة', 'bank'=>'', 'beneficiary'=>'',
                                 'from_account'=>'', 'reference'=>'',
                                 'receipt_url'=>$p['receipt_url'], 'created_by'=>''];
+                            $bk = 'daftra#' . (int)$p['id'];
+                            if (isset($bound[$bk])) {
+                                $row['receipt_doc_id'] = (int)$bound[$bk]['id'];
+                                $row['receipt_name']   = $bound[$bk]['file_name'];
+                                if ($row['receipt_url'] === '') $row['receipt_url'] = $bound[$bk]['drive_url'];
+                            }
+                            $rows[] = $row;
+                        }
+                        // إيصال واحد حرّ ودفعة واحدة: الربط بيّن بلا احتمال خطأ
+                        if (count($free) === 1 && count($rows) === 1 && empty($rows[0]['receipt_doc_id'])) {
+                            $rows[0]['receipt_doc_id'] = (int)$free[0]['id'];
+                            $rows[0]['receipt_name']   = $free[0]['file_name'];
+                            $rows[0]['receipt_guess']  = 1;
+                            if ($rows[0]['receipt_url'] === '') $rows[0]['receipt_url'] = $free[0]['drive_url'];
                         }
                         usort($rows, function($a, $b) { return strcmp((string)$a['pay_date'], (string)$b['pay_date']); });
                         return $rows;

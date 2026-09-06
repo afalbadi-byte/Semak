@@ -553,7 +553,18 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                     {(data.sections || []).map((sec, si) => (
                         <Section key={si} onOpen={onOpen}
                             sec={sec.title === 'الدفعات'
-                                ? { ...sec, attach: true, onAttach: r => { setErr(''); setRcpt({ ...r, file: null, details: null }); } }
+                                ? { ...sec, attach: true,
+                                    onAttach: r => { setErr(''); setRcpt({ ...r, file: null, details: null }); },
+                                    onLink: async (r, docId) => {
+                                        setBusy(true); setErr('');
+                                        try {
+                                            const x = await post('pay_receipt_link',
+                                                { doc_id: docId, payment_id: r.id, src: r.src });
+                                            if (!x.success) setErr(x.message || 'تعذر الربط');
+                                            else setTick(v => v + 1);
+                                        } catch { setErr('تعذر الاتصال'); }
+                                        finally { setBusy(false); }
+                                    } }
                                 : sec.title === 'المستندات'
                                 ? { ...sec, retype: async (r, ty) => {
                                         setBusy(true); setErr('');
@@ -679,7 +690,19 @@ function Section({ sec, onOpen }) {
                                                 <ExternalLink size={12} /> فتح
                                             </a>
                                         )}
-                                        {sec.attach && !r[sec.url_col] && r.src && (
+                                        {sec.attach && Number(r.receipt_doc_id) > 0 && (
+                                            <>
+                                                <button onClick={() => openDoc(r.receipt_doc_id, true).catch(e => alert(e.message))}
+                                                    className="text-[11px] font-bold text-sky-300 flex items-center gap-1">
+                                                    <ExternalLink size={12} /> الإيصال
+                                                </button>
+                                                <button onClick={() => openDoc(r.receipt_doc_id, false).catch(e => alert(e.message))}
+                                                    className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
+                                                    <Download size={13} /> تنزيل
+                                                </button>
+                                            </>
+                                        )}
+                                        {sec.attach && !Number(r.receipt_doc_id) && !r[sec.url_col] && r.src && (
                                             <button onClick={() => sec.onAttach(r)}
                                                 className="text-[11px] font-bold text-[#c5a059] flex items-center gap-1">
                                                 <Receipt size={13} /> أرفق إيصالاً
@@ -687,6 +710,18 @@ function Section({ sec, onOpen }) {
                                         )}
                                     </span>
                                 </div>
+                                {sec.attach && Number(r.receipt_doc_id) > 0 && (
+                                    <div className="flex items-center gap-1.5 mt-1.5 text-[10px]">
+                                        <Receipt size={11} className="text-emerald-300 shrink-0" />
+                                        <span className="text-emerald-300 font-bold truncate">{r.receipt_name}</span>
+                                        {Number(r.receipt_guess) === 1 && (
+                                            <button onClick={() => sec.onLink(r, r.receipt_doc_id)}
+                                                className="text-[10px] text-amber-300 font-bold shrink-0 mr-auto">
+                                                أكّد الربط
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1.5">
                                     {rest.filter(c => c.k !== sec.url_col).map(c => {
                                         const lk = links.find(l => l.col === c.k);
