@@ -7814,7 +7814,7 @@ switch ($action) {
             while ($x = $r->fetch_assoc()) $pays[] = $x;
 
         $day = function($d) { return (int)floor(strtotime($d) / 86400); };
-        $take = []; $multi = 0; $none = 0;
+        $take = []; $multi = 0; $none = 0; $why = [];
         $claimed = [];      // دفعة لا تُربط بملفين
         $pairs = [];
         foreach ($files as $fi) {
@@ -7826,7 +7826,24 @@ switch ($action) {
             }
             if (count($hit) === 1) $pairs[] = ['f'=>$fi, 'p'=>$hit[0]];
             elseif (count($hit) > 1) $multi++;
-            else $none++;
+            else {
+                $none++;
+                // أقرب دفعة بالمبلغ: تكشف هل الخلل في المبلغ أم في التاريخ
+                if (count($why) < 12) {
+                    $best = null; $bd = 1e18;
+                    foreach ($pays as $py) {
+                        $d = abs((float)$fi['amt'] - (float)$py['amt']);
+                        if ($d < $bd) { $bd = $d; $best = $py; }
+                    }
+                    $why[] = ['file'=>$fi['file_name'], 'amount'=>(float)$fi['amt'], 'date'=>$fi['ocr_date'],
+                        'nearest_payment'=>$best ? [
+                            'amount'=>(float)$best['amt'], 'date'=>$best['date'],
+                            'supplier'=>$best['supplier'],
+                            'amount_gap'=>round($bd, 2),
+                            'days_gap'=>$day($fi['ocr_date']) - $day($best['date']),
+                        ] : null];
+                }
+            }
         }
         // تفرّد في الاتجاه الآخر أيضاً: ملفان يقصدان دفعة واحدة يُسقطان معاً
         $byPay = [];
@@ -7841,6 +7858,13 @@ switch ($action) {
             echo json_encode(['success'=>true, 'dry'=>true,
                 'files'=>count($files), 'payments_open'=>count($pays),
                 'would_link'=>count($take), 'ambiguous'=>$multi, 'no_match'=>$none,
+                'why'=>$why,
+                'sample_files'=>array_map(function($x) {
+                    return ['file'=>$x['file_name'], 'amount'=>(float)$x['amt'], 'date'=>$x['ocr_date']];
+                }, array_slice($files, 0, 6)),
+                'sample_payments'=>array_map(function($x) {
+                    return ['amount'=>(float)$x['amt'], 'date'=>$x['date'], 'supplier'=>$x['supplier']];
+                }, array_slice($pays, 0, 6)),
                 'rows'=>array_map(function($x) {
                     return ['file'=>$x['f']['file_name'], 'amount'=>(float)$x['f']['amt'],
                             'date'=>$x['f']['ocr_date'], 'supplier'=>$x['p']['supplier'],

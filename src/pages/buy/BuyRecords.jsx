@@ -169,6 +169,23 @@ export default function BuyRecords() {
                                         {rcp.ambiguous > 0 && ` · ملتبس ${rcp.ambiguous}`}
                                         {rcp.no_match > 0 && ` · بلا دفعة ${rcp.no_match}`}
                                     </div>
+                                    {!rcp.would_link && (rcp.why || []).length > 0 && (
+                                        <div className="rounded-lg bg-black/30 p-2 space-y-1 max-h-[200px] overflow-y-auto">
+                                            <div className="text-[10px] text-slate-400">لماذا لم يجد — أقرب دفعة لكل ملف</div>
+                                            {rcp.why.map((w, i) => (
+                                                <div key={i} className="text-[10px] text-slate-300 leading-relaxed">
+                                                    <span className="text-slate-400">{w.file}</span> · {money(w.amount)} · {w.date}
+                                                    {w.nearest_payment && (
+                                                        <div className="text-slate-500">
+                                                            ← أقرب: {money(w.nearest_payment.amount)} · {w.nearest_payment.date}
+                                                            {' '}· فرق مبلغ {money(w.nearest_payment.amount_gap)}
+                                                            {' '}· فرق أيام {w.nearest_payment.days_gap}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                     <div className="max-h-[180px] overflow-y-auto space-y-0.5">
                                         {(rcp.rows || []).map((x, i) => (
                                             <div key={i} className="text-[10px] text-slate-300 flex gap-2">
