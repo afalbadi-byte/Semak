@@ -1481,11 +1481,11 @@ function daftra_ext_of($ct, $fallbackName = '') {
 function recovery_match($invs, $sup, $tot, $dt) {
     $near = function($a, $b) {
         $d = abs($a - $b);
-        // السماح نسبي لا مطلق: خمسة ريالات على 37 ألفاً تقريب، وعلى 50 ريالاً خطأ فادح.
-        // 0.2% مع حد أدنى هللتين، وسقف عشرة ريالات مهما كبر المبلغ.
-        $tol = min(10.0, max(0.02, max($a, $b) * 0.002));
-        return ($d <= 0.01) ? ['exact', 0.0]
-             : (($d <= $tol) ? ['near', $d] : [null, $d]);
+        // هللتان هما أقصى ما يُنتجه تقريب ضريبة القيمة المضافة؛ وما فوقهما ليس تقريباً.
+        // ونظل نبحث في مدى أوسع كي نعثر على الفاتورة ونكشف خطأ قيدها، لا كي نقبله.
+        $span = min(10.0, max(0.02, max($a, $b) * 0.002));
+        return ($d <= 0.02) ? ['exact', round($d, 2)]
+             : (($d <= $span) ? ['off', round($d, 2)] : [null, round($d, 2)]);
     };
     $best = []; $sn = daftra_norm_name($sup);
     foreach ($invs as $v) {
@@ -1517,7 +1517,7 @@ function recovery_match($invs, $sup, $tot, $dt) {
     $strong = array_values(array_filter($best, function($x) { return $x['sim'] >= 0.6 && $x['date']; }));
     $txt = function($x) {
         return $x['amt'] === 'exact' ? 'المبلغ مطابق'
-             : ('المبلغ يفرق ' . number_format($x['diff'], 2) . ' — تحقق من القيد');
+             : ('القيد أقل/أكثر بـ' . number_format($x['diff'], 2) . ' — صحّحه قبل الربط');
     };
     // وصف صريح للفجوة الزمنية: «ضمن المدى» كانت تُخفي شهراً كاملاً
     $dtxt = function($x) {
@@ -1530,7 +1530,8 @@ function recovery_match($invs, $sup, $tot, $dt) {
     if (count($strong) === 1) {
         // التاريخ المتباعد يُنزل الحكم من «مؤكد» إلى «مرجّح» — يظل قابلاً للربط بعد نظرة
         $far = ($strong[0]['gap'] !== null && $strong[0]['gap'] > 7);
-        $verdict = $strong[0]['amt'] !== 'exact' ? 'فرق يسير' : ($far ? 'مرجّح' : 'مؤكد');
+        // مورد واحد ويوم واحد ومبلغ مختلف = خطأ في القيد، لا مطابقة مقبولة
+        $verdict = $strong[0]['amt'] !== 'exact' ? 'خطأ في القيد' : ($far ? 'مرجّح' : 'مؤكد');
         $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
         $ev = $txt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '%'
             . $dtxt($strong[0]);
@@ -7692,57 +7693,12 @@ switch ($action) {
             $tot  = isset($o['total']) && is_numeric($o['total']) ? round((float)$o['total'], 2) : null;
             $dt   = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($o['date'] ?? '')) ? $o['date'] : null;
 
-            // ── المطابقة: المبلغ، ثم المورد، ثم التاريخ ──
-            // فارق الهللات وبضعة ريالات لا يعني اختلاف الفاتورة — غالباً تقريب
-            // أو خطأ إدخال. نقبله ونُظهره صراحةً بدل أن نُسقط مطابقة صحيحة.
-            $near = function($a, $b) {
-                $d = abs($a - $b);
-                $tol = min(10.0, max(0.02, max($a, $b) * 0.002));
-                return ($d <= 0.01) ? ['exact', 0.0] : (($d <= $tol) ? ['near', $d] : [null, $d]);
-            };
-            $best = []; $sn = daftra_norm_name($sup);
-            foreach ($invs as $v) {
-                if ($tot === null) continue;
-                [$kg, $dg] = $near((float)$v['gross'], $tot);
-                [$kn, $dn] = $near((float)$v['net'], $tot);
-                $kind = $kg ?: $kn;
-                if (!$kind) continue;
-                $diff = $kg ? $dg : $dn;
-                $sim = daftra_name_sim($sn, daftra_norm_name($v['supplier']));
-                $okDate = true;
-                if ($dt && !empty($v['date']))
-                    $okDate = abs(strtotime($dt) - strtotime($v['date'])) <= 45 * 86400;
-                $best[] = ['v'=>$v, 'sim'=>$sim, 'date'=>$okDate, 'amt'=>$kind, 'diff'=>round($diff, 2)];
-            }
-            // الأدق مبلغاً أولاً، ثم الأقرب اسماً
-            usort($best, function($a, $b) {
-                if ($a['amt'] !== $b['amt']) return $a['amt'] === 'exact' ? -1 : 1;
-                return $b['sim'] <=> $a['sim'];
-            });
-            $strong = array_values(array_filter($best, function($x) { return $x['sim'] >= 0.6 && $x['date']; }));
-            $amtTxt = function($x) {
-                return $x['amt'] === 'exact' ? 'المبلغ مطابق'
-                     : ('المبلغ يفرق ' . number_format($x['diff'], 2) . ' — تحقق من القيد');
-            };
-
-            $verdict = 'بلا دليل'; $mid = 'NULL'; $mno = ''; $ev = '';
-            if (count($strong) === 1) {
-                $verdict = $strong[0]['amt'] === 'exact' ? 'مؤكد' : 'فرق يسير';
-                $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
-                $ev = $amtTxt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '% · التاريخ ضمن المدى';
-                if ($verdict === 'مؤكد') $conf++;
-            } elseif (count($strong) > 1) {
-                $verdict = 'متعدد';
-            } elseif (count($best) >= 1) {
-                $verdict = 'مرشّح'; $mid = (int)$best[0]['v']['id']; $mno = (string)$best[0]['v']['no'];
-                $ev = $amtTxt($best[0]) . ' · المورد ' . round($best[0]['sim'] * 100) . '%'
-                    . ($best[0]['date'] ? '' : ' · التاريخ بعيد');
-            }
-            $cands = json_encode(array_map(function($x) {
-                return ['id'=>(int)$x['v']['id'], 'no'=>$x['v']['no'], 'supplier'=>$x['v']['supplier'],
-                        'gross'=>(float)$x['v']['gross'], 'date'=>$x['v']['date'], 'sim'=>round($x['sim'], 2),
-                        'diff'=>$x['diff']];
-            }, array_slice($best, 0, 6)), JSON_UNESCAPED_UNICODE);
+            // مطابقة واحدة للتطبيق كله: recovery_match. نسخة ثانية هنا كانت تُعطي
+            // نتيجة مختلفة حسب الزر المضغوط — القراءة أو إعادة المطابقة.
+            [$verdict, $mid, $mno, $ev, $cnd] = recovery_match($invs, $sup, $tot, $dt);
+            if ($verdict === 'مؤكد') $conf++;
+            if ($mid === null) $mid = 'NULL';
+            $cands = json_encode($cnd, JSON_UNESCAPED_UNICODE);
 
             $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
             $conn->query("UPDATE recovery_files SET ocr_at=NOW(), ocr_kind='" . $E($kind) . "',
