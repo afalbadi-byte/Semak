@@ -1422,8 +1422,11 @@ function daftra_ext_of($ct, $fallbackName = '') {
 function recovery_match($invs, $sup, $tot, $dt) {
     $near = function($a, $b) {
         $d = abs($a - $b);
+        // السماح نسبي لا مطلق: خمسة ريالات على 37 ألفاً تقريب، وعلى 50 ريالاً خطأ فادح.
+        // 0.2% مع حد أدنى هللتين، وسقف عشرة ريالات مهما كبر المبلغ.
+        $tol = min(10.0, max(0.02, max($a, $b) * 0.002));
         return ($d <= 0.01) ? ['exact', 0.0]
-             : (($d <= 5.00 || $d <= max($a, $b) * 0.002) ? ['near', $d] : [null, $d]);
+             : (($d <= $tol) ? ['near', $d] : [null, $d]);
     };
     $best = []; $sn = daftra_norm_name($sup);
     foreach ($invs as $v) {
@@ -7608,8 +7611,8 @@ switch ($action) {
             // أو خطأ إدخال. نقبله ونُظهره صراحةً بدل أن نُسقط مطابقة صحيحة.
             $near = function($a, $b) {
                 $d = abs($a - $b);
-                return ($d <= 0.01) ? ['exact', 0.0]
-                     : (($d <= 5.00 || $d <= max($a, $b) * 0.002) ? ['near', $d] : [null, $d]);
+                $tol = min(10.0, max(0.02, max($a, $b) * 0.002));
+                return ($d <= 0.01) ? ['exact', 0.0] : (($d <= $tol) ? ['near', $d] : [null, $d]);
             };
             $best = []; $sn = daftra_norm_name($sup);
             foreach ($invs as $v) {
