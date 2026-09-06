@@ -7766,6 +7766,130 @@ switch ($action) {
         break;
     }
 
+    case 'pay_receipt_from_sheet': {
+        // إيصالات جدول التدفقات (ملف الإكسل) — رابط درايف لكل تحويل بنكي.
+        // القيد في دفترة يحمل هللات زائدة (100,000.55 لتحويل 100,000.00)،
+        // فالتسامح هنا ريال واحد على المئة ألف: نسبة لا مقدار.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الربط'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(180);
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $apply = !empty($_GET['apply']);
+
+        $path = __DIR__ . '/cashflow_receipts.json';
+        if (!is_file($path)) {
+            echo json_encode(['success'=>false,'message'=>'ملف إيصالات التدفقات غير منشور'], JSON_UNESCAPED_UNICODE); break; }
+        $sheet = json_decode((string)file_get_contents($path), true);
+        if (!is_array($sheet)) {
+            echo json_encode(['success'=>false,'message'=>'ملف غير صالح'], JSON_UNESCAPED_UNICODE); break; }
+        // الصادر فقط: الوارد إيداعات استثمارية لا سداد موردين
+        $sheet = array_values(array_filter($sheet, function($x) { return ($x['dir'] ?? '') === 'صادر'; }));
+
+        // الدفعات التي لا إثبات لها
+        $pays = [];
+        if ($r = $conn->query("SELECT m.id, m.purchase_id, ROUND(m.amount,2) amt, m.date,
+                        COALESCE(p.supplier,'') supplier, COALESCE(p.no,'') inv_no, 'daftra' srck
+                    FROM dmirror_payments m
+                    LEFT JOIN dmirror_purchases p ON p.id = m.purchase_id
+                    LEFT JOIN purchase_documents pd ON pd.payment_id = m.id AND pd.payment_src='daftra'
+                    WHERE m.date IS NOT NULL AND m.amount > 0
+                      AND COALESCE(m.attachment,'') = '' AND COALESCE(m.receipt_url,'') = ''
+                      AND pd.id IS NULL"))
+            while ($x = $r->fetch_assoc()) $pays[] = $x;
+
+        $words = function($t) {
+            $t = preg_replace('/[أإآ]/u', 'ا', (string)$t);
+            $t = preg_replace('/ة/u', 'ه', $t);
+            $t = preg_replace('/[^\p{Arabic}\p{L}0-9 ]/u', ' ', $t);
+            $stop = ['شركه','مؤسسه','التجاريه','للتجاره','المحدوده','ومقاولات','للمقاولات','العامه','ورشه','مصنع'];
+            return array_values(array_filter(preg_split('/\s+/u', trim($t)), function($w) use ($stop) {
+                return mb_strlen($w) >= 3 && !in_array($w, $stop, true); }));
+        };
+        $shares = function($a, $b) use ($words) {
+            foreach ($words($a) as $x) foreach ($words($b) as $y)
+                if ($x === $y || mb_strpos($y, $x) !== false || mb_strpos($x, $y) !== false) return true;
+            return false;
+        };
+        $day = function($d) { return (int)floor(strtotime($d) / 86400); };
+
+        $pairs = []; $multi = 0; $none = 0; $why = [];
+        foreach ($sheet as $sh) {
+            $hit = [];
+            foreach ($pays as $py) {
+                $d = abs((float)$sh['amount'] - (float)$py['amt']);
+                // ريال على مئة ألف، وهللة على مئة ريال — النسبة تحكم لا الرقم
+                $tol = min(1.00, max(0.05, (float)$sh['amount'] * 0.00001));
+                if ($d > $tol) continue;
+                if (abs($day($sh['date']) - $day($py['date'])) > 5) continue;
+                $hit[] = $py;
+            }
+            // الاسم يفصل حين تعدّدت المطابقات، ولا يُشترط حين انفردت
+            if (count($hit) > 1) {
+                $named = array_values(array_filter($hit, function($p) use ($shares, $sh) {
+                    return $shares($sh['party'], $p['supplier']); }));
+                if (count($named) === 1) $hit = $named;
+            }
+            if (count($hit) === 1) $pairs[] = ['s'=>$sh, 'p'=>$hit[0]];
+            elseif (count($hit) > 1) $multi++;
+            else {
+                $none++;
+                if (count($why) < 10) $why[] = ['date'=>$sh['date'], 'party'=>$sh['party'],
+                    'amount'=>(float)$sh['amount'], 'note'=>$sh['note']];
+            }
+        }
+        $byPay = [];
+        foreach ($pairs as $pr) { $k = $pr['p']['id']; $byPay[$k] = ($byPay[$k] ?? 0) + 1; }
+        $take = [];
+        foreach ($pairs as $pr) {
+            if ($byPay[$pr['p']['id']] > 1) { $multi++; continue; }
+            $take[] = $pr;
+        }
+
+        if (!$apply) {
+            echo json_encode(['success'=>true, 'dry'=>true, 'sheet_rows'=>count($sheet),
+                'payments_open'=>count($pays), 'would_link'=>count($take),
+                'ambiguous'=>$multi, 'no_match'=>$none, 'why'=>$why,
+                'rows'=>array_map(function($x) {
+                    return ['date'=>$x['s']['date'], 'party'=>$x['s']['party'],
+                            'amount'=>(float)$x['s']['amount'], 'note'=>$x['s']['note'],
+                            'supplier'=>$x['p']['supplier'], 'invoice'=>$x['p']['inv_no'],
+                            'ledger'=>(float)$x['p']['amt'], 'pay_date'=>$x['p']['date']];
+                }, array_slice($take, 0, 80))], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        $batch = 'CF-' . date('YmdHis');
+        $done = 0;
+        foreach ($take as $pr) {
+            $sh = $pr['s']; $py = $pr['p'];
+            $pid = (int)$py['purchase_id'];
+            if ($pid <= 0) continue;
+            $name = 'إيصال ' . $sh['date'] . ' — ' . mb_substr($sh['party'], 0, 60);
+            $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, supplier, doc_type,
+                    file_name, drive_url, source, created_by, note, payment_id, payment_src)
+                VALUES ($pid, '" . $E($py['inv_no']) . "', '" . $E($py['supplier']) . "', 'receipt', '"
+                . $E($name) . "', '" . $E($sh['url']) . "', 'cashflow-sheet', '" . $E($u['name'] ?? '') . "',
+                    '" . $E(mb_substr('من جدول التدفقات: ' . $sh['note'] . ' — دفعة ' . $batch, 0, 240)) . "',
+                    " . (int)$py['id'] . ", '" . $E($py['srck']) . "')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), payment_id=VALUES(payment_id),
+                    payment_src=VALUES(payment_src), doc_type='receipt'");
+            if ($conn->errno) continue;
+            $done++;
+        }
+        acc_audit($conn, 1, 'purchase', 0, 'pay_receipt_sheet',
+            "ربط $done إيصالاً من جدول التدفقات (دفعة $batch)", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'batch'=>$batch, 'linked'=>$done,
+            'ambiguous'=>$multi, 'no_match'=>$none,
+            'message'=>"رُبط $done إيصالاً من جدول التدفقات"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pay_receipt_from_files': {
         // إيصالات التحويل التي قرأناها بصرياً تُربط بدفعاتها لا بفواتيرها.
         // الدفعة لها مبلغ ويوم محددان، والإيصال كذلك — فالمطابقة هنا قاطعة:

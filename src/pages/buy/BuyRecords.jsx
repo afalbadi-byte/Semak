@@ -27,6 +27,7 @@ export default function BuyRecords() {
     const [onlyGap, setOnlyGap] = useState(true);
     const [rcp, setRcp] = useState(null);      // معاينة ربط الإيصالات المقروءة بدفعاتها
     const [rcpBusy, setRcpBusy] = useState('');
+    const [rcpSrc, setRcpSrc] = useState('sheet');
     const view = rows;
     // تبويب الدفعات مستقل: يقرأ تدقيق الإثباتات لا قائمة الفواتير
     useEffect(() => {
@@ -44,8 +45,10 @@ export default function BuyRecords() {
     // الإيصالات المقروءة سلفاً تُربط بدفعاتها بالمبلغ واليوم — لا بالفواتير
     const rcpRun = async (apply) => {
         setRcpBusy(apply ? 'apply' : 'plan');
+        // جدول التدفقات أولاً: فيه إيصال بنكي لكل تحويل بلا لبس
+        const act = rcpSrc === 'sheet' ? 'pay_receipt_from_sheet' : 'pay_receipt_from_files';
         try {
-            const r = await fetch(`${API_URL}?action=pay_receipt_from_files${apply ? '&apply=1' : ''}`,
+            const r = await fetch(`${API_URL}?action=${act}${apply ? '&apply=1' : ''}`,
                 { headers: auth() }).then(x => x.json());
             if (!r.success) { alert(r.message || 'تعذر الربط'); return; }
             if (apply) { setRcp(null); setProof(null); setOnlyGap(g => g); }
@@ -156,13 +159,15 @@ export default function BuyRecords() {
                             {!rcp && (
                                 <button onClick={() => rcpRun(false)} disabled={!!rcpBusy}
                                     className="w-full min-h-[42px] rounded-xl bg-emerald-500/15 text-emerald-300 text-[12px] font-black disabled:opacity-60">
-                                    {rcpBusy === 'plan' ? '…' : 'اربط الإيصالات المقروءة بدفعاتها'}
+                                    {rcpBusy === 'plan' ? '…' : (rcpSrc === 'sheet' ? 'اربط إيصالات جدول التدفقات' : 'اربط الإيصالات المقروءة')}
                                 </button>
                             )}
                             {rcp && (
                                 <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-2.5 space-y-2">
                                     <div className="text-[12px] font-black text-emerald-200">
                                         {rcp.would_link} إيصالاً يطابق دفعةً واحدة
+                                    <button onClick={() => { setRcpSrc(v => v === 'sheet' ? 'files' : 'sheet'); setRcp(null); }}
+                                        className="mr-2 text-[10px] font-bold text-slate-400 underline">بدّل المصدر</button>
                                     </div>
                                     <div className="text-[10px] text-slate-400">
                                         من {rcp.files} ملفاً مقروءاً · دفعات بلا إثبات {rcp.payments_open}

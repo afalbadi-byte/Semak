@@ -1,0 +1,677 @@
+[
+ {
+  "date": "2023-07-12",
+  "party": "تويست",
+  "dir": "صادر",
+  "account": "من حسابي الأهلي",
+  "amount": 17000,
+  "note": "المكتب الهندسي دفعة رقم 1",
+  "url": "https://drive.google.com/file/d/1F3oVAdDqX8reWYbCQ3ji14vtY-HJrdaN/view?usp=sharing"
+ },
+ {
+  "date": "2023-07-12",
+  "party": "فهد إبراهيم البادي",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 21000,
+  "note": "ايداع استثماري",
+  "url": "https://drive.google.com/file/d/1_-0vk5n0Muto3lVzQ3Ju8fBInKxjLodU/view?usp=sharing"
+ },
+ {
+  "date": "2024-02-08",
+  "party": "تويست",
+  "dir": "صادر",
+  "account": "من حسابي الأهلي",
+  "amount": 14000,
+  "note": "المكتب الهندسي دفعة رقم 2",
+  "url": "https://drive.google.com/file/d/1AXk3mUBzYF8ntywwqNkE24YcYJ98GxZc/view?usp=sharing"
+ },
+ {
+  "date": "2024-02-08",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الأهلي",
+  "amount": 14000,
+  "note": "ايداع استثماري قديم",
+  "url": "https://drive.google.com/file/d/1BQfMmBCbyGZcljtir-kPE0PwAWDNxZGl/view?usp=sharing"
+ },
+ {
+  "date": "2024-04-16",
+  "party": "نجم البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1500,
+  "note": "ايداع استثماري",
+  "url": "https://drive.google.com/file/d/10eHUOLs5GR9gWA-wOS-Knw4tqDaJg4dM/view?usp=sharing"
+ },
+ {
+  "date": "2024-05-31",
+  "party": "محمود نافع محمد ادريس",
+  "dir": "صادر",
+  "account": "من حسابي الأهلي",
+  "amount": 1500,
+  "note": "الأمن والسلامة 1",
+  "url": "https://drive.google.com/file/d/19vJqQrq0GvUBlMfGqWrDTPJQWW5OQJqo/view?usp=sharing"
+ },
+ {
+  "date": "2024-08-12",
+  "party": "تويست",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 10000,
+  "note": "حوالة الواجهات",
+  "url": "https://drive.google.com/file/d/1-o9m8Ozpd4Mrhn3YYtYasMKSX6nGsrRg/view?usp=sharing"
+ },
+ {
+  "date": "2024-08-18",
+  "party": "نجم البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 200,
+  "note": "تعديل الإقرار المساحي",
+  "url": "https://drive.google.com/file/d/1vrJijeGy8R5SJJUTQBJenwO2WA91sZXJ/view?usp=sharing"
+ },
+ {
+  "date": "2024-11-14",
+  "party": "نجم البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 900,
+  "note": "الأمن والسلامة 2",
+  "url": "https://drive.google.com/file/d/1scOAEwpnCOrQh4iWdFs9N_D0KuF_O_uv/view?usp=sharing"
+ },
+ {
+  "date": "2024-11-24",
+  "party": "محمد علي الطويلعي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 15312,
+  "note": "رسوم فاحص ودفعة 1 تأمين",
+  "url": "https://drive.google.com/file/d/10eHUOLs5GR9gWA-wOS-Knw4tqDaJg4dM/view?usp=sharing"
+ },
+ {
+  "date": "2024-11-24",
+  "party": "طلال الحربي",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 50000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1kgb0RoNmjvnAM4r0D6JTB4lrodsYOapi/view?usp=sharing"
+ },
+ {
+  "date": "2024-12-23",
+  "party": "بلدي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 6593,
+  "note": "رسوم الرخصة",
+  "url": "https://drive.google.com/file/d/1VvllvhnR7FNATOodUEnxOBhSZE81Dg6c/view?usp=sharing"
+ },
+ {
+  "date": "2024-12-28",
+  "party": "أسامة فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2650.5,
+  "note": "عهدة",
+  "url": "https://drive.google.com/file/d/1Gd2N9jd4Avar6MatnIC-Gx1Act3X8sWz/view?usp=sharing"
+ },
+ {
+  "date": "2024-12-30",
+  "party": "المركز السعودي للأعمال الاقتصادية",
+  "dir": "صادر",
+  "account": "من حسابي الأهلي",
+  "amount": 100,
+  "note": "تعديل السجل التجاري",
+  "url": "https://drive.google.com/file/d/1eyr7s0E-xSkuJwLtU65b4YdoAP73Qlk4/view?usp=sharing"
+ },
+ {
+  "date": "2025-01-01",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 50000,
+  "note": "دفعة عظم 1",
+  "url": "https://drive.google.com/file/d/11qMywZLbXhbCFqVz0-nEr0UOdrrbU-Bp/view?usp=sharing"
+ },
+ {
+  "date": "2025-01-01",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 250000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/16RzZBQDntteREtfrpLwtCVgkjeqWVhYm/view?usp=drive_link"
+ },
+ {
+  "date": "2025-01-07",
+  "party": "إكسترا",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 584,
+  "note": "كاميرا مراقبة",
+  "url": "https://drive.google.com/file/d/1NAMHzp-L2HudNZ2RATypjfcASu7i6PHa/view?usp=sharing"
+ },
+ {
+  "date": "2025-01-11",
+  "party": "إبراهيم فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "اشراف مقدم",
+  "url": "https://drive.google.com/file/d/19Ex7eXe6d59q6UabKdjFOmFkq8vy00OW/view?usp=sharing"
+ },
+ {
+  "date": "2025-01-27",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 50000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/17Ye1cDn0JmjwXdauYAAts_95cc6eMhl6/view?usp=sharing"
+ },
+ {
+  "date": "2025-01-28",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 100000,
+  "note": "دفعة عظم 2",
+  "url": "https://drive.google.com/file/d/1ibjWHDfZMcDxyFVwMsx5f9YSQdUZUkYd/view?usp=sharing"
+ },
+ {
+  "date": "2025-02-02",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 100000,
+  "note": "دفعة عظم 2",
+  "url": "https://drive.google.com/file/d/1MmUH2pJLOfkuFJbWxhEh2WsIUO3tX_uG/view?usp=sharing"
+ },
+ {
+  "date": "2025-02-03",
+  "party": "إبراهيم فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "اشراف مقدم",
+  "url": "https://drive.google.com/file/d/1mjHWh1i13R4cCSikMZl_i9NkDb8CEB-j/view?usp=sharing"
+ },
+ {
+  "date": "2025-02-18",
+  "party": "أمجد عبدالرحمن بقبق",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 5000,
+  "note": "مكتب اشراف هندسي د1",
+  "url": "https://drive.google.com/file/d/1RMNoaSv6qsXbc2T-UAiZLoYZlarlFZk-/view?usp=sharing"
+ },
+ {
+  "date": "2025-02-19",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 100000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1uiL4l4wLwSv9TS2AeVEzJywePQR4Knsm/view?usp=sharing"
+ },
+ {
+  "date": "2025-02-20",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 100000,
+  "note": "دفعة عظم 3",
+  "url": "https://drive.google.com/file/d/1cpIbxqGTDGkE31FO7mLUHFrMP-8Z6-_k/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-06",
+  "party": "إبراهيم فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "اشراف مقدم",
+  "url": "https://drive.google.com/file/d/1-zusBgRd8aD-an9RXqeiE0npF31_kJUo/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-06",
+  "party": "هيئة الزكاة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 500,
+  "note": "زكاة",
+  "url": "https://drive.google.com/file/d/1tVoc5URWIk2ujW3EmP9Fv_NzCKNAJz1V/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-18",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 4391.37,
+  "note": "سباكة خزانات وصرف الدور الأرضي",
+  "url": "https://drive.google.com/file/d/1W3rR_CCCVzhv-XF_jMCYBuxP8MGBRpAr/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-19",
+  "party": "صدام كهربائي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 600,
+  "note": "شغل يد سباكة الخزانات",
+  "url": "https://drive.google.com/file/d/1cXI7Am5y5iqy84LjcK9xC8lyBXcVAGw2/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-20",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 150000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1lxcGJwEQTl8BZ1cbagGlZrNYdpi-3Etj/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-20",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 150000,
+  "note": "دفعة عظم4",
+  "url": "https://drive.google.com/file/d/1qRCLubvyj6Xmjy4IGt47ul4eTfscjUBF/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-22",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 5600,
+  "note": "تأسيس صرف دور المواقف",
+  "url": "https://drive.google.com/file/d/1PMkhnYdR71NRQRf-nkwsdkBy4NE9gNYZ/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-23",
+  "party": "أسامة فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 5000,
+  "note": "عهدة",
+  "url": "https://drive.google.com/file/d/1nugMIXfOOsex8pAfdmIsXWLJIE0jiCW1/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-26",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 837,
+  "note": "تعديل شبكة صرف المطر والصرف الصحي",
+  "url": "https://drive.google.com/file/d/1cPsazuEymqMiYIKUMvhSYeBdZZk4dwqr/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-27",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 50000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1bHctZDI70QKKM2iKc_iD17aitIKT-dLs/view?usp=sharing"
+ },
+ {
+  "date": "2025-03-27",
+  "party": "صدام كهربائي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1600,
+  "note": "شغل يد صرف المطر والصرف الصحي",
+  "url": "https://drive.google.com/file/d/1bDeKtsx7gNJYfw_hewf2HJdvr-X_RssI/view?usp=sharing"
+ },
+ {
+  "date": "2025-04-09",
+  "party": "إبراهيم فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "اشراف مقدم",
+  "url": "https://drive.google.com/file/d/16bSYdMI6Q7mZkfmYmgVMxrXrFLlkQ02p/view?usp=sharing"
+ },
+ {
+  "date": "2025-04-11",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 150000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1E23Oshkw-31SQtH80b8rFmGpnoPDLz_Q/view?usp=sharing"
+ },
+ {
+  "date": "2025-04-13",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 150000,
+  "note": "دفعة عظم5",
+  "url": "https://drive.google.com/file/d/1NLZC5g0ZKk3nOWP5dJV0Ecg1b6l4420t/view?usp=sharing"
+ },
+ {
+  "date": "2025-04-20",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 3082.75,
+  "note": "سباكة وكهرباء  سقف المواقف",
+  "url": "https://drive.google.com/file/d/1HGuBPkD_hFqNDsI5uh4T3wcfXHY3NJO5/view?usp=sharing"
+ },
+ {
+  "date": "2025-04-24",
+  "party": "صدام كهربائي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1000,
+  "note": "شغل يد سباكة وكهرباء السقف الأول",
+  "url": "https://drive.google.com/file/d/1xRIKKtIPpEJdkbwUdJRBmHzFTKiHavzO/view?usp=sharing"
+ },
+ {
+  "date": "2025-04-29",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 150000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1PJ1k_yxV4mb-PfD5RdIVUkQJflstyg29/view?usp=sharing"
+ },
+ {
+  "date": "2025-04-30",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 150000,
+  "note": "دفعة عظم6",
+  "url": "https://drive.google.com/file/d/1xefXvDG9t-OGz1VWo_hLo80mHxvfAG6R/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-08",
+  "party": "أمجد عبدالرحمن بقبق",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 5000,
+  "note": "مكتب اشراف هندسي د2",
+  "url": "https://drive.google.com/file/d/1-oQYDmSdPf3YWD-POmG5LLISMhtpOoqP/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-08",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 3126.56,
+  "note": "سباكة وكهرباء الدور الأول",
+  "url": "https://drive.google.com/file/d/1AqY582yN20Jwrg2jGn6-qRBlgIU2x3x2/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-08",
+  "party": "أسامة فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 5000,
+  "note": "عهدة",
+  "url": "https://drive.google.com/file/d/10tAz0ZC8RIkgC-0Z7iZuR2fCNLXf6pZL/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-10",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 50000,
+  "note": "سلفة",
+  "url": "https://drive.google.com/file/d/1oRxkukPQ0W_5OWagOWjwciE85Ss8VqWY/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-12",
+  "party": "صدام كهربائي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1000,
+  "note": "شغل يد سباكة وكهرباء السقف الثاني",
+  "url": "https://drive.google.com/file/d/1Ry_ffZLno6VORrTYhGW-4zuxnhyAEQaT/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-18",
+  "party": "إبراهيم فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "اشراف مقدم",
+  "url": "https://drive.google.com/file/d/17hBo79KlBNGeQj_SXbSBAtYSZw6CqyQp/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-19",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 150000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/11Vf42P2--lYH5Eaw23b_rlB5rea_TDDi/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-21",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 100000,
+  "note": "دفعة عظم7",
+  "url": "https://drive.google.com/file/d/1363-viLK0Ptc1ht6zy-tho_-IZ1CBIWv/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-29",
+  "party": "صدام كهربائي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1500,
+  "note": "شغل يد سباكة وكهرباء السقف الثالث",
+  "url": "https://drive.google.com/file/d/1QCEGvNweh_MKQNBnPSDmrzdRJJo5CA1E/view?usp=sharing"
+ },
+ {
+  "date": "2025-05-29",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 50000,
+  "note": "دفعة عظم7.2",
+  "url": "https://drive.google.com/file/d/13SEKbsLnn3_3Q9L7kWvKW1EzBu1tLLL0/view?usp=sharing"
+ },
+ {
+  "date": "2025-06-02",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 200000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/18Ug8VYZaFDUEeaQc27z0R7WOzTCOibSq/view?usp=sharing"
+ },
+ {
+  "date": "2025-06-03",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 150000,
+  "note": "دفعة عظم 8",
+  "url": "https://drive.google.com/file/d/1XonimwZpu6fmAP-f--WmIyY0O3_hK9xA/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-06",
+  "party": "إبراهيم فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "اشراف مقدم",
+  "url": "https://drive.google.com/file/d/1LZgKH0OOBfgqqGUFYr-k20fm2dZKovO1/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-08",
+  "party": "أسامة فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 5000,
+  "note": "عهدة",
+  "url": "https://drive.google.com/file/d/1tUAv3FsdIHy_ZSpoyI-Yz84thOVEaVph/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-09",
+  "party": "صدام كهربائي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1000,
+  "note": "شغل يد سباكة وكهرباء السقف الأخير",
+  "url": "https://drive.google.com/file/d/16SuvyzyR8EFP8nV9jiFykYift-iVd4uO/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-21",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1516.85,
+  "note": "سباكة وكهرباء الدور الثاني",
+  "url": "https://drive.google.com/file/d/1KzsyuSyYmYFckGUmUtZC58vo9gLqbpwN/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-21",
+  "party": "أسامة فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 10000,
+  "note": "عهدة",
+  "url": "https://drive.google.com/file/d/1PgPOJmTMr_-DW68dTijem4ObFnLrylmI/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-21",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الراجحي",
+  "amount": 50000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1hrPJBgkHya5vo8rDiLNoUI71YfJNtNi3/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-21",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2243.65,
+  "note": "سباكة وكهرباء الدور الثاني",
+  "url": "https://drive.google.com/file/d/1rYhnuwkvrmtC9j5DV8tOk187jqP7vqy0/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-21",
+  "party": "شركة إعطاء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 7081.7,
+  "note": "طبالين",
+  "url": "https://drive.google.com/file/d/1RGf66tsLpoBM8PG1Tx5eLu2EvH99b7W-/view?usp=sharing"
+ },
+ {
+  "date": "2025-07-31",
+  "party": "صدام كهربائي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "شغل يد سباكة وكهرباء الدور الأول",
+  "url": "https://drive.google.com/file/d/1OzVRD8jhEM4LiZZsHPT4qKou6B7KC7LI/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-04",
+  "party": "منصة الاعمال",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 500,
+  "note": "سجل سمك العمارة",
+  "url": "https://drive.google.com/file/d/1Qqha3KUmP5_OIVS4BHbOxuGtfwsOIuI4/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-04",
+  "party": "منصة الاعمال",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 200,
+  "note": "تغيير الاسم التجاري",
+  "url": "https://drive.google.com/file/d/1x5F5AA6FPfbn2zDlPX32Rz22lktKuCXn/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-07",
+  "party": "شركة الحلول البديلة",
+  "dir": "صادر",
+  "account": "من سماك الخير",
+  "amount": 2829,
+  "note": "سباكة الدور 2",
+  "url": "https://drive.google.com/file/d/1jctfqSV5DRxDNkywHRnzrPS9QMcNttr-/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-07",
+  "party": "سماك الخير",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 10000,
+  "note": "استثمار",
+  "url": "https://drive.google.com/file/d/148Y6O2TfUfae3ihNQIeeMH6Tgb9mvj5_/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-15",
+  "party": "أسامة فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 15000,
+  "note": "عهدة",
+  "url": "https://drive.google.com/file/d/16Ol0EqWkcatelRAJZSpS9x5kzLP2gC_e/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-17",
+  "party": "احلاف البناء",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 50000,
+  "note": "دفعة عظم 9",
+  "url": "https://drive.google.com/file/d/1CwKF6nwrHEm7c5Bhl9cynAfiUtyQSNZA/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-19",
+  "party": "إبراهيم فهد البادي",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 2000,
+  "note": "اشراف مقدم",
+  "url": "https://drive.google.com/file/d/1YS_UPYfPsb829lLBTSaNp8wjZ2JxVGjA/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-20",
+  "party": "الهيئة السعودية للملكية الفكرية",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 1000,
+  "note": "العلامة التجارية",
+  "url": "https://drive.google.com/file/d/1hmiHwgUCrXpVNdtrvIMePehXxWKEZfp0/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-20",
+  "party": "منصة الاعمال",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 915.89,
+  "note": "التأكيد السنوي للسجل التجاري",
+  "url": "https://drive.google.com/file/d/14prMLPXL7ayt2UBqJy8oQ2BcAAY79DpB/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-24",
+  "party": "سمك العمارة",
+  "dir": "صادر",
+  "account": "من حسابي الراجحي",
+  "amount": 300000,
+  "note": "ايداع استثماري",
+  "url": "https://drive.google.com/file/d/1MHySTlVQ8Of06UiPx_wo82KddYxwL14-/view?usp=sharing"
+ },
+ {
+  "date": "2025-08-28",
+  "party": "نداء عبدالرحمن الخشان",
+  "dir": "وارد",
+  "account": "الى حسابي الأهلي",
+  "amount": 300000,
+  "note": "إيداع استثماري",
+  "url": "https://drive.google.com/file/d/1h3lj_z0SeY5nIl-uGtjr7YYaUHofBSLY/view?usp=sharing"
+ }
+]
