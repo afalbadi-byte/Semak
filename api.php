@@ -9637,6 +9637,16 @@ switch ($action) {
             $out['block_len'] = strlen($h6);
             $out['block_head'] = mb_substr(preg_replace('/\s+/', ' ', strip_tags($h6)), 0, 300);
             $out['block_all_urls'] = array_slice(array_values(array_unique($mu[1] ?? [])), 0, 40);
+            // الحقول المخفية لا تُلتقط كروابط — نبحث عن ذكر المرفق نصياً
+            $hits = [];
+            foreach (['attachment','attach','file_id','entity_key','EntityAttachment','uuid'] as $kw) {
+                $off = 0;
+                while (($pos = stripos($h6, $kw, $off)) !== false && count($hits) < 14) {
+                    $hits[] = preg_replace('/\s+/', ' ', mb_substr(substr($h6, max(0, $pos - 60), 170), 0, 170));
+                    $off = $pos + strlen($kw);
+                }
+            }
+            $out['block_hits'] = $hits;
             $out['block_urls'] = array_slice(array_values(array_unique($urls)), 0, 30);
             $out['pay_routes'] = $pv;
             $out['pay_probe'] = $probe;
