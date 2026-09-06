@@ -9679,26 +9679,6 @@ switch ($action) {
             if ($items) $items_done++;
         }
 
-        // فحص أسماء وحدات الدفعات في الواجهة البرمجية — قراءة فقط
-        if (!empty($_GET['apiprobe'])) {
-            $res2 = [];
-            foreach (['purchase_order_payments','purchase_payments','supplier_payments',
-                      'purchase_invoice_payments','invoice_payments','attachments','files'] as $mod) {
-                $c9 = curl_init("https://semak.daftra.com/api2/$mod.json?limit=1");
-                curl_setopt_array($c9, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
-                    CURLOPT_TIMEOUT=>20, CURLOPT_HTTPHEADER=>["APIKEY: $dk", 'Accept: application/json']]);
-                $r9 = curl_exec($c9); $h9 = curl_getinfo($c9, CURLINFO_HTTP_CODE); curl_close($c9);
-                $j9 = json_decode($r9, true);
-                $first = $j9['data'][0] ?? null;
-                if (is_array($first)) $first = reset($first) ?: $first;
-                $res2[$mod] = ['http'=>$h9,
-                    'total'=>$j9['pagination']['total_results'] ?? null,
-                    'keys'=>is_array($first) ? array_slice(array_keys($first), 0, 30) : null,
-                    'attachment'=>is_array($first) ? ($first['attachment'] ?? null) : null];
-            }
-            $out2 = ['success'=>true, 'api_probe'=>$res2];
-            echo json_encode($out2, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); break;
-        }
         $conn->query("INSERT INTO daftra_sync_log (entity, count, synced_at, synced_by)
                       VALUES ('purchases_lite', $seen, NOW(), 'app')
                       ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW(), synced_by=VALUES(synced_by)");
