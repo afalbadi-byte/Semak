@@ -9570,8 +9570,23 @@ switch ($action) {
             $routes = [];
             if ($one) foreach (['purchase_invoice_payments','purchase_payments','payments','supplier_payments'] as $mod)
                 foreach (['view','preview'] as $act) $routes[] = "/owner/$mod/$act/$one";
-            $routes[] = '/owner/purchase_payments';
-            $routes[] = '/owner/supplier_payments';
+            // الصلة محفوظة في EntityAttachment(entity_key, entity_id, file_id)
+            // فنبحث عن النقطة التي تسرد ملفات كيان بعينه
+            $routes = [];
+            if ($one) {
+                $ek = 'purchase_order_payment';
+                $routes[] = "/v2/owner/entity/files/$ek/$one";
+                $routes[] = "/v2/owner/entity/files/list/$ek/$one";
+                $routes[] = "/v2/owner/entity/files/index/$ek/$one";
+                $routes[] = "/v2/owner/entity/files?entity_key=$ek&entity_id=$one";
+                $routes[] = "/owner/entity_attachments/index/entity_key:$ek/entity_id:$one";
+                $routes[] = "/owner/attachments/index/$ek/$one";
+                $routes[] = "/owner/purchase_invoices/view_payment/$one";
+                $routes[] = "/owner/purchase_invoices/payment/$one";
+                $routes[] = "/owner/invoices/view_payment/$one";
+                $routes[] = "/owner/payments/view/$one.json";
+            }
+            $routes[] = "/owner/purchase_invoices/view/$pidP/payments_block:1";
             foreach ($routes as $ru) {
                 $c5 = curl_init('https://semak.daftra.com' . $ru);
                 curl_setopt_array($c5, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
