@@ -7863,6 +7863,137 @@ switch ($action) {
         break;
     }
 
+    case 'recover_link_safe': {
+        // ربط المؤكد الآمن دفعةً واحدة. الشروط أضيق مما تعرضه الشاشة:
+        // حكم «مؤكد» وحده لا يكفي — نشترط تاريخاً موجوداً، ونوعَ مستندٍ سليماً،
+        // وفاتورةً لا مستند أصلي لها بعد، وتفرّداً في اتجاهين: ملف واحد لفاتورة
+        // واحدة. والافتراضي عرضٌ بلا كتابة.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الاعتماد'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(180);
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $apply = !empty($_GET['apply']);
+
+        $rows = [];
+        if ($r = $conn->query("SELECT rf.id, rf.file_name, rf.drive_url, rf.file_size, rf.ocr_kind, rf.ocr_no,
+                    rf.ocr_sup, rf.ocr_total, rf.ocr_date, rf.match_id, rf.match_no, rf.evidence,
+                    p.no inv_no, p.supplier inv_sup, ROUND(p.total,2) inv_total, p.date inv_date
+                FROM recovery_files rf
+                JOIN dmirror_purchases p ON p.id = rf.match_id
+                WHERE rf.status='pending' AND rf.verdict='مؤكد' AND rf.match_id IS NOT NULL"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+
+        // ملف واحد لفاتورة واحدة: التكرار في أي اتجاه يُخرج الطرفين من الدفعة
+        $byInv = []; $byFile = [];
+        foreach ($rows as $x) {
+            $byInv[(int)$x['match_id']] = ($byInv[(int)$x['match_id']] ?? 0) + 1;
+            $byFile[$x['file_name']]    = ($byFile[$x['file_name']] ?? 0) + 1;
+        }
+
+        $take = []; $skip = [];
+        foreach ($rows as $x) {
+            $why = '';
+            if (recovery_doc_warn($x['file_name'], $x['ocr_no'])) $why = 'نوع المستند ليس فاتورة';
+            elseif (($x['ocr_kind'] ?? '') !== 'invoice')         $why = 'إيصال سداد لا فاتورة أصل';
+            elseif (empty($x['ocr_date']))                        $why = 'بلا تاريخ على المستند';
+            elseif ($byInv[(int)$x['match_id']] > 1)              $why = 'أكثر من ملف يقصد الفاتورة نفسها';
+            elseif ($byFile[$x['file_name']] > 1)                 $why = 'الملف نفسه مرشّح لأكثر من فاتورة';
+            else {
+                // المبلغ يُعاد التحقق منه هنا، لا نثق بحكم محفوظ قديم
+                $d = abs((float)$x['ocr_total'] - (float)$x['inv_total']);
+                if ($d > 0.02) $why = 'المبلغ يفرق ' . number_format($d, 2);
+                else {
+                    $g = abs(strtotime($x['ocr_date']) - strtotime($x['inv_date'])) / 86400;
+                    if ($g > 7) $why = 'التاريخ يبعد ' . (int)$g . ' يوماً';
+                }
+            }
+            // فاتورة لها أصل سلفاً لا تحتاج آخر
+            if ($why === '' && ($r2 = $conn->query("SELECT COUNT(*) n FROM purchase_documents
+                    WHERE purchase_id=" . (int)$x['match_id'] . " AND doc_type='invoice'
+                      AND COALESCE(source,'') <> 'daftra_pdf'")))
+                if (($x2 = $r2->fetch_assoc()) && (int)$x2['n'] > 0) $why = 'للفاتورة أصل مرفق سلفاً';
+            if ($why === '') $take[] = $x;
+            else $skip[] = ['file'=>$x['file_name'], 'inv'=>$x['inv_no'], 'why'=>$why];
+        }
+
+        if (!$apply) {
+            echo json_encode(['success'=>true, 'dry'=>true, 'would_link'=>count($take), 'skipped'=>count($skip),
+                'rows'=>array_map(function($x) {
+                    return ['file'=>$x['file_name'], 'inv'=>$x['inv_no'], 'supplier'=>$x['inv_sup'],
+                            'total'=>(float)$x['inv_total'], 'date'=>$x['inv_date']]; }, $take),
+                'skip'=>$skip], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        // نسخة قبل الكتابة: الحالة السابقة لكل صف، كي يمكن التراجع
+        $conn->query("CREATE TABLE IF NOT EXISTS recovery_link_backup (
+            id INT AUTO_INCREMENT PRIMARY KEY, batch VARCHAR(40), recovery_id INT, purchase_id INT,
+            file_name VARCHAR(255), prev_status VARCHAR(20), doc_id INT DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP, INDEX (batch)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $batch = date('YmdHis') . '-' . substr(bin2hex(random_bytes(3)), 0, 6);
+
+        $done = 0; $fail = [];
+        foreach ($take as $x) {
+            $inv = (int)$x['match_id'];
+            $conn->query("INSERT INTO recovery_link_backup (batch, recovery_id, purchase_id, file_name, prev_status)
+                VALUES ('" . $E($batch) . "', " . (int)$x['id'] . ", $inv, '" . $E($x['file_name']) . "', 'pending')");
+            $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, supplier, doc_type, file_name,
+                    drive_url, file_size, source, created_by, note)
+                VALUES ($inv, '" . $E($x['inv_no']) . "', '" . $E($x['inv_sup']) . "', 'invoice', '"
+                . $E($x['file_name']) . "', '" . $E($x['drive_url']) . "', " . (int)$x['file_size'] . ",
+                    'recovered', '" . $E($u['name'] ?? '') . "', 'ربط جماعي للمؤكد — دفعة " . $E($batch) . "')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url)");
+            if ($conn->errno) { $fail[] = ['file'=>$x['file_name'], 'err'=>$conn->error]; continue; }
+            $docId = (int)$conn->insert_id;
+            $conn->query("UPDATE recovery_link_backup SET doc_id=" . ($docId ?: 'NULL')
+                . " WHERE batch='" . $E($batch) . "' AND recovery_id=" . (int)$x['id']);
+            $conn->query("UPDATE recovery_files SET status='linked', decided_by='" . $E($u['name'] ?? '')
+                . "' WHERE id=" . (int)$x['id']);
+            acc_audit($conn, 1, 'purchase', $inv, 'doc_recovered',
+                'ربط مرفق مسترجَع (دفعة ' . $batch . '): ' . $x['file_name'], $u['name'] ?? '');
+            $done++;
+        }
+        echo json_encode(['success'=>true, 'batch'=>$batch, 'linked'=>$done, 'failed'=>$fail,
+            'skipped'=>count($skip), 'skip'=>$skip,
+            'message'=>"رُبط $done مستندا — رقم الدفعة $batch للتراجع"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'recover_link_undo': {
+        // تراجع كامل عن دفعة ربط برقمها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية التراجع'], JSON_UNESCAPED_UNICODE); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $batch = trim((string)($_GET['batch'] ?? ''));
+        if ($batch === '') { echo json_encode(['success'=>false,'message'=>'رقم الدفعة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $n = 0;
+        if ($r = $conn->query("SELECT * FROM recovery_link_backup WHERE batch='" . $E($batch) . "'"))
+            while ($x = $r->fetch_assoc()) {
+                if (!empty($x['doc_id']))
+                    $conn->query("DELETE FROM purchase_documents WHERE id=" . (int)$x['doc_id'] . " AND source='recovered'");
+                $conn->query("UPDATE recovery_files SET status='" . $E($x['prev_status']) . "', decided_by=NULL
+                              WHERE id=" . (int)$x['recovery_id']);
+                $n++;
+            }
+        $conn->query("DELETE FROM recovery_link_backup WHERE batch='" . $E($batch) . "'");
+        acc_audit($conn, 1, 'purchase', 0, 'doc_recover_undo', "تراجع عن دفعة $batch ($n مستندا)", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'reverted'=>$n, 'message'=>"أُلغي ربط $n مستندا"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'recover_decide': {
         // الربط لا يتم إلا بتأكيد بشري صريح على فاتورة بعينها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {

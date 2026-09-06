@@ -93,6 +93,40 @@ export default function BuyRecover({ onClose }) {
         finally { setBusy(''); }
     };
 
+    const [plan, setPlan] = useState(null);      // معاينة الربط الجماعي قبل الكتابة
+    const [batch, setBatch] = useState(null);    // رقم آخر دفعة، للتراجع
+
+    const preview = async () => {
+        setErr(''); setBusy('plan');
+        try {
+            const r = await fetch(`${API_URL}?action=recover_link_safe`, { headers: auth() }).then(x => x.json());
+            if (!r.success) setErr(r.message || 'تعذرت المعاينة'); else setPlan(r);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(''); }
+    };
+
+    const applyLink = async () => {
+        setErr(''); setBusy('link');
+        try {
+            const r = await fetch(`${API_URL}?action=recover_link_safe&apply=1`, { headers: auth() }).then(x => x.json());
+            if (!r.success) { setErr(r.message || 'تعذر الربط'); return; }
+            setBatch(r.batch); setPlan(null);
+            await load();
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(''); }
+    };
+
+    const undo = async () => {
+        if (!batch) return;
+        setErr(''); setBusy('undo');
+        try {
+            const r = await fetch(`${API_URL}?action=recover_link_undo&batch=${encodeURIComponent(batch)}`,
+                { headers: auth() }).then(x => x.json());
+            if (!r.success) setErr(r.message || 'تعذر التراجع'); else { setBatch(null); await load(); }
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(''); }
+    };
+
     const decide = async (id, invoice_id, action) => {
         setErr('');
         try {
@@ -126,6 +160,60 @@ export default function BuyRecover({ onClose }) {
                     <input type="file" multiple accept=".pdf,image/*" className="hidden"
                         onChange={pick} disabled={!!busy} />
                 </label>
+
+                {/* الربط الجماعي: لا يكتب شيئاً قبل أن تُعرض القائمة ويُضغط التنفيذ */}
+                {!plan && !batch && (
+                    <button onClick={preview} disabled={!!busy}
+                        className="w-full min-h-[46px] rounded-xl bg-emerald-500/15 text-emerald-300 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                        {busy === 'plan' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                        اربط المؤكد الآمن
+                    </button>
+                )}
+
+                {plan && (
+                    <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-3 space-y-2">
+                        <div className="text-[13px] font-black text-emerald-200">
+                            {plan.would_link} مستنداً جاهزاً للربط
+                            {plan.skipped > 0 && <span className="text-slate-400 font-bold"> · استُبعد {plan.skipped}</span>}
+                        </div>
+                        <div className="max-h-[220px] overflow-y-auto space-y-1">
+                            {(plan.rows || []).map((x, i) => (
+                                <div key={i} className="text-[11px] text-slate-300 flex gap-2">
+                                    <span className="truncate flex-1">{x.file}</span>
+                                    <span className="shrink-0 text-emerald-300">فاتورة {x.inv}</span>
+                                </div>
+                            ))}
+                        </div>
+                        {(plan.skip || []).length > 0 && (
+                            <details className="text-[11px] text-slate-400">
+                                <summary className="cursor-pointer">لماذا استُبعد الباقي</summary>
+                                <div className="pt-1 space-y-0.5">
+                                    {plan.skip.map((x, i) => (
+                                        <div key={i}>{x.file} — {x.why}</div>
+                                    ))}
+                                </div>
+                            </details>
+                        )}
+                        <div className="flex gap-2">
+                            <button onClick={applyLink} disabled={!!busy || !plan.would_link}
+                                className="flex-1 min-h-[44px] rounded-xl bg-emerald-500 text-[#04140c] text-[12px] font-black disabled:opacity-50">
+                                {busy === 'link' ? '…' : `نفّذ الربط (${plan.would_link})`}
+                            </button>
+                            <button onClick={() => setPlan(null)} disabled={!!busy}
+                                className="px-4 min-h-[44px] rounded-xl bg-white/10 text-[12px] font-bold">إلغاء</button>
+                        </div>
+                    </div>
+                )}
+
+                {batch && (
+                    <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
+                        <div className="text-[12px] text-emerald-300 font-bold">تم الربط · دفعة {batch}</div>
+                        <button onClick={undo} disabled={!!busy}
+                            className="w-full min-h-[40px] rounded-xl bg-rose-500/15 text-rose-300 text-[12px] font-black">
+                            {busy === 'undo' ? '…' : 'تراجع عن هذه الدفعة'}
+                        </button>
+                    </div>
+                )}
 
                 <button onClick={rematch} disabled={!!busy}
                     className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
