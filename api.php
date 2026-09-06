@@ -9545,6 +9545,22 @@ switch ($action) {
                     'title'=>(preg_match('#<title>(.*?)</title>#is', (string)$h3, $mt) ? mb_substr(trim($mt[1]), 0, 60) : ''),
                     'file_ids'=>array_slice($ids, 0, 20), 'entity_ids'=>$names];
             }
+            // ما الحقول التي تحملها مرفقات الفاتورة فعلاً؟ الافتراض أعمانا عنها
+            $c4 = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pidP.json");
+            curl_setopt_array($c4, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                CURLOPT_TIMEOUT=>20, CURLOPT_HTTPHEADER=>["APIKEY: $dk", 'Accept: application/json']]);
+            $r4 = curl_exec($c4); curl_close($c4);
+            $d4 = json_decode($r4, true) ?: [];
+            $o4 = $d4['data']['PurchaseOrder'] ?? $d4['data']['PurchaseInvoice'] ?? [];
+            $att4 = (array)($o4['Attachments'] ?? []);
+            $out['att_sample'] = [];
+            foreach (array_slice($att4, 0, 4) as $a4) {
+                $a4 = is_array($a4) ? $a4 : [];
+                $out['att_sample'][] = ['keys'=>array_keys($a4),
+                    'entity_key'=>$a4['entity_key'] ?? null, 'entity_id'=>$a4['entity_id'] ?? null,
+                    'name'=>$a4['name'] ?? null, 'id'=>$a4['id'] ?? null];
+            }
+            $out['att_count'] = count($att4);
             $out['pay_probe'] = $probe;
         }
         if ($redetail > 0) {
