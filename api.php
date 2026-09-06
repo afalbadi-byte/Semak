@@ -1478,7 +1478,40 @@ function daftra_ext_of($ct, $fallbackName = '') {
 // مُساعد: مطابقة مستند بفواتيرنا — المبلغ ثم المورد ثم التاريخ.
 // فارق الهللات وبضعة ريالات لا يعني اختلاف الفاتورة، بل تقريباً أو خطأ إدخال؛
 // نقبله ونُظهره بدل أن نُسقط مطابقة صحيحة.
+// يُرفع هذا الرقم مع كل تعديل على قواعد المطابقة أدناه، فتُعاد المطابقة تلقائياً
+// عند أول فتح للصفحة. القاعدة الجديدة لا تنفع إن ظلت النتائج القديمة معروضة.
+define('RECOVERY_RULES_VER', 4);
+
+// إعادة المطابقة لكل المعلّق — بلا قراءة بصرية، فهي حساب محض
+function recovery_rematch_all($conn) {
+    $invs = [];
+    if ($r = $conn->query("SELECT id, no, date, supplier, ROUND(total,2) gross, ROUND(subtotal,2) net
+                           FROM dmirror_purchases"))
+        while ($x = $r->fetch_assoc()) $invs[] = $x;
+    $rows = [];
+    if ($r = $conn->query("SELECT id, ocr_sup, ocr_total, ocr_date FROM recovery_files
+                           WHERE status='pending' AND ocr_at IS NOT NULL"))
+        while ($x = $r->fetch_assoc()) $rows[] = $x;
+    $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+    $n = 0; $by = [];
+    foreach ($rows as $rw) {
+        $tot = ($rw['ocr_total'] === null) ? null : round((float)$rw['ocr_total'], 2);
+        [$verdict, $mid, $mno, $ev, $cands] = recovery_match($invs, (string)$rw['ocr_sup'], $tot, $rw['ocr_date']);
+        $conn->query("UPDATE recovery_files SET verdict='" . $E($verdict) . "',
+                match_id=" . ($mid === null ? 'NULL' : (int)$mid) . ", match_no='" . $E($mno) . "',
+                evidence='" . $E($ev) . "', cands='" . $E(json_encode($cands, JSON_UNESCAPED_UNICODE)) . "'
+            WHERE id=" . (int)$rw['id']);
+        $by[$verdict] = ($by[$verdict] ?? 0) + 1; $n++;
+    }
+    return [$n, $by];
+}
+
 function recovery_match($invs, $sup, $tot, $dt) {
+    // 1445-10-30 هجري، و2019 لمستند 2025: تاريخ خارج المدى المعقول لا تاريخ
+    if ($dt) {
+        $y = (int)substr((string)$dt, 0, 4);
+        if ($y < 2015 || $y > (int)date('Y') + 2) $dt = null;
+    }
     $near = function($a, $b) {
         $d = abs($a - $b);
         // هللتان هما أقصى ما يُنتجه تقريب ضريبة القيمة المضافة؛ وما فوقهما ليس تقريباً.
@@ -1515,9 +1548,11 @@ function recovery_match($invs, $sup, $tot, $dt) {
         return $ga <=> $gb;
     });
     $strong = array_values(array_filter($best, function($x) { return $x['sim'] >= 0.6 && $x['date']; }));
-    $txt = function($x) {
-        return $x['amt'] === 'exact' ? 'المبلغ مطابق'
-             : ('القيد أقل/أكثر بـ' . number_format($x['diff'], 2) . ' — صحّحه قبل الربط');
+    $txt = function($x, $strong = false) {
+        if ($x['amt'] === 'exact') return 'المبلغ مطابق';
+        return $strong
+            ? ('القيد أقل/أكثر بـ' . number_format($x['diff'], 2) . ' — صحّحه قبل الربط')
+            : ('المبلغ يفرق ' . number_format($x['diff'], 2));
     };
     // وصف صريح للفجوة الزمنية: «ضمن المدى» كانت تُخفي شهراً كاملاً
     $dtxt = function($x) {
@@ -1533,7 +1568,7 @@ function recovery_match($invs, $sup, $tot, $dt) {
         // مورد واحد ويوم واحد ومبلغ مختلف = خطأ في القيد، لا مطابقة مقبولة
         $verdict = $strong[0]['amt'] !== 'exact' ? 'خطأ في القيد' : ($far ? 'مرجّح' : 'مؤكد');
         $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
-        $ev = $txt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '%'
+        $ev = $txt($strong[0], true) . ' · المورد ' . round($strong[0]['sim'] * 100) . '%'
             . $dtxt($strong[0]);
     } elseif (count($strong) > 1) {
         $day = array_values(array_filter($strong, function($x) use ($sameDay) {
@@ -1541,7 +1576,7 @@ function recovery_match($invs, $sup, $tot, $dt) {
         if (count($day) === 1) {
             $verdict = 'مؤكد';
             $mid = (int)$day[0]['v']['id']; $mno = (string)$day[0]['v']['no'];
-            $ev = $txt($day[0]) . ' · المورد ' . round($day[0]['sim'] * 100)
+            $ev = $txt($day[0], true) . ' · المورد ' . round($day[0]['sim'] * 100)
                 . '% · نفس اليوم وحدها، وغيرها بتواريخ أخرى';
         } else { $verdict = 'متعدد'; }
     }
@@ -7729,25 +7764,10 @@ switch ($action) {
         if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
             echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الاسترجاع'], JSON_UNESCAPED_UNICODE); break; }
         set_time_limit(180);
-        $invs = [];
-        if ($r = $conn->query("SELECT id, no, date, supplier, ROUND(total,2) gross, ROUND(subtotal,2) net
-                               FROM dmirror_purchases"))
-            while ($x = $r->fetch_assoc()) $invs[] = $x;
-        $rows = [];
-        if ($r = $conn->query("SELECT id, ocr_sup, ocr_total, ocr_date FROM recovery_files
-                               WHERE status='pending' AND ocr_at IS NOT NULL"))
-            while ($x = $r->fetch_assoc()) $rows[] = $x;
-        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
-        $n = 0; $by = [];
-        foreach ($rows as $rw) {
-            $tot = ($rw['ocr_total'] === null) ? null : round((float)$rw['ocr_total'], 2);
-            [$verdict, $mid, $mno, $ev, $cands] = recovery_match($invs, (string)$rw['ocr_sup'], $tot, $rw['ocr_date']);
-            $conn->query("UPDATE recovery_files SET verdict='" . $E($verdict) . "',
-                    match_id=" . ($mid === null ? 'NULL' : (int)$mid) . ", match_no='" . $E($mno) . "',
-                    evidence='" . $E($ev) . "', cands='" . $E(json_encode($cands, JSON_UNESCAPED_UNICODE)) . "'
-                WHERE id=" . (int)$rw['id']);
-            $by[$verdict] = ($by[$verdict] ?? 0) + 1; $n++;
-        }
+        // نسخة ثالثة من نفس الحلقة كانت هنا؛ الآن دالة واحدة يستعملها الزر والصفحة
+        [$n, $by] = recovery_rematch_all($conn);
+        $conn->query("INSERT INTO daftra_config (k, v) VALUES ('recovery_rules_ver', '"
+            . RECOVERY_RULES_VER . "') ON DUPLICATE KEY UPDATE v=VALUES(v)");
         acc_audit($conn, 1, 'purchase', 0, 'recover_rematch', "إعادة مطابقة $n مستندا", $u['name'] ?? '');
         echo json_encode(['success'=>true, 'rematched'=>$n, 'verdicts'=>$by,
             'message'=>"أُعيدت مطابقة $n مستندا"], JSON_UNESCAPED_UNICODE);
@@ -7757,6 +7777,16 @@ switch ($action) {
     case 'recover_list': {
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        // قواعد المطابقة تغيّرت منذ آخر حساب؟ نُعيده هنا صامتاً — لا زر ينتظر أحداً
+        $ver = 0;
+        if ($r = $conn->query("SELECT v FROM daftra_config WHERE k='recovery_rules_ver' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $ver = (int)$x['v'];
+        if ($ver < RECOVERY_RULES_VER) {
+            set_time_limit(120);
+            recovery_rematch_all($conn);
+            $conn->query("INSERT INTO daftra_config (k, v) VALUES ('recovery_rules_ver', '"
+                . RECOVERY_RULES_VER . "') ON DUPLICATE KEY UPDATE v=VALUES(v)");
+        }
         $v  = trim((string)($_GET['verdict'] ?? ''));
         $st = trim((string)($_GET['status'] ?? 'pending'));
         $w  = "status='" . $conn->real_escape_string($st) . "'";
@@ -7766,7 +7796,7 @@ switch ($action) {
             while ($x = $r->fetch_assoc()) $sum[$x['verdict'] ?: 'قيد القراءة'] = (int)$x['n'];
         if ($r = $conn->query("SELECT id, file_name, drive_url, ocr_kind, ocr_sup, ocr_no, ocr_total, ocr_date,
                     verdict, match_id, match_no, evidence, cands, status
-                FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'مؤكد','مرشّح','متعدد','بلا دليل'), id LIMIT 200"))
+                FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'خطأ في القيد','مؤكد','مرجّح','متعدد','مرشّح','بلا دليل'), id LIMIT 200"))
             while ($x = $r->fetch_assoc()) { $x['cands'] = json_decode($x['cands'] ?: '[]', true); $rows[] = $x; }
         echo json_encode(['success'=>true, 'summary'=>$sum, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
