@@ -7829,7 +7829,13 @@ switch ($action) {
                 if (abs($day($sh['date']) - $day($py['date'])) > 5) continue;
                 $hit[] = $py;
             }
-            // الاسم يفصل حين تعدّدت المطابقات، ولا يُشترط حين انفردت
+            // نفس اليوم يتقدّم على القريب قبل أي ترجيح آخر
+            if (count($hit) > 1) {
+                $same = array_values(array_filter($hit, function($p) use ($day, $sh) {
+                    return $day($sh['date']) === $day($p['date']); }));
+                if (count($same) >= 1) $hit = $same;
+            }
+            // ثم الاسم يفصل ما بقي متعدداً، ولا يُشترط حين انفرد
             if (count($hit) > 1) {
                 $named = array_values(array_filter($hit, function($p) use ($shares, $sh) {
                     return $shares($sh['party'], $p['supplier']); }));
@@ -7843,12 +7849,20 @@ switch ($action) {
                     'amount'=>(float)$sh['amount'], 'note'=>$sh['note']];
             }
         }
-        $byPay = [];
-        foreach ($pairs as $pr) { $k = $pr['p']['id']; $byPay[$k] = ($byPay[$k] ?? 0) + 1; }
-        $take = [];
+        // دفعة يقصدها تحويلان: الأقرب تاريخاً يفوز، وإن تساويا سقطا معاً
+        $best = [];
         foreach ($pairs as $pr) {
-            if ($byPay[$pr['p']['id']] > 1) { $multi++; continue; }
-            $take[] = $pr;
+            $k = $pr['p']['id'];
+            $g = abs($day($pr['s']['date']) - $day($pr['p']['date']));
+            if (!isset($best[$k])) { $best[$k] = ['g'=>$g, 'pr'=>$pr, 'tie'=>false]; }
+            elseif ($g < $best[$k]['g']) { $best[$k] = ['g'=>$g, 'pr'=>$pr, 'tie'=>false]; $multi++; }
+            elseif ($g === $best[$k]['g']) { $best[$k]['tie'] = true; }
+            else $multi++;
+        }
+        $take = [];
+        foreach ($best as $b) {
+            if ($b['tie']) { $multi++; continue; }
+            $take[] = $b['pr'];
         }
 
         if (!$apply) {
