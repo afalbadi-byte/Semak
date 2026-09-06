@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine, Receipt } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
+import BuyRecover from './BuyRecover';
 import { passkeyEnrolledHere } from '../../lib/passkey';
 import { syncDaftra } from '../../lib/sync';
 
@@ -20,6 +21,7 @@ export default function BuyHome({ onNew }) {
     const [cls, setCls] = useState(null);        // نتيجة الفرز الآلي للمستندات
     const [rcp, setRcp] = useState(null);        // سحب إيصالات الدفعات
     const [rcpBusy, setRcpBusy] = useState(false);
+    const [recOpen, setRecOpen] = useState(false);
     const [clsBusy, setClsBusy] = useState(false);
 
     const load = useCallback(async (force = false) => {
@@ -129,6 +131,8 @@ export default function BuyHome({ onNew }) {
         { t: 'فواتير الشهر',   v: p.month_count ?? '—',  icon: AlertTriangle, c: 'from-sky-600 to-sky-800' },
     ];
 
+    if (recOpen) return <BuyRecover onClose={() => setRecOpen(false)} />;
+
     return (
         <div className="p-4 space-y-4">
             <button onClick={onNew}
@@ -212,6 +216,10 @@ export default function BuyHome({ onNew }) {
                     يفتح كل دفعة في دفترة، ينزّل إيصالها، ويربطه بها بالمعرّف — لا بمطابقة المبلغ.
                 </p>
                 {rcp?.err && <p className="text-[11px] text-amber-300 font-bold">{rcp.err}</p>}
+                <button onClick={() => setRecOpen(true)}
+                    className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2">
+                    <Archive size={14} /> استرجاع المرفقات المفقودة
+                </button>
                 <button onClick={pullInvoices} disabled={rcpBusy}
                     className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                     <Archive size={14} /> اسحب نسخ الفواتير الرسمية

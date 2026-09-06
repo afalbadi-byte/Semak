@@ -1,0 +1,210 @@
+import React, { useState, useCallback, useEffect } from 'react';
+import { X, Upload, ScanLine, Loader2, Check, Trash2, ExternalLink, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { API_URL, getAdminToken } from '../../lib/api/client';
+
+const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
+const money = v => (v === null || v === undefined || v === '' || isNaN(Number(v)))
+    ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const VERDICT = {
+    'مؤكد':     'bg-emerald-500/15 text-emerald-300',
+    'مرشّح':    'bg-amber-500/15 text-amber-300',
+    'متعدد':    'bg-sky-500/15 text-sky-300',
+    'بلا دليل': 'bg-white/10 text-slate-400',
+};
+
+// ─── استرجاع المرفقات المفقودة: رفع، قراءة بصرية، ثم اعتماد بشري لكل ملف ────
+export default function BuyRecover({ onClose }) {
+    const [busy, setBusy]   = useState('');
+    const [prog, setProg]   = useState(null);
+    const [rows, setRows]   = useState([]);
+    const [sum, setSum]     = useState({});
+    const [filter, setFilter] = useState('');
+    const [err, setErr]     = useState('');
+
+    const load = useCallback(async () => {
+        try {
+            const r = await fetch(`${API_URL}?action=recover_list&status=pending`
+                + (filter ? `&verdict=${encodeURIComponent(filter)}` : ''), { headers: auth() })
+                .then(x => x.json());
+            if (r.success) { setRows(r.data || []); setSum(r.summary || {}); }
+        } catch { /* الشبكة — تُعالج عند الرفع */ }
+    }, [filter]);
+
+    useEffect(() => { load(); }, [load]);
+
+    // الرفع: ملفاً ملفاً كي لا ينقطع على الجوال
+    const pick = async e => {
+        const files = [...(e.target.files || [])];
+        e.target.value = '';
+        if (!files.length) return;
+        setBusy('upload'); setErr('');
+        let ok = 0, dup = 0;
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            setProg({ done: i, total: files.length, name: f.name });
+            try {
+                const b64 = await new Promise(res => {
+                    const rd = new FileReader();
+                    rd.onload = () => res(String(rd.result).split(',')[1] || '');
+                    rd.readAsDataURL(f);
+                });
+                const r = await fetch(`${API_URL}?action=recover_upload`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                    body: JSON.stringify({ filename: f.name, data: b64 }),
+                }).then(x => x.json());
+                if (r.success && r.duplicate) dup++; else if (r.success) ok++;
+            } catch { /* نكمل البقية */ }
+        }
+        setProg(null); setBusy('');
+        setErr(`رُفع ${ok} ملفا${dup ? ` · ${dup} مكرر تجاوزناه` : ''} — اضغط «اقرأ الملفات»`);
+        load();
+    };
+
+    const scan = async () => {
+        setBusy('scan'); setErr('');
+        try {
+            for (let i = 0; i < 200; i++) {
+                const r = await fetch(`${API_URL}?action=recover_scan&limit=3`,
+                    { headers: auth(), cache: 'no-store' }).then(x => x.json());
+                if (!r.success) { setErr(r.message || 'تعذر القراءة'); break; }
+                setProg({ done: r.scanned, total: r.remaining + r.scanned, msg: r.message });
+                await load();
+                if (r.remaining === 0) break;
+                if (!r.scanned) { setErr(r.detail || 'توقفت القراءة'); break; }
+            }
+        } finally { setProg(null); setBusy(''); }
+    };
+
+    const decide = async (id, invoice_id, action) => {
+        setErr('');
+        try {
+            const r = await fetch(`${API_URL}?action=recover_decide`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                body: JSON.stringify({ id, invoice_id, action }),
+            }).then(x => x.json());
+            if (!r.success) { setErr(r.message || 'تعذر الحفظ'); return; }
+            setRows(v => v.filter(x => Number(x.id) !== Number(id)));
+        } catch { setErr('تعذر الاتصال'); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[90] bg-[#0b1628] overflow-y-auto" dir="rtl">
+            <div className="sticky top-0 bg-[#0b1628]/95 backdrop-blur border-b border-white/10 p-4 flex items-center gap-2">
+                <button onClick={onClose} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                    <X size={17} />
+                </button>
+                <h2 className="font-black text-[15px]">استرجاع المرفقات</h2>
+            </div>
+
+            <div className="p-4 space-y-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                    يُقرأ كل ملف بصرياً، ولا يُقترح ربطه بفاتورة إلا حين يتفق الإجمالي واسم المورد والتاريخ معاً.
+                    ولا يُربط شيء إلا بتأكيدك أنت.
+                </p>
+
+                <label className="w-full min-h-[52px] rounded-2xl border border-dashed border-white/20 flex items-center justify-center gap-2 active:bg-white/5">
+                    <Upload size={16} className="text-[#c5a059]" />
+                    <span className="text-[13px] font-black">اختر ملفات الاسترجاع</span>
+                    <input type="file" multiple accept=".pdf,image/*" className="hidden"
+                        onChange={pick} disabled={!!busy} />
+                </label>
+
+                <button onClick={scan} disabled={!!busy}
+                    className="w-full min-h-[48px] rounded-2xl bg-[#c5a059]/15 text-[#c5a059] text-[13px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    {busy === 'scan' ? <Loader2 size={15} className="animate-spin" /> : <ScanLine size={15} />}
+                    {busy === 'scan' ? 'يقرأ الملفات...' : 'اقرأ الملفات'}
+                </button>
+
+                {prog && (
+                    <div className="rounded-xl bg-white/[0.06] border border-white/10 p-2.5 text-[11px] font-bold">
+                        {prog.msg || `${prog.done} من ${prog.total}`}
+                        {prog.name && <span className="text-slate-400"> · {prog.name}</span>}
+                    </div>
+                )}
+                {err && <div className="rounded-xl bg-white/10 p-2.5 text-[11px] font-bold text-slate-200">{err}</div>}
+
+                {!!Object.keys(sum).length && (
+                    <div className="flex gap-2 flex-wrap">
+                        {[['', 'الكل'], ...Object.keys(sum).map(k => [k, k])].map(([k, t]) => (
+                            <button key={k} onClick={() => setFilter(k)}
+                                className={'h-9 px-3 rounded-xl text-[11px] font-bold border ' +
+                                    (filter === k ? 'bg-white/15 border-white/20' : 'bg-white/5 border-white/10 text-slate-400')}>
+                                {t}{k && sum[k] ? ` (${sum[k]})` : ''}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                <div className="space-y-2">
+                    {rows.map(r => (
+                        <div key={r.id} className="rounded-2xl bg-white/[0.05] border border-white/10 p-3 space-y-2">
+                            <div className="flex items-start gap-2">
+                                <span className={'text-[10px] font-black px-2 py-1 rounded-lg shrink-0 ' +
+                                    (VERDICT[r.verdict] || 'bg-white/10 text-slate-400')}>
+                                    {r.verdict === 'مؤكد' ? <ShieldCheck size={11} className="inline ml-1" /> : null}
+                                    {r.verdict || 'قيد القراءة'}
+                                </span>
+                                <span className="text-[12px] font-bold truncate flex-1">{r.file_name}</span>
+                                {r.drive_url && (
+                                    <a href={r.drive_url} target="_blank" rel="noopener noreferrer"
+                                        className="text-[11px] text-sky-300 flex items-center gap-1 shrink-0">
+                                        <ExternalLink size={12} /> افتح
+                                    </a>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
+                                {[['المُصدِر', r.ocr_sup], ['رقم المستند', r.ocr_no],
+                                  ['الإجمالي', r.ocr_total ? money(r.ocr_total) : null], ['التاريخ', r.ocr_date]]
+                                    .filter(([, v]) => v).map(([k, v]) => (
+                                    <div key={k} className="flex justify-between gap-2">
+                                        <span className="text-slate-500 shrink-0">{k}</span>
+                                        <span className="font-bold truncate text-left">{v}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {r.evidence && <p className="text-[10px] text-emerald-300 font-bold">{r.evidence}</p>}
+
+                            {!!(r.cands || []).length ? (
+                                <div className="space-y-1.5">
+                                    {(r.cands || []).slice(0, 4).map(c => (
+                                        <div key={c.id} className="rounded-xl bg-black/25 border border-white/10 p-2 flex items-center gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-[12px] font-bold truncate">
+                                                    فاتورة {c.no} · {money(c.gross)}
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 truncate">
+                                                    {c.supplier} · {c.date} · تطابق الاسم {Math.round((c.sim || 0) * 100)}%
+                                                </div>
+                                            </div>
+                                            <button onClick={() => decide(r.id, c.id, 'link')}
+                                                className="h-9 px-3 rounded-lg bg-[#c5a059] text-[#0b1628] text-[11px] font-black shrink-0">
+                                                اربط
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                                    <AlertTriangle size={12} /> لا فاتورة مطابقة — راجعه بنفسك أو استبعده
+                                </p>
+                            )}
+
+                            <button onClick={() => decide(r.id, 0, 'reject')}
+                                className="w-full h-9 rounded-lg bg-white/10 text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5">
+                                <Trash2 size={12} /> استبعد
+                            </button>
+                        </div>
+                    ))}
+                    {!rows.length && (
+                        <p className="text-[12px] text-slate-500 text-center py-8">
+                            لا ملفات معلّقة — ارفع الملفات ثم اقرأها
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
