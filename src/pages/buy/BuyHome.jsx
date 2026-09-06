@@ -104,6 +104,23 @@ export default function BuyHome({ onNew }) {
         } finally { setRcpBusy(false); }
     };
 
+    const pullInvoices = async () => {
+        setRcpBusy(true);
+        try {
+            const t2 = getAdminToken();
+            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
+            let n = 0;
+            for (let i = 0; i < 70; i++) {
+                const r = await fetch(`${API_URL}?action=inv_pdf_pull&limit=6`,
+                    { headers: h2, cache: 'no-store' }).then(x => x.json());
+                if (!r.success) { setRcp({ err: r.message }); break; }
+                n += r.pulled;
+                setRcp({ pulled: n, none: 0, remaining: r.remaining, err: '' });
+                if (r.remaining === 0 || (!r.pulled && r.missing)) break;
+            }
+        } finally { setRcpBusy(false); }
+    };
+
     const p = k?.purchases || {};
     const cards = [
         { t: 'مشتريات الشهر', v: money(p.month_total), icon: TrendingUp,   c: 'from-emerald-600 to-emerald-800' },
@@ -195,6 +212,10 @@ export default function BuyHome({ onNew }) {
                     يفتح كل دفعة في دفترة، ينزّل إيصالها، ويربطه بها بالمعرّف — لا بمطابقة المبلغ.
                 </p>
                 {rcp?.err && <p className="text-[11px] text-amber-300 font-bold">{rcp.err}</p>}
+                <button onClick={pullInvoices} disabled={rcpBusy}
+                    className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    <Archive size={14} /> اسحب نسخ الفواتير الرسمية
+                </button>
                 <button onClick={pullReceipts} disabled={rcpBusy}
                     className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                     {rcpBusy ? <Loader2 size={14} className="animate-spin" /> : <Receipt size={14} />}

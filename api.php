@@ -1279,6 +1279,12 @@ if ($__sv < 40) {
 ensure_column($conn, 'dmirror_payments', 'receipt_pull_at', "receipt_pull_at DATETIME DEFAULT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (40)");
 } // end DDL v40
+// ─── DDL v41: أثر سحب نسخة الفاتورة الرسمية من دفترة ────────────────────────
+if ($__sv < 41) {
+ensure_column($conn, 'dmirror_purchases', 'pdf_pull_at', "pdf_pull_at DATETIME DEFAULT NULL");
+ensure_column($conn, 'dmirror_purchases', 'pdf_route',   "pdf_route VARCHAR(120) DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (41)");
+} // end DDL v41
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -7389,6 +7395,89 @@ switch ($action) {
             'failed'=>$failed, 'remaining'=>$left, 'detail'=>$last,
             'message'=>$done ? "فُرز $done مستندا · $receipts إيصالا · رُبط $linked"
                              : ($failed ? 'تعذر الفرز' : 'لا مستندات جديدة')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'inv_pdf_pull': {
+        // نسخة الفاتورة الرسمية من دفترة — تعطي مستنداً للفواتير التي لا مرفق لها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية سحب المستندات'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(240);
+        $take = min(15, max(1, (int)($_GET['limit'] ?? 6)));
+        $ck   = daftra_session_cookie($conn);
+
+        // فواتير دفترة التي لم نسحب نسختها الرسمية بعد
+        $todo = [];
+        if ($r = $conn->query("SELECT p.id, p.no, COALESCE(p.supplier,'') supplier, p.date
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_documents pd
+                  ON pd.purchase_id = p.id AND pd.source='daftra_pdf' AND COALESCE(pd.drive_url,'') <> ''
+                WHERE pd.id IS NULL AND COALESCE(p.origin,'daftra')='daftra'
+                  AND (p.pdf_pull_at IS NULL OR p.pdf_pull_at < DATE_SUB(NOW(), INTERVAL 7 DAY))
+                ORDER BY p.id DESC LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $todo[] = $x;
+
+        $dir = __DIR__ . '/qdocs';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $got = 0; $miss = 0; $last = '';
+
+        foreach ($todo as $iv) {
+            $iid = (int)$iv['id'];
+            $conn->query("UPDATE dmirror_purchases SET pdf_pull_at=NOW() WHERE id=$iid");
+            $bin = null; $used = '';
+            foreach (["/owner/purchase_invoices/print/$iid.pdf",
+                      "/owner/purchase_invoices/view/$iid.pdf",
+                      "/owner/purchase_orders/print/$iid.pdf"] as $ru) {
+                $c = curl_init('https://semak.daftra.com' . $ru);
+                curl_setopt_array($c, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                    CURLOPT_TIMEOUT=>60, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
+                    CURLOPT_HTTPHEADER=>['Cookie: ' . $ck, 'Accept: */*',
+                        'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']]);
+                $b2 = curl_exec($c); $h2 = curl_getinfo($c, CURLINFO_HTTP_CODE); curl_close($c);
+                // نحفظ ما هو PDF حقيقي فقط — صفحة دخول أو خطأ لا تُحفظ كمستند
+                if ($h2 === 200 && is_string($b2) && strncmp($b2, '%PDF', 4) === 0) {
+                    $bin = $b2; $used = $ru; break;
+                }
+                $last = $ru . ' → HTTP ' . $h2;
+            }
+            if ($bin === null) { $miss++; continue; }
+
+            $tok  = bin2hex(random_bytes(16));
+            if (@file_put_contents("$dir/$tok.pdf", $bin) === false) { $miss++; $last = 'تعذر الحفظ على القرص'; continue; }
+            $durl = 'https://' . $_SERVER['HTTP_HOST'] . "/qdocs/$tok.pdf";
+            $name = 'فاتورة شراء ' . $iv['no'] . ($iv['supplier'] !== '' ? ' — ' . $iv['supplier'] : '')
+                  . ' (نسخة دفترة).pdf';
+            $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, supplier, doc_type, file_name,
+                    drive_url, file_size, source, created_by, note)
+                VALUES ($iid, '" . $conn->real_escape_string((string)$iv['no']) . "', '"
+                . $conn->real_escape_string($iv['supplier']) . "', 'invoice', '"
+                . $conn->real_escape_string($name) . "', '" . $conn->real_escape_string($durl) . "', "
+                . strlen($bin) . ", 'daftra_pdf', '" . $conn->real_escape_string($u['name'] ?? '') . "',
+                    'نسخة الفاتورة الرسمية من دفترة')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), file_size=VALUES(file_size),
+                    source='daftra_pdf'");
+            $conn->query("UPDATE dmirror_purchases SET pdf_route='" . $conn->real_escape_string($used) . "' WHERE id=$iid");
+            $got++;
+        }
+
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_purchases p
+                LEFT JOIN purchase_documents pd
+                  ON pd.purchase_id = p.id AND pd.source='daftra_pdf' AND COALESCE(pd.drive_url,'') <> ''
+                WHERE pd.id IS NULL AND COALESCE(p.origin,'daftra')='daftra'"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        if ($got) acc_audit($conn, 1, 'purchase', 0, 'invoice_pdf_pull',
+            "سحب $got نسخة فاتورة رسمية من دفترة", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'pulled'=>$got, 'missing'=>$miss, 'remaining'=>$left,
+            'detail'=>$last,
+            'message'=>$got ? "سُحبت $got نسخة فاتورة"
+                            : ($miss ? 'تعذر جلب النسخ — تحقق من جلسة دفترة' : 'لا فواتير جديدة')],
+            JSON_UNESCAPED_UNICODE);
         break;
     }
 
