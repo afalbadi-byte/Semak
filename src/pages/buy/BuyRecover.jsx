@@ -10,6 +10,7 @@ const VERDICT = {
     'مؤكد':     'bg-emerald-500/15 text-emerald-300',
     'مرشّح':    'bg-amber-500/15 text-amber-300',
     'متعدد':    'bg-sky-500/15 text-sky-300',
+    'فرق يسير': 'bg-orange-500/15 text-orange-300',
     'بلا دليل': 'bg-white/10 text-slate-400',
 };
 
@@ -112,7 +113,7 @@ export default function BuyRecover({ onClose }) {
 
                 <button onClick={() => scan(true)} disabled={!!busy}
                     className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
-                    <ScanLine size={14} /> أعد قراءة الإيصالات البنكية
+                    <ScanLine size={14} /> أعد قراءة البنكية وما بلا دليل
                 </button>
 
                 <button onClick={scan} disabled={!!busy}
@@ -182,6 +183,7 @@ export default function BuyRecover({ onClose }) {
                                                 </div>
                                                 <div className="text-[10px] text-slate-400 truncate">
                                                     {c.supplier} · {c.date} · تطابق الاسم {Math.round((c.sim || 0) * 100)}%
+                                                    {Number(c.diff) > 0 ? ' · يفرق ' + money(c.diff) : ''}
                                                 </div>
                                             </div>
                                             <button onClick={() => decide(r.id, c.id, 'link')}

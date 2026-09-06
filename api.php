@@ -7497,7 +7497,7 @@ switch ($action) {
 
         // rescan=1 يعيد قراءة ما جاء مُصدِره بنكاً — تلك ضاع المستفيد منها
         $where = !empty($_GET['rescan'])
-               ? "status='pending' AND ocr_at IS NOT NULL AND (ocr_sup LIKE '%راجحي%'
+               ? "status='pending' AND ocr_at IS NOT NULL AND (verdict='بلا دليل' OR ocr_sup LIKE '%راجحي%'
                    OR ocr_sup LIKE '%Rajhi%' OR ocr_sup LIKE '%بنك%' OR ocr_sup LIKE '%مصرف%'
                    OR ocr_sup LIKE '%Bank%' OR COALESCE(ocr_sup,'') = '')"
                : "ocr_at IS NULL";
@@ -7552,35 +7552,56 @@ switch ($action) {
             $tot  = isset($o['total']) && is_numeric($o['total']) ? round((float)$o['total'], 2) : null;
             $dt   = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($o['date'] ?? '')) ? $o['date'] : null;
 
-            // ── المطابقة: المبلغ يطابق، والمورد يتشابه، والتاريخ قريب ──
+            // ── المطابقة: المبلغ، ثم المورد، ثم التاريخ ──
+            // فارق الهللات وبضعة ريالات لا يعني اختلاف الفاتورة — غالباً تقريب
+            // أو خطأ إدخال. نقبله ونُظهره صراحةً بدل أن نُسقط مطابقة صحيحة.
+            $near = function($a, $b) {
+                $d = abs($a - $b);
+                return ($d <= 0.01) ? ['exact', 0.0]
+                     : (($d <= 5.00 || $d <= max($a, $b) * 0.002) ? ['near', $d] : [null, $d]);
+            };
             $best = []; $sn = daftra_norm_name($sup);
             foreach ($invs as $v) {
-                $okAmt = $tot !== null && (abs((float)$v['gross'] - $tot) <= 0.01 || abs((float)$v['net'] - $tot) <= 0.01);
-                if (!$okAmt) continue;
+                if ($tot === null) continue;
+                [$kg, $dg] = $near((float)$v['gross'], $tot);
+                [$kn, $dn] = $near((float)$v['net'], $tot);
+                $kind = $kg ?: $kn;
+                if (!$kind) continue;
+                $diff = $kg ? $dg : $dn;
                 $sim = daftra_name_sim($sn, daftra_norm_name($v['supplier']));
                 $okDate = true;
                 if ($dt && !empty($v['date']))
                     $okDate = abs(strtotime($dt) - strtotime($v['date'])) <= 45 * 86400;
-                $best[] = ['v'=>$v, 'sim'=>$sim, 'date'=>$okDate];
+                $best[] = ['v'=>$v, 'sim'=>$sim, 'date'=>$okDate, 'amt'=>$kind, 'diff'=>round($diff, 2)];
             }
-            usort($best, function($a, $b) { return $b['sim'] <=> $a['sim']; });
+            // الأدق مبلغاً أولاً، ثم الأقرب اسماً
+            usort($best, function($a, $b) {
+                if ($a['amt'] !== $b['amt']) return $a['amt'] === 'exact' ? -1 : 1;
+                return $b['sim'] <=> $a['sim'];
+            });
             $strong = array_values(array_filter($best, function($x) { return $x['sim'] >= 0.6 && $x['date']; }));
+            $amtTxt = function($x) {
+                return $x['amt'] === 'exact' ? 'المبلغ مطابق'
+                     : ('المبلغ يفرق ' . number_format($x['diff'], 2) . ' — تحقق من القيد');
+            };
 
             $verdict = 'بلا دليل'; $mid = 'NULL'; $mno = ''; $ev = '';
             if (count($strong) === 1) {
-                $verdict = 'مؤكد'; $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
-                $ev = 'المبلغ مطابق · المورد ' . round($strong[0]['sim'] * 100) . '% · التاريخ ضمن المدى';
-                $conf++;
+                $verdict = $strong[0]['amt'] === 'exact' ? 'مؤكد' : 'فرق يسير';
+                $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
+                $ev = $amtTxt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '% · التاريخ ضمن المدى';
+                if ($verdict === 'مؤكد') $conf++;
             } elseif (count($strong) > 1) {
                 $verdict = 'متعدد';
             } elseif (count($best) >= 1) {
                 $verdict = 'مرشّح'; $mid = (int)$best[0]['v']['id']; $mno = (string)$best[0]['v']['no'];
-                $ev = 'المبلغ مطابق · المورد ' . round($best[0]['sim'] * 100) . '%'
+                $ev = $amtTxt($best[0]) . ' · المورد ' . round($best[0]['sim'] * 100) . '%'
                     . ($best[0]['date'] ? '' : ' · التاريخ بعيد');
             }
             $cands = json_encode(array_map(function($x) {
                 return ['id'=>(int)$x['v']['id'], 'no'=>$x['v']['no'], 'supplier'=>$x['v']['supplier'],
-                        'gross'=>(float)$x['v']['gross'], 'date'=>$x['v']['date'], 'sim'=>round($x['sim'], 2)];
+                        'gross'=>(float)$x['v']['gross'], 'date'=>$x['v']['date'], 'sim'=>round($x['sim'], 2),
+                        'diff'=>$x['diff']];
             }, array_slice($best, 0, 6)), JSON_UNESCAPED_UNICODE);
 
             $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
