@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2, Receipt , Check} from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2, Receipt, Check, FileText } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
+import SupplierStatement from './SupplierStatement';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
 import { useDepthGuard } from '../../lib/backstack';
@@ -22,6 +23,7 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [pay,  setPay]  = useState(null);   // دفعة على مستوى المورد
     const [payRes, setPayRes] = useState(null);
     const [rcpt, setRcpt] = useState(null);   // إرفاق إيصال لدفعة قائمة
+    const [stmt, setStmt] = useState(false);  // كشف حساب المورد
     const [busy, setBusy] = useState(false);
     const [tick, setTick] = useState(0);      // لإعادة الجلب بعد الإلغاء
 
@@ -146,12 +148,20 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
         return () => { live = false; };
     }, [type, value, tick]);
 
+    if (stmt) return <SupplierStatement supplier={value} onClose={() => setStmt(false)} />;
+
     return (
         <div className="p-4 space-y-3">
             <div className="flex items-center justify-between">
                 <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] font-bold text-slate-400 min-h-[44px]">
                     <ArrowRight size={16} /> رجوع
                 </button>
+                {type === 'supplier' && (
+                    <button onClick={() => setStmt(true)}
+                        className="min-h-[44px] px-3 rounded-xl bg-white/10 text-slate-200 text-[12px] font-bold flex items-center gap-1.5">
+                        <FileText size={14} /> كشف حساب
+                    </button>
+                )}
                 {type === 'supplier' && data && data.balance && (
                     <button onClick={() => setPay({
                         mode: data.balance.outstanding > 0 ? 'settle' : 'advance',
@@ -565,17 +575,6 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                                         } catch { setErr('تعذر الاتصال'); }
                                         finally { setBusy(false); }
                                     } }
-                                : sec.title === 'مرفقات مقترحة'
-                                ? { ...sec, propose: 1, onDecide: async (rid, action) => {
-                                        setBusy(true); setErr('');
-                                        try {
-                                            const x = await post('recover_decide',
-                                                { id: rid, invoice_id: action === 'link' ? Number(value) : 0, action });
-                                            if (!x.success) setErr(x.message || 'تعذر الحفظ');
-                                            else setTick(v => v + 1);
-                                        } catch { setErr('تعذر الاتصال'); }
-                                        finally { setBusy(false); }
-                                  } }
                                 : sec.title === 'المستندات'
                                 ? { ...sec, retype: async (r, ty) => {
                                         setBusy(true); setErr('');
@@ -700,18 +699,6 @@ function Section({ sec, onOpen }) {
                                                 className="text-[11px] text-sky-300 flex items-center gap-1">
                                                 <ExternalLink size={12} /> فتح
                                             </a>
-                                        )}
-                                        {sec.propose && (
-                                            <>
-                                                <button onClick={() => sec.onDecide(r.id, 'link')}
-                                                    className="text-[11px] font-black text-emerald-300 flex items-center gap-1">
-                                                    <Check size={13} /> أكّد
-                                                </button>
-                                                <button onClick={() => sec.onDecide(r.id, 'reject')}
-                                                    className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
-                                                    <X size={12} /> ليس لها
-                                                </button>
-                                            </>
                                         )}
                                         {sec.attach && Number(r.receipt_doc_id) > 0 && (
                                             <>

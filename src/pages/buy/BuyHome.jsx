@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine, Receipt } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
-import BuyRecover from './BuyRecover';
 import { passkeyEnrolledHere } from '../../lib/passkey';
 import { syncDaftra } from '../../lib/sync';
 
@@ -131,7 +130,6 @@ export default function BuyHome({ onNew }) {
         { t: 'فواتير الشهر',   v: p.month_count ?? '—',  icon: AlertTriangle, c: 'from-sky-600 to-sky-800' },
     ];
 
-    if (recOpen) return <BuyRecover onClose={() => setRecOpen(false)} />;
 
     return (
         <div className="p-4 space-y-4">
