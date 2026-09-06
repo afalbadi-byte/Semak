@@ -9558,7 +9558,8 @@ switch ($action) {
                 $a4 = is_array($a4) ? $a4 : [];
                 $out['att_sample'][] = ['keys'=>array_keys($a4),
                     'entity_key'=>$a4['entity_key'] ?? null, 'entity_id'=>$a4['entity_id'] ?? null,
-                    'name'=>$a4['name'] ?? null, 'id'=>$a4['id'] ?? null];
+                    'name'=>$a4['name'] ?? null, 'id'=>$a4['id'] ?? null,
+                    'EntityAttachment'=>$a4['EntityAttachment'] ?? null];
             }
             $out['att_count'] = count($att4);
             $out['pay_probe'] = $probe;
