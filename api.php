@@ -10173,6 +10173,25 @@ switch ($action) {
         if ($rv2 = $conn->query("SELECT COALESCE(verdict,'قيد القراءة') v, COUNT(*) n
                     FROM recovery_files GROUP BY verdict"))
             while ($vy = $rv2->fetch_assoc()) $out['recovery']['verdicts'][$vy['v']] = (int)$vy['n'];
+        // تقاطع الطريقتين: القراءة البصرية مقابل نافذة الرفع الزمنية
+        $mp = __DIR__ . '/recovery_map.json';
+        if (is_file($mp)) {
+            $map = json_decode((string)file_get_contents($mp), true) ?: [];
+            $byFile = []; foreach ($map as $m) $byFile[(string)($m['file'] ?? '')] = (string)($m['no'] ?? '');
+            $agree = 0; $clash = 0; $onlyTime = 0; $onlyEye = 0;
+            if ($rq = $conn->query("SELECT rf.file_name, rf.verdict, rf.status, d.no
+                    FROM recovery_files rf LEFT JOIN dmirror_purchases d ON d.id = rf.match_id")) {
+                while ($rx = $rq->fetch_assoc()) {
+                    $mine = $byFile[$rx['file_name']] ?? null;
+                    $eye  = ($rx['verdict'] === 'مؤكد') ? (string)$rx['no'] : null;
+                    if ($mine !== null && $eye !== null) { if ($mine === $eye) $agree++; else $clash++; }
+                    elseif ($mine !== null) $onlyTime++;
+                    elseif ($eye !== null) $onlyEye++;
+                }
+            }
+            $out['crosscheck'] = ['تتفق الطريقتان'=>$agree, 'تتعارضان'=>$clash,
+                'بالزمن فقط'=>$onlyTime, 'بالبصر فقط'=>$onlyEye];
+        }
         $out['attachment_kinds'] = [];
         if ($kr = $conn->query("SELECT COALESCE(entity_key,'—') k, COUNT(*) n FROM dmirror_attachments
                                 GROUP BY entity_key ORDER BY n DESC"))
