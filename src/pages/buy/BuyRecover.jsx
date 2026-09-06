@@ -61,11 +61,11 @@ export default function BuyRecover({ onClose }) {
         load();
     };
 
-    const scan = async () => {
+    const scan = async (rescan = false) => {
         setBusy('scan'); setErr('');
         try {
             for (let i = 0; i < 200; i++) {
-                const r = await fetch(`${API_URL}?action=recover_scan&limit=3`,
+                const r = await fetch(`${API_URL}?action=recover_scan&limit=3${rescan ? '&rescan=1' : ''}`,
                     { headers: auth(), cache: 'no-store' }).then(x => x.json());
                 if (!r.success) { setErr(r.message || 'تعذر القراءة'); break; }
                 setProg({ done: r.scanned, total: r.remaining + r.scanned, msg: r.message });
@@ -109,6 +109,11 @@ export default function BuyRecover({ onClose }) {
                     <input type="file" multiple accept=".pdf,image/*" className="hidden"
                         onChange={pick} disabled={!!busy} />
                 </label>
+
+                <button onClick={() => scan(true)} disabled={!!busy}
+                    className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    <ScanLine size={14} /> أعد قراءة الإيصالات البنكية
+                </button>
 
                 <button onClick={scan} disabled={!!busy}
                     className="w-full min-h-[48px] rounded-2xl bg-[#c5a059]/15 text-[#c5a059] text-[13px] font-black flex items-center justify-center gap-2 disabled:opacity-60">

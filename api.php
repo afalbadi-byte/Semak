@@ -7495,9 +7495,15 @@ switch ($action) {
         set_time_limit(240);
         $take = min(6, max(1, (int)($_GET['limit'] ?? 3)));
 
+        // rescan=1 يعيد قراءة ما جاء مُصدِره بنكاً — تلك ضاع المستفيد منها
+        $where = !empty($_GET['rescan'])
+               ? "status='pending' AND ocr_at IS NOT NULL AND (ocr_sup LIKE '%راجحي%'
+                   OR ocr_sup LIKE '%Rajhi%' OR ocr_sup LIKE '%بنك%' OR ocr_sup LIKE '%مصرف%'
+                   OR ocr_sup LIKE '%Bank%' OR COALESCE(ocr_sup,'') = '')"
+               : "ocr_at IS NULL";
         $todo = [];
         if ($r = $conn->query("SELECT id, file_name, drive_url FROM recovery_files
-                               WHERE ocr_at IS NULL AND COALESCE(drive_url,'') <> '' ORDER BY id LIMIT $take"))
+                               WHERE $where AND COALESCE(drive_url,'') <> '' ORDER BY id LIMIT $take"))
             while ($x = $r->fetch_assoc()) $todo[] = $x;
 
         // الفواتير مرة واحدة لكل دفعة
@@ -7521,7 +7527,9 @@ switch ($action) {
                   : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mime,'data'=>$data]];
             $sys  = "اقرأ المستند وأعد JSON فقط: {\"kind\":\"invoice|receipt|other\",\"supplier\":\"اسم الجهة المُصدِرة\","
                   . "\"no\":\"رقم المستند\",\"total\":رقم,\"date\":\"YYYY-MM-DD\"}.\n"
-                  . "supplier = اسم الشركة التي أصدرت المستند، لا اسم المشتري (سماك الخير / سمك العمارة هي المشتري).\n"
+                  . "supplier = الطرف المقابل لنا، لا سماك الخير ولا سمك العمارة (نحن المشتري).\n"
+                  . "في الفاتورة: الشركة المُصدِرة. وفي إيصال التحويل: اسم المستفيد لا اسم البنك —\n"
+                  . "البنك وسيط لا مورد؛ فإن لم يظهر إلا اسم البنك فاجعل supplier فارغاً.\n"
                   . "total = الإجمالي النهائي شامل الضريبة. ما لا تجده اجعله null. لا تخترع شيئاً.";
             $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>400, 'system'=>$sys,
                 'messages'=>[['role'=>'user','content'=>[$blk, ['type'=>'text','text'=>'استخرج البيانات.']]]]];
