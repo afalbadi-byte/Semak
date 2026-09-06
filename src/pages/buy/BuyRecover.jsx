@@ -13,6 +13,7 @@ const VERDICT = {
     'يحتاج مراجعة': 'bg-fuchsia-500/15 text-fuchsia-300',
     'مرشّح':    'bg-amber-500/15 text-amber-300',
     'متعدد':    'bg-sky-500/15 text-sky-300',
+    'قيد مصروف': 'bg-indigo-500/15 text-indigo-300',
     'نسخة مكررة': 'bg-slate-500/15 text-slate-300',
     'بلا دليل': 'bg-white/10 text-slate-400',
 };
@@ -96,6 +97,17 @@ export default function BuyRecover({ onClose }) {
 
     const [plan, setPlan] = useState(null);      // معاينة الربط الجماعي قبل الكتابة
     const [batch, setBatch] = useState(null);    // رقم آخر دفعة، للتراجع
+
+    // مرآتنا لا تحمل إلا فواتير الشراء، فما لا يطابقها يبدو «بلا دليل» ظلماً
+    const pullExpenses = async () => {
+        setErr(''); setBusy('exp');
+        try {
+            const r = await fetch(`${API_URL}?action=expense_sync`, { headers: auth() }).then(x => x.json());
+            if (!r.success) setErr(r.message || 'تعذر جلب المصروفات');
+            else { setErr(''); await load(); }
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(''); }
+    };
 
     const preview = async () => {
         setErr(''); setBusy('plan');
@@ -231,6 +243,12 @@ export default function BuyRecover({ onClose }) {
                     className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                     {busy === 'rematch' ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
                     أعد المطابقة (بلا قراءة — لحظي)
+                </button>
+
+                <button onClick={pullExpenses} disabled={!!busy}
+                    className="w-full min-h-[44px] rounded-xl bg-indigo-500/15 text-indigo-300 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    {busy === 'exp' ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
+                    اجلب المصروفات من دفترة (تفسّر «بلا دليل»)
                 </button>
 
                 <button onClick={() => scan(true)} disabled={!!busy}

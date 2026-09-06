@@ -1370,6 +1370,24 @@ $conn->query("CREATE TABLE IF NOT EXISTS refund_documents (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (43)");
 } // end DDL v43
+// ─── DDL v44: مرآة المصروفات — مالٌ خرج بقيدٍ ليس فاتورة شراء ────────────────
+if ($__sv < 44) {
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_expenses (
+    id         INT PRIMARY KEY,
+    no         VARCHAR(40) DEFAULT NULL,
+    date       DATE DEFAULT NULL,
+    party      VARCHAR(255) DEFAULT NULL,
+    category   VARCHAR(255) DEFAULT NULL,
+    amount     DECIMAL(14,3) NOT NULL DEFAULT 0,
+    treasury   VARCHAR(120) DEFAULT NULL,
+    note       VARCHAR(400) DEFAULT NULL,
+    created    DATETIME DEFAULT NULL,
+    raw        MEDIUMTEXT,
+    synced_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (date), INDEX (amount)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (44)");
+} // end DDL v44
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -1480,7 +1498,7 @@ function daftra_ext_of($ct, $fallbackName = '') {
 // نقبله ونُظهره بدل أن نُسقط مطابقة صحيحة.
 // يُرفع هذا الرقم مع كل تعديل على قواعد المطابقة أدناه، فتُعاد المطابقة تلقائياً
 // عند أول فتح للصفحة. القاعدة الجديدة لا تنفع إن ظلت النتائج القديمة معروضة.
-define('RECOVERY_RULES_VER', 7);
+define('RECOVERY_RULES_VER', 8);
 
 // تحذير نوع المستند: يُقرأ من اسمه ورقمه، فالمبلغ وحده لا يميّز عرض السعر من الفاتورة
 function recovery_doc_warn($fileName, $ocrNo) {
@@ -1489,6 +1507,21 @@ function recovery_doc_warn($fileName, $ocrNo) {
         return 'إشعار مرتجع لا فاتورة — سجّله في المرتجعات';
     if (preg_match('/عرض سعر|عرض[ _-]?السعر|quotation|\bqtn\b|\bquote\b|estimate|proforma/u', $t))
         return 'عرض سعر لا فاتورة — لا يصلح نسخةً للأصل';
+    return '';
+}
+
+// «بلا دليل» تعني: لا فاتورة شراء. وقد يكون للمبلغ قيدٌ آخر — مصروف مثلاً.
+// نبحث عنه ونسمّيه، كي لا يُقرأ الوسم كأن المال خرج بلا قيد.
+function recovery_expense_hint($conn, $tot, $dt) {
+    if ($tot === null) return '';
+    $lo = $tot - 0.02; $hi = $tot + 0.02;
+    $w  = "amount BETWEEN $lo AND $hi";
+    if ($dt) $w .= " AND ABS(DATEDIFF(date, '" . $conn->real_escape_string($dt) . "')) <= 7";
+    if ($r = $conn->query("SELECT no, date, party, category, ROUND(amount,2) amount
+                           FROM dmirror_expenses WHERE $w ORDER BY ABS(amount - $tot) LIMIT 1"))
+        if ($x = $r->fetch_assoc())
+            return 'مصروف مطابق: ' . ($x['category'] ?: $x['party'] ?: ('رقم ' . $x['no']))
+                 . ' بتاريخ ' . $x['date'];
     return '';
 }
 
@@ -1527,6 +1560,9 @@ function recovery_rematch_all($conn) {
         // مطابق تماماً لكنه ليس من نوع الفاتورة: لا يُقدَّم كأنه الأصل المفقود
         [$verdict, $ev] = recovery_verdict_fix($conn, $verdict, $mid, $ev,
             $rw['file_name'] ?? '', $rw['ocr_no'] ?? '');
+        if ($verdict === 'بلا دليل' && ($h = recovery_expense_hint($conn, $tot, $rw['ocr_date']))) {
+            $verdict = 'قيد مصروف'; $ev = $h;
+        }
         $conn->query("UPDATE recovery_files SET verdict='" . $E($verdict) . "',
                 match_id=" . ($mid === null ? 'NULL' : (int)$mid) . ", match_no='" . $E($mno) . "',
                 evidence='" . $E($ev) . "', cands='" . $E(json_encode($cands, JSON_UNESCAPED_UNICODE)) . "'
@@ -7832,7 +7868,7 @@ switch ($action) {
             while ($x = $r->fetch_assoc()) $sum[$x['verdict'] ?: 'قيد القراءة'] = (int)$x['n'];
         if ($r = $conn->query("SELECT id, file_name, drive_url, ocr_kind, ocr_sup, ocr_no, ocr_total, ocr_date,
                     verdict, match_id, match_no, evidence, cands, status
-                FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'خطأ في القيد','مؤكد','مرجّح','يحتاج مراجعة','متعدد','مرشّح','نسخة مكررة','بلا دليل'), id LIMIT 200"))
+                FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'خطأ في القيد','مؤكد','مرجّح','يحتاج مراجعة','متعدد','مرشّح','قيد مصروف','نسخة مكررة','بلا دليل'), id LIMIT 200"))
             while ($x = $r->fetch_assoc()) { $x['cands'] = json_decode($x['cands'] ?: '[]', true); $rows[] = $x; }
         echo json_encode(['success'=>true, 'summary'=>$sum, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
@@ -9432,6 +9468,58 @@ switch ($action) {
         $conn->query("UPDATE dmirror_refunds SET attachments = (SELECT COUNT(*) FROM refund_documents WHERE refund_id=$rid)
                       WHERE id=$rid");
         echo json_encode(['success'=>true, 'message'=>'أُرفق المستند'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'expense_sync': {
+        // المصروفات من دفترة — القيود التي ليست فواتير شراء
+        set_time_limit(120);
+        $dk = "__DAFTRA_KEY__";
+        $E  = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $added = 0; $seen = 0; $pages = 0;
+        for ($page = 1; $page <= 20; $page++) {
+            $ch = curl_init("https://semak.daftra.com/api2/expenses.json?page=$page&limit=100");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>25,
+                CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            if ($code !== 200 || !$res) break;
+            $d = json_decode($res, true) ?: [];
+            $rows = is_array($d['data'] ?? null) ? $d['data'] : [];
+            if (!$rows) break;
+            $pages++;
+            foreach ($rows as $it) {
+                $p = $it['Expense'] ?? $it;
+                if (empty($p['id'])) continue;
+                $seen++;
+                $date = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($p['date'] ?? ''))
+                      ? substr($p['date'], 0, 10) : null;
+                $amt  = abs((float)($p['amount'] ?? $p['total'] ?? 0));
+                $conn->query("INSERT INTO dmirror_expenses (id,no,date,party,category,amount,treasury,note,created,raw)
+                    VALUES (" . (int)$p['id'] . ", '" . $E((string)($p['no'] ?? $p['code'] ?? '')) . "',
+                        " . ($date ? "'$date'" : 'NULL') . ",
+                        '" . $E(mb_substr((string)($p['staff_name'] ?? $p['party'] ?? $p['supplier'] ?? ''), 0, 240)) . "',
+                        '" . $E(mb_substr((string)($p['category_name'] ?? $p['category'] ?? ''), 0, 240)) . "',
+                        $amt, '" . $E(mb_substr((string)($p['treasury_name'] ?? ''), 0, 110)) . "',
+                        '" . $E(mb_substr((string)($p['description'] ?? $p['notes'] ?? ''), 0, 390)) . "',
+                        " . (!empty($p['created']) ? "'" . $E($p['created']) . "'" : 'NULL') . ",
+                        '" . $E(json_encode($p, JSON_UNESCAPED_UNICODE)) . "')
+                    ON DUPLICATE KEY UPDATE no=VALUES(no), date=VALUES(date), party=VALUES(party),
+                        category=VALUES(category), amount=VALUES(amount), treasury=VALUES(treasury),
+                        note=VALUES(note), raw=VALUES(raw)");
+                if (!$conn->errno) $added++;
+            }
+            if (count($rows) < 100) break;
+        }
+        $tot = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_expenses"))
+            if ($x = $r->fetch_assoc()) $tot = (int)$x['n'];
+        // القاعدة تغيّرت فعلياً: مصروفٌ جديد قد يفسّر ملفاً كان «بلا دليل»
+        $conn->query("DELETE FROM daftra_config WHERE k='recovery_rules_ver'");
+        $conn->query("INSERT INTO daftra_sync_log (entity, count, synced_at, synced_by)
+                      VALUES ('expenses', $seen, NOW(), 'app')
+                      ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW()");
+        echo json_encode(['success'=>true, 'pages'=>$pages, 'checked'=>$seen, 'stored'=>$added,
+            'total'=>$tot, 'message'=>"جُلب $seen مصروفا — المجموع عندنا $tot"], JSON_UNESCAPED_UNICODE);
         break;
     }
 
