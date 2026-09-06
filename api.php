@@ -9605,6 +9605,23 @@ switch ($action) {
                     'files'=>array_slice(array_values(array_unique($m5[1] ?? [])), 0, 10)];
             }
             $out['pay_ids'] = $payIds;
+            // بدل تخمين مسار نافذة «عرض»: نقرؤه من كود الصفحة نفسها
+            $c6 = curl_init("https://semak.daftra.com/owner/purchase_invoices/view/$pidP/payments_block:1");
+            curl_setopt_array($c6, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                CURLOPT_TIMEOUT=>25, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
+                CURLOPT_HTTPHEADER=>['Cookie: ' . $ck2, 'Accept: */*', 'X-Requested-With: XMLHttpRequest',
+                    'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']]);
+            $h6 = (string)curl_exec($c6); curl_close($c6);
+            $urls = [];
+            preg_match_all('#[\"\']((?:/|https?://)[^\"\' >]{6,160})[\"\']#', $h6, $mu);
+            foreach ($mu[1] ?? [] as $uu) {
+                $l = strtolower($uu);
+                if (strpos($l, '.css') !== false || strpos($l, '.js') !== false
+                    || strpos($l, '.png') !== false || strpos($l, '.svg') !== false) continue;
+                if (strpos($l, 'payment') !== false || strpos($l, 'attach') !== false
+                    || strpos($l, 'file') !== false || strpos($l, 'entity') !== false) $urls[] = $uu;
+            }
+            $out['block_urls'] = array_slice(array_values(array_unique($urls)), 0, 30);
             $out['pay_routes'] = $pv;
             $out['pay_probe'] = $probe;
         }
