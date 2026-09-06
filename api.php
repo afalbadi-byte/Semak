@@ -7633,14 +7633,14 @@ switch ($action) {
         $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $marked = 0; $missing = 0; $already = 0;
         foreach ($map as $m) {
-            $fn  = (string)($m['file'] ?? '');
+            $fn  = (string)($m['sha1'] ?? '');
             $no  = (string)($m['no'] ?? '');
             if ($fn === '' || $no === '') continue;
             $iv = null;
             if ($r = $conn->query("SELECT id, no FROM dmirror_purchases WHERE no='" . $E($no) . "' LIMIT 1")) $iv = $r->fetch_assoc();
             if (!$iv) { $missing++; continue; }
             $rf = null;
-            if ($r = $conn->query("SELECT id, status FROM recovery_files WHERE file_name='" . $E($fn) . "' LIMIT 1")) $rf = $r->fetch_assoc();
+            if ($r = $conn->query("SELECT id, status FROM recovery_files WHERE sha1='" . $E($fn) . "' LIMIT 1")) $rf = $r->fetch_assoc();
             if (!$rf) { $missing++; continue; }
             if (($rf['status'] ?? '') !== 'pending') { $already++; continue; }
             $kind = (($m['type'] ?? '') === 'إيصال سداد') ? 'receipt' : 'invoice';
@@ -10177,12 +10177,12 @@ switch ($action) {
         $mp = __DIR__ . '/recovery_map.json';
         if (is_file($mp)) {
             $map = json_decode((string)file_get_contents($mp), true) ?: [];
-            $byFile = []; foreach ($map as $m) $byFile[(string)($m['file'] ?? '')] = (string)($m['no'] ?? '');
+            $byFile = []; foreach ($map as $m) $byFile[(string)($m['sha1'] ?? '')] = (string)($m['no'] ?? '');
             $agree = 0; $clash = 0; $onlyTime = 0; $onlyEye = 0;
-            if ($rq = $conn->query("SELECT rf.file_name, rf.verdict, rf.status, d.no
+            if ($rq = $conn->query("SELECT rf.sha1, rf.verdict, rf.status, d.no
                     FROM recovery_files rf LEFT JOIN dmirror_purchases d ON d.id = rf.match_id")) {
                 while ($rx = $rq->fetch_assoc()) {
-                    $mine = $byFile[$rx['file_name']] ?? null;
+                    $mine = $byFile[$rx['sha1']] ?? null;
                     $eye  = ($rx['verdict'] === 'مؤكد') ? (string)$rx['no'] : null;
                     if ($mine !== null && $eye !== null) { if ($mine === $eye) $agree++; else $clash++; }
                     elseif ($mine !== null) $onlyTime++;
