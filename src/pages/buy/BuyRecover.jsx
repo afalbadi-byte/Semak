@@ -32,7 +32,7 @@ export default function BuyRecover({ onClose }) {
             const r = await fetch(`${API_URL}?action=recover_list&status=pending`
                 + (filter ? `&verdict=${encodeURIComponent(filter)}` : ''), { headers: auth() })
                 .then(x => x.json());
-            if (r.success) { setRows(r.data || []); setSum(r.summary || {}); }
+            if (r.success) { setRows(r.data || []); setSum(r.summary || {}); setGap(r.gap || null); }
         } catch { /* الشبكة — تُعالج عند الرفع */ }
     }, [filter]);
 
@@ -95,6 +95,7 @@ export default function BuyRecover({ onClose }) {
         finally { setBusy(''); }
     };
 
+    const [gap, setGap] = useState(null);        // الفجوة الحقيقية لا الأحكام
     const [plan, setPlan] = useState(null);      // معاينة الربط الجماعي قبل الكتابة
     const [batch, setBatch] = useState(null);    // رقم آخر دفعة، للتراجع
 
@@ -166,6 +167,31 @@ export default function BuyRecover({ onClose }) {
                     يُقرأ كل ملف بصرياً، ولا يُقترح ربطه بفاتورة إلا حين يتفق الإجمالي واسم المورد والتاريخ معاً.
                     ولا يُربط شيء إلا بتأكيدك أنت.
                 </p>
+
+                {gap && (
+                    <div className="rounded-2xl bg-white/[0.05] border border-white/10 p-3 space-y-2">
+                        <div className="text-[12px] font-black">الفجوة الحقيقية</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-xl bg-amber-500/10 p-2.5">
+                                <div className="text-[10px] text-amber-300">فواتير بلا أصل</div>
+                                <div className="text-[17px] font-black tabular-nums">{gap.missing}</div>
+                                <div className="text-[10px] text-slate-400 tabular-nums">
+                                    {money(gap.missing_amount)} ريال
+                                </div>
+                            </div>
+                            <div className="rounded-xl bg-emerald-500/10 p-2.5">
+                                <div className="text-[10px] text-emerald-300">فواتير أعاد الاسترجاع أصلها</div>
+                                <div className="text-[17px] font-black tabular-nums">{gap.recovered}</div>
+                                <div className="text-[10px] text-slate-400 tabular-nums">
+                                    {gap.linked_files} ملفاً مربوطاً
+                                </div>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                            من أصل {gap.invoices} فاتورة. «بلا أصل» = لا مستند مورد عندنا ولا مرفق في دفترة.
+                        </p>
+                    </div>
+                )}
 
                 <label className="w-full min-h-[52px] rounded-2xl border border-dashed border-white/20 flex items-center justify-center gap-2 active:bg-white/5">
                     <Upload size={16} className="text-[#c5a059]" />

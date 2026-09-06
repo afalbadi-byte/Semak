@@ -7870,7 +7870,29 @@ switch ($action) {
                     verdict, match_id, match_no, evidence, cands, status
                 FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'خطأ في القيد','مؤكد','مرجّح','يحتاج مراجعة','متعدد','مرشّح','قيد مصروف','نسخة مكررة','بلا دليل'), id LIMIT 200"))
             while ($x = $r->fetch_assoc()) { $x['cands'] = json_decode($x['cands'] ?: '[]', true); $rows[] = $x; }
-        echo json_encode(['success'=>true, 'summary'=>$sum, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        // الفجوة الحقيقية: كم فاتورة بلا أصل، وكم أصلاً أعاده الاسترجاع.
+        // الأحكام والنسب لا تقيس شيئاً؛ هذا هو المقياس.
+        $gap = ['invoices'=>0, 'missing'=>0, 'missing_amount'=>0, 'recovered'=>0, 'linked_files'=>0];
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_purchases"))
+            if ($x = $r->fetch_assoc()) $gap['invoices'] = (int)$x['n'];
+        if ($r = $conn->query("SELECT COUNT(*) n, ROUND(COALESCE(SUM(p.total),0),2) amt
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_documents d ON d.purchase_id = p.id AND d.doc_type='invoice'
+                     AND COALESCE(d.source,'') <> 'daftra_pdf'
+                LEFT JOIN dmirror_attachments a ON a.entity_id = p.id
+                     AND a.entity_key IN ('purchase_order','purchase_invoice')
+                WHERE d.id IS NULL AND a.file_id IS NULL"))
+            if ($x = $r->fetch_assoc()) {
+                $gap['missing'] = (int)$x['n'];
+                $gap['missing_amount'] = (float)$x['amt'];
+            }
+        if ($r = $conn->query("SELECT COUNT(DISTINCT purchase_id) n FROM purchase_documents
+                               WHERE source='recovered'"))
+            if ($x = $r->fetch_assoc()) $gap['recovered'] = (int)$x['n'];
+        if ($r = $conn->query("SELECT COUNT(*) n FROM recovery_files WHERE status='linked'"))
+            if ($x = $r->fetch_assoc()) $gap['linked_files'] = (int)$x['n'];
+
+        echo json_encode(['success'=>true, 'summary'=>$sum, 'gap'=>$gap, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
     }
 
