@@ -25,6 +25,8 @@ export default function BuyRecords() {
     const [more, setMore] = useState(false);
     const [proof, setProof] = useState(null);        // تدقيق إثباتات الدفعات
     const [onlyGap, setOnlyGap] = useState(true);
+    const [rcp, setRcp] = useState(null);      // معاينة ربط الإيصالات المقروءة بدفعاتها
+    const [rcpBusy, setRcpBusy] = useState('');
     const view = rows;
     // تبويب الدفعات مستقل: يقرأ تدقيق الإثباتات لا قائمة الفواتير
     useEffect(() => {
@@ -38,6 +40,19 @@ export default function BuyRecords() {
             .finally(() => live && setBusy(false));
         return () => { live = false; };
     }, [tab, onlyGap]);
+
+    // الإيصالات المقروءة سلفاً تُربط بدفعاتها بالمبلغ واليوم — لا بالفواتير
+    const rcpRun = async (apply) => {
+        setRcpBusy(apply ? 'apply' : 'plan');
+        try {
+            const r = await fetch(`${API_URL}?action=pay_receipt_from_files${apply ? '&apply=1' : ''}`,
+                { headers: auth() }).then(x => x.json());
+            if (!r.success) { alert(r.message || 'تعذر الربط'); return; }
+            if (apply) { setRcp(null); setProof(null); setOnlyGap(g => g); }
+            else setRcp(r);
+        } catch { alert('تعذر الاتصال'); }
+        finally { setRcpBusy(''); }
+    };
 
     const SORTS = tab === 'invoices'
         ? [{ k: 'date', t: 'التاريخ' }, { k: 'gross', t: 'المبلغ' }, { k: 'remaining', t: 'المتبقي' },
@@ -127,9 +142,52 @@ export default function BuyRecords() {
                                     <div className="text-[10px] text-slate-400 tabular-nums">{money(proof.amount_without_proof)}</div>
                                 </div>
                             </div>
+                            {Number(proof.unchecked) > 0 && (
+                                <div className="rounded-xl bg-slate-500/10 p-2.5">
+                                    <div className="text-[11px] text-slate-300">لم تُفحص بعد</div>
+                                    <div className="text-[15px] font-black tabular-nums">{proof.unchecked}</div>
+                                    <div className="text-[10px] text-slate-400 tabular-nums">{money(proof.amount_unchecked)}</div>
+                                </div>
+                            )}
                             <p className="text-[10px] text-slate-500 leading-relaxed">
-                                الإثبات: إيصال مرفوع على الدفعة، أو مستند إيصال على فاتورتها، أو مرفق في دفترة عليها.
+                                الإثبات: مرفق الدفعة في دفترة، أو إيصال مربوط بها عندنا، أو مستند إيصال على فاتورتها.
                             </p>
+
+                            {!rcp && (
+                                <button onClick={() => rcpRun(false)} disabled={!!rcpBusy}
+                                    className="w-full min-h-[42px] rounded-xl bg-emerald-500/15 text-emerald-300 text-[12px] font-black disabled:opacity-60">
+                                    {rcpBusy === 'plan' ? '…' : 'اربط الإيصالات المقروءة بدفعاتها'}
+                                </button>
+                            )}
+                            {rcp && (
+                                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-2.5 space-y-2">
+                                    <div className="text-[12px] font-black text-emerald-200">
+                                        {rcp.would_link} إيصالاً يطابق دفعةً واحدة
+                                    </div>
+                                    <div className="text-[10px] text-slate-400">
+                                        من {rcp.files} ملفاً مقروءاً · دفعات بلا إثبات {rcp.payments_open}
+                                        {rcp.ambiguous > 0 && ` · ملتبس ${rcp.ambiguous}`}
+                                        {rcp.no_match > 0 && ` · بلا دفعة ${rcp.no_match}`}
+                                    </div>
+                                    <div className="max-h-[180px] overflow-y-auto space-y-0.5">
+                                        {(rcp.rows || []).map((x, i) => (
+                                            <div key={i} className="text-[10px] text-slate-300 flex gap-2">
+                                                <span className="truncate flex-1">{x.file}</span>
+                                                <span className="shrink-0 text-emerald-300 tabular-nums">{money(x.amount)}</span>
+                                                <span className="shrink-0 text-slate-500 truncate max-w-[90px]">{x.supplier}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => rcpRun(true)} disabled={!!rcpBusy || !rcp.would_link}
+                                            className="flex-1 min-h-[40px] rounded-xl bg-emerald-500 text-[#04140c] text-[12px] font-black disabled:opacity-50">
+                                            {rcpBusy === 'apply' ? '…' : `نفّذ (${rcp.would_link})`}
+                                        </button>
+                                        <button onClick={() => setRcp(null)}
+                                            className="px-4 min-h-[40px] rounded-xl bg-white/10 text-[12px] font-bold">إلغاء</button>
+                                    </div>
+                                </div>
+                            )}
                             <button onClick={() => setOnlyGap(v => !v)}
                                 className="w-full h-[40px] rounded-xl bg-white/10 text-[12px] font-bold">
                                 {onlyGap ? 'اعرض كل الدفعات' : 'اعرض الناقصة فقط'}
@@ -153,8 +211,10 @@ export default function BuyRecords() {
                                     <div className="text-left shrink-0">
                                         <div className="text-[15px] font-black tabular-nums">{money(r.amount)}</div>
                                         <div className={'text-[10px] font-bold ' +
-                                            (Number(r.has_proof) ? 'text-emerald-300' : 'text-amber-300')}>
-                                            {Number(r.has_proof) ? 'له إثبات' : 'بلا إثبات'}
+                                            (Number(r.has_proof) ? 'text-emerald-300'
+                                                : Number(r.unchecked) ? 'text-slate-400' : 'text-amber-300')}>
+                                            {Number(r.has_proof) ? 'له إثبات'
+                                                : Number(r.unchecked) ? 'لم يُفحص' : 'بلا إثبات'}
                                         </div>
                                     </div>
                                 </div>

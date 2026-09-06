@@ -7766,6 +7766,135 @@ switch ($action) {
         break;
     }
 
+    case 'pay_receipt_from_files': {
+        // إيصالات التحويل التي قرأناها بصرياً تُربط بدفعاتها لا بفواتيرها.
+        // الدفعة لها مبلغ ويوم محددان، والإيصال كذلك — فالمطابقة هنا قاطعة:
+        // نفس الهللة ونفس اليوم وتفرّد الطرفين. لا أسماء ولا تقريب.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الربط'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(180);
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $apply = !empty($_GET['apply']);
+        $slack = min(3, max(0, (int)($_GET['days'] ?? 1)));   // فارق أيام مسموح بين البنك والقيد
+
+        // الملفات المقروءة التي لم تُربط بدفعة بعد
+        $files = [];
+        if ($r = $conn->query("SELECT rf.id, rf.file_name, rf.drive_url, rf.file_size, rf.ocr_sup,
+                        ROUND(rf.ocr_total,2) amt, rf.ocr_date
+                    FROM recovery_files rf
+                    LEFT JOIN purchase_documents pd ON pd.file_name = rf.file_name AND pd.payment_id IS NOT NULL
+                    WHERE rf.ocr_total IS NOT NULL AND rf.ocr_date IS NOT NULL
+                      AND COALESCE(rf.drive_url,'') <> '' AND pd.id IS NULL"))
+            while ($x = $r->fetch_assoc()) $files[] = $x;
+
+        // الدفعات التي لا إثبات لها بعد — من مرآة دفترة ومن دفعاتنا
+        $pays = [];
+        if ($r = $conn->query("SELECT m.id, m.purchase_id, ROUND(m.amount,2) amt, m.date,
+                        COALESCE(p.supplier,'') supplier, COALESCE(p.no,'') inv_no, 'daftra' srck
+                    FROM dmirror_payments m
+                    LEFT JOIN dmirror_purchases p ON p.id = m.purchase_id
+                    LEFT JOIN purchase_documents pd ON pd.payment_id = m.id AND pd.payment_src='daftra'
+                    WHERE m.date IS NOT NULL AND m.amount > 0
+                      AND COALESCE(m.attachment,'') = '' AND COALESCE(m.receipt_url,'') = ''
+                      AND pd.id IS NULL"))
+            while ($x = $r->fetch_assoc()) $pays[] = $x;
+        if ($r = $conn->query("SELECT pp.id, pp.purchase_id, ROUND(pp.amount,2) amt, pp.pay_date date,
+                        COALESCE(pp.supplier, p.supplier, '') supplier, COALESCE(p.no,'') inv_no, 'local' srck
+                    FROM purchase_payments pp
+                    LEFT JOIN dmirror_purchases p ON p.id = pp.purchase_id
+                    LEFT JOIN purchase_documents pd ON pd.payment_id = pp.id AND pd.payment_src='local'
+                    WHERE pp.pay_date IS NOT NULL AND pp.amount > 0
+                      AND COALESCE(pp.receipt_url,'') = '' AND pd.id IS NULL"))
+            while ($x = $r->fetch_assoc()) $pays[] = $x;
+
+        $day = function($d) { return (int)floor(strtotime($d) / 86400); };
+        $take = []; $multi = 0; $none = 0;
+        $claimed = [];      // دفعة لا تُربط بملفين
+        $pairs = [];
+        foreach ($files as $fi) {
+            $hit = [];
+            foreach ($pays as $py) {
+                if (abs((float)$fi['amt'] - (float)$py['amt']) > 0.02) continue;
+                if (abs($day($fi['ocr_date']) - $day($py['date'])) > $slack) continue;
+                $hit[] = $py;
+            }
+            if (count($hit) === 1) $pairs[] = ['f'=>$fi, 'p'=>$hit[0]];
+            elseif (count($hit) > 1) $multi++;
+            else $none++;
+        }
+        // تفرّد في الاتجاه الآخر أيضاً: ملفان يقصدان دفعة واحدة يُسقطان معاً
+        $byPay = [];
+        foreach ($pairs as $pr) { $k = $pr['p']['srck'] . ':' . $pr['p']['id']; $byPay[$k] = ($byPay[$k] ?? 0) + 1; }
+        foreach ($pairs as $pr) {
+            $k = $pr['p']['srck'] . ':' . $pr['p']['id'];
+            if ($byPay[$k] > 1) { $multi++; continue; }
+            $take[] = $pr;
+        }
+
+        if (!$apply) {
+            echo json_encode(['success'=>true, 'dry'=>true,
+                'files'=>count($files), 'payments_open'=>count($pays),
+                'would_link'=>count($take), 'ambiguous'=>$multi, 'no_match'=>$none,
+                'rows'=>array_map(function($x) {
+                    return ['file'=>$x['f']['file_name'], 'amount'=>(float)$x['f']['amt'],
+                            'date'=>$x['f']['ocr_date'], 'supplier'=>$x['p']['supplier'],
+                            'invoice'=>$x['p']['inv_no'], 'src'=>$x['p']['srck']];
+                }, array_slice($take, 0, 60))], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
+        $batch = 'PR-' . date('YmdHis');
+        $done = 0;
+        foreach ($take as $pr) {
+            $fi = $pr['f']; $py = $pr['p'];
+            $pid = (int)$py['purchase_id'];
+            if ($pid <= 0) continue;         // دفعة بلا فاتورة لا مكان لمستندها
+            $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, supplier, doc_type,
+                    file_name, drive_url, file_size, source, created_by, note, payment_id, payment_src)
+                VALUES ($pid, '" . $E($py['inv_no']) . "', '" . $E($py['supplier']) . "', 'receipt', '"
+                . $E($fi['file_name']) . "', '" . $E($fi['drive_url']) . "', " . (int)$fi['file_size'] . ",
+                    'receipt-file', '" . $E($u['name'] ?? '') . "',
+                    'ربط إيصال مقروء بدفعته — دفعة " . $E($batch) . "',
+                    " . (int)$py['id'] . ", '" . $E($py['srck']) . "')
+                ON DUPLICATE KEY UPDATE payment_id=VALUES(payment_id), payment_src=VALUES(payment_src),
+                    doc_type='receipt', drive_url=VALUES(drive_url)");
+            if ($conn->errno) continue;
+            $done++;
+        }
+        acc_audit($conn, 1, 'purchase', 0, 'pay_receipt_files',
+            "ربط $done إيصالاً بدفعاته (دفعة $batch)", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'batch'=>$batch, 'linked'=>$done,
+            'ambiguous'=>$multi, 'no_match'=>$none,
+            'message'=>"رُبط $done إيصالاً بدفعاته"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pay_receipt_files_undo': {
+        // تراجع: تُحذف مستندات الدفعة المضافة بهذه الدفعة وحدها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1"))
+            $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية التراجع'], JSON_UNESCAPED_UNICODE); break; }
+        $b = trim((string)($_GET['batch'] ?? ''));
+        if ($b === '') { echo json_encode(['success'=>false,'message'=>'رقم الدفعة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $e = $conn->real_escape_string($b);
+        $conn->query("DELETE FROM purchase_documents WHERE source='receipt-file' AND note LIKE '%$e%'");
+        $n = $conn->affected_rows;
+        acc_audit($conn, 1, 'purchase', 0, 'pay_receipt_files_undo', "تراجع عن دفعة $b ($n مستندا)", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'reverted'=>$n, 'message'=>"أُلغي ربط $n إيصالاً"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pay_proofs': {
         // تدقيق: أي دفعة بلا إيصال يثبتها — الإيصال إمّا رابط على الدفعة أو مستند على فاتورتها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -7776,12 +7905,13 @@ switch ($action) {
         // إثبات الدفعة: رابط إيصال عليها، أو مستند من نوع إيصال على نفس الفاتورة
         // دفعاتنا ودفعات دفترة في مصدر واحد — الأخيرة بلا حقول إيصال
         $src = "(SELECT id, purchase_id, supplier, amount, method, pay_date, reference, bank, receipt_url,
-                        'التطبيق' src, 'local' srck FROM purchase_payments
+                        '' attach, created_at checked_at, 'التطبيق' src, 'local' srck FROM purchase_payments
                  UNION ALL
                  SELECT m.id, m.purchase_id, COALESCE(dp.supplier,'') supplier, m.amount,
                         COALESCE(m.payment_method,'') method,
                         m.date pay_date, COALESCE(m.transaction_id,'') reference, '' bank,
-                        COALESCE(m.receipt_url,'') receipt_url, 'دفترة' src, 'daftra' srck
+                        COALESCE(m.receipt_url,'') receipt_url, COALESCE(m.attachment,'') attach,
+                        m.receipt_pull_at checked_at, 'دفترة' src, 'daftra' srck
                    FROM dmirror_payments m
                    LEFT JOIN dmirror_purchases dp ON dp.id = m.purchase_id)";
         $base = "FROM $src pp
@@ -7798,12 +7928,17 @@ switch ($action) {
                    ON at.entity_id = pp.id AND pp.srck = 'daftra'";
         // إثبات السداد = إيصال، لا الفاتورة. مرفق الفاتورة نفسه لا يُحتسب إثباتاً
         // للدفع، وإلا بدت كل فاتورة لها صورة كأنها مسدّدة بإثبات.
-        $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(pdp.n,0) > 0
-                 OR COALESCE(at.n,0) > 0 OR COALESCE(rc.n,0) > 0)";
+        // مرفق دفترة على الدفعة إثباتٌ كامل — هو الأصل الذي رفعته أنت وقت السداد
+        $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(pp.attach,'') <> ''
+                 OR COALESCE(pdp.n,0) > 0 OR COALESCE(at.n,0) > 0 OR COALESCE(rc.n,0) > 0)";
+        // دفعة لم نفتح تفصيلها قط: لا نقول عنها «بلا إثبات» ولم نبحث فيها
+        $unk = "(NOT $has AND pp.checked_at IS NULL)";
 
         $sum = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(pp.amount),0),2) amount,
                         SUM(CASE WHEN $has THEN 1 ELSE 0 END) with_proof,
-                        ROUND(COALESCE(SUM(CASE WHEN $has THEN pp.amount ELSE 0 END),0),2) amount_with_proof
+                        ROUND(COALESCE(SUM(CASE WHEN $has THEN pp.amount ELSE 0 END),0),2) amount_with_proof,
+                        SUM(CASE WHEN $unk THEN 1 ELSE 0 END) unchecked,
+                        ROUND(COALESCE(SUM(CASE WHEN $unk THEN pp.amount ELSE 0 END),0),2) amount_unchecked
                    $base");
         $s = $sum ? $sum[0] : [];
         $out = ['success'=>true,
@@ -7813,6 +7948,8 @@ switch ($action) {
             'without_proof' => (int)($s['n'] ?? 0) - (int)($s['with_proof'] ?? 0),
             'amount_with_proof'    => (float)($s['amount_with_proof'] ?? 0),
             'amount_without_proof' => round((float)($s['amount'] ?? 0) - (float)($s['amount_with_proof'] ?? 0), 2),
+            'unchecked'        => (int)($s['unchecked'] ?? 0),
+            'amount_unchecked' => (float)($s['amount_unchecked'] ?? 0),
         ];
         $where = ($only === 'missing') ? "WHERE NOT $has" : '';
         $out['rows'] = $Q("SELECT pp.id, pp.purchase_id, COALESCE(d.no,'') invoice_no, pp.src source,
@@ -7820,7 +7957,9 @@ switch ($action) {
                     COALESCE(pp.reference,'') reference, COALESCE(pp.bank,'') bank,
                     COALESCE(pp.receipt_url,'') receipt_url, COALESCE(rc.n,0) receipt_docs,
                     COALESCE(at.n,0) daftra_files, COALESCE(pdp.n,0) payment_receipts,
-                    CASE WHEN $has THEN 1 ELSE 0 END has_proof
+                    CASE WHEN $has THEN 1 ELSE 0 END has_proof,
+                    CASE WHEN $unk THEN 1 ELSE 0 END unchecked,
+                    COALESCE(pp.attach,'') attach
                 $base $where ORDER BY has_proof ASC, pp.amount DESC LIMIT 300");
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
         break;
