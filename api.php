@@ -9646,20 +9646,26 @@ switch ($action) {
 
                 $body = json_encode(['entity_key'=>'purchase_order_payment', 'entity_id'=>$pickPay],
                                     JSON_UNESCAPED_UNICODE);
+                // لارافيل يقبل قيمة كوكي XSRF-TOKEN نفسها في الترويسة
+                $xsrf = '';
+                if (preg_match('/XSRF-TOKEN=([^;]+)/', $ck2, $mx)) $xsrf = urldecode($mx[1]);
                 $cp = curl_init('https://semak.daftra.com/v2/owner/entity/files');
                 curl_setopt_array($cp, [
                     CURLOPT_RETURNTRANSFER=>true, CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>$body,
                     CURLOPT_TIMEOUT=>25, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
                     CURLOPT_FOLLOWLOCATION=>false,
-                    CURLOPT_HTTPHEADER=>['Cookie: ' . $ck2, 'Accept: application/json',
+                    CURLOPT_HTTPHEADER=>array_filter(['Cookie: ' . $ck2, 'Accept: application/json',
                         'Content-Type: application/json', 'X-Requested-With: XMLHttpRequest',
-                        'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)'],
+                        $xsrf !== '' ? 'X-XSRF-TOKEN: ' . $xsrf : null,
+                        'Referer: https://semak.daftra.com/owner/purchase_invoices/view/' . $pidP,
+                        'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']),
                 ]);
                 $pr = curl_exec($cp); $pc = curl_getinfo($cp, CURLINFO_HTTP_CODE); curl_close($cp);
                 $after = $cnt($pidP);
 
                 $out['post_probe'] = [
                     'sent'          => 'POST /v2/owner/entity/files {entity_key, entity_id} — بلا أي ملف',
+                    'xsrf'          => ($xsrf !== ''),
                     'payment'       => $pickPay,
                     'http'          => $pc,
                     'body'          => mb_substr(preg_replace('/\s+/', ' ', (string)$pr), 0, 700),
