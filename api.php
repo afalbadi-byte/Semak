@@ -9562,6 +9562,29 @@ switch ($action) {
                     'EntityAttachment'=>$a4['EntityAttachment'] ?? null];
             }
             $out['att_count'] = count($att4);
+            // نافذة «عرض» للدفعة تُحمَّل بطلب مستقل، ووحدة «مدفوعات الموردين» صفحة قائمة بذاتها
+            $payIds = [];
+            if ($rp = $conn->query("SELECT id FROM dmirror_payments WHERE purchase_id=$pidP ORDER BY id LIMIT 3"))
+                while ($xp = $rp->fetch_assoc()) $payIds[] = (int)$xp['id'];
+            $pv = []; $one = $payIds ? $payIds[0] : 0;
+            $routes = [];
+            if ($one) foreach (['purchase_invoice_payments','purchase_payments','payments','supplier_payments'] as $mod)
+                foreach (['view','preview'] as $act) $routes[] = "/owner/$mod/$act/$one";
+            $routes[] = '/owner/purchase_payments';
+            $routes[] = '/owner/supplier_payments';
+            foreach ($routes as $ru) {
+                $c5 = curl_init('https://semak.daftra.com' . $ru);
+                curl_setopt_array($c5, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                    CURLOPT_TIMEOUT=>25, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
+                    CURLOPT_HTTPHEADER=>['Cookie: ' . $ck2, 'Accept: */*', 'X-Requested-With: XMLHttpRequest',
+                        'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']]);
+                $h5 = curl_exec($c5); $k5 = curl_getinfo($c5, CURLINFO_HTTP_CODE); curl_close($c5);
+                preg_match_all('#files/preview/(\d+)#', (string)$h5, $m5);
+                $pv[] = ['url'=>$ru, 'http'=>$k5, 'len'=>strlen((string)$h5),
+                    'files'=>array_slice(array_values(array_unique($m5[1] ?? [])), 0, 10)];
+            }
+            $out['pay_ids'] = $payIds;
+            $out['pay_routes'] = $pv;
             $out['pay_probe'] = $probe;
         }
         if ($redetail > 0) {
