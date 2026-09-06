@@ -9389,6 +9389,26 @@ switch ($action) {
                       ON DUPLICATE KEY UPDATE count=VALUES(count), synced_at=NOW(), synced_by=VALUES(synced_by)");
         $out = ['success'=>true, 'checked'=>$seen, 'added'=>$added, 'updated'=>$updated,
                 'items_synced'=>$items_done];
+        // فحص: نقطة الدفعات المستقلة قد تحمل المرفقات التي لا ترجع مع الفاتورة
+        if (!empty($_GET['paysrc']) && $need) {
+            $probe = []; $pidP = (int)$need[0];
+            foreach (["purchase_invoice_payments.json?purchase_invoice_id=$pidP",
+                      "purchase_invoice_payments.json?purchase_order_id=$pidP",
+                      "purchase_invoice_payments.json?limit=3",
+                      "purchase_orders/$pidP/payments.json"] as $u2) {
+                $c2 = curl_init("https://semak.daftra.com/api2/$u2");
+                curl_setopt_array($c2, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                    CURLOPT_TIMEOUT=>20, CURLOPT_HTTPHEADER=>["APIKEY: $dk", 'Accept: application/json']]);
+                $r2 = curl_exec($c2); $h2 = curl_getinfo($c2, CURLINFO_HTTP_CODE); curl_close($c2);
+                $j2 = json_decode($r2, true);
+                $first = $j2['data'][0] ?? null;
+                if (is_array($first)) $first = reset($first) ?: $first;
+                $probe[] = ['url'=>$u2, 'http'=>$h2,
+                    'n'=>is_array($j2['data'] ?? null) ? count($j2['data']) : 0,
+                    'keys'=>is_array($first) ? array_slice(array_keys($first), 0, 40) : null];
+            }
+            $out['pay_probe'] = $probe;
+        }
         if ($redetail > 0) {
             $out['payment_keys'] = array_values(array_unique($payKeys));
             $out['payment_attachments'] = array_slice(array_values(array_unique($payAtt)), 0, 8);
