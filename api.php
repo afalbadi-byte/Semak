@@ -1266,6 +1266,14 @@ ensure_column($conn, 'purchase_documents', 'payment_src', "payment_src VARCHAR(1
 $conn->query("ALTER TABLE purchase_documents ADD INDEX idx_pd_payment (payment_id, payment_src)");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (38)");
 } // end DDL v38
+// ─── DDL v39: نتيجة الفرز الآلي للمستندات ───────────────────────────────────
+if ($__sv < 39) {
+ensure_column($conn, 'purchase_documents', 'auto_kind',   "auto_kind VARCHAR(16) DEFAULT NULL");
+ensure_column($conn, 'purchase_documents', 'auto_amount', "auto_amount DECIMAL(14,2) DEFAULT NULL");
+ensure_column($conn, 'purchase_documents', 'auto_date',   "auto_date DATE DEFAULT NULL");
+ensure_column($conn, 'purchase_documents', 'auto_at',     "auto_at DATETIME DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (39)");
+} // end DDL v39
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -7277,6 +7285,105 @@ switch ($action) {
         acc_audit($conn, 1, 'purchase', (int)$old['purchase_id'], 'doc_retype',
             'تصنيف المستند ' . $old['file_name'] . ': ' . $old['doc_type'] . ' ← ' . $ty, $u['name'] ?? '');
         echo json_encode(['success'=>true,'message'=>'حُدّث تصنيف المستند'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'doc_classify_run': {
+        // فرز آلي: المعالج يقرأ كل مستند ويقرر فاتورة أم إيصال، ويستخرج مبلغه وتاريخه.
+        // الربط بدفعة لا يتم إلا بتطابق مبلغ قاطع مع دفعة واحدة بعينها.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية فرز المستندات'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(240);
+        $take = min(8, max(1, (int)($_GET['limit'] ?? 4)));
+
+        $todo = [];
+        if ($r = $conn->query("SELECT id, purchase_id, file_name, COALESCE(drive_url,'') drive_url
+                FROM purchase_documents
+                WHERE auto_at IS NULL AND COALESCE(drive_url,'') <> ''
+                ORDER BY id DESC LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $todo[] = $x;
+
+        $done = 0; $receipts = 0; $linked = 0; $failed = 0; $last = '';
+        foreach ($todo as $d) {
+            $path  = parse_url($d['drive_url'], PHP_URL_PATH);
+            $local = ($path && strpos($path, '/qdocs/') === 0) ? __DIR__ . $path : null;
+            if (!$local || !is_file($local)) { $failed++;
+                $conn->query("UPDATE purchase_documents SET auto_at=NOW(), auto_kind='missing' WHERE id=" . (int)$d['id']);
+                continue; }
+            $ext  = strtolower(pathinfo($local, PATHINFO_EXTENSION));
+            $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg'][$ext] ?? '';
+            if ($mime === '') { $failed++;
+                $conn->query("UPDATE purchase_documents SET auto_at=NOW(), auto_kind='skip' WHERE id=" . (int)$d['id']);
+                continue; }
+            $data = base64_encode((string)file_get_contents($local));
+            $blk  = ($mime === 'application/pdf')
+                  ? ['type'=>'document', 'source'=>['type'=>'base64','media_type'=>'application/pdf','data'=>$data]]
+                  : ['type'=>'image',    'source'=>['type'=>'base64','media_type'=>$mime,'data'=>$data]];
+            $sys = "صنّف المستند. أعد JSON فقط: {\"kind\":\"invoice|receipt|other\",\"amount\":رقم أو null,"
+                 . "\"date\":\"YYYY-MM-DD\" أو null}.\n"
+                 . "invoice = فاتورة أو عرض سعر أو كشف حساب من مورد. "
+                 . "receipt = إثبات سداد: إشعار تحويل بنكي، إيصال إيداع، سند صرف، إيصال مدى أو شيك.\n"
+                 . "amount = المبلغ الإجمالي المدفوع أو إجمالي الفاتورة. لا تخترع رقماً غير مكتوب.";
+            $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>300, 'system'=>$sys,
+                'messages'=>[['role'=>'user','content'=>[$blk, ['type'=>'text','text'=>'صنّفه.']]]]];
+            $ch = curl_init('https://api.anthropic.com/v1/messages');
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_POST=>true,
+                CURLOPT_POSTFIELDS=>json_encode($payload, JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER=>['Content-Type: application/json','x-api-key: __ANTHROPIC_KEY__',
+                                     'anthropic-version: 2023-06-01'],
+                CURLOPT_TIMEOUT=>90]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            if ($code !== 200) { $failed++; $last = 'HTTP ' . $code; continue; }
+            $j = json_decode($res, true); $txt = '';
+            foreach ((array)($j['content'] ?? []) as $b2) if (($b2['type'] ?? '') === 'text') $txt .= $b2['text'];
+            if (preg_match('/\{[\s\S]*\}/', $txt, $m2)) $txt = $m2[0];
+            $r2 = json_decode($txt, true);
+            if (!is_array($r2)) { $failed++; $last = 'تعذر تفسير الرد'; continue; }
+
+            $kind = in_array(($r2['kind'] ?? ''), ['invoice','receipt','other'], true) ? $r2['kind'] : 'other';
+            $amt  = isset($r2['amount']) && is_numeric($r2['amount']) ? round((float)$r2['amount'], 2) : null;
+            $dt   = (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($r2['date'] ?? ''))) ? $r2['date'] : null;
+            $conn->query("UPDATE purchase_documents SET doc_type='" . $conn->real_escape_string($kind) . "',
+                    auto_kind='" . $conn->real_escape_string($kind) . "',
+                    auto_amount=" . ($amt === null ? 'NULL' : $amt) . ",
+                    auto_date=" . ($dt === null ? 'NULL' : "'" . $conn->real_escape_string($dt) . "'") . ",
+                    auto_at=NOW()
+                WHERE id=" . (int)$d['id']);
+            $done++;
+            if ($kind !== 'receipt') continue;
+            $receipts++;
+            if ($amt === null) continue;
+
+            // الربط بدفعة: مبلغ مطابق، ودفعة واحدة فقط تطابقه — وإلا يُترك للمراجعة
+            $pidD = (int)$d['purchase_id'];
+            $cands = [];
+            if ($q = $conn->query("SELECT id, 'app' src, amount FROM purchase_payments WHERE purchase_id=$pidD
+                                   UNION ALL
+                                   SELECT id, 'daftra' src, amount FROM dmirror_payments WHERE purchase_id=$pidD"))
+                while ($x = $q->fetch_assoc()) if (abs((float)$x['amount'] - $amt) <= 0.01) $cands[] = $x;
+            if (count($cands) === 1) {
+                $conn->query("UPDATE purchase_documents SET payment_id=" . (int)$cands[0]['id'] . ",
+                        payment_src='" . $conn->real_escape_string($cands[0]['src']) . "'
+                    WHERE id=" . (int)$d['id']);
+                $linked++;
+            }
+        }
+
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM purchase_documents
+                WHERE auto_at IS NULL AND COALESCE(drive_url,'') <> ''"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        if ($done) acc_audit($conn, 1, 'purchase', 0, 'doc_classify',
+            "فرز آلي: $done مستندا، منها $receipts إيصالا، ورُبط $linked بدفعاتها", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'classified'=>$done, 'receipts'=>$receipts, 'linked'=>$linked,
+            'failed'=>$failed, 'remaining'=>$left, 'detail'=>$last,
+            'message'=>$done ? "فُرز $done مستندا · $receipts إيصالا · رُبط $linked"
+                             : ($failed ? 'تعذر الفرز' : 'لا مستندات جديدة')], JSON_UNESCAPED_UNICODE);
         break;
     }
 

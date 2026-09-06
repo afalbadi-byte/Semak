@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2 } from 'lucide-react';
+import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { passkeyEnrolledHere } from '../../lib/passkey';
@@ -17,6 +17,8 @@ export default function BuyHome({ onNew }) {
     const [sync, setSync] = useState(null);
     const [docs, setDocs] = useState(null);      // حالة أرشفة مرفقات دفترة
     const [arch, setArch] = useState(false);
+    const [cls, setCls] = useState(null);        // نتيجة الفرز الآلي للمستندات
+    const [clsBusy, setClsBusy] = useState(false);
 
     const load = useCallback(async (force = false) => {
         setBusy(true);
@@ -61,6 +63,25 @@ export default function BuyHome({ onNew }) {
                 }
             }
         } finally { setArch(false); }
+    };
+
+    // فرز المستندات آلياً: فاتورة أم إيصال، وربط الإيصال بدفعته عند التطابق القاطع
+    const classify = async () => {
+        setClsBusy(true);
+        try {
+            const t2 = getAdminToken();
+            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
+            let tot = { classified: 0, receipts: 0, linked: 0 };
+            for (let i = 0; i < 40; i++) {
+                const r = await fetch(`${API_URL}?action=doc_classify_run&limit=4`,
+                    { headers: h2, cache: 'no-store' }).then(x => x.json());
+                if (!r.success) { setCls({ err: r.message }); break; }
+                tot = { classified: tot.classified + r.classified, receipts: tot.receipts + r.receipts,
+                        linked: tot.linked + r.linked };
+                setCls({ ...tot, remaining: r.remaining });
+                if (r.remaining === 0 || (!r.classified && r.failed)) break;
+            }
+        } finally { setClsBusy(false); }
     };
 
     const p = k?.purchases || {};
@@ -113,6 +134,30 @@ export default function BuyHome({ onNew }) {
             {docs && docs.total > 0 && docs.remaining === 0 && (
                 <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold flex items-center gap-2">
                     <CheckCircle2 size={14} /> كل مرفقات دفترة ({docs.total}) محفوظة عندنا وتُفتح بلا جلسة
+                </div>
+            )}
+
+            {docs && docs.total > 0 && docs.remaining === 0 && (
+                <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <ScanLine size={15} className="text-[#c5a059]" />
+                        <span className="text-[12px] font-black">فرز المستندات</span>
+                        {cls && !cls.err && (
+                            <span className="text-[11px] text-slate-400 mr-auto">
+                                {cls.classified} مفروز · {cls.linked} مربوط
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                        دفترة ترفق كل شيء على الفاتورة، فيصل الإيصال مصنّفاً فاتورةً. المعالج يقرأ كل مستند
+                        ويحدّد نوعه، ويربط الإيصال بدفعته حين يطابق مبلغها تماماً — وما عدا ذلك يُترك لمراجعتك.
+                    </p>
+                    {cls?.err && <p className="text-[11px] text-amber-300 font-bold">{cls.err}</p>}
+                    <button onClick={classify} disabled={clsBusy}
+                        className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                        {clsBusy ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
+                        {clsBusy ? 'يفرز المستندات...' : 'افرز المستندات آلياً'}
+                    </button>
                 </div>
             )}
 
