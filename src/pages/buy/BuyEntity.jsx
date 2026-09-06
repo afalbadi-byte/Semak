@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2, Receipt } from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2, Receipt , Check} from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { SortBar } from '../../components/SortHeader';
 import { useSort, smartFirstDir } from '../../lib/sortable';
@@ -565,6 +565,17 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                                         } catch { setErr('تعذر الاتصال'); }
                                         finally { setBusy(false); }
                                     } }
+                                : sec.title === 'مرفقات مقترحة'
+                                ? { ...sec, propose: 1, onDecide: async (rid, action) => {
+                                        setBusy(true); setErr('');
+                                        try {
+                                            const x = await post('recover_decide',
+                                                { id: rid, invoice_id: action === 'link' ? Number(value) : 0, action });
+                                            if (!x.success) setErr(x.message || 'تعذر الحفظ');
+                                            else setTick(v => v + 1);
+                                        } catch { setErr('تعذر الاتصال'); }
+                                        finally { setBusy(false); }
+                                  } }
                                 : sec.title === 'المستندات'
                                 ? { ...sec, retype: async (r, ty) => {
                                         setBusy(true); setErr('');
@@ -689,6 +700,18 @@ function Section({ sec, onOpen }) {
                                                 className="text-[11px] text-sky-300 flex items-center gap-1">
                                                 <ExternalLink size={12} /> فتح
                                             </a>
+                                        )}
+                                        {sec.propose && (
+                                            <>
+                                                <button onClick={() => sec.onDecide(r.id, 'link')}
+                                                    className="text-[11px] font-black text-emerald-300 flex items-center gap-1">
+                                                    <Check size={13} /> أكّد
+                                                </button>
+                                                <button onClick={() => sec.onDecide(r.id, 'reject')}
+                                                    className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                                                    <X size={12} /> ليس لها
+                                                </button>
+                                            </>
                                         )}
                                         {sec.attach && Number(r.receipt_doc_id) > 0 && (
                                             <>

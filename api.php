@@ -7612,6 +7612,52 @@ switch ($action) {
         break;
     }
 
+    case 'recover_mark': {
+        // وسم اقتراحات محسوبة خارجياً: تُكتب كاقتراح لا كربط، وتنتظر تأكيد بشري
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الوسم'], JSON_UNESCAPED_UNICODE); break; }
+
+        // الخريطة تُنشر مع الموقع، فلا تمرّ عبر الشبكة ولا تُلصق يدوياً
+        $path = __DIR__ . '/recovery_map.json';
+        if (!is_file($path)) {
+            echo json_encode(['success'=>false,'message'=>'خريطة الاقتراحات غير منشورة بعد'], JSON_UNESCAPED_UNICODE); break; }
+        $map = json_decode((string)file_get_contents($path), true);
+        if (!is_array($map)) {
+            echo json_encode(['success'=>false,'message'=>'خريطة غير صالحة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $marked = 0; $missing = 0; $already = 0;
+        foreach ($map as $m) {
+            $fn  = (string)($m['file'] ?? '');
+            $no  = (string)($m['no'] ?? '');
+            if ($fn === '' || $no === '') continue;
+            $iv = null;
+            if ($r = $conn->query("SELECT id, no FROM dmirror_purchases WHERE no='" . $E($no) . "' LIMIT 1")) $iv = $r->fetch_assoc();
+            if (!$iv) { $missing++; continue; }
+            $rf = null;
+            if ($r = $conn->query("SELECT id, status FROM recovery_files WHERE file_name='" . $E($fn) . "' LIMIT 1")) $rf = $r->fetch_assoc();
+            if (!$rf) { $missing++; continue; }
+            if (($rf['status'] ?? '') !== 'pending') { $already++; continue; }
+            $kind = (($m['type'] ?? '') === 'إيصال سداد') ? 'receipt' : 'invoice';
+            $conn->query("UPDATE recovery_files SET verdict='مقترح', match_id=" . (int)$iv['id'] . ",
+                    match_no='" . $E($iv['no']) . "', ocr_kind='" . $E($kind) . "',
+                    evidence='" . $E('رُفع بعد إنشاء الفاتورة بـ' . (int)($m['gap'] ?? 0)
+                        . ' ثانية، ولا فاتورة أخرى في النافذة') . "'
+                WHERE id=" . (int)$rf['id']);
+            $marked++;
+        }
+        acc_audit($conn, 1, 'purchase', 0, 'recover_mark',
+            "وسم $marked اقتراح مرفق بانتظار التأكيد", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'marked'=>$marked, 'not_found'=>$missing, 'already'=>$already,
+            'message'=>"وُسم $marked اقتراحا — أكّدها من بطاقة كل فاتورة"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'recover_decide': {
         // الربط لا يتم إلا بتأكيد بشري صريح على فاتورة بعينها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -9161,6 +9207,17 @@ switch ($action) {
                         usort($rows, function($a, $b) { return strcmp((string)$a['pay_date'], (string)$b['pay_date']); });
                         return $rows;
                     })()];
+                // مرفقات يتيمة رُشّحت لهذه الفاتورة — تنتظر تأكيدك، ولم تُربط بعد
+                $prop = $Q("SELECT id, file_name, drive_url, ocr_kind, verdict, evidence,
+                            ROUND(ocr_total,2) ocr_total, ocr_date, ocr_sup
+                        FROM recovery_files
+                        WHERE status='pending' AND match_id=$pid ORDER BY id");
+                if ($prop) $out['sections'][] = ['title'=>'مرفقات مقترحة',
+                    'cols'=>[['k'=>'file_name','t'=>'الملف'],['k'=>'verdict','t'=>'الحكم'],
+                             ['k'=>'evidence','t'=>'الدليل'],['k'=>'drive_url','t'=>'المعاينة']],
+                    'url_col'=>'drive_url',
+                    'propose'=>1,
+                    'rows'=>$prop];
                 $out['sections'][] = ['title'=>'المستندات',
                     'cols'=>[['k'=>'file_name','t'=>'المستند'],['k'=>'doc_type_ar','t'=>'النوع'],
                              ['k'=>'created_at','t'=>'أضيف'],['k'=>'drive_url','t'=>'الرابط']],
