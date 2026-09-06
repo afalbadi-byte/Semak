@@ -9897,6 +9897,12 @@ switch ($action) {
         }
         $r = $conn->query("SELECT COALESCE(SUM(total),0) s FROM dmirror_purchases");
         $out['total_value'] = $r ? round((float)$r->fetch_assoc()['s'], 2) : 0;
+        // إيصالات الدفعات المسحوبة والمربوطة — لمتابعة التقدّم
+        if ($pr2 = $conn->query("SELECT COUNT(*) n FROM purchase_documents
+                WHERE doc_type='receipt' AND payment_id IS NOT NULL AND COALESCE(drive_url,'') <> ''"))
+            $out['counts']['payment_receipts'] = (int)$pr2->fetch_assoc()['n'];
+        if ($pr3 = $conn->query("SELECT COUNT(*) n FROM dmirror_payments WHERE receipt_pull_at IS NOT NULL"))
+            $out['counts']['payments_checked'] = (int)$pr3->fetch_assoc()['n'];
         $out['attachment_kinds'] = [];
         if ($kr = $conn->query("SELECT COALESCE(entity_key,'—') k, COUNT(*) n FROM dmirror_attachments
                                 GROUP BY entity_key ORDER BY n DESC"))
