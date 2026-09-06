@@ -1416,6 +1416,57 @@ function daftra_ext_of($ct, $fallbackName = '') {
     return $e !== '' ? $e : 'pdf';
 }
 
+// مُساعد: مطابقة مستند بفواتيرنا — المبلغ ثم المورد ثم التاريخ.
+// فارق الهللات وبضعة ريالات لا يعني اختلاف الفاتورة، بل تقريباً أو خطأ إدخال؛
+// نقبله ونُظهره بدل أن نُسقط مطابقة صحيحة.
+function recovery_match($invs, $sup, $tot, $dt) {
+    $near = function($a, $b) {
+        $d = abs($a - $b);
+        return ($d <= 0.01) ? ['exact', 0.0]
+             : (($d <= 5.00 || $d <= max($a, $b) * 0.002) ? ['near', $d] : [null, $d]);
+    };
+    $best = []; $sn = daftra_norm_name($sup);
+    foreach ($invs as $v) {
+        if ($tot === null) continue;
+        [$kg, $dg] = $near((float)$v['gross'], $tot);
+        [$kn, $dn] = $near((float)$v['net'], $tot);
+        $kind = $kg ?: $kn;
+        if (!$kind) continue;
+        $sim = daftra_name_sim($sn, daftra_norm_name($v['supplier']));
+        $okDate = true;
+        if ($dt && !empty($v['date']))
+            $okDate = abs(strtotime($dt) - strtotime($v['date'])) <= 45 * 86400;
+        $best[] = ['v'=>$v, 'sim'=>$sim, 'date'=>$okDate, 'amt'=>$kind,
+                   'diff'=>round($kg ? $dg : $dn, 2)];
+    }
+    usort($best, function($a, $b) {
+        if ($a['amt'] !== $b['amt']) return $a['amt'] === 'exact' ? -1 : 1;
+        return $b['sim'] <=> $a['sim'];
+    });
+    $strong = array_values(array_filter($best, function($x) { return $x['sim'] >= 0.6 && $x['date']; }));
+    $txt = function($x) {
+        return $x['amt'] === 'exact' ? 'المبلغ مطابق'
+             : ('المبلغ يفرق ' . number_format($x['diff'], 2) . ' — تحقق من القيد');
+    };
+    $verdict = 'بلا دليل'; $mid = null; $mno = ''; $ev = '';
+    if (count($strong) === 1) {
+        $verdict = $strong[0]['amt'] === 'exact' ? 'مؤكد' : 'فرق يسير';
+        $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
+        $ev = $txt($strong[0]) . ' · المورد ' . round($strong[0]['sim'] * 100) . '% · التاريخ ضمن المدى';
+    } elseif (count($strong) > 1) { $verdict = 'متعدد'; }
+    elseif (count($best) >= 1) {
+        $verdict = 'مرشّح'; $mid = (int)$best[0]['v']['id']; $mno = (string)$best[0]['v']['no'];
+        $ev = $txt($best[0]) . ' · المورد ' . round($best[0]['sim'] * 100) . '%'
+            . ($best[0]['date'] ? '' : ' · التاريخ بعيد');
+    }
+    $cands = array_map(function($x) {
+        return ['id'=>(int)$x['v']['id'], 'no'=>$x['v']['no'], 'supplier'=>$x['v']['supplier'],
+                'gross'=>(float)$x['v']['gross'], 'date'=>$x['v']['date'],
+                'sim'=>round($x['sim'], 2), 'diff'=>$x['diff']];
+    }, array_slice($best, 0, 6));
+    return [$verdict, $mid, $mno, $ev, $cands];
+}
+
 // مُساعد: تطبيع اسم جهة — تُسقط الألفاظ العامة كي لا تتشابه الشركات ببعضها
 function daftra_norm_name($s) {
     $s = (string)$s;
@@ -7620,6 +7671,41 @@ switch ($action) {
             if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
         echo json_encode(['success'=>true, 'scanned'=>$done, 'confirmed'=>$conf, 'remaining'=>$left,
             'detail'=>$last, 'message'=>"قُرئ $done ملفا · $conf مؤكد · بقي $left"], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'recover_rematch': {
+        // إعادة مطابقة بلا قراءة: البيانات مستخرجة سلفاً، والقاعدة وحدها تغيّرت
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=" . (int)$_jwt_claims['sub'] . " LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية الاسترجاع'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(180);
+        $invs = [];
+        if ($r = $conn->query("SELECT id, no, date, supplier, ROUND(total,2) gross, ROUND(subtotal,2) net
+                               FROM dmirror_purchases"))
+            while ($x = $r->fetch_assoc()) $invs[] = $x;
+        $rows = [];
+        if ($r = $conn->query("SELECT id, ocr_sup, ocr_total, ocr_date FROM recovery_files
+                               WHERE status='pending' AND ocr_at IS NOT NULL"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $n = 0; $by = [];
+        foreach ($rows as $rw) {
+            $tot = ($rw['ocr_total'] === null) ? null : round((float)$rw['ocr_total'], 2);
+            [$verdict, $mid, $mno, $ev, $cands] = recovery_match($invs, (string)$rw['ocr_sup'], $tot, $rw['ocr_date']);
+            $conn->query("UPDATE recovery_files SET verdict='" . $E($verdict) . "',
+                    match_id=" . ($mid === null ? 'NULL' : (int)$mid) . ", match_no='" . $E($mno) . "',
+                    evidence='" . $E($ev) . "', cands='" . $E(json_encode($cands, JSON_UNESCAPED_UNICODE)) . "'
+                WHERE id=" . (int)$rw['id']);
+            $by[$verdict] = ($by[$verdict] ?? 0) + 1; $n++;
+        }
+        acc_audit($conn, 1, 'purchase', 0, 'recover_rematch', "إعادة مطابقة $n مستندا", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'rematched'=>$n, 'verdicts'=>$by,
+            'message'=>"أُعيدت مطابقة $n مستندا"], JSON_UNESCAPED_UNICODE);
         break;
     }
 

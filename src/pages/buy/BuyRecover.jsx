@@ -77,6 +77,20 @@ export default function BuyRecover({ onClose }) {
         } finally { setProg(null); setBusy(''); }
     };
 
+    // إعادة المطابقة تحسب من البيانات المستخرجة سلفاً — بلا قراءة بصرية ولا تكلفة
+    const rematch = async () => {
+        setBusy('rematch'); setErr('');
+        try {
+            const r = await fetch(`${API_URL}?action=recover_rematch`,
+                { headers: auth(), cache: 'no-store' }).then(x => x.json());
+            if (!r.success) { setErr(r.message || 'تعذرت المطابقة'); return; }
+            setErr(r.message + ' — ' + Object.entries(r.verdicts || {})
+                .map(([k, v]) => k + ': ' + v).join(' · '));
+            await load();
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(''); }
+    };
+
     const decide = async (id, invoice_id, action) => {
         setErr('');
         try {
@@ -110,6 +124,12 @@ export default function BuyRecover({ onClose }) {
                     <input type="file" multiple accept=".pdf,image/*" className="hidden"
                         onChange={pick} disabled={!!busy} />
                 </label>
+
+                <button onClick={rematch} disabled={!!busy}
+                    className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    {busy === 'rematch' ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
+                    أعد المطابقة (بلا قراءة — لحظي)
+                </button>
 
                 <button onClick={() => scan(true)} disabled={!!busy}
                     className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
