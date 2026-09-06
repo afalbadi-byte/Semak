@@ -9593,9 +9593,15 @@ switch ($action) {
                     CURLOPT_TIMEOUT=>25, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
                     CURLOPT_HTTPHEADER=>['Cookie: ' . $ck2, 'Accept: */*', 'X-Requested-With: XMLHttpRequest',
                         'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']]);
-                $h5 = curl_exec($c5); $k5 = curl_getinfo($c5, CURLINFO_HTTP_CODE); curl_close($c5);
+                curl_setopt($c5, CURLOPT_HEADER, true);
+                $h5 = curl_exec($c5); $k5 = curl_getinfo($c5, CURLINFO_HTTP_CODE);
+                $hs = curl_getinfo($c5, CURLINFO_HEADER_SIZE); curl_close($c5);
+                $hdrTxt = substr((string)$h5, 0, $hs); $h5 = substr((string)$h5, $hs);
+                $allow = '';
+                if (preg_match('/^allow:s*(.+)$/im', $hdrTxt, $ma)) $allow = trim($ma[1]);
                 preg_match_all('#files/preview/(\d+)#', (string)$h5, $m5);
                 $pv[] = ['url'=>$ru, 'http'=>$k5, 'len'=>strlen((string)$h5),
+                    'allow'=>$allow, 'body'=>mb_substr(trim((string)$h5), 0, 160),
                     'files'=>array_slice(array_values(array_unique($m5[1] ?? [])), 0, 10)];
             }
             $out['pay_ids'] = $payIds;
