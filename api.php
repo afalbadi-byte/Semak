@@ -8789,6 +8789,15 @@ switch ($action) {
         break;
     }
 
+    case 'inv_times': {
+        // أوقات إنشاء الفواتير كما سجّلتها دفترة — لمطابقة المرفقات اليتيمة بنافذة الرفع
+        $r = $conn->query("SELECT id, no, date, supplier, ROUND(total,2) gross, created, modified
+                           FROM dmirror_purchases ORDER BY id");
+        $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x;
+        echo json_encode(['success'=>true, 'count'=>count($o), 'data'=>$o], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_list': {
         // سجلات التطبيق: الفواتير والموردون ببحث وترقيم صفحات
         $kind = (string)($_GET['kind'] ?? 'invoices');
