@@ -9573,7 +9573,11 @@ switch ($action) {
             // الصلة محفوظة في EntityAttachment(entity_key, entity_id, file_id)
             // فنبحث عن النقطة التي تسرد ملفات كيان بعينه
             $routes = [];
-            if ($one) {
+            foreach ($payIds as $q1) {
+                $routes[] = "/owner/purchase_order_payments/view/$q1/$pidP";
+                $routes[] = "/owner/purchase_order_payments/view/$q1";
+            }
+            if (false) {
                 $ek = 'purchase_order_payment';
                 $routes[] = "/v2/owner/entity/files/$ek/$one";
                 $routes[] = "/v2/owner/entity/files/list/$ek/$one";
