@@ -186,16 +186,20 @@ export default function BuyRecover({ onClose }) {
                                         </div>
                                     ))}
                                 </div>
+                            ) : !r.verdict ? (
+                                <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                                    <Loader2 size={12} /> لم يُقرأ بعد — اضغط «اقرأ الملفات»
+                                </p>
                             ) : (
                                 <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
                                     <AlertTriangle size={12} /> لا فاتورة مطابقة — راجعه بنفسك أو استبعده
                                 </p>
                             )}
 
-                            <button onClick={() => decide(r.id, 0, 'reject')}
+                            {!!r.verdict && <button onClick={() => decide(r.id, 0, 'reject')}
                                 className="w-full h-9 rounded-lg bg-white/10 text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1.5">
                                 <Trash2 size={12} /> استبعد
-                            </button>
+                            </button>}
                         </div>
                     ))}
                     {!rows.length && (
