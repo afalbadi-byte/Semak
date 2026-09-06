@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine } from 'lucide-react';
+import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine, Receipt } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { passkeyEnrolledHere } from '../../lib/passkey';
@@ -18,6 +18,8 @@ export default function BuyHome({ onNew }) {
     const [docs, setDocs] = useState(null);      // حالة أرشفة مرفقات دفترة
     const [arch, setArch] = useState(false);
     const [cls, setCls] = useState(null);        // نتيجة الفرز الآلي للمستندات
+    const [rcp, setRcp] = useState(null);        // سحب إيصالات الدفعات
+    const [rcpBusy, setRcpBusy] = useState(false);
     const [clsBusy, setClsBusy] = useState(false);
 
     const load = useCallback(async (force = false) => {
@@ -82,6 +84,24 @@ export default function BuyHome({ onNew }) {
                 if (r.remaining === 0 || (!r.classified && r.failed)) break;
             }
         } finally { setClsBusy(false); }
+    };
+
+    // إيصالات الدفعات: نافذة الدفعة في دفترة تحمل رابط الملف، فنقرؤه وننزّله ونربطه
+    const pullReceipts = async () => {
+        setRcpBusy(true);
+        try {
+            const t2 = getAdminToken();
+            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
+            let tot = { pulled: 0, none: 0 };
+            for (let i = 0; i < 60; i++) {
+                const r = await fetch(`${API_URL}?action=pay_receipt_pull&limit=6`,
+                    { headers: h2, cache: 'no-store' }).then(x => x.json());
+                if (!r.success) { setRcp({ err: r.message }); break; }
+                tot = { pulled: tot.pulled + r.pulled, none: tot.none + r.no_receipt };
+                setRcp({ ...tot, remaining: r.remaining, err: '' });
+                if (r.remaining === 0 || (!r.pulled && !r.no_receipt)) break;
+            }
+        } finally { setRcpBusy(false); }
     };
 
     const p = k?.purchases || {};
@@ -160,6 +180,27 @@ export default function BuyHome({ onNew }) {
                     </button>
                 </div>
             )}
+
+            <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                    <Receipt size={15} className="text-[#c5a059]" />
+                    <span className="text-[12px] font-black">إيصالات الدفعات</span>
+                    {rcp && !rcp.err && (
+                        <span className="text-[11px] text-slate-400 mr-auto">
+                            {rcp.pulled} مسحوب · {rcp.none} بلا إيصال
+                        </span>
+                    )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                    يفتح كل دفعة في دفترة، ينزّل إيصالها، ويربطه بها بالمعرّف — لا بمطابقة المبلغ.
+                </p>
+                {rcp?.err && <p className="text-[11px] text-amber-300 font-bold">{rcp.err}</p>}
+                <button onClick={pullReceipts} disabled={rcpBusy}
+                    className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    {rcpBusy ? <Loader2 size={14} className="animate-spin" /> : <Receipt size={14} />}
+                    {rcpBusy ? 'يسحب الإيصالات...' : 'اسحب إيصالات الدفعات'}
+                </button>
+            </div>
 
             {sync && (sync.added > 0 || sync.updated > 0) && (
                 <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold">

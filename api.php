@@ -1274,6 +1274,11 @@ ensure_column($conn, 'purchase_documents', 'auto_date',   "auto_date DATE DEFAUL
 ensure_column($conn, 'purchase_documents', 'auto_at',     "auto_at DATETIME DEFAULT NULL");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (39)");
 } // end DDL v39
+// ─── DDL v40: أثر محاولة سحب إيصال الدفعة ───────────────────────────────────
+if ($__sv < 40) {
+ensure_column($conn, 'dmirror_payments', 'receipt_pull_at', "receipt_pull_at DATETIME DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (40)");
+} // end DDL v40
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -7384,6 +7389,100 @@ switch ($action) {
             'failed'=>$failed, 'remaining'=>$left, 'detail'=>$last,
             'message'=>$done ? "فُرز $done مستندا · $receipts إيصالا · رُبط $linked"
                              : ($failed ? 'تعذر الفرز' : 'لا مستندات جديدة')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pay_receipt_pull': {
+        // سحب إيصالات دفعات دفترة: نافذة الدفعة تحمل رابط الملف الموقّع، فنقرؤه
+        // وننزّل الملف ونربطه بدفعته بالمعرّف — بلا مطابقة مبالغ ولا تخمين.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية سحب الإيصالات'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(240);
+        $take = min(15, max(1, (int)($_GET['limit'] ?? 6)));
+        $ck   = daftra_session_cookie($conn);
+
+        // الدفعات التي لم نربط لها إيصالاً بعد
+        $todo = [];
+        if ($r = $conn->query("SELECT m.id, m.purchase_id, ROUND(m.amount,2) amount, m.date,
+                    COALESCE(d.supplier,'') supplier
+                FROM dmirror_payments m
+                LEFT JOIN dmirror_purchases d ON d.id = m.purchase_id
+                LEFT JOIN purchase_documents pd
+                  ON pd.payment_id = m.id AND pd.payment_src='daftra' AND COALESCE(pd.drive_url,'') <> ''
+                WHERE pd.id IS NULL AND COALESCE(m.receipt_pull_at,'0000-00-00') < DATE_SUB(NOW(), INTERVAL 1 DAY)
+                ORDER BY m.id DESC LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $todo[] = $x;
+
+        $dir = __DIR__ . '/qdocs';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $pulled = 0; $none = 0; $failed = 0; $last = '';
+
+        foreach ($todo as $p) {
+            $conn->query("UPDATE dmirror_payments SET receipt_pull_at=NOW() WHERE id=" . (int)$p['id']);
+            $url = "https://semak.daftra.com/owner/purchase_order_payments/view/"
+                 . (int)$p['id'] . "/" . (int)$p['purchase_id'] . "&box=1";
+            $c = curl_init($url);
+            curl_setopt_array($c, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                CURLOPT_TIMEOUT=>30, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
+                CURLOPT_HTTPHEADER=>['Cookie: ' . $ck, 'Accept: */*',
+                    'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']]);
+            $html = (string)curl_exec($c); $hc = curl_getinfo($c, CURLINFO_HTTP_CODE); curl_close($c);
+            if ($hc !== 200 || $html === '') { $failed++; $last = 'صفحة الدفعة: HTTP ' . $hc; continue; }
+
+            // الرابط الموقّع طويل جداً، فلا حدّ لطوله هنا
+            if (!preg_match('#https://daftra-clients-data\.s3[^"\x27]+#', $html, $mu)) { $none++; continue; }
+            $s3 = html_entity_decode($mu[0], ENT_QUOTES, 'UTF-8');
+
+            $name = 'إيصال ' . number_format((float)$p['amount'], 2);
+            if (preg_match('/filename%3D%22(.*?)%22/i', $s3, $mn)) {
+                $dec = urldecode(urldecode($mn[1]));
+                if (trim($dec) !== '') $name = trim($dec);
+            }
+
+            $c2 = curl_init($s3);
+            curl_setopt_array($c2, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                CURLOPT_TIMEOUT=>60, CURLOPT_SSL_VERIFYPEER=>false]);
+            $bin = curl_exec($c2); $bc = curl_getinfo($c2, CURLINFO_HTTP_CODE);
+            $ct  = (string)curl_getinfo($c2, CURLINFO_CONTENT_TYPE); curl_close($c2);
+            if ($bc !== 200 || $bin === false || $bin === '') { $failed++; $last = 'تنزيل الملف: HTTP ' . $bc; continue; }
+
+            $ext = daftra_ext_of($ct, $name);
+            $tok = bin2hex(random_bytes(16));
+            if (@file_put_contents("$dir/$tok.$ext", $bin) === false) { $failed++; $last = 'تعذر الحفظ على القرص'; continue; }
+            $durl = 'https://' . $_SERVER['HTTP_HOST'] . "/qdocs/$tok.$ext";
+
+            $label = mb_substr($name, 0, 180) . ' — ' . $p['date'];
+            $conn->query("INSERT INTO purchase_documents (purchase_id, supplier, doc_type, file_name, drive_url,
+                    file_size, source, created_by, payment_id, payment_src)
+                VALUES (" . (int)$p['purchase_id'] . ", '" . $conn->real_escape_string($p['supplier']) . "', 'receipt', '"
+                . $conn->real_escape_string($label) . "', '" . $conn->real_escape_string($durl) . "', " . strlen($bin) . ",
+                    'daftra', '" . $conn->real_escape_string($u['name'] ?? '') . "', " . (int)$p['id'] . ", 'daftra')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), doc_type='receipt',
+                    payment_id=VALUES(payment_id), payment_src='daftra', file_size=VALUES(file_size)");
+            $conn->query("UPDATE dmirror_payments SET receipt_url='" . $conn->real_escape_string($durl) . "'
+                WHERE id=" . (int)$p['id']);
+            $pulled++;
+        }
+
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_payments m
+                LEFT JOIN purchase_documents pd
+                  ON pd.payment_id = m.id AND pd.payment_src='daftra' AND COALESCE(pd.drive_url,'') <> ''
+                WHERE pd.id IS NULL"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        if ($pulled) acc_audit($conn, 1, 'purchase', 0, 'receipt_pull',
+            "سحب $pulled إيصال دفعة من دفترة وربطها بدفعاتها", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'pulled'=>$pulled, 'no_receipt'=>$none, 'failed'=>$failed,
+            'remaining'=>$left, 'detail'=>$last,
+            'message'=>$pulled ? "سُحب $pulled إيصالا وربطت بدفعاتها"
+                               : ($none ? 'الدفعات المفحوصة بلا إيصالات في دفترة'
+                                        : ($failed ? 'تعذر السحب — تحقق من جلسة دفترة' : 'لا دفعات جديدة'))],
+            JSON_UNESCAPED_UNICODE);
         break;
     }
 
