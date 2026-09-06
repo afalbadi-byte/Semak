@@ -166,14 +166,14 @@ export default function BuyRecover({ onClose }) {
                     <button onClick={preview} disabled={!!busy}
                         className="w-full min-h-[46px] rounded-xl bg-emerald-500/15 text-emerald-300 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                         {busy === 'plan' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                        اربط المؤكد الآمن
+                        اربط المطابق تماماً (نفس اليوم · اسم 100%)
                     </button>
                 )}
 
                 {plan && (
                     <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-3 space-y-2">
                         <div className="text-[13px] font-black text-emerald-200">
-                            {plan.would_link} مستنداً جاهزاً للربط
+                            {plan.would_link} مستنداً مطابقاً تماماً
                             {plan.skipped > 0 && <span className="text-slate-400 font-bold"> · استُبعد {plan.skipped}</span>}
                         </div>
                         <div className="max-h-[220px] overflow-y-auto space-y-1">

@@ -7882,6 +7882,9 @@ switch ($action) {
         set_time_limit(180);
         $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $apply = !empty($_GET['apply']);
+        // الشرط الافتراضي هو الأضيق الذي أقرّه أحمد: مبلغ مطابق، اسم 100%، نفس اليوم.
+        // 'wide' يفتحه إلى اسم 60% فأعلى وأسبوع، ولا يُستعمل إلا بطلب صريح.
+        $wide = ((string)($_GET['tier'] ?? '') === 'wide');
 
         $rows = [];
         if ($r = $conn->query("SELECT rf.id, rf.file_name, rf.drive_url, rf.file_size, rf.ocr_kind, rf.ocr_no,
@@ -7912,8 +7915,14 @@ switch ($action) {
                 $d = abs((float)$x['ocr_total'] - (float)$x['inv_total']);
                 if ($d > 0.02) $why = 'المبلغ يفرق ' . number_format($d, 2);
                 else {
-                    $g = abs(strtotime($x['ocr_date']) - strtotime($x['inv_date'])) / 86400;
-                    if ($g > 7) $why = 'التاريخ يبعد ' . (int)$g . ' يوماً';
+                    $g   = abs(strtotime($x['ocr_date']) - strtotime($x['inv_date'])) / 86400;
+                    $sim = daftra_name_sim(daftra_norm_name($x['ocr_sup']), daftra_norm_name($x['inv_sup']));
+                    if ($wide) {
+                        if ($g > 7) $why = 'التاريخ يبعد ' . (int)$g . ' يوماً';
+                    } else {
+                        if ($g > 0)          $why = 'ليس نفس اليوم — يبعد ' . (int)$g . ' يوماً';
+                        elseif ($sim < 0.999) $why = 'اسم المورد ' . round($sim * 100) . '% لا 100%';
+                    }
                 }
             }
             // فاتورة لها أصل سلفاً لا تحتاج آخر
