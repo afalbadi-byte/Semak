@@ -7776,12 +7776,12 @@ switch ($action) {
         // إثبات الدفعة: رابط إيصال عليها، أو مستند من نوع إيصال على نفس الفاتورة
         // دفعاتنا ودفعات دفترة في مصدر واحد — الأخيرة بلا حقول إيصال
         $src = "(SELECT id, purchase_id, supplier, amount, method, pay_date, reference, bank, receipt_url,
-                        'التطبيق' src FROM purchase_payments
+                        'التطبيق' src, 'local' srck FROM purchase_payments
                  UNION ALL
                  SELECT m.id, m.purchase_id, COALESCE(dp.supplier,'') supplier, m.amount,
                         COALESCE(m.payment_method,'') method,
                         m.date pay_date, COALESCE(m.transaction_id,'') reference, '' bank,
-                        COALESCE(m.receipt_url,'') receipt_url, 'دفترة' src
+                        COALESCE(m.receipt_url,'') receipt_url, 'دفترة' src, 'daftra' srck
                    FROM dmirror_payments m
                    LEFT JOIN dmirror_purchases dp ON dp.id = m.purchase_id)";
         $base = "FROM $src pp
@@ -7789,13 +7789,17 @@ switch ($action) {
                  LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents
                             WHERE doc_type='receipt' GROUP BY purchase_id) rc
                    ON rc.purchase_id = pp.purchase_id
+                 LEFT JOIN (SELECT payment_id, payment_src, COUNT(*) n FROM purchase_documents
+                            WHERE payment_id IS NOT NULL AND COALESCE(drive_url,'') <> ''
+                            GROUP BY payment_id, payment_src) pdp
+                   ON pdp.payment_id = pp.id AND pdp.payment_src = pp.srck
                  LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
-                            WHERE entity_key NOT IN ('purchase_order','purchase_invoice')
-                            GROUP BY entity_id) at
-                   ON at.entity_id = pp.purchase_id";
+                            WHERE entity_key = 'purchase_order_payment' GROUP BY entity_id) at
+                   ON at.entity_id = pp.id AND pp.srck = 'daftra'";
         // إثبات السداد = إيصال، لا الفاتورة. مرفق الفاتورة نفسه لا يُحتسب إثباتاً
         // للدفع، وإلا بدت كل فاتورة لها صورة كأنها مسدّدة بإثبات.
-        $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(rc.n,0) > 0 OR COALESCE(at.n,0) > 0)";
+        $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(pdp.n,0) > 0
+                 OR COALESCE(at.n,0) > 0 OR COALESCE(rc.n,0) > 0)";
 
         $sum = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(pp.amount),0),2) amount,
                         SUM(CASE WHEN $has THEN 1 ELSE 0 END) with_proof,
@@ -7815,7 +7819,7 @@ switch ($action) {
                     COALESCE(pp.supplier,'') supplier, ROUND(pp.amount,2) amount, pp.pay_date, pp.method,
                     COALESCE(pp.reference,'') reference, COALESCE(pp.bank,'') bank,
                     COALESCE(pp.receipt_url,'') receipt_url, COALESCE(rc.n,0) receipt_docs,
-                    COALESCE(at.n,0) daftra_files,
+                    COALESCE(at.n,0) daftra_files, COALESCE(pdp.n,0) payment_receipts,
                     CASE WHEN $has THEN 1 ELSE 0 END has_proof
                 $base $where ORDER BY has_proof ASC, pp.amount DESC LIMIT 300");
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
