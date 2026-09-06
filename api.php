@@ -9407,6 +9407,25 @@ switch ($action) {
                     'n'=>is_array($j2['data'] ?? null) ? count($j2['data']) : 0,
                     'keys'=>is_array($first) ? array_slice(array_keys($first), 0, 40) : null];
             }
+            // الجلسة تفتح ما لا تفتحه الواجهة البرمجية: صفحة الفاتورة تعرض ملفاتها كلها
+            $ck2 = daftra_session_cookie($conn);
+            foreach (["/owner/purchase_orders/view/$pidP", "/v2/owner/purchase_invoices/$pidP"] as $hu) {
+                $c3 = curl_init('https://semak.daftra.com' . $hu);
+                curl_setopt_array($c3, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                    CURLOPT_TIMEOUT=>30, CURLOPT_SSL_VERIFYPEER=>false,
+                    CURLOPT_HTTPHEADER=>['Cookie: ' . $ck2, 'Accept: */*',
+                        'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']]);
+                $h3 = curl_exec($c3); $k3 = curl_getinfo($c3, CURLINFO_HTTP_CODE); curl_close($c3);
+                $ids = []; $names = [];
+                if ($h3) {
+                    preg_match_all('#files/preview/(\d+)#', $h3, $m3);
+                    $ids = array_values(array_unique($m3[1] ?? []));
+                    preg_match_all('#purchase_order_payment[^0-9]{0,20}(\d+)#', $h3, $m4);
+                    $names = array_slice(array_values(array_unique($m4[1] ?? [])), 0, 10);
+                }
+                $probe[] = ['url'=>$hu, 'http'=>$k3, 'len'=>strlen((string)$h3),
+                    'file_ids'=>array_slice($ids, 0, 20), 'entity_ids'=>$names];
+            }
             $out['pay_probe'] = $probe;
         }
         if ($redetail > 0) {
