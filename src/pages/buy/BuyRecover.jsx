@@ -283,27 +283,48 @@ export default function BuyRecover({ onClose }) {
 
                             {r.evidence && <p className="text-[10px] text-emerald-300 font-bold">{r.evidence}</p>}
 
-                            {!!(r.cands || []).length ? (
-                                <div className="space-y-1.5">
-                                    {(r.cands || []).slice(0, 4).map(c => (
-                                        <div key={c.id} className="rounded-xl bg-black/25 border border-white/10 p-2 flex items-center gap-2">
-                                            <div className="min-w-0 flex-1">
-                                                <div className="text-[12px] font-bold truncate">
-                                                    فاتورة {c.no} · {money(c.gross)}
-                                                </div>
-                                                <div className="text-[10px] text-slate-400 truncate">
-                                                    {c.supplier} · {c.date} · تطابق الاسم {Math.round((c.sim || 0) * 100)}%
-                                                    {Number(c.diff) > 0 ? ' · يفرق ' + money(c.diff) : ''}
-                                                </div>
+                            {!!(r.cands || []).length ? (() => {
+                                // المرشّح الذي بُني عليه الحكم يُعرض وحده كقرار؛ والبقية
+                                // لم تدخل الحساب، فتُطوى كي لا تبدو خيارات متكافئة.
+                                const cs   = r.cands || [];
+                                const main = cs.find(c => c.picked) || (cs.length === 1 ? cs[0] : null);
+                                const rest = cs.filter(c => c !== main).slice(0, 4);
+                                const Row = ({ c, dim }) => (
+                                    <div className={'rounded-xl border p-2 flex items-center gap-2 '
+                                        + (dim ? 'bg-black/20 border-white/5 opacity-70' : 'bg-black/25 border-white/10')}>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-[12px] font-bold truncate">
+                                                فاتورة {c.no} · {money(c.gross)}
                                             </div>
-                                            <button onClick={() => decide(r.id, c.id, 'link')}
-                                                className="h-9 px-3 rounded-lg bg-[#c5a059] text-[#0b1628] text-[11px] font-black shrink-0">
-                                                اربط
-                                            </button>
+                                            <div className="text-[10px] text-slate-400 truncate">
+                                                {c.supplier} · {c.date} · تطابق الاسم {Math.round((c.sim || 0) * 100)}%
+                                                {Number(c.diff) > 0 ? ' · يفرق ' + money(c.diff) : ''}
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                            ) : !r.verdict ? (
+                                        <button onClick={() => decide(r.id, c.id, 'link')}
+                                            className={'h-9 px-3 rounded-lg text-[11px] font-black shrink-0 '
+                                                + (dim ? 'bg-white/10 text-slate-300' : 'bg-[#c5a059] text-[#0b1628]')}>
+                                            اربط
+                                        </button>
+                                    </div>
+                                );
+                                return (
+                                    <div className="space-y-1.5">
+                                        {main && <Row c={main} />}
+                                        {!main && cs.slice(0, 4).map(c => <Row key={c.id} c={c} />)}
+                                        {!!rest.length && main && (
+                                            <details className="text-[10px] text-slate-500">
+                                                <summary className="cursor-pointer py-1">
+                                                    {rest.length} فاتورة أخرى بنفس المبلغ — لم تدخل في الحكم
+                                                </summary>
+                                                <div className="space-y-1.5 pt-1.5">
+                                                    {rest.map(c => <Row key={c.id} c={c} dim />)}
+                                                </div>
+                                            </details>
+                                        )}
+                                    </div>
+                                );
+                            })() : !r.verdict ? (
                                 <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
                                     <Loader2 size={12} /> لم يُقرأ بعد — اضغط «اقرأ الملفات»
                                 </p>

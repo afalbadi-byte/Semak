@@ -1480,7 +1480,7 @@ function daftra_ext_of($ct, $fallbackName = '') {
 // نقبله ونُظهره بدل أن نُسقط مطابقة صحيحة.
 // يُرفع هذا الرقم مع كل تعديل على قواعد المطابقة أدناه، فتُعاد المطابقة تلقائياً
 // عند أول فتح للصفحة. القاعدة الجديدة لا تنفع إن ظلت النتائج القديمة معروضة.
-define('RECOVERY_RULES_VER', 5);
+define('RECOVERY_RULES_VER', 6);
 
 // تحذير نوع المستند: يُقرأ من اسمه ورقمه، فالمبلغ وحده لا يميّز عرض السعر من الفاتورة
 function recovery_doc_warn($fileName, $ocrNo) {
@@ -1579,7 +1579,7 @@ function recovery_match($invs, $sup, $tot, $dt) {
     $verdict = 'بلا دليل'; $mid = null; $mno = ''; $ev = '';
     if (count($strong) === 1) {
         // التاريخ المتباعد يُنزل الحكم من «مؤكد» إلى «مرجّح» — يظل قابلاً للربط بعد نظرة
-        $far = ($strong[0]['gap'] !== null && $strong[0]['gap'] > 7);
+        $far = ($strong[0]['gap'] === null || $strong[0]['gap'] > 7);
         // مورد واحد ويوم واحد ومبلغ مختلف = خطأ في القيد، لا مطابقة مقبولة
         $verdict = $strong[0]['amt'] !== 'exact' ? 'خطأ في القيد' : ($far ? 'مرجّح' : 'مؤكد');
         $mid = (int)$strong[0]['v']['id']; $mno = (string)$strong[0]['v']['no'];
@@ -1599,10 +1599,13 @@ function recovery_match($invs, $sup, $tot, $dt) {
         $verdict = 'مرشّح'; $mid = (int)$best[0]['v']['id']; $mno = (string)$best[0]['v']['no'];
         $ev = $txt($best[0]) . ' · المورد ' . round($best[0]['sim'] * 100) . '%' . $dtxt($best[0]);
     }
-    $cands = array_map(function($x) {
+    $cands = array_map(function($x) use ($mid) {
         return ['id'=>(int)$x['v']['id'], 'no'=>$x['v']['no'], 'supplier'=>$x['v']['supplier'],
                 'gross'=>(float)$x['v']['gross'], 'date'=>$x['v']['date'],
-                'sim'=>round($x['sim'], 2), 'diff'=>$x['diff'], 'gap'=>$x['gap']];
+                'sim'=>round($x['sim'], 2), 'diff'=>$x['diff'], 'gap'=>$x['gap'],
+                // دخل الحكم: اسمٌ قريب وتاريخٌ ضمن المدى. غيره معروض للعلم لا للاختيار.
+                'strong'=>($x['sim'] >= 0.6 && $x['date']) ? 1 : 0,
+                'picked'=>($mid !== null && (int)$x['v']['id'] === (int)$mid) ? 1 : 0];
     }, array_slice($best, 0, 6));
     return [$verdict, $mid, $mno, $ev, $cands];
 }
