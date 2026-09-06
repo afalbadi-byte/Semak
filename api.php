@@ -9409,10 +9409,17 @@ switch ($action) {
             }
             // الجلسة تفتح ما لا تفتحه الواجهة البرمجية: صفحة الفاتورة تعرض ملفاتها كلها
             $ck2 = daftra_session_cookie($conn);
-            foreach (["/owner/purchase_orders/view/$pidP", "/v2/owner/purchase_invoices/$pidP"] as $hu) {
+            $noP = '';
+            if ($rn = $conn->query("SELECT no FROM dmirror_purchases WHERE id=$pidP LIMIT 1"))
+                if ($xn = $rn->fetch_assoc()) $noP = (string)$xn['no'];
+            $cands = ["/owner/purchase_orders/view/$pidP", "/owner/purchase_invoices/view/$pidP",
+                      "/v2/owner/purchase_invoices/$pidP", "/v2/owner/purchase_orders/$pidP",
+                      "/owner/purchase_orders/view/$pidP/payments:1"];
+            if ($noP !== '') $cands[] = "/v2/owner/purchase_invoices/$noP";
+            foreach ($cands as $hu) {
                 $c3 = curl_init('https://semak.daftra.com' . $hu);
                 curl_setopt_array($c3, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
-                    CURLOPT_TIMEOUT=>30, CURLOPT_SSL_VERIFYPEER=>false,
+                    CURLOPT_TIMEOUT=>30, CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_ENCODING=>"",
                     CURLOPT_HTTPHEADER=>['Cookie: ' . $ck2, 'Accept: */*',
                         'User-Agent: Mozilla/5.0 (compatible; SemakDocs/1.0)']]);
                 $h3 = curl_exec($c3); $k3 = curl_getinfo($c3, CURLINFO_HTTP_CODE); curl_close($c3);
@@ -9424,6 +9431,8 @@ switch ($action) {
                     $names = array_slice(array_values(array_unique($m4[1] ?? [])), 0, 10);
                 }
                 $probe[] = ['url'=>$hu, 'http'=>$k3, 'len'=>strlen((string)$h3),
+                    'has_preview'=>(stripos((string)$h3, 'files/preview') !== false),
+                    'title'=>(preg_match('#<title>(.*?)</title>#is', (string)$h3, $mt) ? mb_substr(trim($mt[1]), 0, 60) : ''),
                     'file_ids'=>array_slice($ids, 0, 20), 'entity_ids'=>$names];
             }
             $out['pay_probe'] = $probe;
