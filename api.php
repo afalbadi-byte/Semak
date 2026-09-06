@@ -9412,10 +9412,13 @@ switch ($action) {
             $noP = '';
             if ($rn = $conn->query("SELECT no FROM dmirror_purchases WHERE id=$pidP LIMIT 1"))
                 if ($xn = $rn->fetch_assoc()) $noP = (string)$xn['no'];
-            $cands = ["/owner/purchase_orders/view/$pidP", "/owner/purchase_invoices/view/$pidP",
-                      "/v2/owner/purchase_invoices/$pidP", "/v2/owner/purchase_orders/$pidP",
-                      "/owner/purchase_orders/view/$pidP/payments:1"];
-            if ($noP !== '') $cands[] = "/v2/owner/purchase_invoices/$noP";
+            // صفحة الفاتورة تعمل؛ إيصالات الدفعات في تبويب المدفوعات ويُحمَّل بطلب منفصل
+            $cands = ["/owner/purchase_invoices/view/$pidP",
+                      "/owner/purchase_invoices/view/$pidP/payments:1",
+                      "/owner/purchase_invoices/payments/$pidP",
+                      "/owner/purchase_invoice_payments/index/purchase_invoice_id:$pidP",
+                      "/owner/purchase_invoice_payments/index/purchase_order_id:$pidP",
+                      "/owner/purchase_invoices/view/$pidP#payments"];
             foreach ($cands as $hu) {
                 $c3 = curl_init('https://semak.daftra.com' . $hu);
                 curl_setopt_array($c3, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
