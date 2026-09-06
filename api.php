@@ -7926,16 +7926,26 @@ switch ($action) {
                 }
             }
             // فاتورة لها أصل سلفاً لا تحتاج آخر
-            if ($why === '' && ($r2 = $conn->query("SELECT COUNT(*) n FROM purchase_documents
+            if ($why === '' && ($r2 = $conn->query("SELECT file_name, source FROM purchase_documents
                     WHERE purchase_id=" . (int)$x['match_id'] . " AND doc_type='invoice'
-                      AND COALESCE(source,'') <> 'daftra_pdf'")))
-                if (($x2 = $r2->fetch_assoc()) && (int)$x2['n'] > 0) $why = 'للفاتورة أصل مرفق سلفاً';
+                      AND COALESCE(source,'') <> 'daftra_pdf' LIMIT 1")))
+                if ($x2 = $r2->fetch_assoc())
+                    $why = 'للفاتورة أصل مرفق سلفاً: ' . $x2['file_name'];
             if ($why === '') $take[] = $x;
             else $skip[] = ['file'=>$x['file_name'], 'inv'=>$x['inv_no'], 'why'=>$why];
         }
 
+        $tally = [];
+        foreach ($skip as $sk) {
+            $k = preg_replace('/:.*$/u', '', $sk['why']);          // نوحّد الأسباب ذات التفصيل
+            $k = preg_replace('/d+/u', 'ن', $k);
+            $tally[$k] = ($tally[$k] ?? 0) + 1;
+        }
+        arsort($tally);
+
         if (!$apply) {
             echo json_encode(['success'=>true, 'dry'=>true, 'would_link'=>count($take), 'skipped'=>count($skip),
+                'tally'=>$tally,
                 'rows'=>array_map(function($x) {
                     return ['file'=>$x['file_name'], 'inv'=>$x['inv_no'], 'supplier'=>$x['inv_sup'],
                             'total'=>(float)$x['inv_total'], 'date'=>$x['inv_date']]; }, $take),

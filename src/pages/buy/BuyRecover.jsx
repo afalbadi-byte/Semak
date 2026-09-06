@@ -184,9 +184,20 @@ export default function BuyRecover({ onClose }) {
                                 </div>
                             ))}
                         </div>
+                        {Object.keys(plan.tally || {}).length > 0 && (
+                            <div className="rounded-xl bg-black/25 p-2 space-y-0.5">
+                                {Object.entries(plan.tally).map(([k, n]) => (
+                                    <div key={k} className="text-[11px] flex justify-between gap-2">
+                                        <span className="text-slate-300">{k}</span>
+                                        <span className="text-slate-500 tabular-nums shrink-0">{n}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                         {(plan.skip || []).length > 0 && (
-                            <details className="text-[11px] text-slate-400">
-                                <summary className="cursor-pointer">لماذا استُبعد الباقي</summary>
+                            // لا يمرّ شيء؟ السبب هو كل الخبر، فلا يُطوى
+                            <details className="text-[11px] text-slate-400" open={!plan.would_link}>
+                                <summary className="cursor-pointer">تفصيل كل مستند</summary>
                                 <div className="pt-1 space-y-0.5">
                                     {plan.skip.map((x, i) => (
                                         <div key={i}>{x.file} — {x.why}</div>
