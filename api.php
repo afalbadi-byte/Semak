@@ -1480,7 +1480,17 @@ function daftra_ext_of($ct, $fallbackName = '') {
 // نقبله ونُظهره بدل أن نُسقط مطابقة صحيحة.
 // يُرفع هذا الرقم مع كل تعديل على قواعد المطابقة أدناه، فتُعاد المطابقة تلقائياً
 // عند أول فتح للصفحة. القاعدة الجديدة لا تنفع إن ظلت النتائج القديمة معروضة.
-define('RECOVERY_RULES_VER', 4);
+define('RECOVERY_RULES_VER', 5);
+
+// تحذير نوع المستند: يُقرأ من اسمه ورقمه، فالمبلغ وحده لا يميّز عرض السعر من الفاتورة
+function recovery_doc_warn($fileName, $ocrNo) {
+    $t = mb_strtolower((string)$fileName . ' ' . (string)$ocrNo);
+    if (preg_match('/مرتجع|إشعار دائن|اشعار دائن|credit[ _-]?note|\bcrn\b/u', $t))
+        return 'إشعار مرتجع لا فاتورة — سجّله في المرتجعات';
+    if (preg_match('/عرض سعر|عرض[ _-]?السعر|quotation|\bqtn\b|\bquote\b|estimate|proforma/u', $t))
+        return 'عرض سعر لا فاتورة — لا يصلح نسخةً للأصل';
+    return '';
+}
 
 // إعادة المطابقة لكل المعلّق — بلا قراءة بصرية، فهي حساب محض
 function recovery_rematch_all($conn) {
@@ -1489,7 +1499,7 @@ function recovery_rematch_all($conn) {
                            FROM dmirror_purchases"))
         while ($x = $r->fetch_assoc()) $invs[] = $x;
     $rows = [];
-    if ($r = $conn->query("SELECT id, ocr_sup, ocr_total, ocr_date FROM recovery_files
+    if ($r = $conn->query("SELECT id, ocr_sup, ocr_total, ocr_date, ocr_no, file_name FROM recovery_files
                            WHERE status='pending' AND ocr_at IS NOT NULL"))
         while ($x = $r->fetch_assoc()) $rows[] = $x;
     $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
@@ -1497,6 +1507,11 @@ function recovery_rematch_all($conn) {
     foreach ($rows as $rw) {
         $tot = ($rw['ocr_total'] === null) ? null : round((float)$rw['ocr_total'], 2);
         [$verdict, $mid, $mno, $ev, $cands] = recovery_match($invs, (string)$rw['ocr_sup'], $tot, $rw['ocr_date']);
+        // مطابق تماماً لكنه ليس من نوع الفاتورة: لا يُقدَّم كأنه الأصل المفقود
+        if ($w = recovery_doc_warn($rw['file_name'] ?? '', $rw['ocr_no'] ?? '')) {
+            if ($verdict === 'مؤكد' || $verdict === 'مرجّح') $verdict = 'يحتاج مراجعة';
+            $ev = $w . ' · ' . $ev;
+        }
         $conn->query("UPDATE recovery_files SET verdict='" . $E($verdict) . "',
                 match_id=" . ($mid === null ? 'NULL' : (int)$mid) . ", match_no='" . $E($mno) . "',
                 evidence='" . $E($ev) . "', cands='" . $E(json_encode($cands, JSON_UNESCAPED_UNICODE)) . "'
@@ -7796,7 +7811,7 @@ switch ($action) {
             while ($x = $r->fetch_assoc()) $sum[$x['verdict'] ?: 'قيد القراءة'] = (int)$x['n'];
         if ($r = $conn->query("SELECT id, file_name, drive_url, ocr_kind, ocr_sup, ocr_no, ocr_total, ocr_date,
                     verdict, match_id, match_no, evidence, cands, status
-                FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'خطأ في القيد','مؤكد','مرجّح','متعدد','مرشّح','بلا دليل'), id LIMIT 200"))
+                FROM recovery_files WHERE $w ORDER BY FIELD(verdict,'خطأ في القيد','مؤكد','مرجّح','يحتاج مراجعة','متعدد','مرشّح','بلا دليل'), id LIMIT 200"))
             while ($x = $r->fetch_assoc()) { $x['cands'] = json_decode($x['cands'] ?: '[]', true); $rows[] = $x; }
         echo json_encode(['success'=>true, 'summary'=>$sum, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;

@@ -10,6 +10,7 @@ const VERDICT = {
     'مؤكد':     'bg-emerald-500/15 text-emerald-300',
     'مرجّح':    'bg-teal-500/15 text-teal-300',
     'خطأ في القيد': 'bg-rose-500/15 text-rose-300',
+    'يحتاج مراجعة': 'bg-fuchsia-500/15 text-fuchsia-300',
     'مرشّح':    'bg-amber-500/15 text-amber-300',
     'متعدد':    'bg-sky-500/15 text-sky-300',
     'بلا دليل': 'bg-white/10 text-slate-400',
