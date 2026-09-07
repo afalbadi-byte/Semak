@@ -21,11 +21,13 @@ const src = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
 for (const a of APPS) {
   let h = src;
 
-  // بطاقة التعريف وأيقونة iOS: مكتوبتان في الترويسة، فيقرؤهما سفاري فورا
-  h = h.replace('<link rel="manifest" href="/manifest.webmanifest" />',
-                `<link rel="manifest" href="/${a.slug}.webmanifest" />`);
+  // إضافة Vite تحقن بطاقة تعريف ثانية في نهاية الترويسة. ومع بطاقتين يأخذ
+  // كل متصفح واحدة — كروم الأولى وسفاري قد يأخذ الأخيرة. نمحوهما جميعا
+  // ونضع واحدة صريحة، فلا يبقى للتخمين موضع.
+  h = h.replace(/\s*<link rel="manifest"[^>]*>/g, '');
   h = h.replace('<link rel="apple-touch-icon" href="/logo.png" />',
-                '<link rel="apple-touch-icon" href="/images/app-icon-512.png" />');
+    `<link rel="apple-touch-icon" href="/images/app-icon-512.png" />\n` +
+    `    <link rel="manifest" href="/${a.slug}.webmanifest" />`);
 
   // بدونها يفتح iOS الرابط في سفاري بشريط العنوان، لا كتطبيق مستقل
   h = h.replace('<meta name="viewport"',
