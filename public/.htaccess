@@ -3,6 +3,11 @@
   RewriteEngine On
   RewriteBase /
   RewriteRule ^index\.html$ - [L]
+  # كل تطبيق PWA له صفحة دخول خاصة تحمل بطاقة تعريفه ووسوم iOS.
+  # بدونها يقرأ iOS البطاقة العامة (start_url:"/") فتفتح الأيقونة الموقع لا التطبيق.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^(buy|proj|qc)(/.*)?$ /$1/index.html [L]
+
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]

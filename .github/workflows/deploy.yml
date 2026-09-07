@@ -45,6 +45,9 @@ jobs:
       - name: Copy api.php to dist
         run: cp api.php dist/api.php
 
+      - name: Build per-app entry pages (iOS PWA install)
+        run: node scripts/build-app-pages.mjs
+
       - name: Copy brochure landing page to dist/brochure
         run: |
           mkdir -p dist/brochure
