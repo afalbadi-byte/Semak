@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, RefreshCw, Bot, MessageSquarePlus, LogOut, Maximize2, Minimize2 } from 'lucide-react';
+import { Sparkles, X, Send, RefreshCw, Bot, MessageSquarePlus, LogOut, Maximize2, Minimize2, Copy, Check } from 'lucide-react';
 import { API_URL, getAdminToken } from '../lib/api/client';
 import MiniMarkdown from './MiniMarkdown';
 
@@ -28,7 +28,14 @@ export default function AiAssistant({ userName = '' }) {
   });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState(null);
   const endRef = useRef(null);
+
+  const copyMsg = (i, text) => {
+    try { navigator.clipboard.writeText(text); } catch { /* تجاهل */ }
+    setCopiedIdx(i);
+    setTimeout(() => setCopiedIdx(c => (c === i ? null : c)), 1500);
+  };
 
   const clearChat = () => {
     setMessages([]); setInput('');
@@ -132,6 +139,14 @@ export default function AiAssistant({ userName = '' }) {
                     : 'max-w-full w-full bg-white dark:bg-brand-800 text-slate-700 dark:text-brand-100 border border-slate-100 dark:border-brand-700 rounded-tl-sm'
                 }`}>
                   {m.role === 'user' ? renderWithSar(m.content) : <MiniMarkdown text={m.content} />}
+                  {m.role === 'assistant' && (
+                    <button onClick={() => copyMsg(i, m.content)}
+                      className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-[#c5a059] transition-colors">
+                      {copiedIdx === i
+                        ? <><Check size={11} className="text-emerald-500" /> تم النسخ</>
+                        : <><Copy size={11} /> نسخ</>}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

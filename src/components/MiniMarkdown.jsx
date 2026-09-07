@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Copy, Check } from 'lucide-react';
 
 // ─── عارض ماركداون مصغّر: عناوين وقوائم وجداول وتشديد — بلا مكتبات خارجية ────
 // النص يُحوَّل إلى عناصر React مباشرة، فلا حقن HTML ولا حاجة لتنقية.
@@ -28,6 +29,47 @@ function sar(text, keyBase) {
 const cells = line => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim());
 const isSep  = line => /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(line) && line.includes('-');
 
+// جدول بزر نسخ يحوّله لنص مفصول بمسافات Tab — يلصق كجدول حقيقي في إكسل/شيتس/وورد
+function TableBlock({ head, rows }) {
+    const [copied, setCopied] = useState(false);
+    const doCopy = () => {
+        const tsv = [head, ...rows].map(r => r.join('\t')).join('\n');
+        try { navigator.clipboard.writeText(tsv); } catch { /* تجاهل */ }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+    return (
+        <div className="my-2 -mx-1">
+            <div className="flex justify-end mb-1">
+                <button type="button" onClick={doCopy}
+                    className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-[#c5a059] transition-colors">
+                    {copied ? <><Check size={11} className="text-emerald-500" /> نُسخ الجدول</> : <><Copy size={11} /> نسخ الجدول</>}
+                </button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-[11px] border-collapse">
+                    <thead>
+                        <tr>{head.map((h, k) => (
+                            <th key={k} className="bg-slate-100 dark:bg-brand-700 text-slate-600 dark:text-brand-100 font-black px-2 py-1.5 text-right whitespace-nowrap border border-slate-200 dark:border-brand-600">
+                                {inline(h, 'h' + k)}
+                            </th>))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((r, ri) => (
+                            <tr key={ri}>
+                                {r.map((c, ci) => (
+                                    <td key={ci} className="px-2 py-1.5 border border-slate-200 dark:border-brand-700 whitespace-nowrap align-top">
+                                        {inline(c, 'c' + ri + '_' + ci)}
+                                    </td>))}
+                            </tr>))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
 export default function MiniMarkdown({ text }) {
     const lines = String(text || '').split('\n');
     const blocks = [];
@@ -45,28 +87,7 @@ export default function MiniMarkdown({ text }) {
             i += 2;
             const rows = [];
             while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(cells(lines[i])); i++; }
-            blocks.push(
-                <div key={'tb' + i} className="my-2 -mx-1 overflow-x-auto">
-                    <table className="w-full text-[11px] border-collapse">
-                        <thead>
-                            <tr>{head.map((h, k) => (
-                                <th key={k} className="bg-slate-100 dark:bg-brand-700 text-slate-600 dark:text-brand-100 font-black px-2 py-1.5 text-right whitespace-nowrap border border-slate-200 dark:border-brand-600">
-                                    {inline(h, 'h' + k)}
-                                </th>))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((r, ri) => (
-                                <tr key={ri}>
-                                    {r.map((c, ci) => (
-                                        <td key={ci} className="px-2 py-1.5 border border-slate-200 dark:border-brand-700 whitespace-nowrap align-top">
-                                            {inline(c, 'c' + ri + '_' + ci)}
-                                        </td>))}
-                                </tr>))}
-                        </tbody>
-                    </table>
-                </div>
-            );
+            blocks.push(<TableBlock key={'tb' + i} head={head} rows={rows} />);
             continue;
         }
 
