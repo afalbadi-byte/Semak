@@ -1,5 +1,54 @@
 import React, { useState } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Image as ImageIcon } from 'lucide-react';
+
+// ─── تحويل HTML لصورة PNG عبر <foreignObject> داخل SVG — لنسخ عناصر كصورة (واتساب) ───
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function measureHTML(html) {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed; top:-9999px; left:-9999px; display:inline-block;';
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    const rect = host.getBoundingClientRect();
+    const w = Math.ceil(rect.width) + 4, h = Math.ceil(rect.height) + 4;
+    document.body.removeChild(host);
+    return { w, h };
+}
+
+function htmlToPngBlob(html, width, height, scale = 2) {
+    return new Promise((resolve, reject) => {
+        const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`
+            + `<foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${html}</div></foreignObject></svg>`;
+        const svg64 = btoa(unescape(encodeURIComponent(svgStr)));
+        const img = new window.Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = width * scale; canvas.height = height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('canvas empty')), 'image/png');
+        };
+        img.onerror = reject;
+        img.src = 'data:image/svg+xml;base64,' + svg64;
+    });
+}
+
+async function copyOrDownloadBlob(blob, filename, onState) {
+    if (navigator.clipboard && window.ClipboardItem) {
+        try {
+            await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]);
+            onState('copied'); return;
+        } catch { /* تجاهل — جرّب التنزيل */ }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    onState('downloaded');
+}
 
 // ─── عارض ماركداون مصغّر: عناوين وقوائم وجداول وتشديد — بلا مكتبات خارجية ────
 // النص يُحوَّل إلى عناصر React مباشرة، فلا حقن HTML ولا حاجة لتنقية.
@@ -29,21 +78,43 @@ function sar(text, keyBase) {
 const cells = line => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim());
 const isSep  = line => /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(line) && line.includes('-');
 
-// جدول بزر نسخ يحوّله لنص مفصول بمسافات Tab — يلصق كجدول حقيقي في إكسل/شيتس/وورد
+// جدول بخياري نسخ: نص TSV يلصق كجدول حقيقي في إكسل/شيتس، أو صورة تلصق كجدول مرئي في واتساب
 function TableBlock({ head, rows }) {
-    const [copied, setCopied] = useState(false);
-    const doCopy = () => {
+    const [textState, setTextState] = useState('idle');   // idle | copied
+    const [imgState, setImgState]   = useState('idle');   // idle | copied | downloaded
+
+    const doCopyText = () => {
         const tsv = [head, ...rows].map(r => r.join('\t')).join('\n');
         try { navigator.clipboard.writeText(tsv); } catch { /* تجاهل */ }
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        setTextState('copied');
+        setTimeout(() => setTextState('idle'), 1500);
     };
+
+    const doCopyImage = async () => {
+        try {
+            const th = h => `<th style="background:#f1f5f9;color:#334155;font-weight:900;padding:8px 10px;text-align:right;white-space:nowrap;border:1px solid #cbd5e1;font-family:Cairo,Tahoma,sans-serif;font-size:14px;">${escapeHtml(h)}</th>`;
+            const td = c => `<td style="padding:8px 10px;border:1px solid #cbd5e1;white-space:nowrap;text-align:right;font-family:Cairo,Tahoma,sans-serif;font-size:14px;color:#1e293b;background:#ffffff;">${escapeHtml(c)}</td>`;
+            const html = `<table dir="rtl" style="border-collapse:collapse;background:#ffffff;">`
+                + `<thead><tr>${head.map(th).join('')}</tr></thead>`
+                + `<tbody>${rows.map(r => `<tr>${r.map(td).join('')}</tr>`).join('')}</tbody></table>`;
+            const { w, h } = measureHTML(html);
+            const blob = await htmlToPngBlob(html, w, h);
+            await copyOrDownloadBlob(blob, 'جدول.png', s => { setImgState(s); setTimeout(() => setImgState('idle'), 1500); });
+        } catch { /* تجاهل */ }
+    };
+
     return (
         <div className="my-2 -mx-1">
-            <div className="flex justify-end mb-1">
-                <button type="button" onClick={doCopy}
+            <div className="flex justify-end items-center gap-3 mb-1">
+                <button type="button" onClick={doCopyImage}
                     className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-[#c5a059] transition-colors">
-                    {copied ? <><Check size={11} className="text-emerald-500" /> نُسخ الجدول</> : <><Copy size={11} /> نسخ الجدول</>}
+                    {imgState === 'copied' && <><Check size={11} className="text-emerald-500" /> نُسخت الصورة</>}
+                    {imgState === 'downloaded' && <><Check size={11} className="text-emerald-500" /> نزّلت الصورة</>}
+                    {imgState === 'idle' && <><ImageIcon size={11} /> نسخ كصورة (واتساب)</>}
+                </button>
+                <button type="button" onClick={doCopyText}
+                    className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-[#c5a059] transition-colors">
+                    {textState === 'copied' ? <><Check size={11} className="text-emerald-500" /> نُسخ النص</> : <><Copy size={11} /> نسخ كنص (إكسل)</>}
                 </button>
             </div>
             <div className="overflow-x-auto">
