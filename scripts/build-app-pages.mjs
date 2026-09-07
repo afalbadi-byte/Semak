@@ -37,6 +37,19 @@ for (const a of APPS) {
 
   h = h.replace(/<title>[\s\S]*?<\/title>/, `<title>${a.title}</title>`);
 
+  // العطب الأصلي: iOS تقرأ og:url لتحديد الرابط عند «مشاركة»، لا شريط العنوان.
+  // وكانت مثبّتة على الجذر، فأيقونة الشاشة الرئيسية تفتح semak.sa مهما فعلنا
+  // ببطاقة التعريف.
+  const url = `https://semak.sa/${a.slug}`;
+  h = h.replace(/<meta property="og:url" content="[^"]*">/,
+                `<meta property="og:url" content="${url}">`);
+  h = h.replace(/<meta property="og:title" content="[^"]*">/,
+                `<meta property="og:title" content="${a.title}">`);
+  h = h.replace(/<meta name="twitter:title" content="[^"]*">/,
+                `<meta name="twitter:title" content="${a.title}">`);
+  h = h.replace(/<link rel="canonical" href="[^"]*"\s*\/?>/,
+                `<link rel="canonical" href="${url}">`);
+
   const dir = path.join(DIST, a.slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'index.html'), h);
