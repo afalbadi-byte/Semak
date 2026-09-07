@@ -8814,6 +8814,56 @@ switch ($action) {
         break;
     }
 
+    case 'purchase_set_project': {
+        // تسكين محلي بحت على مشروع — لأي فاتورة (محلية أو من دفترة) عبر جدول purchase_project فقط
+        // بلا أي اتصال بـ API دفترة إطلاقاً: لا يمس رقم الفاتورة ولا مرفقاتها
+        // (قاعدة أحمد 2026-09-07: التسكين المباشر على دفترة عبر daftra_purchase_set_project
+        //  سبّب مشاكل — كنسل مرفقات وغيّر أرقام فواتير — فانتقل التسكين لهذا المسار المحلي الآمن)
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة — سجّل الدخول مرة أخرى'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        if (!$u) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if ((($u['role'] ?? '') !== 'admin') && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true)) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسكين المشتريات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b  = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E  = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $inv = $conn->query("SELECT id, no FROM dmirror_purchases WHERE id=$id LIMIT 1");
+        if (!$inv || !$inv->num_rows) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $invRow = $inv->fetch_assoc();
+        $pid_pr = (int)($b['project_id'] ?? 0);
+
+        if ($pid_pr > 0) {
+            $conn->query("INSERT INTO purchase_project (purchase_id, project_id, note, set_by)
+                VALUES ($id, $pid_pr, 'تسكين من تطبيق المشتريات', '" . $E($u['name'] ?? '') . "')
+                ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), note=VALUES(note), set_by=VALUES(set_by)");
+        } else {
+            $conn->query("DELETE FROM purchase_project WHERE purchase_id=$id");
+        }
+        $pname = '';
+        if ($pid_pr > 0) {
+            $pr = $conn->query("SELECT name FROM project_budgets WHERE project_id=$pid_pr LIMIT 1");
+            if ($pr && ($prow = $pr->fetch_assoc())) $pname = $prow['name'];
+        }
+        acc_audit($conn, 1, 'purchase', $id, 'update',
+            'تسكين فاتورة ' . $invRow['no'] . ' على ' . ($pname ?: 'بلا مشروع') . ' (محلي — بلا مساس بدفترة)', $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'id'=>$id, 'project_id'=>$pid_pr, 'project'=>$pname], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'projects_list': {
+        if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
+        $rows = [];
+        if ($r = $conn->query("SELECT project_id, name FROM project_budgets ORDER BY project_id"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'purchase_delete': {
         // حذف فاتورة شراء — لا يمر إلا بعد إلغاء ما هو مرتبط بها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -9715,8 +9765,9 @@ switch ($action) {
             else {
                 $h = $h[0];
                 $out['title']    = 'فاتورة شراء ' . $h['no'];
-                $out['subtitle'] = $h['supplier'];
-                $out['origin']   = $h['origin'] ?? 'daftra';
+                $out['subtitle']   = $h['supplier'];
+                $out['origin']     = $h['origin'] ?? 'daftra';
+                $out['project_id'] = (int)($h['project_id'] ?? 0);
                 if (($h['origin'] ?? '') === 'local') {
                     $out['edit'] = [
                         'id'         => $pid,

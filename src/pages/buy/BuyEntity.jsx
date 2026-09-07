@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2, Receipt, Check, FileText } from 'lucide-react';
+import { ArrowRight, Loader2, ExternalLink, Layers, Download, Archive, Trash2, AlertTriangle, X, Pencil, Plus, Save, Wallet, CheckCircle2, Receipt, Check, FileText, FolderKanban } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import SupplierStatement from './SupplierStatement';
 import { SortBar } from '../../components/SortHeader';
@@ -20,6 +20,8 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [err, setErr]   = useState('');
     const [del, setDel]   = useState(null);   // { blockers } أو { ask: true }
     const [edit, setEdit] = useState(null);   // نسخة قابلة للتحرير من الفاتورة
+    const [assign, setAssign] = useState(null); // تسكين محلي على مشروع {project_id}
+    const [projects, setProjects] = useState([]);
     const [pay,  setPay]  = useState(null);   // دفعة على مستوى المورد
     const [payRes, setPayRes] = useState(null);
     const [rcpt, setRcpt] = useState(null);   // إرفاق إيصال لدفعة قائمة
@@ -27,10 +29,10 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
     const [busy, setBusy] = useState(false);
     const [tick, setTick] = useState(0);      // لإعادة الجلب بعد الإلغاء
 
-    useDepthGuard((del ? 1 : 0) + (edit ? 1 : 0) + (pay ? 1 : 0) + (rcpt ? 1 : 0),
+    useDepthGuard((del ? 1 : 0) + (edit ? 1 : 0) + (assign ? 1 : 0) + (pay ? 1 : 0) + (rcpt ? 1 : 0),
         () => { rcpt ? setRcpt(null)
               : pay ? (payRes ? (setPay(null), setPayRes(null)) : setPay(null))
-              : edit ? setEdit(null) : setDel(null); });
+              : edit ? setEdit(null) : assign ? setAssign(null) : setDel(null); });
 
     const post = (action, body) => fetch(`${API_URL}?action=${action}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
@@ -77,6 +79,17 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
             if (!r.success) { setErr(r.message || 'تعذر الحفظ'); return; }
             if (r.overpaid > 0) alert('تنبيه: المسدد يزيد عن الإجمالي بمقدار ' + money(r.overpaid) + ' ريال');
             setEdit(null); setTick(t => t + 1);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
+
+    // تسكين محلي على مشروع — لا يمس دفترة إطلاقاً (بلا تغيير رقم فاتورة أو فقدان مرفقات)
+    const saveAssign = async () => {
+        setBusy(true); setErr('');
+        try {
+            const r = await post('purchase_set_project', { id: value, project_id: Number(assign.project_id) || 0 });
+            if (!r.success) { setErr(r.message || 'تعذر الحفظ'); return; }
+            setAssign(null); setTick(t => t + 1);
         } catch { setErr('تعذر الاتصال'); }
         finally { setBusy(false); }
     };
@@ -148,6 +161,12 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
         return () => { live = false; };
     }, [type, value, tick]);
 
+    useEffect(() => {
+        if (type !== 'purchase') return;
+        fetch(`${API_URL}?action=projects_list`, { headers: auth() }).then(r => r.json())
+            .then(r => { if (r.success) setProjects(r.data || []); }).catch(() => {});
+    }, [type]);
+
     if (stmt) return <SupplierStatement supplier={value} onClose={() => setStmt(false)} />;
 
     return (
@@ -179,6 +198,12 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                         disabled={busy}
                         className="min-h-[44px] px-3 rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-bold flex items-center gap-1.5">
                         <Pencil size={14} /> تعديل
+                    </button>
+                )}
+                {type === 'purchase' && data && (
+                    <button onClick={() => setAssign({ project_id: data.project_id || 0 })} disabled={busy}
+                        className="min-h-[44px] px-3 rounded-xl bg-white/10 text-slate-200 text-[12px] font-bold flex items-center gap-1.5">
+                        <FolderKanban size={14} /> تسكين
                     </button>
                 )}
                 {type === 'purchase' && data && data.origin === 'local' && (
@@ -474,6 +499,40 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                         <button onClick={saveEdit} disabled={busy}
                             className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1628] text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60">
                             {busy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} حفظ التعديل
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {assign && (
+                <div className="fixed inset-0 bg-black/70 z-[85] flex items-end justify-center p-0 sm:p-4"
+                    onClick={() => !busy && setAssign(null)}>
+                    <div dir="rtl" onClick={e => e.stopPropagation()}
+                        className="bg-[#0f1e36] rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+                        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-black text-[15px] flex items-center gap-2">
+                                <FolderKanban size={16} className="text-[#c5a059]" /> تسكين على مشروع
+                            </h3>
+                            <button onClick={() => setAssign(null)} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                            تسكين محلي داخل التطبيق فقط — لا يعدّل الفاتورة في دفترة ولا يمس رقمها أو مرفقاتها.
+                        </p>
+                        <Field label="المشروع">
+                            <select value={assign.project_id}
+                                onChange={e => setAssign({ ...assign, project_id: e.target.value })} className={INP}>
+                                <option value="0">— بلا مشروع —</option>
+                                {projects.map(p => (
+                                    <option key={p.project_id} value={p.project_id}>{p.name}</option>
+                                ))}
+                            </select>
+                        </Field>
+                        <button onClick={saveAssign} disabled={busy}
+                            className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1628] text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                            {busy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} حفظ التسكين
                         </button>
                     </div>
                 </div>
