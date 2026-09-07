@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, RefreshCw, MessageSquarePlus } from 'lucide-react';
+import { Send, RefreshCw, MessageSquarePlus, Copy, Check } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import MiniMarkdown from '../../components/MiniMarkdown';
 
@@ -17,7 +17,14 @@ export default function BuyChat({ userName = '' }) {
     });
     const [input, setInput]   = useState('');
     const [busy, setBusy]     = useState(false);
+    const [copiedIdx, setCopiedIdx] = useState(null);
     const endRef = useRef(null);
+
+    const copyMsg = (i, text) => {
+        try { navigator.clipboard.writeText(text); } catch { /* تجاهل */ }
+        setCopiedIdx(i);
+        setTimeout(() => setCopiedIdx(c => (c === i ? null : c)), 1500);
+    };
 
     useEffect(() => {
         try { sessionStorage.setItem('buy_ai_chat', JSON.stringify(messages.slice(-30))); } catch { /* تجاهل */ }
@@ -80,6 +87,14 @@ export default function BuyChat({ userName = '' }) {
                             ? 'max-w-[85%] bg-[#2d5299] rounded-2xl rounded-tr-sm px-3 py-2 text-xs whitespace-pre-wrap'
                             : 'bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-3 py-2 text-xs'}>
                             {m.role === 'user' ? m.content : <MiniMarkdown text={m.content} />}
+                            {m.role === 'assistant' && (
+                                <button onClick={() => copyMsg(i, m.content)}
+                                    className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-gold-500 transition-colors">
+                                    {copiedIdx === i
+                                        ? <><Check size={11} className="text-emerald-500" /> تم النسخ</>
+                                        : <><Copy size={11} /> نسخ</>}
+                                </button>
+                            )}
                         </div>
                     </div>
                 ))}
