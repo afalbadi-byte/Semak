@@ -9908,7 +9908,7 @@ switch ($action) {
         if ($r = $conn->query("SELECT id FROM dmirror_purchases WHERE id < 900000 ORDER BY id LIMIT $take OFFSET $skip"))
             while ($x = $r->fetch_assoc()) $ids[] = (int)$x['id'];
 
-        $filled = []; $notes = []; $custom = []; $staff = []; $scanned = 0;
+        $filled = []; $notes = []; $custom = []; $staff = []; $scanned = 0; $links = [];
         foreach ($ids as $pid) {
             $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
             curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
@@ -9923,7 +9923,9 @@ switch ($action) {
                 $sv = trim((string)$v);
                 if ($sv !== '' && $sv !== '0' && $sv !== '0.00' && $sv !== 'null') $filled[$k] = ($filled[$k] ?? 0) + 1;
             }
-            $nt = trim((string)($o['notes'] ?? ''));
+            $nt = trim((string)($o['notes'] ?? '')); if ($nt === '') $nt = trim(strip_tags((string)($o['html_notes'] ?? '')));
+            $raw = trim((string)($o['html_notes'] ?? ''));
+            if ($raw !== '' && preg_match_all('#https?://[^s"<>]+#', $raw, $mm)) $links[] = ['id'=>$pid,'no'=>(string)($o['no'] ?? ''),'links'=>$mm[0]];
             if ($nt !== '') $notes[] = ['id'=>$pid, 'no'=>(string)($o['no'] ?? ''), 'notes'=>mb_substr($nt, 0, 300)];
             $cf = (array)($o['PurchaseOrderCustomField'] ?? []);
             if ($cf) $custom[] = ['id'=>$pid, 'fields'=>$cf];
@@ -9934,7 +9936,7 @@ switch ($action) {
         echo json_encode(['success'=>true, 'scanned'=>$scanned, 'filled'=>$filled,
             'notes_count'=>count($notes), 'notes'=>array_slice($notes, 0, 25),
             'custom_count'=>count($custom), 'custom'=>array_slice($custom, 0, 5),
-            'staff'=>$staff], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            'staff'=>$staff, 'links_count'=>count($links), 'links'=>array_slice($links, 0, 40)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         break;
     }
 
