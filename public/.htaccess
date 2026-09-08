@@ -42,6 +42,15 @@ AddType application/wasm .wasm
 # كانت تُقدَّم text/plain فيفشل التثبيت على أندرويد بصمت بعد «جاري التثبيت»
 AddType application/manifest+json .webmanifest
 
+# ── الفيديو: كاش قصير ────────────────────────────────────────
+# اسمه ثابت بلا hash، فالكاش الطويل يجمّد النسخة القديمة عند أي استبدال.
+<FilesMatch "\.(mp4|webm|mov)$">
+  Header set Cache-Control "public, max-age=300, must-revalidate"
+  <IfModule mod_expires.c>
+    ExpiresActive Off
+  </IfModule>
+</FilesMatch>
+
 # ── كاش طويل لملفات الأصول (لها hash في اسمها) ────────────────
 <IfModule mod_expires.c>
   ExpiresActive On
