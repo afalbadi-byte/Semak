@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FileText, Search, Link2, Trash2, AlertTriangle, CheckCircle2, FolderOpen, RefreshCw, Plus, Upload } from 'lucide-react';
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
+
+// الأوامر المالية صارت تتطلب جلسة
+const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
 
 const DRIVE_FOLDER = 'سماك-المستندات';
 const TYPES = { invoice: 'فاتورة مورد', receipt: 'إيصال سداد', other: 'مستند آخر' };
@@ -23,9 +26,9 @@ export default function PurchaseDocs() {
         setLoading(true); setError('');
         try {
             const [s, d, pc] = await Promise.all([
-                fetch(`${API_URL}?action=pdocs_stats`).then(r => r.json()),
-                fetch(`${API_URL}?action=pdocs_list`).then(r => r.json()),
-                fetch(`${API_URL}?action=pcost_list`).then(r => r.json()),
+                fetch(`${API_URL}?action=pdocs_stats`, { headers: auth() }).then(r => r.json()),
+                fetch(`${API_URL}?action=pdocs_list`, { headers: auth() }).then(r => r.json()),
+                fetch(`${API_URL}?action=pcost_list`, { headers: auth() }).then(r => r.json()),
             ]);
             if (s.success) setStats(s);
             if (d.success) setDocs(d.data || []);

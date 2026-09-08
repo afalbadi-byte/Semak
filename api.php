@@ -9961,6 +9961,9 @@ switch ($action) {
     }
 
     case 'buy_list': {
+        // بيانات مالية — لا تُقرأ بلا جلسة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         // سجلات التطبيق: الفواتير والموردون ببحث وترقيم صفحات
         $kind = (string)($_GET['kind'] ?? 'invoices');
         $q    = trim((string)($_GET['q'] ?? ''));
@@ -10835,6 +10838,9 @@ switch ($action) {
     }
 
     case 'pdocs_list': {
+        // بيانات مالية — لا تُقرأ بلا جلسة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         $pid = (int)($_GET['purchase_id'] ?? 0);
         $where = $pid ? "WHERE d.purchase_id = $pid" : '';
         $r = $conn->query("SELECT d.*, p.no AS mirror_no, p.supplier, p.date, p.total
@@ -10847,6 +10853,9 @@ switch ($action) {
     }
 
     case 'pdocs_stats': {
+        // بيانات مالية — لا تُقرأ بلا جلسة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         $out = ['success'=>true];
         $r = $conn->query("SELECT COUNT(*) c FROM purchase_documents");
         $out['documents'] = $r ? (int)$r->fetch_assoc()['c'] : 0;
