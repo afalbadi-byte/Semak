@@ -9999,7 +9999,7 @@ switch ($action) {
             ['discount_total', "discount_total DECIMAL(14,3) DEFAULT NULL"],
         ] as $c) ensure_column($conn, 'dmirror_purchases', $c[0], $c[1]);
 
-        if (!empty($_GET['reset'])) daftra_treasuries_cache($conn);
+        $trc = !empty($_GET['reset']) ? daftra_treasuries_cache($conn) : -1;
         $take = min(25, max(1, (int)($_GET['limit'] ?? 10)));
         $cur  = null;
         if ($r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='daftra_import_cursor' LIMIT 1"))
@@ -10082,7 +10082,7 @@ switch ($action) {
         if ($docs) acc_audit($conn, 1, 'purchase', 0, 'daftra_import',
             "استيراد تفاصيل دفترة: $scanned فاتورة، $docs مستندا من الملاحظات", $u['name'] ?? '');
         echo json_encode(['success'=>true, 'scanned'=>$scanned, 'with_notes'=>$withNotes,
-            'docs_added'=>$docs, 'failed'=>$failed, 'remaining'=>$left, 'done'=>$done], JSON_UNESCAPED_UNICODE);
+            'docs_added'=>$docs, 'failed'=>$failed, 'remaining'=>$left, 'done'=>$done, 'treasuries'=>$trc], JSON_UNESCAPED_UNICODE);
         break;
     }
 
