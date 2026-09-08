@@ -47,6 +47,10 @@
   .fal { margin-top:18px; display:flex; align-items:center; gap:8px; opacity:.65; }
   .fal img { height:20px; }
   .fal span { font-size:11px; font-weight:700; direction:ltr; }
+.pick{display:flex;gap:8px;justify-content:center;margin:14px 0 0}
+.pick button{font:inherit;font-weight:700;cursor:pointer;padding:9px 18px;border-radius:999px;
+  border:1px solid rgba(197,160,89,.45);background:transparent;color:#e9e3d6}
+.pick button.on{background:#c5a059;border-color:#c5a059;color:#0a0f1e}
 </style>
 </head>
 <body>
@@ -56,10 +60,29 @@
   <div><b>سماك العقارية</b><span>حي البوابة، مكة المكرمة</span></div>
 </div>
 
-<video controls playsinline preload="metadata" poster="video-poster.jpg">
-  <source src="semak-albawaba-film.mp4?v=3" type="video/mp4">
+<video id="film" controls playsinline preload="metadata" poster="video-poster.jpg">
+  <source id="src" src="semak-albawaba-film.mp4?v=3" type="video/mp4">
   متصفحك لا يشغّل الفيديو — <a href="semak-albawaba-film.mp4?v=3">حمّله من هنا</a>.
 </video>
+
+<!-- نسختان من الفيلم نفسه: بلا تعليق وبتعليق. الاختيار للمشاهد -->
+<div class="pick">
+  <button class="on" data-src="semak-albawaba-film.mp4?v=3">بلا تعليق</button>
+  <button data-src="semak-albawaba-film-vo.mp4?v=3">بتعليق صوتي</button>
+</div>
+<script>
+(function(){
+  var v=document.getElementById("film"), s=document.getElementById("src");
+  document.querySelectorAll(".pick button").forEach(function(b){
+    b.addEventListener("click",function(){
+      if(b.classList.contains("on")) return;
+      document.querySelectorAll(".pick button").forEach(function(x){x.classList.remove("on")});
+      b.classList.add("on");
+      var play=!v.paused; s.src=b.dataset.src; v.load(); if(play) v.play();
+    });
+  });
+})();
+</script>
 
 <h1>سماك البوابة — فيلم التعريف</h1>
 <p>٧ وحدات فقط · ١٩٧ م² · تسع دقائق عن قطار الحرمين</p>
