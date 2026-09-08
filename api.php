@@ -9940,6 +9940,126 @@ switch ($action) {
         break;
     }
 
+    case 'buy_daftra_import': {
+        // يستورد ما لم نكن نخزّنه من صفحة فاتورة دفترة: الملاحظات وروابطها،
+        // ومن سجّلها، وأمر العمل، وحالة السداد، والفرع والمستودع والشروط.
+        // وروابط درايف في الملاحظات تصير مستندات — كانت الطريقة الأولى للتوثيق.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(280);
+
+        foreach ([
+            ['po_number',      "po_number VARCHAR(60) DEFAULT NULL"],
+            ['staff_name',     "staff_name VARCHAR(120) DEFAULT NULL"],
+            ['work_order_text',"work_order_text VARCHAR(200) DEFAULT NULL"],
+            ['store_id',       "store_id INT DEFAULT NULL"],
+            ['branch_id',      "branch_id INT DEFAULT NULL"],
+            ['payment_status', "payment_status VARCHAR(30) DEFAULT NULL"],
+            ['due_date',       "due_date DATE DEFAULT NULL"],
+            ['received_date',  "received_date DATE DEFAULT NULL"],
+            ['is_received',    "is_received TINYINT(1) DEFAULT NULL"],
+            ['follow_up',      "follow_up VARCHAR(60) DEFAULT NULL"],
+            ['notes',          "notes TEXT DEFAULT NULL"],
+            ['html_notes',     "html_notes TEXT DEFAULT NULL"],
+            ['terms',          "terms TEXT DEFAULT NULL"],
+            ['extra_details',  "extra_details TEXT DEFAULT NULL"],
+            ['tax_total',      "tax_total DECIMAL(14,3) DEFAULT NULL"],
+            ['discount_total', "discount_total DECIMAL(14,3) DEFAULT NULL"],
+        ] as $c) ensure_column($conn, 'dmirror_purchases', $c[0], $c[1]);
+
+        $take = min(25, max(1, (int)($_GET['limit'] ?? 10)));
+        $cur  = null;
+        if ($r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='daftra_import_cursor' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $cur = $x['sval'];
+        if (!empty($_GET['reset']) || $cur === null) $cur = '0';
+
+        $ids = [];
+        if ($r = $conn->query("SELECT id FROM dmirror_purchases WHERE id > " . (int)$cur . " AND id < 900000
+                               ORDER BY id LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $ids[] = (int)$x['id'];
+
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $scanned = 0; $withNotes = 0; $docs = 0; $failed = 0; $last = (int)$cur;
+        foreach ($ids as $pid) {
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
+                CURLOPT_HTTPHEADER=>["APIKEY: __DAFTRA_KEY__", "Accept: application/json"]]);
+            $res = curl_exec($ch); curl_close($ch);
+            $last = $pid; $scanned++;
+            $d = json_decode((string)$res, true) ?: [];
+            $o = $d['data']['PurchaseOrder'] ?? $d['data']['PurchaseInvoice'] ?? null;
+            if (!$o) { $failed++; continue; }
+
+            $html = (string)($o['html_notes'] ?? '');
+            $note = trim((string)($o['notes'] ?? ''));
+            if ($note === '' && $html !== '') $note = trim(preg_replace('/\s+/u', ' ', strip_tags($html)));
+            $staff = (array)($o['Staff'] ?? []);
+            $sn = trim((string)(($staff['name'] ?? '') ?: trim((string)($staff['first_name'] ?? '') . ' ' . (string)($staff['last_name'] ?? ''))));
+
+            $set = [
+                "po_number='"       . $E($o['po_number'] ?? '') . "'",
+                "staff_name='"      . $E($sn) . "'",
+                "work_order_text='" . $E(mb_substr((string)($o['work_order_text'] ?? ''), 0, 190)) . "'",
+                "store_id="         . (int)($o['store_id'] ?? 0),
+                "branch_id="        . (int)($o['branch_id'] ?? 0),
+                "payment_status='"  . $E($o['payment_status'] ?? '') . "'",
+                "follow_up='"       . $E($o['follow_up_status'] ?? '') . "'",
+                "is_received="      . (!empty($o['is_received']) ? 1 : 0),
+                "notes='"           . $E(mb_substr($note, 0, 4000)) . "'",
+                "html_notes='"      . $E(mb_substr($html, 0, 8000)) . "'",
+                "terms='"           . $E(mb_substr((string)($o['terms'] ?? ''), 0, 4000)) . "'",
+                "extra_details='"   . $E(mb_substr((string)($o['extra_details'] ?? ''), 0, 2000)) . "'",
+                "tax_total="        . (float)($o['summary_tax1'] ?? 0),
+                "discount_total="   . (float)($o['summary_discount'] ?? 0),
+            ];
+            foreach ([['due_date','due_date'], ['received_date','received_date']] as $dd)
+                $set[] = $dd[0] . "=" . (preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($o[$dd[1]] ?? ''))
+                        ? "'" . $E(substr((string)$o[$dd[1]], 0, 10)) . "'" : 'NULL');
+            $conn->query("UPDATE dmirror_purchases SET " . implode(', ', $set) . " WHERE id=$pid");
+
+            if ($html === '') continue;
+            $withNotes++;
+            // كل رابط في الملاحظة مع النص الذي يسبقه — منه نعرف: فاتورة أم إيصال
+            if (!preg_match_all('#<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>#is', $html, $mm, PREG_SET_ORDER)) {
+                if (preg_match_all('#https?://[^\s"\'<>]+#', $html, $m2))
+                    foreach ($m2[0] as $url) $mm[] = [null, $url, ''];
+            }
+            foreach ($mm as $m) {
+                $url = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
+                if (!preg_match('#^https?://#', $url)) continue;
+                $lbl = trim(preg_replace('/\s+/u', ' ', strip_tags($m[2] ?? '')));
+                $kind = (preg_match('/(سداد|إيصال|ايصال|تحويل|حوالة|receipt|transfer)/u', $lbl)) ? 'receipt' : 'invoice';
+                $name = ($lbl !== '' ? $lbl : ($kind === 'receipt' ? 'إيصال سداد' : 'فاتورة مورّد')) . ' — درايف';
+                $conn->query("INSERT INTO purchase_documents (purchase_id, doc_type, file_name, drive_url,
+                        source, created_by, note)
+                    VALUES ($pid, '" . $E($kind) . "', '" . $E(mb_substr($name, 0, 180)) . "', '" . $E($url) . "',
+                        'daftra_note', '" . $E($u['name'] ?? '') . "', 'من ملاحظات دفترة')
+                    ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), doc_type=VALUES(doc_type),
+                        source='daftra_note'");
+                if ($conn->affected_rows > 0) $docs++;
+            }
+        }
+
+        $done = count($ids) < $take;
+        $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval) VALUES (1, 'daftra_import_cursor', '"
+            . ($done ? '0' : (int)$last) . "') ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_purchases WHERE id > " . ($done ? 999999 : (int)$last) . " AND id < 900000"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        if ($docs) acc_audit($conn, 1, 'purchase', 0, 'daftra_import',
+            "استيراد تفاصيل دفترة: $scanned فاتورة، $docs مستندا من الملاحظات", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'scanned'=>$scanned, 'with_notes'=>$withNotes,
+            'docs_added'=>$docs, 'failed'=>$failed, 'remaining'=>$left, 'done'=>$done], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
