@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine, Receipt } from 'lucide-react';
+import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine, Receipt, FileWarning, X } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { passkeyEnrolledHere } from '../../lib/passkey';
@@ -21,6 +21,9 @@ export default function BuyHome({ onNew }) {
     const [rcp, setRcp] = useState(null);        // سحب إيصالات الدفعات
     const [rcpBusy, setRcpBusy] = useState(false);
     const [recOpen, setRecOpen] = useState(false);
+    const [gaps, setGaps]       = useState(null);   // نواقص التوثيق
+    const [gapsOpen, setGapsOpen] = useState(false);
+    const [gapTab, setGapTab]   = useState('neither');
     const [clsBusy, setClsBusy] = useState(false);
 
     const load = useCallback(async (force = false) => {
@@ -37,6 +40,8 @@ export default function BuyHome({ onNew }) {
             ]);
             if (a && a.success !== false) setK(a.data || a);
             if (b && b.success) setLast((b.rows || []).slice(0, 12));
+            fetch(`${API_URL}?action=buy_gaps`, { headers: h })
+                .then(r => r.json()).then(r => r.success && setGaps(r)).catch(() => {});
             fetch(`${API_URL}?action=daftra_link_status`, { headers: h })
                 .then(r => r.json()).then(r => r.success && setDocs(r)).catch(() => {});
         } finally { setBusy(false); }
@@ -128,6 +133,15 @@ export default function BuyHome({ onNew }) {
         { t: 'المستحق للموردين', v: money(p.unpaid),   icon: Wallet,       c: 'from-amber-600 to-amber-800' },
         { t: 'بلا مستند',      v: p.docs_missing ?? '—', icon: Paperclip,  c: 'from-rose-600 to-rose-800' },
         { t: 'فواتير الشهر',   v: p.month_count ?? '—',  icon: AlertTriangle, c: 'from-sky-600 to-sky-800' },
+    ];
+
+    // نواقص التوثيق: نسخة دفترة المطبوعة لا تُحتسب مستندا
+    const gt = gaps?.totals;
+    const gapRows = gaps ? (gaps[gapTab] || []) : [];
+    const GAP_TABS = [
+        { k: 'neither',    t: 'بلا الاثنين' },
+        { k: 'no_invoice', t: 'بلا فاتورة مورّد' },
+        { k: 'no_receipt', t: 'بلا إثبات سداد' },
     ];
 
 
@@ -247,6 +261,82 @@ export default function BuyHome({ onNew }) {
                     );
                 })}
             </div>
+
+            {gt && (gt.neither.n + gt.no_invoice.n + gt.no_receipt.n) > 0 && (
+                <button onClick={() => setGapsOpen(true)}
+                    className="w-full text-right rounded-2xl p-4 bg-gradient-to-bl from-orange-600 to-orange-800">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="flex items-center gap-2 text-white/80">
+                                <FileWarning size={16} />
+                                <span className="text-[11px] font-bold">نواقص التوثيق</span>
+                            </div>
+                            <div className="text-2xl font-black mt-1 tabular-nums">{gt.neither.n}</div>
+                            <div className="text-[11px] text-white/70 font-bold">فاتورة بلا فاتورة مورّد ولا إثبات سداد</div>
+                        </div>
+                        <div className="text-left text-[11px] text-white/75 font-bold space-y-1">
+                            <div>{gt.no_invoice.n} بلا فاتورة مورّد</div>
+                            <div>{gt.no_receipt.n} بلا إثبات سداد</div>
+                            <div className="tabular-nums">{money(gt.neither.amount)} ريال</div>
+                        </div>
+                    </div>
+                </button>
+            )}
+
+            {gapsOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-950/95 flex flex-col">
+                    <div className="flex items-center justify-between p-4 border-b border-white/10">
+                        <h3 className="font-black">نواقص التوثيق</h3>
+                        <button onClick={() => setGapsOpen(false)} className="text-slate-400"><X size={20} /></button>
+                    </div>
+                    <div className="flex gap-2 p-3 overflow-x-auto">
+                        {GAP_TABS.map(t => (
+                            <button key={t.k} onClick={() => setGapTab(t.k)}
+                                className={'shrink-0 px-3 py-2 rounded-xl text-[12px] font-bold ' +
+                                    (gapTab === t.k ? 'bg-orange-600 text-white' : 'bg-white/5 text-slate-300')}>
+                                {t.t} · {gaps?.totals?.[t.k]?.n ?? 0}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="px-3 pb-2 text-[11px] text-slate-400 font-bold tabular-nums">
+                        {gapRows.length} فاتورة · {money(gaps?.totals?.[gapTab]?.amount)} ريال
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-3 pb-6 space-y-2">
+                        {gapRows.map(r => (
+                            <div key={r.id} className="rounded-xl bg-white/5 p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-sm font-bold truncate">{r.supplier}</div>
+                                        <div className="text-[11px] text-slate-400 mt-0.5">
+                                            #{r.no} · {r.date}{r.project ? ' · ' + r.project : ''}
+                                        </div>
+                                    </div>
+                                    <div className="text-left shrink-0">
+                                        <div className="text-sm font-black tabular-nums">{money(r.gross)}</div>
+                                        {Number(r.remaining) > 0.5 && (
+                                            <div className="text-[11px] text-amber-400 font-bold tabular-nums">
+                                                متبقٍ {money(r.remaining)}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 mt-2 text-[10px] font-bold">
+                                    <span className={'px-2 py-0.5 rounded-full ' + (Number(r.orig_docs) ? 'bg-emerald-600/25 text-emerald-300' : 'bg-rose-600/25 text-rose-300')}>
+                                        {Number(r.orig_docs) ? 'فاتورة مورّد ✓' : 'بلا فاتورة مورّد'}
+                                    </span>
+                                    <span className={'px-2 py-0.5 rounded-full ' + (Number(r.receipts) ? 'bg-emerald-600/25 text-emerald-300' : 'bg-rose-600/25 text-rose-300')}>
+                                        {Number(r.receipts) ? 'إثبات سداد ✓' : 'بلا إثبات سداد'}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full bg-white/5 text-slate-400">
+                                        {r.payments} دفعة
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                        {!gapRows.length && <p className="text-center text-slate-500 text-sm py-8">لا شيء في هذه الفئة</p>}
+                    </div>
+                </div>
+            )}
 
             <div className="flex items-center justify-between">
                 <h3 className="font-black text-sm">آخر فواتير الشهر</h3>

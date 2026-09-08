@@ -6736,7 +6736,7 @@ switch ($action) {
         } elseif ($k === 'docs_missing') {
             $out = ['title'=>'فواتير بلا مستند'] + $INV + ['rows'=>$Q("SELECT p.id, p.no, p.date, p.supplier,
                 ROUND(p.total,2) gross, ROUND(p.paid,2) paid FROM dmirror_purchases p
-                LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
+                LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents WHERE COALESCE(source,'') <> 'daftra_pdf' GROUP BY purchase_id) d
                   ON d.purchase_id = p.id
                     LEFT JOIN (SELECT entity_id FROM dmirror_attachments
                         WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
@@ -9852,6 +9852,46 @@ switch ($action) {
         break;
     }
 
+    case 'buy_gaps': {
+        // نواقص التوثيق: أي فاتورة تنقصها صورة فاتورة المورّد أو إثبات السداد.
+        // نسخة دفترة المطبوعة (daftra_pdf) ليست مستندا — هي إخراج من النظام
+        // لا ورقة من المورّد، فلا تُحتسب في أي من الفئتين.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $Q = function($sql) use ($conn) { $o=[]; if($r=$conn->query($sql)) while($x=$r->fetch_assoc()) $o[]=$x; return $o; };
+
+        $SEL = "SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) gross, ROUND(p.paid,2) paid,
+                       ROUND(p.total - p.paid,2) remaining, COALESCE(b.name,'') project,
+                       COALESCE(p.origin,'daftra') origin,
+                       (SELECT COUNT(*) FROM purchase_documents d WHERE d.purchase_id=p.id
+                          AND d.doc_type='invoice' AND COALESCE(d.source,'') <> 'daftra_pdf') orig_docs,
+                       (SELECT COUNT(*) FROM purchase_documents d WHERE d.purchase_id=p.id
+                          AND d.doc_type='receipt') receipts,
+                       (SELECT COUNT(*) FROM dmirror_payments m WHERE m.purchase_id=p.id) payments
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                LEFT JOIN project_budgets b ON b.project_id = pp.project_id";
+
+        $noInv  = "orig_docs = 0";
+        $noRcpt = "receipts = 0";
+        $wrap = function($cond) use ($SEL) {
+            return "SELECT * FROM ($SEL) t WHERE $cond ORDER BY gross DESC";
+        };
+        $out = ['success'=>true];
+        $out['no_invoice'] = $Q($wrap($noInv));
+        $out['no_receipt'] = $Q($wrap($noRcpt));
+        $out['neither']    = $Q($wrap("$noInv AND $noRcpt"));
+        $sum = function($a) { $s=0; foreach($a as $r) $s += (float)$r['gross']; return round($s,2); };
+        $out['totals'] = [
+            'invoices'   => (int)($conn->query("SELECT COUNT(*) n FROM dmirror_purchases")->fetch_assoc()['n'] ?? 0),
+            'no_invoice' => ['n'=>count($out['no_invoice']), 'amount'=>$sum($out['no_invoice'])],
+            'no_receipt' => ['n'=>count($out['no_receipt']), 'amount'=>$sum($out['no_receipt'])],
+            'neither'    => ['n'=>count($out['neither']),    'amount'=>$sum($out['neither'])],
+        ];
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
@@ -10640,7 +10680,7 @@ switch ($action) {
             'top_suppliers'=> $rows("SELECT supplier, ROUND(SUM(total),2) amount FROM dmirror_purchases
                     WHERE date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY) GROUP BY supplier ORDER BY amount DESC LIMIT 5"),
             'docs_missing' => (int)$one("SELECT COUNT(*) FROM dmirror_purchases p
-                    LEFT JOIN (SELECT purchase_id FROM purchase_documents GROUP BY purchase_id) d ON d.purchase_id=p.id
+                    LEFT JOIN (SELECT purchase_id FROM purchase_documents WHERE COALESCE(source,'') <> 'daftra_pdf' GROUP BY purchase_id) d ON d.purchase_id=p.id
                     LEFT JOIN (SELECT entity_id FROM dmirror_attachments
                         WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
                       ON a.entity_id = p.id
