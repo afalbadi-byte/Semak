@@ -9506,6 +9506,110 @@ switch ($action) {
         break;
     }
 
+    case 'buy_localize': {
+        // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
+        // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
+        // حلّت محلّها فاتورة أخرى عند أول مزامنة، ومعها مستنداتها وربط مشروعها.
+        // المساحة 900000+ هي التي يستعملها purchase_create للفواتير المحلية.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+
+        $from = (int)($_GET['from'] ?? 0);                 // أدنى معرّف يُنقل
+        $go   = !empty($_GET['apply']);                    // بلا هذا: معاينة فقط
+        if ($from < 1) { echo json_encode(['success'=>false,'message'=>'from مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+
+        $rows = [];
+        if ($r = $conn->query("SELECT id, no, date, supplier, total, paid FROM dmirror_purchases
+                               WHERE id >= $from AND id < 900000 AND COALESCE(origin,'daftra')='daftra'
+                               ORDER BY id"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        if (!$rows) { echo json_encode(['success'=>true,'moved'=>0,'message'=>'لا صفوف مطابقة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $mx = 900000;
+        if ($r = $conn->query("SELECT COALESCE(MAX(id),899999) m FROM dmirror_purchases WHERE id >= 900000"))
+            if ($x = $r->fetch_assoc()) $mx = max(900000, (int)$x['m'] + 1);
+
+        // كل جدول يشير إلى الفاتورة بمعرّفها — لا يُترك واحد فيبقى رابط معلّق
+        $refs = [
+            ['dmirror_purchase_items', 'purchase_id'], ['dmirror_payments',   'purchase_id'],
+            ['dmirror_refunds',        'purchase_id'], ['purchase_documents', 'purchase_id'],
+            ['purchase_payments',      'purchase_id'], ['purchase_project',   'purchase_id'],
+            ['project_extra_costs',    'purchase_id'],
+        ];
+        $plan = []; $i = 0;
+        foreach ($rows as $rw) {
+            $old = (int)$rw['id']; $new = $mx + $i++;
+            $cnt = [];
+            foreach ($refs as [$t, $c]) {
+                if ($r = $conn->query("SELECT COUNT(*) n FROM $t WHERE $c = $old"))
+                    if ($x = $r->fetch_assoc()) if ((int)$x['n']) $cnt[$t] = (int)$x['n'];
+            }
+            if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments
+                                   WHERE entity_id=$old AND entity_key IN ('purchase_order','purchase_invoice')"))
+                if ($x = $r->fetch_assoc()) if ((int)$x['n']) $cnt['dmirror_attachments'] = (int)$x['n'];
+            if ($r = $conn->query("SELECT COUNT(*) n FROM purchase_classification WHERE kind='purchase' AND ref_id=$old"))
+                if ($x = $r->fetch_assoc()) if ((int)$x['n']) $cnt['purchase_classification'] = (int)$x['n'];
+            $plan[] = ['old'=>$old, 'new'=>$new, 'no'=>$rw['no'], 'date'=>$rw['date'],
+                       'supplier'=>$rw['supplier'], 'total'=>$rw['total'], 'refs'=>$cnt];
+        }
+
+        if (!$go) {
+            echo json_encode(['success'=>true, 'preview'=>true, 'count'=>count($plan), 'plan'=>$plan],
+                JSON_UNESCAPED_UNICODE); break;
+        }
+
+        // نسخة احتياطية على القرص قبل أي كتابة — يُرجع منها يدويا إن لزم
+        $bdir = __DIR__ . '/qdocs/_backup';
+        if (!is_dir($bdir)) mkdir($bdir, 0755, true);
+        $stamp = date('Ymd-His');
+        $dump  = ['at'=>date('c'), 'by'=>$u['name'] ?? '', 'from'=>$from, 'plan'=>$plan, 'tables'=>[]];
+        $ids   = implode(',', array_column($plan, 'old'));
+        foreach ($refs as [$t, $c]) {
+            $d = [];
+            if ($r = $conn->query("SELECT * FROM $t WHERE $c IN ($ids)")) while ($x = $r->fetch_assoc()) $d[] = $x;
+            if ($d) $dump['tables'][$t] = $d;
+        }
+        foreach ([["dmirror_purchases", "id IN ($ids)"],
+                  ["dmirror_attachments", "entity_id IN ($ids) AND entity_key IN ('purchase_order','purchase_invoice')"],
+                  ["purchase_classification", "kind='purchase' AND ref_id IN ($ids)"]] as [$t, $w]) {
+            $d = [];
+            if ($r = $conn->query("SELECT * FROM $t WHERE $w")) while ($x = $r->fetch_assoc()) $d[] = $x;
+            if ($d) $dump['tables'][$t] = $d;
+        }
+        $bfile = "$bdir/localize-$stamp.json";
+        if (@file_put_contents($bfile, json_encode($dump, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)) === false) {
+            echo json_encode(['success'=>false,'message'=>'تعذّرت كتابة النسخة الاحتياطية — أُوقفت العملية'],
+                JSON_UNESCAPED_UNICODE); break; }
+
+        // النقل يبدأ من الأعلى فالأدنى: المعرّفات الجديدة أكبر دائما فلا تتصادم
+        $conn->query("START TRANSACTION");
+        $ok = true; $moved = 0;
+        foreach (array_reverse($plan) as $p) {
+            $o = (int)$p['old']; $n = (int)$p['new'];
+            $q = ["UPDATE dmirror_purchases SET id=$n, origin='local' WHERE id=$o"];
+            foreach ($refs as [$t, $c]) $q[] = "UPDATE $t SET $c=$n WHERE $c=$o";
+            $q[] = "UPDATE dmirror_attachments SET entity_id=$n
+                    WHERE entity_id=$o AND entity_key IN ('purchase_order','purchase_invoice')";
+            $q[] = "UPDATE purchase_classification SET ref_id=$n WHERE kind='purchase' AND ref_id=$o";
+            foreach ($q as $s) if (!$conn->query($s)) { $ok = false; break 2; }
+            $moved++;
+        }
+        if (!$ok) { $conn->query("ROLLBACK");
+            echo json_encode(['success'=>false,'message'=>'فشل النقل فأُلغي كاملا: ' . $conn->error,
+                'backup'=>basename($bfile)], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("COMMIT");
+
+        acc_audit($conn, 1, 'purchase', 0, 'localize',
+            "نقل $moved فاتورة من مساحة دفترة إلى السجلات المحلية (نسخة: " . basename($bfile) . ")", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'moved'=>$moved, 'backup'=>basename($bfile), 'plan'=>$plan],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_list': {
         // سجلات التطبيق: الفواتير والموردون ببحث وترقيم صفحات
         $kind = (string)($_GET['kind'] ?? 'invoices');
