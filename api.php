@@ -9685,6 +9685,30 @@ switch ($action) {
         break;
     }
 
+    case 'buy_attach_find': {
+        // أي فاتورة يتبعها مرفق بعينه — قراءة محضة، للتشخيص
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $fid = (int)($_GET['file_id'] ?? 0);
+        $out = ['success'=>true, 'file_id'=>$fid, 'rows'=>[], 'unarchived'=>[]];
+        if ($fid > 0 && $r = $conn->query("SELECT at.file_id, at.name, at.entity_id, at.entity_key, at.file_size,
+                    p.no, p.date, p.supplier, ROUND(p.total,2) total
+                FROM dmirror_attachments at
+                LEFT JOIN dmirror_purchases p ON p.id = at.entity_id
+                WHERE at.file_id = $fid"))
+            while ($x = $r->fetch_assoc()) $out['rows'][] = $x;
+        // وكل مرفق لم يُؤرشف بعد
+        if ($r = $conn->query("SELECT at.file_id, at.name, at.entity_id, p.no, p.date, p.supplier
+                FROM dmirror_attachments at
+                LEFT JOIN purchase_documents pd
+                  ON pd.daftra_file_id = at.file_id AND COALESCE(pd.drive_url,'') <> ''
+                LEFT JOIN dmirror_purchases p ON p.id = at.entity_id
+                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL"))
+            while ($x = $r->fetch_assoc()) $out['unarchived'][] = $x;
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
