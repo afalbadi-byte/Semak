@@ -9709,6 +9709,39 @@ switch ($action) {
         break;
     }
 
+    case 'buy_docs_stats': {
+        // تغطية المستندات: ماذا يملك التطبيق فعلا لكل فاتورة — قراءة محضة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $Q = function($sql) use ($conn) { $o=[]; if($r=$conn->query($sql)) while($x=$r->fetch_assoc()) $o[]=$x; return $o; };
+        $out = ['success'=>true];
+        $out['by_type_source'] = $Q("SELECT doc_type, COALESCE(source,'') source, COUNT(*) n,
+                                     SUM(COALESCE(drive_url,'') <> '') stored
+                                     FROM purchase_documents GROUP BY doc_type, source ORDER BY n DESC");
+        // لكل نطاق: كم فاتورة معها أصل المورّد، وكم معها إيصال
+        foreach ([['local','p.id >= 900000'], ['daftra','p.id < 900000']] as [$k, $w]) {
+            $out['coverage'][$k] = $Q("SELECT COUNT(*) invoices,
+                SUM(orig > 0) with_supplier_doc, SUM(rcpt > 0) with_receipt, SUM(pdf > 0) with_daftra_pdf,
+                SUM(orig = 0) no_supplier_doc
+              FROM (SELECT p.id,
+                      (SELECT COUNT(*) FROM purchase_documents d WHERE d.purchase_id=p.id
+                         AND d.doc_type='invoice' AND COALESCE(d.source,'') <> 'daftra_pdf') orig,
+                      (SELECT COUNT(*) FROM purchase_documents d WHERE d.purchase_id=p.id
+                         AND d.doc_type='receipt') rcpt,
+                      (SELECT COUNT(*) FROM purchase_documents d WHERE d.purchase_id=p.id
+                         AND COALESCE(d.source,'')='daftra_pdf') pdf
+                    FROM dmirror_purchases p WHERE $w) t")[0] ?? null;
+        }
+        // الدفعات: كم منها مربوط بإيصال
+        $out['payments'] = $Q("SELECT COUNT(*) n, SUM(COALESCE(receipt_url,'') <> '') with_receipt
+                               FROM dmirror_payments")[0] ?? null;
+        $out['payments_local'] = $Q("SELECT COUNT(*) n FROM purchase_payments")[0] ?? null;
+        $out['attachments'] = $Q("SELECT COUNT(*) n FROM dmirror_attachments
+                                  WHERE entity_key IN ('purchase_order','purchase_invoice')")[0] ?? null;
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
