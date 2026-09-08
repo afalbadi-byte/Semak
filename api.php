@@ -9590,6 +9590,101 @@ switch ($action) {
         break;
     }
 
+    case 'buy_purge_mirror': {
+        // حذف كل ما مصدره دفترة من مرآة التطبيق، ليُعاد جلبه من دفترة نظيفا.
+        // السجلات المحلية (900000+) لا تُمسّ — وهي فواتير ما بعد نقطة الاستعادة.
+        // نسخة كاملة على القرص قبل أي حذف، والحذف في معاملة واحدة تُلغى عند أي فشل.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+
+        $go = !empty($_GET['apply']);
+        set_time_limit(300);
+
+        // نطاق الحذف: كل فاتورة مصدرها دفترة
+        $ids = [];
+        if ($r = $conn->query("SELECT id FROM dmirror_purchases WHERE id < 900000 ORDER BY id"))
+            while ($x = $r->fetch_assoc()) $ids[] = (int)$x['id'];
+        if (!$ids) { echo json_encode(['success'=>true,'deleted'=>0,'message'=>'لا صفوف'], JSON_UNESCAPED_UNICODE); break; }
+        $in = implode(',', $ids);
+
+        // ما سيُحذف، جدولا جدولا
+        $scope = [
+            ['dmirror_purchases',       "id IN ($in)"],
+            ['dmirror_purchase_items',  "purchase_id IN ($in)"],
+            ['dmirror_payments',        "purchase_id IN ($in)"],
+            ['dmirror_refunds',         "purchase_id IN ($in)"],
+            ['dmirror_attachments',     "entity_id IN ($in) AND entity_key IN ('purchase_order','purchase_invoice')"],
+            ['purchase_documents',      "purchase_id IN ($in)"],
+            ['purchase_payments',       "purchase_id IN ($in)"],
+            ['purchase_project',        "purchase_id IN ($in)"],
+            ['purchase_classification', "kind='purchase' AND ref_id IN ($in)"],
+        ];
+        // جدول غير موجود يُسقط العملية كلها — يُستبعد قبل البدء
+        $scope = array_values(array_filter($scope, function($s) use ($conn) {
+            $r = $conn->query("SHOW TABLES LIKE '" . $s[0] . "'");
+            return $r && $r->num_rows > 0;
+        }));
+
+        $counts = [];
+        foreach ($scope as [$t, $w]) {
+            if ($r = $conn->query("SELECT COUNT(*) n FROM $t WHERE $w"))
+                if ($x = $r->fetch_assoc()) $counts[$t] = (int)$x['n'];
+        }
+        $keep = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_purchases WHERE id >= 900000"))
+            if ($x = $r->fetch_assoc()) $keep = (int)$x['n'];
+
+        if (!$go) {
+            echo json_encode(['success'=>true, 'preview'=>true, 'invoices'=>count($ids),
+                'kept_local'=>$keep, 'counts'=>$counts], JSON_UNESCAPED_UNICODE); break;
+        }
+
+        // النسخة الاحتياطية — باسم عشوائي فلا يُخمَّن رابطها
+        $bdir = __DIR__ . '/qdocs/_backup';
+        if (!is_dir($bdir)) mkdir($bdir, 0755, true);
+        $tok  = bin2hex(random_bytes(8));
+        $dump = ['at'=>date('c'), 'by'=>$u['name'] ?? '', 'scope'=>'daftra_mirror', 'ids'=>$ids, 'tables'=>[]];
+        foreach ($scope as [$t, $w]) {
+            $d = [];
+            if ($r = $conn->query("SELECT * FROM $t WHERE $w")) while ($x = $r->fetch_assoc()) $d[] = $x;
+            $dump['tables'][$t] = $d;
+        }
+        $bfile = "$bdir/purge-" . date('Ymd-His') . "-$tok.json";
+        if (@file_put_contents($bfile, json_encode($dump, JSON_UNESCAPED_UNICODE)) === false) {
+            echo json_encode(['success'=>false,'message'=>'تعذّرت كتابة النسخة الاحتياطية — أُوقفت العملية'],
+                JSON_UNESCAPED_UNICODE); break; }
+        $bsize = filesize($bfile);
+        if ($bsize < 1000) {
+            echo json_encode(['success'=>false,'message'=>'النسخة الاحتياطية صغيرة بشكل مريب — أُوقفت العملية',
+                'size'=>$bsize], JSON_UNESCAPED_UNICODE); break; }
+
+        $conn->query("START TRANSACTION");
+        $ok = true; $del = []; $badq = '';
+        foreach ($scope as [$t, $w]) {
+            if (!$conn->query("DELETE FROM $t WHERE $w")) { $ok = false; $badq = "$t: $w"; break; }
+            $del[$t] = $conn->affected_rows;
+        }
+        if (!$ok) { $conn->query("ROLLBACK");
+            echo json_encode(['success'=>false,'message'=>'فشل الحذف فأُلغي كاملا: ' . ($conn->error ?: 'بلا رسالة'),
+                'query'=>$badq, 'backup'=>basename($bfile)], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("COMMIT");
+
+        // علامة إعادة المسح تُصفَّر حتى يبدأ المسح من جديد
+        $conn->query("DELETE FROM acc_settings WHERE tenant_id=1 AND skey='attach_rescan_cursor'");
+
+        acc_audit($conn, 1, 'purchase', 0, 'purge_mirror',
+            'حذف مرآة دفترة (' . count($ids) . ' فاتورة) لإعادة جلبها نظيفة — نسخة: ' . basename($bfile),
+            $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'deleted'=>$del, 'invoices'=>count($ids),
+            'kept_local'=>$keep, 'backup'=>basename($bfile), 'backup_size'=>$bsize],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
