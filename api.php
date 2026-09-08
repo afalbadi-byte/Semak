@@ -9506,6 +9506,90 @@ switch ($action) {
         break;
     }
 
+    case 'buy_attach_rescan': {
+        // إعادة قراءة مرفقات كل فاتورة من دفترة.
+        // المزامنة تجلب تفاصيل الفاتورة مرة واحدة (حين لا بنود لها)، فالمرفقات
+        // التي أعادتها الاستعادة إلى دفترة لا يعرف التطبيق بوجودها أبدا.
+        // هذا يمسح الفواتير تنازليا ويحدّث dmirror_attachments — قراءة من دفترة
+        // وكتابة عندنا فقط، وبلا حذف: REPLACE على المعرّف نفسه.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية المزامنة'], JSON_UNESCAPED_UNICODE); break; }
+
+        set_time_limit(240);
+        $take  = min(25, max(1, (int)($_GET['limit'] ?? 10)));
+        $reset = !empty($_GET['reset']);
+        $dk    = "__DAFTRA_KEY__";
+
+        // علامة التقدّم: آخر معرّف مُسح. المسح تنازلي فالأحدث أولا.
+        $cur = null;
+        if ($r = $conn->query("SELECT sval v FROM acc_settings WHERE tenant_id=1 AND skey='attach_rescan_cursor' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $cur = $x['v'];
+        if ($reset || $cur === null) $cur = '999999999';
+
+        $ids = [];
+        if ($r = $conn->query("SELECT id FROM dmirror_purchases
+                               WHERE id < " . (int)$cur . " AND id < 900000
+                               ORDER BY id DESC LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $ids[] = (int)$x['id'];
+
+        $scanned = 0; $found = 0; $added = 0; $failed = 0; $last = (int)$cur;
+        foreach ($ids as $pid) {
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>25,
+                CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            $last = $pid; $scanned++;
+            if ($code !== 200 || !$res) { $failed++; continue; }
+            $d = json_decode($res, true) ?: [];
+            $o = $d['data']['PurchaseOrder'] ?? $d['data']['PurchaseInvoice'] ?? null;
+            if (!$o) { $failed++; continue; }
+
+            $att = (array)($o['Attachments'] ?? $o['attachments'] ?? []);
+            foreach ($att as $a) {
+                if (empty($a['id'])) continue;
+                $found++;
+                $fid = (int)$a['id'];
+                $was = 0;
+                if ($q = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments WHERE file_id=$fid"))
+                    if ($x = $q->fetch_assoc()) $was = (int)$x['n'];
+                $conn->query("REPLACE INTO dmirror_attachments
+                    (file_id,name,path,entity_key,entity_id,file_size,mime_type,created_at) VALUES ("
+                    . $fid . ", '" . $conn->real_escape_string((string)($a['name'] ?? '')) . "', '"
+                    . $conn->real_escape_string((string)($a['path'] ?? '')) . "', '"
+                    . $conn->real_escape_string((string)($a['entity_key'] ?? 'purchase_order')) . "', $pid, "
+                    . (int)($a['file_size'] ?? 0) . ", '"
+                    . $conn->real_escape_string((string)($a['mime_type'] ?? '')) . "', "
+                    . ($a['created_at'] ?? null ? "'" . $conn->real_escape_string((string)$a['created_at']) . "'" : 'NULL') . ")");
+                if (!$was) $added++;
+            }
+            $conn->query("UPDATE dmirror_purchases SET attachments=" . count($att) . " WHERE id=$pid");
+        }
+
+        $done = count($ids) < $take;
+        $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval) VALUES (1, 'attach_rescan_cursor', '" . ($done ? '0' : (int)$last) . "')
+                      ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_purchases WHERE id < " . ($done ? 0 : (int)$last) . " AND id < 900000"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        $tot = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments
+                               WHERE entity_key IN ('purchase_order','purchase_invoice')"))
+            if ($x = $r->fetch_assoc()) $tot = (int)$x['n'];
+
+        if ($added) acc_audit($conn, 1, 'purchase', 0, 'attach_rescan',
+            "إعادة مسح مرفقات دفترة: $scanned فاتورة، $added مرفقا جديدا", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'scanned'=>$scanned, 'found'=>$found, 'added'=>$added,
+            'failed'=>$failed, 'remaining'=>$left, 'attachments_total'=>$tot, 'done'=>$done],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
