@@ -10060,6 +10060,74 @@ switch ($action) {
         break;
     }
 
+    case 'buy_drive_fetch': {
+        // تنزيل ملفات درايف المذكورة في ملاحظات دفترة إلى تخزيننا،
+        // فلا يبقى مستند معلّقا على خدمة خارجية وصلاحياتها.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(280);
+        $take = min(12, max(1, (int)($_GET['limit'] ?? 5)));
+
+        $todo = [];
+        if ($r = $conn->query("SELECT id, purchase_id, file_name, drive_url FROM purchase_documents
+                               WHERE source='daftra_note' AND drive_url LIKE '%drive.google.com%'
+                               ORDER BY id LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $todo[] = $x;
+
+        $dir = __DIR__ . '/qdocs';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $done = 0; $failed = 0; $last = '';
+        foreach ($todo as $t) {
+            if (!preg_match('#/d/([A-Za-z0-9_-]{10,})#', $t['drive_url'], $m)
+                && !preg_match('#[?&]id=([A-Za-z0-9_-]{10,})#', $t['drive_url'], $m)) {
+                $failed++; $last = 'رابط بلا معرّف';
+                $conn->query("UPDATE purchase_documents SET note=CONCAT(COALESCE(note,''),' · تعذّر: رابط غير مفهوم')
+                              WHERE id=" . (int)$t['id']);
+                continue;
+            }
+            $fid = $m[1];
+            $ch = curl_init("https://drive.google.com/uc?export=download&id=$fid");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                CURLOPT_TIMEOUT=>60, CURLOPT_SSL_VERIFYPEER=>false,
+                CURLOPT_USERAGENT=>'Mozilla/5.0 (compatible; SemakDocs/1.0)']);
+            $bin = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $ct   = strtolower((string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE));
+            curl_close($ch);
+            // صفحة تسجيل دخول أو تحذير حجم = ليس ملفا
+            if ($code !== 200 || $bin === false || strlen((string)$bin) < 500 || strpos($ct, 'text/html') !== false) {
+                $failed++; $last = "HTTP $code · $ct";
+                $conn->query("UPDATE purchase_documents SET note=CONCAT(COALESCE(note,''),' · تعذّر التنزيل (صلاحية درايف)')
+                              WHERE id=" . (int)$t['id']);
+                continue;
+            }
+            $ext = daftra_ext_of($ct, (string)$t['file_name']);
+            $tok = bin2hex(random_bytes(16));
+            if (@file_put_contents("$dir/$tok.$ext", $bin) === false) { $failed++; $last = 'تعذّر الحفظ'; continue; }
+            $url = 'https://' . $_SERVER['HTTP_HOST'] . "/qdocs/$tok.$ext";
+            $conn->query("UPDATE purchase_documents
+                SET drive_url='" . $conn->real_escape_string($url) . "',
+                    file_size=" . strlen($bin) . ",
+                    source='drive_note',
+                    note=CONCAT('من ملاحظات دفترة · الأصل: ', '" . $conn->real_escape_string($t['drive_url']) . "')
+                WHERE id=" . (int)$t['id']);
+            $done++;
+        }
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM purchase_documents
+                               WHERE source='daftra_note' AND drive_url LIKE '%drive.google.com%'"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        if ($done) acc_audit($conn, 1, 'purchase', 0, 'drive_fetch',
+            "تنزيل $done مستندا من درايف إلى تخزيننا", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'saved'=>$done, 'failed'=>$failed,
+            'remaining'=>$left, 'detail'=>$last], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
@@ -10462,6 +10530,28 @@ switch ($action) {
                     ['label'=>'المسدد',      'value'=>(float)$h['paid'], 'money'=>1],
                     ['label'=>'المتبقي',     'value'=>round((float)$h['total'] - (float)$h['paid'], 2), 'money'=>1],
                 ];
+                // ما جاء من صفحة دفترة — يُعرض ما وُجد منه فقط
+                $more = [['staff_name','من سجّلها'], ['payment_status','حالة السداد'],
+                         ['work_order_text','أمر العمل'], ['po_number','رقم أمر الشراء'],
+                         ['due_date','تاريخ الاستحقاق'], ['received_date','تاريخ الاستلام'],
+                         ['follow_up','المتابعة'], ['terms','الشروط'], ['extra_details','تفاصيل إضافية']];
+                foreach ($more as $mf) {
+                    $vv = trim((string)($h[$mf[0]] ?? ''));
+                    if ($vv !== '' && $vv !== '0000-00-00')
+                        $out['stats'][] = ['label'=>$mf[1], 'value'=>mb_substr($vv, 0, 120)];
+                }
+                $nt = trim((string)($h['notes'] ?? ''));
+                if ($nt !== '') $out['note'] = mb_substr($nt, 0, 1200);
+                // الخزائن التي خرجت منها الدفعات
+                $trs = $Q("SELECT DISTINCT treasury_id FROM dmirror_payments
+                           WHERE purchase_id=$pid AND treasury_id > 0");
+                if ($trs) {
+                    $tnm = ['1'=>'الخزينة البنكية', '2'=>'الصندوق النقدي'];
+                    $out['stats'][] = ['label'=>'الخزينة', 'value'=>implode(' · ',
+                        array_map(function($t) use ($tnm) {
+                            return $tnm[(string)$t['treasury_id']] ?? ('خزينة ' . $t['treasury_id']);
+                        }, $trs))];
+                }
                 $out['sections'][] = ['title'=>'البنود',
                     'cols'=>[['k'=>'item','t'=>'الصنف'],['k'=>'quantity','t'=>'الكمية'],
                              ['k'=>'unit_price','t'=>'سعر الوحدة'],['k'=>'subtotal','t'=>'الإجمالي']],
