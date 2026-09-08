@@ -9818,6 +9818,40 @@ switch ($action) {
         break;
     }
 
+    case 'daftra_probe': {
+        // ماذا تُرجع دفترة فعلا لفاتورة واحدة — للتشخيص، قراءة محضة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        $id = (int)($_GET['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$id.json");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>25,
+            CURLOPT_HTTPHEADER=>["APIKEY: __DAFTRA_KEY__", "Accept: application/json"]]);
+        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        $d = json_decode((string)$res, true) ?: [];
+        $out = ['success'=>true, 'http'=>$code, 'data_keys'=>array_keys((array)($d['data'] ?? []))];
+        $o = $d['data']['PurchaseOrder'] ?? $d['data']['PurchaseInvoice'] ?? [];
+        $out['invoice_keys'] = array_keys((array)$o);
+        $out['attachments'] = $o['Attachments'] ?? $o['attachments'] ?? null;
+        // الدفعات: هل تحمل مرفقاتها؟
+        foreach (['PurchaseOrderPayment','Payment','PurchaseInvoicePayment','payments'] as $k) {
+            if (isset($d['data'][$k])) $out['payments_at_data'][$k] = $d['data'][$k];
+            if (isset($o[$k]))         $out['payments_at_invoice'][$k] = $o[$k];
+        }
+        // ما عندنا لنفس الفاتورة
+        $out['ours'] = [];
+        if ($r = $conn->query("SELECT id, amount, date, COALESCE(attachment,'') attachment,
+                                      COALESCE(receipt_url,'') receipt_url
+                               FROM dmirror_payments WHERE purchase_id=$id"))
+            while ($x = $r->fetch_assoc()) $out['ours'][] = $x;
+        echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
