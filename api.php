@@ -9622,8 +9622,12 @@ switch ($action) {
             ['dmirror_purchase_items', 'purchase_id'], ['dmirror_payments',   'purchase_id'],
             ['dmirror_refunds',        'purchase_id'], ['purchase_documents', 'purchase_id'],
             ['purchase_payments',      'purchase_id'], ['purchase_project',   'purchase_id'],
-            ['project_extra_costs',    'purchase_id'],
         ];
+        // جدول ناقص أو عمود غير موجود كان يُسقط الترحيل كله — نتحقّق قبل الاستعمال
+        $refs = array_values(array_filter($refs, function($x) use ($conn) {
+            $r = $conn->query("SHOW COLUMNS FROM `" . $x[0] . "` LIKE '" . $x[1] . "'");
+            return $r && $r->num_rows > 0;
+        }));
         $plan = []; $i = 0;
         foreach ($rows as $rw) {
             $old = (int)$rw['id']; $new = $mx + $i++;
@@ -9671,7 +9675,7 @@ switch ($action) {
 
         // النقل يبدأ من الأعلى فالأدنى: المعرّفات الجديدة أكبر دائما فلا تتصادم
         $conn->query("START TRANSACTION");
-        $ok = true; $moved = 0;
+        $ok = true; $moved = 0; $badq = '';
         foreach (array_reverse($plan) as $p) {
             $o = (int)$p['old']; $n = (int)$p['new'];
             $q = ["UPDATE dmirror_purchases SET id=$n, origin='local' WHERE id=$o"];
@@ -9679,11 +9683,11 @@ switch ($action) {
             $q[] = "UPDATE dmirror_attachments SET entity_id=$n
                     WHERE entity_id=$o AND entity_key IN ('purchase_order','purchase_invoice')";
             $q[] = "UPDATE purchase_classification SET ref_id=$n WHERE kind='purchase' AND ref_id=$o";
-            foreach ($q as $s) if (!$conn->query($s)) { $ok = false; break 2; }
+            foreach ($q as $s) if (!$conn->query($s)) { $ok = false; $badq = $s; break 2; }
             $moved++;
         }
         if (!$ok) { $conn->query("ROLLBACK");
-            echo json_encode(['success'=>false,'message'=>'فشل النقل فأُلغي كاملا: ' . $conn->error,
+            echo json_encode(['success'=>false,'message'=>'فشل النقل فأُلغي كاملا: ' . ($conn->error ?: 'بلا رسالة'), 'query'=>$badq,
                 'backup'=>basename($bfile)], JSON_UNESCAPED_UNICODE); break; }
         $conn->query("COMMIT");
 
