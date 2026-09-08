@@ -9892,6 +9892,52 @@ switch ($action) {
         break;
     }
 
+    case 'daftra_fields_scan': {
+        // مسح حقول دفترة: أيّها يحمل بيانات فعلا وأيّها فارغ دائما — قراءة محضة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(280);
+        $take = min(60, max(1, (int)($_GET['limit'] ?? 25)));
+        $skip = max(0, (int)($_GET['offset'] ?? 0));
+
+        $ids = [];
+        if ($r = $conn->query("SELECT id FROM dmirror_purchases WHERE id < 900000 ORDER BY id LIMIT $take OFFSET $skip"))
+            while ($x = $r->fetch_assoc()) $ids[] = (int)$x['id'];
+
+        $filled = []; $notes = []; $custom = []; $staff = []; $scanned = 0;
+        foreach ($ids as $pid) {
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices/$pid.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_TIMEOUT=>20,
+                CURLOPT_HTTPHEADER=>["APIKEY: __DAFTRA_KEY__", "Accept: application/json"]]);
+            $res = curl_exec($ch); curl_close($ch);
+            $d = json_decode((string)$res, true) ?: [];
+            $o = $d['data']['PurchaseOrder'] ?? $d['data']['PurchaseInvoice'] ?? null;
+            if (!$o) continue;
+            $scanned++;
+            foreach ($o as $k => $v) {
+                if (is_array($v)) { if (count($v)) $filled[$k] = ($filled[$k] ?? 0) + 1; continue; }
+                $sv = trim((string)$v);
+                if ($sv !== '' && $sv !== '0' && $sv !== '0.00' && $sv !== 'null') $filled[$k] = ($filled[$k] ?? 0) + 1;
+            }
+            $nt = trim((string)($o['notes'] ?? ''));
+            if ($nt !== '') $notes[] = ['id'=>$pid, 'no'=>(string)($o['no'] ?? ''), 'notes'=>mb_substr($nt, 0, 300)];
+            $cf = (array)($o['PurchaseOrderCustomField'] ?? []);
+            if ($cf) $custom[] = ['id'=>$pid, 'fields'=>$cf];
+            $st = (array)($o['Staff'] ?? []);
+            if ($st) $staff[(string)($st['name'] ?? $st['id'] ?? '?')] = ($staff[(string)($st['name'] ?? $st['id'] ?? '?')] ?? 0) + 1;
+        }
+        arsort($filled);
+        echo json_encode(['success'=>true, 'scanned'=>$scanned, 'filled'=>$filled,
+            'notes_count'=>count($notes), 'notes'=>array_slice($notes, 0, 25),
+            'custom_count'=>count($custom), 'custom'=>array_slice($custom, 0, 5),
+            'staff'=>$staff], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
