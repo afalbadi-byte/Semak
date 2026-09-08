@@ -9623,6 +9623,13 @@ switch ($action) {
             ['purchase_project',        "purchase_id IN ($in)"],
             ['purchase_classification', "kind='purchase' AND ref_id IN ($in)"],
         ];
+        // التسكين على المشاريع والتصنيف عملُنا نحن، ودفترة رجعت لما قبلهما فلن تعيدهما.
+        // يُحذفان بطلب صريح فقط: drop_links=1
+        if (empty($_GET['drop_links'])) {
+            $scope = array_values(array_filter($scope, function($s) {
+                return !in_array($s[0], ['purchase_project', 'purchase_classification'], true);
+            }));
+        }
         // جدول غير موجود يُسقط العملية كلها — يُستبعد قبل البدء
         $scope = array_values(array_filter($scope, function($s) use ($conn) {
             $r = $conn->query("SHOW TABLES LIKE '" . $s[0] . "'");
