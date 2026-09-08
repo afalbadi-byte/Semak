@@ -928,12 +928,6 @@ $conn->query("CREATE TABLE IF NOT EXISTS dmirror_payments (
     synced_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX (purchase_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-$conn->query("CREATE TABLE IF NOT EXISTS dmirror_treasuries (
-    id       INT PRIMARY KEY,
-    name     VARCHAR(160) DEFAULT NULL,
-    currency VARCHAR(10)  DEFAULT NULL,
-    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("CREATE TABLE IF NOT EXISTS dmirror_attachments (
     file_id     INT PRIMARY KEY,
     name        VARCHAR(255) DEFAULT NULL,
@@ -1395,6 +1389,16 @@ $conn->query("CREATE TABLE IF NOT EXISTS dmirror_expenses (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (44)");
 } // end DDL v44
+// ─── DDL v45: أسماء خزائن دفترة عندنا — تذهب مع انتهاء الرخصة وإلا ──────────
+if ($__sv < 45) {
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_treasuries (
+    id        INT PRIMARY KEY,
+    name      VARCHAR(160) DEFAULT NULL,
+    currency  VARCHAR(10)  DEFAULT NULL,
+    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (45)");
+} // end DDL v45
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
