@@ -928,6 +928,12 @@ $conn->query("CREATE TABLE IF NOT EXISTS dmirror_payments (
     synced_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX (purchase_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_treasuries (
+    id       INT PRIMARY KEY,
+    name     VARCHAR(160) DEFAULT NULL,
+    currency VARCHAR(10)  DEFAULT NULL,
+    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("CREATE TABLE IF NOT EXISTS dmirror_attachments (
     file_id     INT PRIMARY KEY,
     name        VARCHAR(255) DEFAULT NULL,
@@ -1615,6 +1621,25 @@ function acc_next_no($conn, $tid, $kind, $yr) {
     return (int)$conn->insert_id;
 }
 // تسجيل حركة في سجل التدقيق — عالمي المستوى
+function daftra_treasuries_cache($conn) {
+    // أسماء الخزائن تُحفظ عندنا — تذهب مع انتهاء رخصة دفترة وإلا
+    $ch = curl_init("https://semak.daftra.com/api2/treasuries.json");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+        CURLOPT_TIMEOUT=>20, CURLOPT_HTTPHEADER=>["APIKEY: __DAFTRA_KEY__", "Accept: application/json"]]);
+    $res = curl_exec($ch); curl_close($ch);
+    $d = json_decode((string)$res, true) ?: [];
+    $n = 0;
+    foreach (($d["data"] ?? []) as $row) {
+        $t = $row["Treasury"] ?? $row;
+        if (empty($t["id"])) continue;
+        $conn->query("REPLACE INTO dmirror_treasuries (id, name, currency) VALUES ("
+            . (int)$t["id"] . ", '" . $conn->real_escape_string((string)($t["name"] ?? '')) . "', '"
+            . $conn->real_escape_string((string)($t["currency_code"] ?? 'SAR')) . "')");
+        $n++;
+    }
+    return $n;
+}
+
 function daftra_detached($conn) {
     // مفصول عن دفترة؟ يُقرأ من الإعدادات مرة واحدة لكل طلب
     static $v = null;
@@ -9974,6 +9999,7 @@ switch ($action) {
             ['discount_total', "discount_total DECIMAL(14,3) DEFAULT NULL"],
         ] as $c) ensure_column($conn, 'dmirror_purchases', $c[0], $c[1]);
 
+        if (!empty($_GET['reset'])) daftra_treasuries_cache($conn);
         $take = min(25, max(1, (int)($_GET['limit'] ?? 10)));
         $cur  = null;
         if ($r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='daftra_import_cursor' LIMIT 1"))
@@ -10531,10 +10557,10 @@ switch ($action) {
                     ['label'=>'المتبقي',     'value'=>round((float)$h['total'] - (float)$h['paid'], 2), 'money'=>1],
                 ];
                 // ما جاء من صفحة دفترة — يُعرض ما وُجد منه فقط
-                $more = [['staff_name','من سجّلها'], ['payment_status','حالة السداد'],
+                $more = [['staff_name','من سجّلها'],
                          ['work_order_text','أمر العمل'], ['po_number','رقم أمر الشراء'],
                          ['due_date','تاريخ الاستحقاق'], ['received_date','تاريخ الاستلام'],
-                         ['follow_up','المتابعة'], ['terms','الشروط'], ['extra_details','تفاصيل إضافية']];
+                         ['follow_up','المتابعة'], ['terms','الشروط']];
                 foreach ($more as $mf) {
                     $vv = trim((string)($h[$mf[0]] ?? ''));
                     if ($vv !== '' && $vv !== '0000-00-00')
@@ -10546,7 +10572,9 @@ switch ($action) {
                 $trs = $Q("SELECT DISTINCT treasury_id FROM dmirror_payments
                            WHERE purchase_id=$pid AND treasury_id > 0");
                 if ($trs) {
-                    $tnm = ['1'=>'الخزينة البنكية', '2'=>'الصندوق النقدي'];
+                    $tnm = [];
+                    foreach ($Q("SELECT id, name FROM dmirror_treasuries") as $tr)
+                        $tnm[(string)$tr['id']] = $tr['name'];
                     $out['stats'][] = ['label'=>'الخزينة', 'value'=>implode(' · ',
                         array_map(function($t) use ($tnm) {
                             return $tnm[(string)$t['treasury_id']] ?? ('خزينة ' . $t['treasury_id']);
