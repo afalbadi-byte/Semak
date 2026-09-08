@@ -1615,6 +1615,15 @@ function acc_next_no($conn, $tid, $kind, $yr) {
     return (int)$conn->insert_id;
 }
 // تسجيل حركة في سجل التدقيق — عالمي المستوى
+function daftra_detached($conn) {
+    // مفصول عن دفترة؟ يُقرأ من الإعدادات مرة واحدة لكل طلب
+    static $v = null;
+    if ($v !== null) return $v;
+    $v = false;
+    if ($r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='daftra_detached' LIMIT 1"))
+        if ($x = $r->fetch_assoc()) $v = ((string)$x['sval'] === '1');
+    return $v;
+}
 function acc_audit($conn, $tid, $entity, $eid, $action, $detail, $actor, $ip = '', $ua = '', $old = null, $new = null) {
     // اكتشاف مستوى الخطورة تلقائياً
     static $r4 = ['delete','void','reverse','reopen_year','close_year'];
@@ -7291,6 +7300,10 @@ switch ($action) {
     }
 
     case 'daftra_doc_archive': {
+        // بعد فصل دفترة لا يُسحب منها شيء — فلا تكتب فوق بياناتنا ولا تتعثّر
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
         // نسخ مرفقات دفترة إلى تخزيننا مرة واحدة — بعدها تُفتح بلا أي اعتماد على دفترة
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
@@ -7511,6 +7524,10 @@ switch ($action) {
     }
 
     case 'inv_pdf_pull': {
+        // بعد فصل دفترة لا يُسحب منها شيء — فلا تكتب فوق بياناتنا ولا تتعثّر
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
         // نسخة الفاتورة الرسمية من دفترة — تعطي مستنداً للفواتير التي لا مرفق لها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
@@ -7594,6 +7611,10 @@ switch ($action) {
     }
 
     case 'pay_receipt_pull': {
+        // بعد فصل دفترة لا يُسحب منها شيء — فلا تكتب فوق بياناتنا ولا تتعثّر
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
         // سحب إيصالات دفعات دفترة: نافذة الدفعة تحمل رابط الملف الموقّع، فنقرؤه
         // وننزّل الملف ونربطه بدفعته بالمعرّف — بلا مطابقة مبالغ ولا تخمين.
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -8720,7 +8741,7 @@ switch ($action) {
         if ($r = $conn->query("SELECT id, no, date, supplier, total, subtotal, paid, COALESCE(origin,'daftra') origin
                                FROM dmirror_purchases WHERE id=$id LIMIT 1")) $old = $r->fetch_assoc();
         if (!$old) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
-        if ($old['origin'] !== 'local') {
+        if ($old['origin'] !== 'local' && !daftra_detached($conn)) {
             echo json_encode(['success'=>false,'message'=>'هذه الفاتورة مصدرها دفترة — تُعدَّل من دفترة، وإلا رجع التعديل مع أول مزامنة'],
                 JSON_UNESCAPED_UNICODE); break;
         }
@@ -8884,7 +8905,7 @@ switch ($action) {
         if ($r = $conn->query("SELECT id, no, supplier, total, COALESCE(origin,'daftra') origin
                                FROM dmirror_purchases WHERE id=$pid LIMIT 1")) $inv = $r->fetch_assoc();
         if (!$inv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
-        if ($inv['origin'] !== 'local') {
+        if ($inv['origin'] !== 'local' && !daftra_detached($conn)) {
             echo json_encode(['success'=>false,'message'=>'هذه الفاتورة مصدرها دفترة — تُحذف من دفترة لا من هنا، وإلا عادت مع أول مزامنة'],
                 JSON_UNESCAPED_UNICODE); break;
         }
@@ -9507,6 +9528,10 @@ switch ($action) {
     }
 
     case 'buy_attach_rescan': {
+        // بعد فصل دفترة لا يُسحب منها شيء — فلا تكتب فوق بياناتنا ولا تتعثّر
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
         // إعادة قراءة مرفقات كل فاتورة من دفترة.
         // المزامنة تجلب تفاصيل الفاتورة مرة واحدة (حين لا بنود لها)، فالمرفقات
         // التي أعادتها الاستعادة إلى دفترة لا يعرف التطبيق بوجودها أبدا.
@@ -9746,6 +9771,50 @@ switch ($action) {
         $out['attachments'] = $Q("SELECT COUNT(*) n FROM dmirror_attachments
                                   WHERE entity_key IN ('purchase_order','purchase_invoice')")[0] ?? null;
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'buy_detach': {
+        // مفتاح فصل دفترة. حين يُرفع:
+        //   • تُفتح فواتير دفترة للتعديل والحذف — فلا مزامنة تُعيد ما صحّحته.
+        //   • تُغلق كل أوامر السحب من دفترة — فلا تكتب فوق بياناتنا ولا تتعثّر
+        //     حين تنتهي الرخصة.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+
+        if (isset($_GET['set'])) {
+            $on = $_GET['set'] === '1';
+            if ($on && empty($_GET['confirm'])) {
+                echo json_encode(['success'=>false,'message'=>'الفصل قرار كبير — أضف confirm=1'],
+                    JSON_UNESCAPED_UNICODE); break; }
+            if ($on) {
+                // لا نفصل وفي دفترة ملفات لم تُنزَّل بعد
+                $left = 0;
+                if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
+                        LEFT JOIN purchase_documents pd
+                          ON pd.daftra_file_id = at.file_id AND COALESCE(pd.drive_url,'') <> ''
+                        WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL"))
+                    if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+                if ($left > 0 && empty($_GET['force'])) {
+                    echo json_encode(['success'=>false, 'remaining_files'=>$left,
+                        'message'=>"ما زال $left مرفقا في دفترة وحدها — نزّلها أولا أو أضف force=1"],
+                        JSON_UNESCAPED_UNICODE); break; }
+            }
+            $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval) VALUES (1, 'daftra_detached', '"
+                . ($on ? '1' : '0') . "') ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+            acc_audit($conn, 1, 'purchase', 0, 'daftra_detach',
+                $on ? 'فُصل التطبيق عن دفترة' : 'أُعيد وصل التطبيق بدفترة', $u['name'] ?? '');
+        }
+        $st = '0';
+        if ($r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='daftra_detached' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $st = (string)$x['sval'];
+        echo json_encode(['success'=>true, 'detached'=>($st === '1'),
+            'message'=>$st === '1' ? 'التطبيق مفصول عن دفترة — الفواتير كلها قابلة للتعديل، والسحب موقوف'
+                                   : 'التطبيق موصول بدفترة'], JSON_UNESCAPED_UNICODE);
         break;
     }
 
@@ -10841,6 +10910,10 @@ switch ($action) {
     }
 
     case 'dmirror_sync_lite': {
+        // بعد فصل دفترة لا يُسحب منها شيء — فلا تكتب فوق بياناتنا ولا تتعثّر
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
         // مزامنة خفيفة: أحدث صفحة من دفترة فقط — تُستدعى مع كل فتح للتطبيق
         // المزامنة الكاملة تبقى في dmirror_sync للمراجعات الدورية.
         set_time_limit(60);
@@ -11025,6 +11098,10 @@ switch ($action) {
     }
 
     case 'dmirror_sync': {
+        // بعد فصل دفترة لا يُسحب منها شيء — فلا تكتب فوق بياناتنا ولا تتعثّر
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
         set_time_limit(300);
         $dk   = "__DAFTRA_KEY__";
         $base = "https://semak.daftra.com/api2";
