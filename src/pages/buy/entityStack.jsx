@@ -21,10 +21,16 @@ export function EntityProvider({ children }) {
         <EntityCtx.Provider value={{ openEntity }}>
             {children}
             {top && (
-                <div className="fixed inset-0 z-[60] bg-[#0b1220] overflow-y-auto"
-                    style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-                    <BuyEntity key={top.type + top.value} type={top.type} value={top.value}
-                        onOpen={openEntity} onBack={back} depth={stack.length} />
+                // على الجوال تملأ الشاشة، وعلى المكتب لوحٌ في الوسط فوق حاجب —
+                // نفس البطاقة ونفس البيانات، تجلس في السياق الذي فُتحت منه
+                <div className="fixed inset-0 z-[60] bg-[#0b1220] overflow-y-auto
+                        md:bg-black/60 md:p-6 md:flex md:items-start md:justify-center"
+                    style={{ paddingTop: 'env(safe-area-inset-top)' }}
+                    onClick={e => { if (e.target === e.currentTarget) back(); }}>
+                    <div className="w-full md:max-w-3xl md:rounded-3xl md:bg-[#0b1220] md:overflow-hidden md:shadow-2xl">
+                        <BuyEntity key={top.type + top.value} type={top.type} value={top.value}
+                            onOpen={openEntity} onBack={back} depth={stack.length} />
+                    </div>
                 </div>
             )}
         </EntityCtx.Provider>

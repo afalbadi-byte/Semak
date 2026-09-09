@@ -1432,6 +1432,14 @@ ensure_column($conn, 'dmirror_attachments', 'unavailable', 'unavailable TINYINT(
 ensure_column($conn, 'dmirror_attachments', 'unavailable_note', 'unavailable_note VARCHAR(240) DEFAULT NULL');
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (47)");
 } // end DDL v47
+// ─── DDL v48: رصيد الخزينة يُحفظ عندنا ──────────────────────────────────
+// البوابة كانت تقرأ الأرصدة من دفترة مباشرة؛ ورخصتها تنتهي، فيبقى الرصيد
+// الأخير المعروف محفوظاً بتاريخه بدل أن يظهر صفراً يوم انقطاعها.
+if ($__sv < 48) {
+ensure_column($conn, 'dmirror_treasuries', 'balance',    'balance DECIMAL(16,4) NOT NULL DEFAULT 0');
+ensure_column($conn, 'dmirror_treasuries', 'balance_at', 'balance_at DATETIME DEFAULT NULL');
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (48)");
+} // end DDL v48
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -12628,12 +12636,32 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_treasuries':
+        // ما دامت دفترة تردّ، يُحدَّث الرصيد ويُحفظ عندنا بتاريخه؛ ويوم تصمت
+        // يُخدَم آخر رصيد معروف بدل صفرٍ كاذب.
+        if (!daftra_detached($conn)) {
+            $dk = "__DAFTRA_KEY__";
+            $ch = curl_init("https://semak.daftra.com/api2/treasuries.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
+            $res = curl_exec($ch); curl_close($ch);
+            foreach ((json_decode((string)$res, true)['data'] ?? []) as $r0) {
+                $t = $r0['Treasury'] ?? $r0;
+                $tid = (int)($t['id'] ?? 0); if (!$tid) continue;
+                $conn->query("INSERT INTO dmirror_treasuries (id, name, currency, balance, balance_at)
+                    VALUES ($tid, '" . $conn->real_escape_string((string)($t['name'] ?? '')) . "', '"
+                    . $conn->real_escape_string((string)($t['currency_code'] ?? 'SAR')) . "', "
+                    . round((float)($t['balance'] ?? 0), 4) . ", NOW())
+                    ON DUPLICATE KEY UPDATE name=VALUES(name), currency=VALUES(currency),
+                        balance=VALUES(balance), balance_at=VALUES(balance_at)");
+            }
+        }
         $rows = [];
-        if ($r = $conn->query("SELECT id, name, COALESCE(currency,'SAR') currency
+        if ($r = $conn->query("SELECT id, name, COALESCE(currency,'SAR') currency,
+                                      ROUND(COALESCE(balance,0),4) balance, balance_at
                                FROM dmirror_treasuries ORDER BY id"))
             while ($x = $r->fetch_assoc())
-                $rows[] = ['id'=>(int)$x['id'], 'name'=>$x['name'] ?? '', 'balance'=>0,
-                           'currency'=>$x['currency'], 'status'=>1];
+                $rows[] = ['id'=>(int)$x['id'], 'name'=>$x['name'] ?? '',
+                           'balance'=>(float)$x['balance'], 'currency'=>$x['currency'],
+                           'balance_at'=>$x['balance_at'], 'status'=>1];
         echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 

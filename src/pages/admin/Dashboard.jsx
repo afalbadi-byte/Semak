@@ -30,6 +30,7 @@ const WhatsAppInbox     = React.lazy(() => import('./WhatsAppInbox'));
 const InvoicesManage    = React.lazy(() => import('./InvoicesManage'));
 const PurchasesManage   = React.lazy(() => import('./PurchasesManage'));
 const PurchaseDocs      = React.lazy(() => import('./PurchaseDocs'));
+const PurchaseHub       = React.lazy(() => import('./PurchaseHub'));
 const TaxReports        = React.lazy(() => import('./TaxReports'));
 const MeetingRoom       = React.lazy(() => import('./MeetingRoom'));
 const MeetingMinutes    = React.lazy(() => import('./MeetingMinutes'));
@@ -1060,6 +1061,7 @@ function DashboardInner({ onLogout }) {
             tools:[
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',        icon:ShoppingCart,   permKey:'finance', color:'amber'  },
                 { id:'purchase_docs', tabId:'purchase_docs', label:'مستندات المشتريات', icon:FileText, permKey:'finance', color:'emerald' },
+                { id:'purchase_hub', tabId:'purchase_hub', label:'مركز المشتريات', icon:ShoppingCart, permKey:'finance', color:'amber' },
                 { id:'tax_reports',  tabId:'tax_reports',  label:'مركز التقارير',      icon:BarChart3, permKey:'finance', color:'sky' },
                 { id:'item_prices',  tabId:'item_prices',  label:'متابعة أسعار الأصناف', icon:Package, permKey:'finance', color:'rose' },
                 { id:'meeting',      tabId:'meeting',      label:'غرفة الاجتماع',      icon:Presentation, permKey:'finance', color:'violet' },
@@ -1099,6 +1101,7 @@ function DashboardInner({ onLogout }) {
                 { id:'quotations',  tabId:'quotations',  label:'عروض الأسعار',        icon:FileText,     permKey:'finance', color:'sky'     },
                 { id:'purchases',   tabId:'purchases',   label:'فواتير الشراء',       icon:ShoppingCart, permKey:'finance', color:'amber'   },
                 { id:'purchase_docs', tabId:'purchase_docs', label:'مستندات المشتريات', icon:FileText, permKey:'finance', color:'emerald' },
+                { id:'purchase_hub', tabId:'purchase_hub', label:'مركز المشتريات', icon:ShoppingCart, permKey:'finance', color:'amber' },
                 { id:'tax_reports',  tabId:'tax_reports',  label:'مركز التقارير',      icon:BarChart3, permKey:'finance', color:'sky' },
                 { id:'meeting',      tabId:'meeting',      label:'غرفة الاجتماع',      icon:Presentation, permKey:'finance', color:'violet' },
                 { id:'expenses',    tabId:'expenses',    label:'المصروفات',           icon:Tag,          permKey:'finance', color:'red'     },
@@ -1175,7 +1178,7 @@ function DashboardInner({ onLogout }) {
         subscription:'الاشتراك والباقة',
         rega:'قيد المطور العقاري',
         minutes:'محاضر الاجتماعات', meeting:'غرفة الاجتماع', tax_reports:'مركز التقارير',
-        purchase_docs:'مستندات المشتريات', month_close:'القفلة الشهرية', campaign:'الحملات التسويقية',
+        purchase_docs:'مستندات المشتريات', purchase_hub:'مركز المشتريات', month_close:'القفلة الشهرية', campaign:'الحملات التسويقية',
         ent:'بطاقة', item_prices:'متابعة أسعار الأصناف',
     };
 
@@ -1624,6 +1627,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'quotations'  && hasPermission('finance')     && <div className="animate-fadeIn"><QuotationsManage /></div>}
                 {activeTab === 'purchases'   && hasPermission('finance')     && <div className="animate-fadeIn"><PurchasesManage /></div>}
                 {activeTab === 'purchase_docs' && hasPermission('finance')   && <div className="animate-fadeIn"><PurchaseDocs /></div>}
+                {activeTab === 'purchase_hub' && hasPermission('finance')    && <div className="animate-fadeIn"><PurchaseHub /></div>}
                 {activeTab === 'tax_reports'  && hasPermission('finance')   && <div className="animate-fadeIn"><TaxReports /></div>}
                 {activeTab === 'item_prices'  && hasPermission('finance')   && <div className="animate-fadeIn"><ItemPrices /></div>}
                 {activeTab === 'meeting'      && hasPermission('finance')   && <div className="animate-fadeIn"><MeetingRoom /></div>}
