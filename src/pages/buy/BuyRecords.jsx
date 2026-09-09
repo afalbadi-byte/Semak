@@ -122,6 +122,14 @@ export default function BuyRecords() {
             </div>
             )}
 
+            {/* أي كلمة تُفتح بطاقةً تجمع كل ما تحتها: موردين وفواتير وأصناف ومستندات */}
+            {tab !== 'returns' && q.trim().length > 1 && (
+                <button onClick={() => open('keyword', q.trim())}
+                    className="w-full text-right rounded-xl bg-[#c5a059]/15 border border-[#c5a059]/40 px-3 py-2.5 text-[12px] font-bold text-[#c5a059]">
+                    افتح كل ما تحت «{q.trim()}» — موردين وفواتير وأصناف ومستندات
+                </button>
+            )}
+
             {tab === 'payments' && (
                 <>
                     {proof && (

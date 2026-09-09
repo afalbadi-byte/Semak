@@ -612,7 +612,12 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                                 <div key={i} className="rounded-xl bg-white/[0.06] border border-white/10 p-2.5">
                                     <div className="text-[11px] text-slate-400">{s.label}</div>
                                     <div className="text-[15px] font-black mt-0.5 tabular-nums">
-                                        {s.money ? money(s.value) : String(s.value ?? '—')}
+                                        {!s.money && STAT_LINK[s.label] && s.value
+                                            ? <button onClick={() => onOpen(STAT_LINK[s.label], s.value)}
+                                                className="text-[#c5a059] underline decoration-dotted underline-offset-4 text-right">
+                                                {String(s.value)}
+                                              </button>
+                                            : (s.money ? money(s.value) : String(s.value ?? '—'))}
                                     </div>
                                 </div>
                             ))}
@@ -664,6 +669,38 @@ function Field({ label, children }) {
 }
 
 // صفوف القسم كبطاقات لا كجدول — أنسب لعرض الجوال
+// ─── الربط التلقائي ─────────────────────────────────────────────────────────
+// أي عمود اسمه معروف يصير رابطا، حتى لو لم يُعلنه الخادم. القيمة تُؤخذ من
+// عمود المعرّف إن وُجد، وإلا من النص نفسه (المورّد وأمر العمل أسماء لا أرقام).
+const AUTO_LINK = {
+    supplier:        { type: 'supplier',   self: true },
+    supplier_name:   { type: 'supplier',   self: true },
+    no:              { type: 'purchase',   idCol: ['id', 'purchase_id'] },
+    invoice_no:      { type: 'purchase',   idCol: ['purchase_id', 'id'] },
+    project:         { type: 'project',    idCol: ['project_id'] },
+    item:            { type: 'product',    idCol: ['product_id'] },
+    treasury:        { type: 'treasury',   idCol: ['treasury_id'] },
+    staff_name:      { type: 'staff',      self: true },
+    work_order_text: { type: 'work_order', self: true },
+};
+// وسوم البطاقة العلوية: من نصّها نعرف نوعها
+const STAT_LINK = {
+    'المورد':      'supplier',
+    'المورّد':      'supplier',
+    'من سجّلها':   'staff',
+    'أمر العمل':   'work_order',
+    'الخزينة':     'treasury',
+};
+function autoLink(colKey, row, declared) {
+    if (declared) return { type: declared.type, value: row[declared.value_col] };
+    const a = AUTO_LINK[colKey];
+    if (!a) return null;
+    if (a.self) { const v = row[colKey]; return v ? { type: a.type, value: v } : null; }
+    for (const c of a.idCol || []) if (row[c] !== undefined && row[c] !== null && +row[c] > 0)
+        return { type: a.type, value: row[c] };
+    return null;
+}
+
 function Section({ sec, onOpen }) {
     const [open, setOpen] = useState(true);
     const [showSort, setShowSort] = useState(false);
@@ -706,13 +743,13 @@ function Section({ sec, onOpen }) {
                     )}
                     {!raw.length && <p className="text-[12px] text-slate-500 text-center py-3">لا بيانات</p>}
                     {rows.map((r, i) => {
-                        const hl = links.find(l => l.col === head?.k);
+                        const hl = autoLink(head?.k, r, links.find(l => l.col === head?.k));
                         const val = head ? r[head.k] : '';
                         return (
                             <div key={i} className="rounded-xl bg-black/25 border border-white/5 p-2.5">
                                 <div className="flex items-start justify-between gap-2">
                                     {hl
-                                        ? <button onClick={() => onOpen(hl.type, r[hl.value_col])}
+                                        ? <button onClick={() => onOpen(hl.type, hl.value)}
                                             className="text-[13px] font-bold text-[#c5a059] text-right underline decoration-dotted underline-offset-4">
                                             {String(val ?? '—')}
                                           </button>
@@ -793,14 +830,14 @@ function Section({ sec, onOpen }) {
                                 )}
                                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1.5">
                                     {rest.filter(c => c.k !== sec.url_col).map(c => {
-                                        const lk = links.find(l => l.col === c.k);
+                                        const lk = autoLink(c.k, r, links.find(l => l.col === c.k));
                                         const v = r[c.k];
                                         if (v === null || v === undefined || v === '') return null;
                                         return (
                                             <div key={c.k} className="flex justify-between gap-2 text-[11px]">
                                                 <span className="text-slate-500 shrink-0">{c.t}</span>
                                                 {lk
-                                                    ? <button onClick={() => onOpen(lk.type, r[lk.value_col])}
+                                                    ? <button onClick={() => onOpen(lk.type, lk.value)}
                                                         className="font-bold text-[#c5a059] truncate text-left">{String(v)}</button>
                                                     : <span className={'font-bold truncate text-left ' + (isNum(v) ? 'tabular-nums' : '')}>
                                                         {isNum(v) && String(v).includes('.') ? money(v) : String(v)}

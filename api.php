@@ -10796,6 +10796,127 @@ switch ($action) {
                 ['label'=>'تاريخ التسجيل', 'value'=>$o ? $o[0]['since'] : '—'],
             ];
         }
+        elseif ($type === 'treasury') {
+            // خزينة: ما خرج منها من دفعات وعلى أي فواتير
+            $tid = (int)$val;
+            $nm = $Q("SELECT name FROM dmirror_treasuries WHERE id=$tid LIMIT 1");
+            $out['title'] = $nm ? $nm[0]['name'] : ('خزينة ' . $tid);
+            $out['subtitle'] = 'خزينة';
+            $sm = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(amount),0),2) amount,
+                             MIN(date) first_d, MAX(date) last_d
+                      FROM dmirror_payments WHERE treasury_id=$tid");
+            if ($sm) {
+                $out['stats'] = [
+                    ['label'=>'عدد الدفعات', 'value'=>(int)$sm[0]['n']],
+                    ['label'=>'مجموع المدفوع', 'value'=>(float)$sm[0]['amount'], 'money'=>1],
+                    ['label'=>'أول دفعة', 'value'=>(string)$sm[0]['first_d']],
+                    ['label'=>'آخر دفعة', 'value'=>(string)$sm[0]['last_d']],
+                ];
+            }
+            $out['sections'][] = ['title'=>'الدفعات',
+                'cols'=>[['k'=>'date','t'=>'التاريخ'],['k'=>'supplier','t'=>'المورد'],
+                         ['k'=>'amount','t'=>'المبلغ','money'=>1],['k'=>'invoice_no','t'=>'الفاتورة']],
+                'link'=>['col'=>'date','type'=>'payment','value_col'=>'id'],
+                'link2'=>['col'=>'invoice_no','type'=>'purchase','value_col'=>'purchase_id'],
+                'rows'=>$Q("SELECT m.id, m.date, m.purchase_id, ROUND(m.amount,2) amount,
+                            COALESCE(p.supplier,'') supplier, COALESCE(p.no,'') invoice_no
+                     FROM dmirror_payments m LEFT JOIN dmirror_purchases p ON p.id=m.purchase_id
+                     WHERE m.treasury_id=$tid ORDER BY m.date DESC LIMIT 300")];
+        }
+        elseif ($type === 'staff') {
+            // من سجّل الفواتير
+            $out['title'] = $val; $out['subtitle'] = 'مُدخِل الفواتير';
+            $sm = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(total),0),2) amount
+                      FROM dmirror_purchases WHERE staff_name='" . $E($val) . "'");
+            if ($sm) $out['stats'] = [
+                ['label'=>'عدد الفواتير', 'value'=>(int)$sm[0]['n']],
+                ['label'=>'إجماليها', 'value'=>(float)$sm[0]['amount'], 'money'=>1]];
+            $out['sections'][] = ['title'=>'فواتيره'] + ['cols'=>[['k'=>'no','t'=>'رقم'],['k'=>'date','t'=>'التاريخ'],['k'=>'supplier','t'=>'المورد'],['k'=>'gross','t'=>'الإجمالي','money'=>1],['k'=>'paid','t'=>'المسدد','money'=>1]],'link'=>['col'=>'no','type'=>'purchase','value_col'=>'id']] + 
+                ['rows'=>$Q("SELECT id, no, date, supplier, ROUND(total,2) gross, ROUND(paid,2) paid
+                     FROM dmirror_purchases WHERE staff_name='" . $E($val) . "'
+                     ORDER BY date DESC LIMIT 300")];
+        }
+        elseif ($type === 'work_order') {
+            // أمر العمل في دفترة
+            $out['title'] = $val; $out['subtitle'] = 'أمر عمل';
+            $sm = $Q("SELECT COUNT(*) n, ROUND(COALESCE(SUM(total),0),2) amount
+                      FROM dmirror_purchases WHERE work_order_text='" . $E($val) . "'");
+            if ($sm) $out['stats'] = [
+                ['label'=>'عدد الفواتير', 'value'=>(int)$sm[0]['n']],
+                ['label'=>'إجماليها', 'value'=>(float)$sm[0]['amount'], 'money'=>1]];
+            $out['sections'][] = ['title'=>'فواتير أمر العمل'] + ['cols'=>[['k'=>'no','t'=>'رقم'],['k'=>'date','t'=>'التاريخ'],['k'=>'supplier','t'=>'المورد'],['k'=>'gross','t'=>'الإجمالي','money'=>1],['k'=>'paid','t'=>'المسدد','money'=>1]],'link'=>['col'=>'no','type'=>'purchase','value_col'=>'id']] + 
+                ['rows'=>$Q("SELECT id, no, date, supplier, ROUND(total,2) gross, ROUND(paid,2) paid
+                     FROM dmirror_purchases WHERE work_order_text='" . $E($val) . "'
+                     ORDER BY date DESC LIMIT 300")];
+        }
+        elseif ($type === 'payment') {
+            // دفعة واحدة: فاتورتها ومورّدها وخزينتها وإيصالها
+            $mid = (int)$val;
+            $pm = $Q("SELECT m.*, COALESCE(p.no,'') invoice_no, COALESCE(p.supplier,'') supplier,
+                             COALESCE(t.name,'') treasury
+                      FROM dmirror_payments m
+                      LEFT JOIN dmirror_purchases p ON p.id=m.purchase_id
+                      LEFT JOIN dmirror_treasuries t ON t.id=m.treasury_id
+                      WHERE m.id=$mid LIMIT 1");
+            if (!$pm) { $ok = false; $out = ['success'=>false,'message'=>'الدفعة غير موجودة']; }
+            else {
+                $m = $pm[0];
+                $out['title'] = 'دفعة ' . number_format((float)$m['amount'], 2);
+                $out['subtitle'] = $m['supplier'];
+                $out['stats'] = [
+                    ['label'=>'التاريخ', 'value'=>(string)$m['date']],
+                    ['label'=>'المبلغ', 'value'=>(float)$m['amount'], 'money'=>1],
+                    ['label'=>'الطريقة', 'value'=>(string)($m['payment_method'] ?? '')],
+                    ['label'=>'الخزينة', 'value'=>(string)$m['treasury']],
+                    ['label'=>'رقم العملية', 'value'=>(string)($m['transaction_id'] ?? '')],
+                ];
+                $out['stats'] = array_values(array_filter($out['stats'],
+                    function($x) { return trim((string)$x['value']) !== ''; }));
+                if ($m['supplier'] !== '') $out['links'][] = ['label'=>$m['supplier'], 'type'=>'supplier', 'value'=>$m['supplier']];
+                if ((int)$m['purchase_id']) $out['links'][] = ['label'=>'الفاتورة ' . $m['invoice_no'],
+                    'type'=>'purchase', 'value'=>(int)$m['purchase_id']];
+                if ((int)$m['treasury_id']) $out['links'][] = ['label'=>$m['treasury'] ?: ('خزينة ' . $m['treasury_id']),
+                    'type'=>'treasury', 'value'=>(int)$m['treasury_id']];
+                $out['sections'][] = ['title'=>'إيصالها', 'download'=>1,
+                    'cols'=>[['k'=>'file_name','t'=>'الملف'],['k'=>'doc_type','t'=>'النوع']],
+                    'rows'=>$Q("SELECT id, file_name, doc_type, 1 downloadable FROM purchase_documents
+                                WHERE payment_id=$mid AND payment_src='daftra'")];
+            }
+        }
+        elseif ($type === 'keyword') {
+            // أي كلمة: كل ما تحتها في النظام
+            $k = $E($val);
+            $out['title'] = $val; $out['subtitle'] = 'بحث في كل شيء';
+            $sup = $Q("SELECT supplier name, COUNT(*) invoices, ROUND(SUM(total),2) gross
+                       FROM dmirror_purchases WHERE supplier LIKE '%$k%'
+                       GROUP BY supplier ORDER BY gross DESC LIMIT 40");
+            if ($sup) $out['sections'][] = ['title'=>'موردون',
+                'cols'=>[['k'=>'name','t'=>'المورد'],['k'=>'invoices','t'=>'فواتير'],
+                         ['k'=>'gross','t'=>'الإجمالي','money'=>1]],
+                'link'=>['col'=>'name','type'=>'supplier','value_col'=>'name'], 'rows'=>$sup];
+            $inv = $Q("SELECT id, no, date, supplier, ROUND(total,2) gross, ROUND(paid,2) paid
+                       FROM dmirror_purchases
+                       WHERE no LIKE '%$k%' OR supplier LIKE '%$k%' OR COALESCE(notes,'') LIKE '%$k%'
+                          OR COALESCE(work_order_text,'') LIKE '%$k%' OR COALESCE(staff_name,'') LIKE '%$k%'
+                       ORDER BY date DESC LIMIT 60");
+            if ($inv) $out['sections'][] = ['title'=>'فواتير'] + ['cols'=>[['k'=>'no','t'=>'رقم'],['k'=>'date','t'=>'التاريخ'],['k'=>'supplier','t'=>'المورد'],['k'=>'gross','t'=>'الإجمالي','money'=>1],['k'=>'paid','t'=>'المسدد','money'=>1]],'link'=>['col'=>'no','type'=>'purchase','value_col'=>'id']] + ['rows'=>$inv];
+            $it = $Q("SELECT i.item, COUNT(*) times, ROUND(SUM(i.subtotal),2) gross, MAX(i.product_id) product_id
+                      FROM dmirror_purchase_items i WHERE i.item LIKE '%$k%'
+                      GROUP BY i.item ORDER BY gross DESC LIMIT 40");
+            if ($it) $out['sections'][] = ['title'=>'أصناف',
+                'cols'=>[['k'=>'item','t'=>'الصنف'],['k'=>'times','t'=>'مرات'],
+                         ['k'=>'gross','t'=>'الإجمالي','money'=>1]],
+                'link'=>['col'=>'item','type'=>'product','value_col'=>'product_id'], 'rows'=>$it];
+            $dc = $Q("SELECT d.id, d.file_name, d.doc_type, COALESCE(p.no,'') invoice_no, d.purchase_id,
+                             CASE WHEN COALESCE(d.drive_url,'') <> '' THEN 1 ELSE 0 END downloadable
+                      FROM purchase_documents d LEFT JOIN dmirror_purchases p ON p.id=d.purchase_id
+                      WHERE d.file_name LIKE '%$k%' ORDER BY d.id DESC LIMIT 40");
+            if ($dc) $out['sections'][] = ['title'=>'مستندات', 'download'=>1,
+                'cols'=>[['k'=>'file_name','t'=>'الملف'],['k'=>'doc_type','t'=>'النوع'],
+                         ['k'=>'invoice_no','t'=>'الفاتورة']],
+                'link'=>['col'=>'invoice_no','type'=>'purchase','value_col'=>'purchase_id'], 'rows'=>$dc];
+            if (!$out['sections']) $out['subtitle'] = 'لا نتائج';
+        }
         else { $ok = false; $out = ['success'=>false,'message'=>'نوع كيان غير معروف']; }
 
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
