@@ -7491,7 +7491,7 @@ switch ($action) {
 
     case 'doc_classify_run': {
         // فرز آلي: المعالج يقرأ كل مستند ويقرر فاتورة أم إيصال، ويستخرج مبلغه وتاريخه.
-        // الربط بدفعة لا يتم إلا بتطابق مبلغ قاطع مع دفعة واحدة بعينها.
+        // لا يربط بدفعة: الربط يأتي من دفترة أو بيد موظف، لا بتخمين المبلغ.
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         $uid = (int)$_jwt_claims['sub']; $u = null;
@@ -7560,19 +7560,7 @@ switch ($action) {
             $receipts++;
             if ($amt === null) continue;
 
-            // الربط بدفعة: مبلغ مطابق، ودفعة واحدة فقط تطابقه — وإلا يُترك للمراجعة
-            $pidD = (int)$d['purchase_id'];
-            $cands = [];
-            if ($q = $conn->query("SELECT id, 'app' src, amount FROM purchase_payments WHERE purchase_id=$pidD
-                                   UNION ALL
-                                   SELECT id, 'daftra' src, amount FROM dmirror_payments WHERE purchase_id=$pidD"))
-                while ($x = $q->fetch_assoc()) if (abs((float)$x['amount'] - $amt) <= 0.01) $cands[] = $x;
-            if (count($cands) === 1) {
-                $conn->query("UPDATE purchase_documents SET payment_id=" . (int)$cands[0]['id'] . ",
-                        payment_src='" . $conn->real_escape_string($cands[0]['src']) . "'
-                    WHERE id=" . (int)$d['id']);
-                $linked++;
-            }
+            // لا ربط آلي بدفعة: تطابق المبلغ تخمين. الربط من دفترة أو بيد موظف.
         }
 
         $left = 0;
@@ -8177,11 +8165,11 @@ switch ($action) {
                  LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
                             WHERE entity_key = 'purchase_order_payment' GROUP BY entity_id) at
                    ON at.entity_id = pp.id AND pp.srck = 'daftra'";
-        // إثبات السداد = إيصال، لا الفاتورة. مرفق الفاتورة نفسه لا يُحتسب إثباتاً
-        // للدفع، وإلا بدت كل فاتورة لها صورة كأنها مسدّدة بإثبات.
-        // مرفق دفترة على الدفعة إثباتٌ كامل — هو الأصل الذي رفعته أنت وقت السداد
+        // الإثبات لدفعةٍ بعينها لا لفاتورتها: مرفق الدفعة في دفترة، أو مستند
+        // ربطه موظف بهذه الدفعة. إيصالٌ معلّق على الفاتورة لا يُثبت أيّ دفعة
+        // منها، وتطابقُ المبلغ تخمينٌ لا إثبات.
         $has = "(COALESCE(pp.receipt_url,'') <> '' OR COALESCE(pp.attach,'') <> ''
-                 OR COALESCE(pdp.n,0) > 0 OR COALESCE(at.n,0) > 0 OR COALESCE(rc.n,0) > 0)";
+                 OR COALESCE(pdp.n,0) > 0 OR COALESCE(at.n,0) > 0)";
         // دفعة لم نفتح تفصيلها قط: لا نقول عنها «بلا إثبات» ولم نبحث فيها
         $unk = "(NOT $has AND pp.checked_at IS NULL)";
 
@@ -10530,6 +10518,31 @@ switch ($action) {
             ($on ? 'تعليم المرفق ' : 'رفع تعليم المرفق ') . $fid . ($on ? (' — ' . $nt) : ''), $u['name'] ?? '');
         echo json_encode(['success'=>true, 'file_id'=>$fid, 'unavailable'=>$on, 'changed'=>$aff],
             JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'pdoc_unlink_guessed': {
+        // فكّ الروابط التي أنشأها الفرز بمطابقة المبلغ — مرفقُ فاتورةٍ عُلّق على دفعة.
+        // مرفقات الدفعات المسحوبة من دفترة لا تُمسّ (لا daftra_file_id لها).
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        $w = "payment_id IS NOT NULL AND auto_at IS NOT NULL AND COALESCE(daftra_file_id,0) > 0";
+        $rows = [];
+        if ($r = $conn->query("SELECT id, purchase_id, payment_id, file_name FROM purchase_documents
+                               WHERE $w ORDER BY id"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        if (empty($_GET['apply'])) {
+            echo json_encode(['success'=>true, 'preview'=>true, 'count'=>count($rows),
+                'sample'=>array_slice($rows, 0, 10)], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("UPDATE purchase_documents SET payment_id=NULL, payment_src=NULL WHERE $w");
+        $aff = $conn->affected_rows;
+        acc_audit($conn, 1, 'purchase', 0, 'unlink_guessed',
+            "فكّ $aff ربطا مخمَّنا بين مستندات ودفعات", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'unlinked'=>$aff], JSON_UNESCAPED_UNICODE);
         break;
     }
 
