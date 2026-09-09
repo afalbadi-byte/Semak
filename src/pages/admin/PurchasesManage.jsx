@@ -12,7 +12,10 @@ import SortHeader from '../../components/SortHeader';
 import TablePager from '../../components/TablePager';
 
 import EntityLink from '../../components/EntityLink';
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
+
+// الفاتورة صارت تُحفظ في قاعدتنا، فيلزمها جلسة كأي أمر مالي
+const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
 import { useToast } from '../../components/ui';
 import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 
@@ -310,6 +313,8 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
       const body = {
         ...(view === 'edit' ? { id: selected.id } : {}),
         supplier_id:   form.supplier_id,
+        // الاسم يُرسل معه: مورد جديد بلا فاتورة سابقة لا يُستدلّ على اسمه من القاعدة
+        supplier:      (suppliers.find(s => String(s.id) === String(form.supplier_id))?.name) || '',
         date:          form.date,
         work_order_id: form.work_order_id || '',
         notes:         form.notes || '',
@@ -324,7 +329,7 @@ export default function PurchasesManage({ user, navigateTo, showToast: externalT
 
       const res  = await fetch(`${API_URL}?action=${action}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth() },
         body: JSON.stringify(body),
       });
       const data = await res.json();

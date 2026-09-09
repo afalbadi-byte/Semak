@@ -6,7 +6,10 @@ import {
   CreditCard, User, FileText
 } from 'lucide-react';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
+
+// تسجيل الصرف صار يُكتب في قاعدتنا، فيلزمه جلسة كأي أمر مالي
+const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
 import { useToast } from '../../components/ui';
 import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 
@@ -232,7 +235,7 @@ export default function PaymentsManage() {
       };
       const res  = await fetch(`${API_URL}?action=daftra_supplier_payment_add`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth() },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -750,13 +753,13 @@ export default function PaymentsManage() {
                 <tbody>
                   {payRows.map((r, idx) => (
                     <tr
-                      key={r.id || idx}
+                      key={`${r.src || 'x'}-${r.id || idx}`}
                       className={`border-b border-slate-50 dark:border-brand-700 hover:bg-slate-50/50 dark:hover:bg-brand-800 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30 dark:bg-brand-800/40'}`}
                     >
                       <td className="px-4 py-3 text-xs text-slate-500 dark:text-brand-400 font-medium whitespace-nowrap">{r.date || '—'}</td>
                       <td className="px-4 py-3">
                         <span className="bg-brand-800/10 text-brand-800 dark:text-brand-100 px-2 py-0.5 rounded-lg text-xs font-black">
-                          #{r.purchase_id || '—'}
+                          {r.invoice_no ? `#${r.invoice_no}` : (r.purchase_id ? `#${r.purchase_id}` : '—')}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs font-bold">

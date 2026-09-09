@@ -5524,55 +5524,106 @@ switch ($action) {
         break;
 
     case 'daftra_supplier_payments_list':
-        // قائمة دفعات الموردين
-        $dk = "__DAFTRA_KEY__";
+        // دفعات الموردين من قاعدتنا: المسجَّل في التطبيق أولاً، ثم ما جاء من
+        // دفترة ولم يُسجَّل عندنا بنفس اليوم والمبلغ — كقاعدة بطاقة الفاتورة.
         $pur_id = (int)($_GET['purchase_id'] ?? 0);
-        $page   = (int)($_GET['page'] ?? 1);
-        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $qp = "page=$page&limit=50";
-        if ($pur_id) $qp .= "&purchase_invoice_id=$pur_id";
-        if ($from)   $qp .= "&from_date=$from";
-        if ($to)     $qp .= "&to_date=$to";
-        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoice_payments.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
-        $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $p = $r['PurchaseInvoicePayment'] ?? $r['PurchaseOrderPayment'] ?? $r;
-            $rows[] = [
-                'id'          => $p['id'],
-                'date'        => $p['date'] ?? '',
-                'amount'      => (float)($p['amount'] ?? 0),
-                'purchase_id' => $p['purchase_invoice_id'] ?? $p['purchase_order_id'] ?? '',
-                'supplier'    => $p['supplier_business_name'] ?? '',
-                'supplier_id' => $p['supplier_id'] ?? '',
-                'method'      => $p['payment_method'] ?? '',
-                'treasury'    => $p['treasury_name'] ?? '',
-                'notes'       => $p['notes'] ?? '',
-            ];
+        $D = function($v) { return preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)$v) ? $v : ''; };
+        $from = $D($_GET['from'] ?? ''); $to = $D($_GET['to'] ?? '');
+        $lim_pay = min(500, max(5, (int)($_GET['limit'] ?? 50)));
+        $wl = ['1']; $wd = ['1'];
+        if ($pur_id) { $wl[] = "p.purchase_id = $pur_id"; $wd[] = "m.purchase_id = $pur_id"; }
+        if ($from)   { $wl[] = "p.pay_date >= '$from'"; $wd[] = "m.date >= '$from'"; }
+        if ($to)     { $wl[] = "p.pay_date <= '$to'";   $wd[] = "m.date <= '$to'"; }
+        $rows = []; $seen_pay = [];
+        $QP = function($sql) use ($conn) { $o=[]; if($r=$conn->query($sql)) while($x=$r->fetch_assoc()) $o[]=$x; return $o; };
+        foreach ($QP("SELECT p.id, p.pay_date, ROUND(p.amount,2) amount, p.purchase_id,
+                        COALESCE(p.supplier,'') supplier, COALESCE(p.method,'') method,
+                        COALESCE(p.reference,'') reference, COALESCE(p.note,'') note,
+                        COALESCE(p.receipt_url,'') receipt_url, COALESCE(p.created_by,'') created_by,
+                        COALESCE(d.no,'') invoice_no, d.supplier_id
+                     FROM purchase_payments p
+                     LEFT JOIN dmirror_purchases d ON d.id = p.purchase_id
+                     WHERE " . implode(' AND ', $wl) . " ORDER BY p.pay_date DESC, p.id DESC LIMIT $lim_pay") as $p) {
+            $seen_pay[$p['pay_date'] . '|' . number_format((float)$p['amount'], 2, '.', '')] = 1;
+            $rows[] = ['id'=>(int)$p['id'], 'src'=>'app', 'date'=>$p['pay_date'],
+                'amount'=>(float)$p['amount'], 'purchase_id'=>(int)$p['purchase_id'],
+                'invoice_no'=>$p['invoice_no'], 'supplier'=>$p['supplier'],
+                'supplier_id'=>$p['supplier_id'], 'method'=>$p['method'], 'treasury'=>'',
+                'reference'=>$p['reference'], 'receipt_url'=>$p['receipt_url'],
+                'created_by'=>$p['created_by'], 'notes'=>$p['note'], 'source'=>'التطبيق'];
         }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        foreach ($QP("SELECT m.id, m.date, ROUND(m.amount,2) amount, m.purchase_id,
+                        COALESCE(m.payment_method,'') method, COALESCE(m.notes,'') notes,
+                        COALESCE(m.receipt_url,'') receipt_url,
+                        COALESCE(t.name,'') treasury, COALESCE(d.no,'') invoice_no,
+                        COALESCE(d.supplier,'') supplier, d.supplier_id
+                     FROM dmirror_payments m
+                     LEFT JOIN dmirror_purchases d ON d.id = m.purchase_id
+                     LEFT JOIN dmirror_treasuries t ON t.id = m.treasury_id
+                     WHERE " . implode(' AND ', $wd) . " ORDER BY m.date DESC, m.id DESC LIMIT $lim_pay") as $p) {
+            if (isset($seen_pay[$p['date'] . '|' . number_format((float)$p['amount'], 2, '.', '')])) continue;
+            $rows[] = ['id'=>(int)$p['id'], 'src'=>'daftra', 'date'=>$p['date'],
+                'amount'=>(float)$p['amount'], 'purchase_id'=>(int)$p['purchase_id'],
+                'invoice_no'=>$p['invoice_no'], 'supplier'=>$p['supplier'],
+                'supplier_id'=>$p['supplier_id'], 'method'=>$p['method'], 'treasury'=>$p['treasury'],
+                'reference'=>'', 'receipt_url'=>$p['receipt_url'],
+                'created_by'=>'', 'notes'=>$p['notes'], 'source'=>'دفترة'];
+        }
+        usort($rows, function($a, $b) {
+            $c = strcmp((string)$b['date'], (string)$a['date']);
+            return $c !== 0 ? $c : ((int)$b['id'] <=> (int)$a['id']);
+        });
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'daftra_supplier_payment_add':
-        // سند صرف لمورد — يخفّض رصيد المورد ويخصم من الخزينة
-        $dk = "__DAFTRA_KEY__";
+    case 'daftra_supplier_payment_add': {
+        // الصرف يُسجَّل في قاعدتنا — لا كتابة في دفترة، ورخصتها تنتهي.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسجيل الدفعات'], JSON_UNESCAPED_UNICODE); break; }
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $payload = ['PurchaseInvoicePayment' => [
-            'purchase_invoice_id' => $body['purchase_id'] ?? '',
-            'supplier_id'         => $body['supplier_id'] ?? '',
-            'amount'              => (float)($body['amount'] ?? 0),
-            'date'                => $body['date']        ?? date('Y-m-d'),
-            'treasury_id'         => $body['treasury_id'] ?? '',
-            'payment_method'      => $body['method']      ?? 'cash',
-            'notes'               => $body['notes']       ?? '',
-        ]];
-        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoice_payments.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تم تسجيل الصرف':'فشل التسجيل'], JSON_UNESCAPED_UNICODE);
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $pid = (int)($body['purchase_id'] ?? 0);
+        $amt = round((float)($body['amount'] ?? 0), 2);
+        if (!$pid || $amt <= 0) { echo json_encode(['success'=>false,'message'=>'الفاتورة والمبلغ مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $iv = null;
+        if ($r = $conn->query("SELECT supplier, total, paid FROM dmirror_purchases WHERE id=$pid LIMIT 1")) $iv = $r->fetch_assoc();
+        if (!$iv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $method = in_array(($body['method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $body['method'] : 'transfer';
+        $pdate  = preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)($body['date'] ?? '')) ? $body['date'] : date('Y-m-d');
+        $remain = round((float)$iv['total'] - (float)$iv['paid'], 2);
+        $overBy = ($amt > $remain + 0.5) ? round($amt - $remain, 2) : 0;
+        $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date,
+                reference, receipt_url, note, created_by)
+            VALUES ($pid, '" . $E($iv['supplier']) . "', $amt, '" . $E($method) . "', '$pdate', '"
+            . $E(mb_substr((string)($body['reference'] ?? ''), 0, 110)) . "', '"
+            . $E((string)($body['receipt_url'] ?? '')) . "', '"
+            . $E(mb_substr((string)($body['notes'] ?? ''), 0, 380)) . "', '" . $E($u['name'] ?? '') . "')");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        $payId = (int)$conn->insert_id;
+        $sum = 0;
+        if ($sr = $conn->query("SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM purchase_payments WHERE purchase_id=$pid"))
+            $sum = (float)($sr->fetch_assoc()['s'] ?? 0);
+        $newPaid = max($sum, (float)$iv['paid']);
+        if ($sum >= (float)$iv['paid']) $newPaid = $sum;
+        $conn->query("UPDATE dmirror_purchases SET paid=" . round($newPaid, 2) . " WHERE id=$pid");
+        if (($body['receipt_url'] ?? '') !== '')
+            $conn->query("INSERT INTO purchase_documents (purchase_id, doc_type, file_name, drive_url, source, created_by)
+                VALUES ($pid, 'receipt', '" . $E('إيصال سداد ' . $amt) . "', '" . $E($body['receipt_url']) . "', 'portal', '"
+                . $E($u['name'] ?? '') . "')");
+        acc_audit($conn, $uid, 'purchase', $pid, 'pay_add',
+            'صرف ' . number_format($amt, 2) . ' لـ' . ($iv['supplier'] ?? '') . ' من البوابة', $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'id'=>$payId, 'paid'=>round($newPaid, 2),
+            'remaining'=>round((float)$iv['total'] - $newPaid, 2), 'paid_over'=>$overBy,
+            'message'=>'تم تسجيل الصرف',
+            'warning'=>$overBy > 0 ? ('الدفعة تتجاوز المتبقي بـ' . number_format($overBy, 2)) : ''],
+            JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     // ══════════════════════════════════════════════════════════════════════
     // إعدادات الربط — حفظ/حالة كوكي جلسة دفترة (خدمة ذاتية بدون redeploy)
@@ -12216,48 +12267,26 @@ switch ($action) {
     }
 
     case 'daftra_purchases_list':
+        // المصدر قاعدتنا: نفس ما يقرأه التطبيق، فالبوابة والجوال رقم واحد.
         set_time_limit(30);
-        $dk   = "__DAFTRA_KEY__";
-        $page = (int)($_GET['page'] ?? 1);
-        $lim_pur = (int)($_GET['limit'] ?? 50);
+        $lim_pur = min(500, max(5, (int)($_GET['limit'] ?? 50)));
+        $page    = max(1, (int)($_GET['page'] ?? 1));
+        $off_pur = ($page - 1) * $lim_pur;
         $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
         $supplier_id_filter = (int)($_GET['supplier_id'] ?? 0);
-        $qp   = "page=$page&limit=$lim_pur";
-        if ($from) $qp .= "&from_date=$from";
-        if ($to)   $qp .= "&to_date=$to";
-        if ($supplier_id_filter) $qp .= "&supplier_id=$supplier_id_filter";
-        $ch = curl_init("https://semak.daftra.com/api2/purchase_invoices.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
-        $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $p = $r['PurchaseInvoice'] ?? $r['PurchaseOrder'] ?? $r;
-            $rows[] = [
-                'id'           => $p['id'],
-                'no'           => $p['no']   ?? '',
-                'date'         => $p['date'] ?? '',
-                'supplier_id'  => $p['supplier_id'] ?? '',
-                'supplier'     => $p['supplier_business_name'] ?? '',
-                'total'        => (float)($p['summary_total'] ?? $p['grand_total'] ?? 0),
-                'paid'         => (float)($p['summary_paid']  ?? 0),
-                'work_order_id'=> $p['work_order_id'] ?? null,
-            ];
-        }
-
-        // ─── فواتير أُدخلت من تطبيق المشتريات: تعيش عندنا لا في دفترة ─────────
-        // القائمة تُبنى من دفترة، فلولا هذا الدمج لاختفت الفاتورة التي يحفظها
-        // مدير المشتريات من جواله رغم أنها محفوظة فعلاً.
-        $seen = [];
-        foreach ($rows as $r0) $seen[(int)$r0['id']] = 1;
-        $lw = ["origin = 'local'"];
-        if (preg_match('/^d{4}-d{2}-d{2}$/', (string)$from)) $lw[] = "date >= '" . $conn->real_escape_string($from) . "'";
-        if (preg_match('/^d{4}-d{2}-d{2}$/', (string)$to))   $lw[] = "date <= '" . $conn->real_escape_string($to) . "'";
+        $lw = ['1'];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$from)) $lw[] = "date >= '" . $conn->real_escape_string($from) . "'";
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$to))   $lw[] = "date <= '" . $conn->real_escape_string($to) . "'";
         if ($supplier_id_filter) $lw[] = "supplier_id = $supplier_id_filter";
-        $lr = $conn->query("SELECT id, no, date, supplier_id, supplier, total, paid, work_order_id
-                            FROM dmirror_purchases WHERE " . implode(' AND ', $lw) . " ORDER BY date DESC, id DESC LIMIT 200");
+        $qtxt = trim((string)($_GET['q'] ?? ''));
+        if ($qtxt !== '') { $qe = $conn->real_escape_string($qtxt);
+            $lw[] = "(supplier LIKE '%$qe%' OR no LIKE '%$qe%')"; }
+        $rows = [];
+        $lr = $conn->query("SELECT id, no, date, supplier_id, supplier, total, paid, work_order_id,
+                                   COALESCE(origin,'daftra') origin
+                            FROM dmirror_purchases WHERE " . implode(' AND ', $lw) . "
+                            ORDER BY date DESC, id DESC LIMIT $lim_pur OFFSET $off_pur");
         if ($lr) while ($lx = $lr->fetch_assoc()) {
-            if (isset($seen[(int)$lx['id']])) continue;
             $rows[] = [
                 'id'           => (int)$lx['id'],
                 'no'           => $lx['no'] ?? '',
@@ -12267,13 +12296,12 @@ switch ($action) {
                 'total'        => (float)$lx['total'],
                 'paid'         => (float)$lx['paid'],
                 'work_order_id'=> $lx['work_order_id'],
-                'origin'       => 'local',
+                'origin'       => $lx['origin'],
             ];
         }
-        usort($rows, function($a, $b) {
-            $c = strcmp((string)($b['date'] ?? ''), (string)($a['date'] ?? ''));
-            return $c !== 0 ? $c : ((int)$b['id'] <=> (int)$a['id']);
-        });
+        $tot_pur = 0;
+        if ($tr = $conn->query("SELECT COUNT(*) n FROM dmirror_purchases WHERE " . implode(' AND ', $lw)))
+            $tot_pur = (int)($tr->fetch_assoc()['n'] ?? 0);
 
         // ─── تصنيف تلقائي: الفاتورة الجديدة ترث البند الغالب لموردها ──────────
         // (البوابة تبقى محدثة: أي فاتورة تدخل دفترة تُصنَّف فور أول عرض للقائمة،
@@ -12317,34 +12345,109 @@ switch ($action) {
                 $rows[$i]['class_code'] = '';
             }
         }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$tot_pur,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_purchase_create':
-    case 'daftra_purchase_update':
-        $dk   = "__DAFTRA_KEY__";
+    case 'daftra_purchase_update': {
+        // الفاتورة تُحفظ عندنا. فاتورةُ دفترة القديمة لا تُعدَّل ما دمنا موصولين بها،
+        // كي لا يفترق سجلّان لفاتورة واحدة؛ وتُفتح للتعديل يوم فكّ الارتباط.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية إدخال المشتريات'], JSON_UNESCAPED_UNICODE); break; }
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $pur_id    = (int)($body['id'] ?? $_GET['id'] ?? 0);
         $is_update = ($action === 'daftra_purchase_update' && $pur_id > 0);
-        $url    = $is_update
-            ? "https://semak.daftra.com/api2/purchase_invoices/$pur_id.json"
-            : "https://semak.daftra.com/api2/purchase_invoices.json";
-        $items = [];
+
+        $sup_id = (int)($body['supplier_id'] ?? 0);
+        $sup    = trim((string)($body['supplier'] ?? ''));
+        if ($sup === '' && $sup_id > 0 &&
+            ($r = $conn->query("SELECT supplier FROM dmirror_purchases WHERE supplier_id=$sup_id
+                                AND COALESCE(supplier,'') <> '' ORDER BY id DESC LIMIT 1")))
+            $sup = (string)($r->fetch_assoc()['supplier'] ?? '');
+        $date = preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)($body['date'] ?? '')) ? $body['date'] : date('Y-m-d');
+        $no   = trim((string)($body['no'] ?? ''));
+        $wo   = (int)($body['work_order_id'] ?? 0);
+        $note = mb_substr((string)($body['notes'] ?? ''), 0, 380);
+
+        $clean = []; $net = 0; $vat = 0;
         foreach ($body['items'] ?? [] as $it) {
-            $items[] = ['name'=>$it['name']??'','quantity'=>(float)($it['quantity']??1),'unit_price'=>(float)($it['unit_price']??0),'discount'=>(float)($it['discount']??0),'tax'=>(float)($it['tax']??15)];
+            $nm = trim((string)($it['name'] ?? ''));
+            $qt = (float)($it['quantity'] ?? 0);
+            $pr = (float)($it['unit_price'] ?? 0);
+            $ds = (float)($it['discount'] ?? 0);
+            $tx = isset($it['tax']) && $it['tax'] !== '' ? (float)$it['tax'] : 15;
+            if ($nm === '' || $qt <= 0) continue;
+            $line = round($qt * $pr - $ds, 2);
+            $net += $line; $vat += round($line * $tx / 100, 2);
+            $clean[] = ['name'=>$nm, 'qty'=>$qt, 'price'=>$pr, 'disc'=>$ds, 'tax'=>$tx, 'line'=>$line];
         }
-        $payload = ['PurchaseInvoice' => [
-            'supplier_id'   => $body['supplier_id']   ?? '',
-            'date'          => $body['date']          ?? date('Y-m-d'),
-            'work_order_id' => $body['work_order_id'] ?? null,
-            'notes'         => $body['notes']         ?? '',
-            'PurchaseInvoiceItem' => $items,
-        ]];
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
+        $subtotal = round($net, 2);
+        $total    = round($subtotal + $vat, 2);
+        if ($sup === '') { echo json_encode(['success'=>false,'message'=>'المورد مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        if ($total <= 0) { echo json_encode(['success'=>false,'message'=>'بنود الفاتورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
+
+        if ($is_update) {
+            $cur = null;
+            if ($r = $conn->query("SELECT id, COALESCE(origin,'daftra') origin, paid FROM dmirror_purchases WHERE id=$pur_id LIMIT 1"))
+                $cur = $r->fetch_assoc();
+            if (!$cur) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+            if ($cur['origin'] === 'daftra' && !daftra_detached($conn)) {
+                echo json_encode(['success'=>false,
+                    'message'=>'فاتورة مسحوبة من دفترة — لا تُعدَّل قبل فكّ الارتباط بدفترة'],
+                    JSON_UNESCAPED_UNICODE); break; }
+            $conn->query("UPDATE dmirror_purchases SET supplier='" . $E($sup) . "',
+                    supplier_id=" . ($sup_id ?: 'NULL') . ", date='$date', total=$total, subtotal=$subtotal,
+                    work_order_id=" . ($wo ?: 'NULL') . ", modified=NOW(), items_count=" . count($clean) . ",
+                    note='" . $E($note) . "'" . ($no !== '' ? ", no='" . $E($no) . "'" : '') . "
+                WHERE id=$pur_id");
+            if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+            $conn->query("DELETE FROM dmirror_purchase_items WHERE purchase_id=$pur_id");
+            $newId = $pur_id;
+        } else {
+            if ($no !== '') {
+                $dup = $conn->query("SELECT id FROM dmirror_purchases WHERE no='" . $E($no) . "' AND supplier='" . $E($sup) . "' LIMIT 1");
+                if ($dup && $dup->num_rows) {
+                    echo json_encode(['success'=>false,'message'=>'الفاتورة مسجلة مسبقاً بهذا الرقم لهذا المورد',
+                        'id'=>(int)$dup->fetch_assoc()['id']], JSON_UNESCAPED_UNICODE); break; }
+            }
+            $newId = 900001;
+            if ($mx = $conn->query("SELECT COALESCE(MAX(id),0) m FROM dmirror_purchases WHERE id >= 900000"))
+                $newId = max(900001, (int)($mx->fetch_assoc()['m'] ?? 0) + 1);
+            if ($no === '') $no = 'ب-' . $newId;
+            $conn->query("INSERT INTO dmirror_purchases (id, no, date, supplier_id, supplier, total, subtotal,
+                    paid, work_order_id, created, modified, items_count, attachments, origin, created_by, note)
+                VALUES ($newId, '" . $E($no) . "', '$date', " . ($sup_id ?: 'NULL') . ", '" . $E($sup) . "',
+                    $total, $subtotal, 0, " . ($wo ?: 'NULL') . ", NOW(), NOW(), " . count($clean) . ", 0,
+                    'local', '" . $E($u['name'] ?? '') . "', '" . $E($note) . "')");
+            if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        }
+
+        $seq = $newId * 100;
+        foreach ($clean as $it) {
+            $seq++;
+            $conn->query("INSERT INTO dmirror_purchase_items (id, purchase_id, item, description, quantity,
+                    unit_price, discount, tax1, subtotal, product_id)
+                VALUES ($seq, $newId, '" . $E($it['name']) . "', '', " . $it['qty'] . ", " . $it['price'] . ",
+                    " . $it['disc'] . ", '" . $E((string)$it['tax']) . "', " . $it['line'] . ", 0)");
+        }
+        if ($wo > 0) {
+            $conn->query("INSERT INTO purchase_project (purchase_id, project_id, note, set_by)
+                VALUES ($newId, $wo, 'إدخال من بوابة الموظفين', '" . $E($u['name'] ?? '') . "')
+                ON DUPLICATE KEY UPDATE project_id=VALUES(project_id)");
+        }
+        acc_audit($conn, $uid, 'purchase', $newId, $is_update ? 'update' : 'create',
+            ($is_update ? 'تعديل' : 'إدخال') . ' فاتورة ' . $no . ' — ' . $sup . ' بـ' . number_format($total, 2)
+            . ' من البوابة', $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'id'=>$newId, 'total'=>$total, 'subtotal'=>$subtotal,
+            'message'=>$is_update ? 'تم تحديث الفاتورة' : 'تم حفظ الفاتورة'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     case 'daftra_purchase_set_project': {
         // تسكين فواتير على مشروع — يرسل work_order_id فقط (لا يمس البنود/المورد/التاريخ)
@@ -12525,17 +12628,13 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_treasuries':
-        $dk = "__DAFTRA_KEY__";
-        $ch = curl_init("https://semak.daftra.com/api2/treasuries.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $t = $r['Treasury'] ?? $r;
-            $rows[] = ['id'=>$t['id'],'name'=>$t['name']??'','balance'=>(float)($t['balance']??0),'currency'=>$t['currency_code']??'SAR','status'=>$t['status']??1];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows,'http_code'=>$code,'raw_count'=>count($data['data']??[])], JSON_UNESCAPED_UNICODE);
+        if ($r = $conn->query("SELECT id, name, COALESCE(currency,'SAR') currency
+                               FROM dmirror_treasuries ORDER BY id"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>(int)$x['id'], 'name'=>$x['name'] ?? '', 'balance'=>0,
+                           'currency'=>$x['currency'], 'status'=>1];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_treasury_transactions':
@@ -12592,17 +12691,14 @@ switch ($action) {
         break;
 
     case 'daftra_suppliers_list':
-        $dk = "__DAFTRA_KEY__";
-        $ch = curl_init("https://semak.daftra.com/api2/suppliers.json?limit=200");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        // الموردون من فواتيرنا نفسها — من له فاتورة عندنا فهو مورد.
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $s = $r['Supplier'] ?? $r;
-            $rows[] = ['id'=>$s['id'],'name'=>$s['business_name']??($s['first_name'].' '.$s['last_name'])];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        if ($r = $conn->query("SELECT supplier_id, MAX(supplier) name, COUNT(*) invoices
+                               FROM dmirror_purchases WHERE COALESCE(supplier,'') <> ''
+                               GROUP BY supplier_id ORDER BY name"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>$x['supplier_id'], 'name'=>$x['name'], 'invoices'=>(int)$x['invoices']];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ══════════════════════════════════════════════════════════════════════
@@ -17516,9 +17612,18 @@ switch ($action) {
             if (($json['current_page'] ?? 1) >= ($json['last_page'] ?? 1)) break;
         }
 
+        // احتياط دائم: يوم تنقطع دفترة تبقى المشاريع من قاعدتنا بنفس الشكل
+        $src_wc = 'daftra_api';
+        if (!$all_rows) {
+            $src_wc = 'local';
+            if ($r = $conn->query("SELECT project_id, name FROM project_budgets ORDER BY project_id"))
+                while ($x = $r->fetch_assoc())
+                    $all_rows[] = ['id'=>(int)$x['project_id'], 'title'=>$x['name'],
+                                   'number'=>(int)$x['project_id']];
+        }
         echo json_encode([
             'success' => true,
-            'source'  => 'daftra_api',
+            'source'  => $src_wc,
             'count'   => count($all_rows),
             'data'    => $all_rows,
         ], JSON_UNESCAPED_UNICODE);
