@@ -9185,6 +9185,9 @@ switch ($action) {
     }
 
     case 'refund_list': {
+        // بيانات مالية — لا تُقرأ ولا تُزامَن بلا جلسة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         // سجل المرتجعات: مثل سجل المشتريات تماماً، مع عمود الفاتورة الأصل
         $q   = trim((string)($_GET['q'] ?? ''));
         $lim = min(100, max(5, (int)($_GET['limit'] ?? 30)));
@@ -9226,6 +9229,9 @@ switch ($action) {
     }
 
     case 'refund_entity': {
+        // بيانات مالية — لا تُقرأ ولا تُزامَن بلا جلسة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         // بطاقة المرتجع: بنوده ومستنداته والفاتورة التي رجع منها
         $rid = (int)($_GET['id'] ?? 0);
         if ($rid <= 0) { echo json_encode(['success'=>false,'message'=>'رقم المرتجع مطلوب'], JSON_UNESCAPED_UNICODE); break; }
@@ -9419,6 +9425,9 @@ switch ($action) {
     }
 
     case 'refund_sync': {
+        // بيانات مالية — لا تُقرأ ولا تُزامَن بلا جلسة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         // مزامنة مرتجعات المشتريات من دفترة.
         // مسار المرتجعات في api2 غير موثّق، فنجرّب المرشّحات ونعتمد أول مسار يردّ قائمة،
         // ثم نحفظ المسار الناجح كي لا نجرّب في المرة القادمة.
@@ -10323,6 +10332,33 @@ switch ($action) {
             . ' ' . $t['file_name'] . ')' . ($nt !== '' ? ' — ' . $nt : ''), $u['name'] ?? '');
         echo json_encode(['success'=>true, 'applied'=>$applied,
             'message'=>$ok ? ('تمت الموافقة · ' . $applied) : 'رُفضت التذكرة'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'refund_raw': {
+        // نصّ دفترة الخام لمرتجع — لنرى أسماء حقولها كما هي، بلا تخمين
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        $id = (int)($_GET['id'] ?? 0);
+        $out = ['success'=>true];
+        // ما خزّناه وقت المزامنة
+        if ($id && $r = $conn->query("SELECT raw FROM dmirror_refunds WHERE id=$id LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $out['stored'] = json_decode((string)$x['raw'], true);
+        // وما تقوله دفترة الآن لهذا المرتجع بمفرده
+        if ($id) {
+            $ch = curl_init("https://semak.daftra.com/api2/purchase_refunds/$id.json");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+                CURLOPT_TIMEOUT=>20, CURLOPT_HTTPHEADER=>["APIKEY: __DAFTRA_KEY__", "Accept: application/json"]]);
+            $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            $out['detail_http'] = $code;
+            $d = json_decode((string)$res, true) ?: [];
+            $out['detail'] = $d['data'] ?? null;
+        }
+        echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         break;
     }
 
