@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Printer, Loader2 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
+import { useEntity } from './entityCtx';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const auth  = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
@@ -20,6 +21,8 @@ export default function SupplierStatement({ supplier, onClose }) {
     const [from, setFrom] = useState('');
     const [to, setTo]     = useState('');
     const [kinds, setKinds] = useState([]);   // فارغ = كل الأنواع
+    const [openRow, setOpenRow] = useState(-1);
+    const { openEntity } = useEntity();
 
     const load = useCallback(async () => {
         setBusy(true); setErr('');
@@ -141,18 +144,52 @@ export default function SupplierStatement({ supplier, onClose }) {
                                 <p className="text-[12px] text-slate-500 text-center py-8">لا حركة في هذه المدة</p>
                             )}
                             {shown.map((r, i) => (
-                                <div key={i} className="px-3 py-2 border-b border-white/5 last:border-0">
-                                    <div className="flex items-center gap-2 text-[12px]">
-                                        <span className={'font-black shrink-0 ' + (KIND[r.kind] || '')}>{r.kind}</span>
-                                        <span className="text-slate-400 truncate">{r.ref}</span>
-                                        <span className="mr-auto tabular-nums font-black shrink-0">
-                                            {r.debit ? money(r.debit) : '−' + money(r.credit)}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                                        <span>{r.date}</span>
-                                        <span className="mr-auto tabular-nums">الرصيد {money(r.balance)}</span>
-                                    </div>
+                                <div key={i} className="border-b border-white/5 last:border-0">
+                                    <button onClick={() => setOpenRow(v => v === i ? -1 : i)}
+                                        className="w-full text-right px-3 py-2">
+                                        <div className="flex items-center gap-2 text-[12px]">
+                                            <span className={'font-black shrink-0 ' + (KIND[r.kind] || '')}>{r.kind}</span>
+                                            <span className="text-slate-400 truncate">{r.ref}</span>
+                                            <span className="mr-auto tabular-nums font-black shrink-0">
+                                                {r.debit ? money(r.debit) : '−' + money(r.credit)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                                            <span>{r.date}</span>
+                                            <span className="mr-auto tabular-nums">الرصيد {money(r.balance)}</span>
+                                        </div>
+                                    </button>
+
+                                    {openRow === i && (
+                                        <div className="px-3 pb-3 space-y-2">
+                                            {r.info && (
+                                                <div className="rounded-xl bg-black/25 p-2.5 space-y-1">
+                                                    {Object.entries(r.info).map(([k, v]) => (
+                                                        <div key={k} className="flex justify-between text-[11px]">
+                                                            <span className="text-slate-400">{k}</span>
+                                                            <span className="font-bold tabular-nums">
+                                                                {typeof v === 'number' ? money(v) : String(v)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="flex gap-2">
+                                                {r.open?.value > 0 && (
+                                                    <button onClick={() => { onClose && onClose(); openEntity(r.open.type, r.open.value); }}
+                                                        className="flex-1 h-9 rounded-lg bg-white/10 text-[11px] font-bold">
+                                                        افتح البطاقة
+                                                    </button>
+                                                )}
+                                                {r.url && (
+                                                    <a href={r.url} target="_blank" rel="noreferrer"
+                                                        className="flex-1 h-9 rounded-lg bg-white/10 text-[11px] font-bold flex items-center justify-center">
+                                                        الإيصال
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

@@ -8238,19 +8238,39 @@ switch ($action) {
 
         $ev = [];
         // الفواتير — ما علينا
-        if ($r = $conn->query("SELECT id, no, date, ROUND(total,2) amt FROM dmirror_purchases
-                               WHERE TRIM(supplier)=TRIM('$v') AND date IS NOT NULL"))
+        if ($r = $conn->query("SELECT p.id, p.no, p.date, ROUND(p.total,2) amt, ROUND(p.paid,2) paid,
+                    COALESCE(b.name,'') project, COALESCE(p.staff_name,'') staff,
+                    (SELECT COUNT(*) FROM purchase_documents d WHERE d.purchase_id=p.id) docs
+                FROM dmirror_purchases p
+                LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                WHERE TRIM(p.supplier)=TRIM('$v') AND p.date IS NOT NULL"))
             while ($x = $r->fetch_assoc())
                 $ev[] = ['date'=>$x['date'], 'kind'=>'فاتورة', 'ref'=>$x['no'],
-                         'id'=>(int)$x['id'], 'debit'=>(float)$x['amt'], 'credit'=>0.0];
+                         'id'=>(int)$x['id'], 'debit'=>(float)$x['amt'], 'credit'=>0.0,
+                         'open'=>['type'=>'purchase', 'value'=>(int)$x['id']],
+                         'info'=>['المسدّد'=>(float)$x['paid'],
+                                  'المتبقي'=>round((float)$x['amt'] - (float)$x['paid'], 2),
+                                  'المشروع'=>$x['project'] ?: '—',
+                                  'من سجّلها'=>$x['staff'] ?: '—',
+                                  'مستندات'=>(int)$x['docs']]];
         // الدفعات — ما دفعناه، من مرآة دفترة ومن دفعاتنا معاً
-        if ($r = $conn->query("SELECT mp.id, mp.date, ROUND(mp.amount,2) amt, p.no
-                               FROM dmirror_payments mp
-                               JOIN dmirror_purchases p ON p.id = mp.purchase_id
-                               WHERE TRIM(p.supplier)=TRIM('$v') AND mp.date IS NOT NULL"))
+        if ($r = $conn->query("SELECT mp.id, mp.date, ROUND(mp.amount,2) amt, p.no, p.id pid,
+                    COALESCE(mp.payment_method,'') method, COALESCE(t.name,'') treasury,
+                    COALESCE(mp.transaction_id,'') ref_no, COALESCE(mp.receipt_url,'') receipt
+                FROM dmirror_payments mp
+                JOIN dmirror_purchases p ON p.id = mp.purchase_id
+                LEFT JOIN dmirror_treasuries t ON t.id = mp.treasury_id
+                WHERE TRIM(p.supplier)=TRIM('$v') AND mp.date IS NOT NULL"))
             while ($x = $r->fetch_assoc())
                 $ev[] = ['date'=>$x['date'], 'kind'=>'دفعة', 'ref'=>'على ' . $x['no'],
-                         'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt']];
+                         'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt'],
+                         'open'=>['type'=>'purchase', 'value'=>(int)$x['pid']],
+                         'url'=>$x['receipt'] ?: '',
+                         'info'=>['الخزينة'=>$x['treasury'] ?: '—',
+                                  'الطريقة'=>$x['method'] ?: '—',
+                                  'رقم العملية'=>$x['ref_no'] ?: '—',
+                                  'على فاتورة'=>$x['no']]];
         if ($r = $conn->query("SELECT pp.id, pp.pay_date AS date, ROUND(pp.amount,2) amt, p.no
                                FROM purchase_payments pp
                                LEFT JOIN dmirror_purchases p ON p.id = pp.purchase_id
@@ -8261,12 +8281,16 @@ switch ($action) {
         // المرتجعات — تُنقص ما علينا
         // المرتجع دائنٌ للمورد، وما استُرِدّ منه نقدا أو مقاصةً مدينٌ عليه.
         // بدون سطر الاسترداد يظهر رصيد سالب وهميّ على كل مرتجع سُوِّي.
-        if ($r = $conn->query("SELECT id, no, date, ROUND(total,2) amt, ROUND(COALESCE(settled,0),2) st
+        if ($r = $conn->query("SELECT id, no, date, ROUND(total,2) amt, ROUND(COALESCE(settled,0),2) st,
+                    (SELECT COUNT(*) FROM refund_documents rd WHERE rd.refund_id = dmirror_refunds.id) docs
                                FROM dmirror_refunds
                                WHERE TRIM(supplier)=TRIM('$v') AND date IS NOT NULL"))
             while ($x = $r->fetch_assoc()) {
                 $ev[] = ['date'=>$x['date'], 'kind'=>'مرتجع', 'ref'=>$x['no'],
-                         'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt']];
+                         'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt'],
+                         'info'=>['المُسترَدّ'=>(float)$x['st'],
+                                  'غير المسترَدّ'=>round((float)$x['amt'] - (float)$x['st'], 2),
+                                  'مستندات'=>(int)($x['docs'] ?? 0)]];
                 if ((float)$x['st'] > 0.009)
                     $ev[] = ['date'=>$x['date'], 'kind'=>'استرداد', 'ref'=>'على مرتجع ' . $x['no'],
                              'id'=>0, 'debit'=>(float)$x['st'], 'credit'=>0.0];
@@ -10627,14 +10651,22 @@ switch ($action) {
         $dir = (strtolower((string)($_GET['dir'] ?? 'desc')) === 'asc') ? 'ASC' : 'DESC';
 
         if ($kind === 'suppliers') {
-            $w = $q === '' ? "supplier <> ''" : "supplier LIKE '%" . $E($q) . "%'";
+            $w = $q === '' ? "p.supplier <> ''" : "p.supplier LIKE '%" . $E($q) . "%'";
             $smap = ['gross'=>'gross', 'invoices'=>'invoices', 'outstanding'=>'outstanding',
                      'last_date'=>'last_date', 'name'=>'name'];
             $sk = $smap[(string)($_GET['sort'] ?? '')] ?? 'gross';
-            $rows = $Q("SELECT supplier AS name, COUNT(*) invoices, ROUND(SUM(total),2) gross,
-                        ROUND(SUM(GREATEST(total - paid, 0)),2) outstanding, MAX(date) last_date
-                    FROM dmirror_purchases WHERE $w
-                    GROUP BY supplier ORDER BY $sk $dir LIMIT $lim OFFSET $off");
+            // الرصيد الحقيقي = (فواتير − مدفوع) − (مرتجعات − ما استُرِدّ منها).
+            // كان المرتجع مُهمَلا هنا، فيظهر للمورد مستحقٌّ أكبر من الواقع.
+            $rows = $Q("SELECT p.supplier AS name, COUNT(*) invoices, ROUND(SUM(p.total),2) gross,
+                        ROUND(SUM(GREATEST(p.total - p.paid, 0)) - COALESCE(rf.net,0), 2) outstanding,
+                        ROUND(COALESCE(rf.net,0),2) refunds_net, MAX(p.date) last_date
+                    FROM dmirror_purchases p
+                    LEFT JOIN (SELECT TRIM(supplier) s,
+                                 SUM(GREATEST(total - COALESCE(settled,0), 0)) net
+                               FROM dmirror_refunds GROUP BY TRIM(supplier)) rf
+                      ON rf.s = TRIM(p.supplier)
+                    WHERE $w
+                    GROUP BY p.supplier, rf.net ORDER BY $sk $dir LIMIT $lim OFFSET $off");
             echo json_encode(['success'=>true, 'kind'=>'suppliers', 'data'=>$rows], JSON_UNESCAPED_UNICODE);
             break;
         }
