@@ -1467,7 +1467,7 @@ $conn->query("DELETE FROM acc_invoices
     WHERE tenant_id=1 AND doc_type='sales' AND status='draft'
       AND daftra_id IS NOT NULL AND created_by='تلقائي' AND entry_id IS NULL");
 $conn->query("DELETE FROM acc_settings WHERE tenant_id=1
-              AND skey IN ('sales_pull_state','sales_pull_at')");
+              AND skey IN ('sales_pull_state','sales_pull_at','sales_pull_tries')");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (50)");
 } // end DDL v50
 
@@ -1606,15 +1606,18 @@ function sales_pull_chunk($conn, $take, $actor) {
             'in_daftra'=>$seen, 'remaining'=>max(0, $left - $done), 'errors'=>$errs];
 }
 
-// تشغيل ذاتي: دفعة صغيرة مع أول الطلبات حتى يكتمل السحب — بلا ضغطة زر.
-// يتوقف نهائياً حين لا يبقى شيء، ولا يعيد المحاولة أكثر من مرة كل ساعة.
+// تشغيل ذاتي: دفعة صغيرة مع الطلبات حتى يكتمل السحب — بلا ضغطة زر.
+// كل دفعتين دقيقتان، فيكتمل السحب في دقائق لا ساعات؛ ويتوقف نهائياً حين لا
+// يبقى شيء. وإن تعثّر فله سقفٌ من المحاولات لئلا يُثقل الطلبات إلى الأبد.
 if (!daftra_detached($conn)) {
     $__sp = acc_setting($conn, 1, 'sales_pull_state', '');
     if ($__sp !== 'done') {
         $__spAt = (int)acc_setting($conn, 1, 'sales_pull_at', '0');
-        if (time() - $__spAt > 3600) {
+        $__spN  = (int)acc_setting($conn, 1, 'sales_pull_tries', '0');
+        if (time() - $__spAt > 120 && $__spN < 40) {
             $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval)
-                VALUES (1, 'sales_pull_at', '" . time() . "')
+                VALUES (1, 'sales_pull_at', '" . time() . "'), (1, 'sales_pull_tries', '"
+                . ($__spN + 1) . "')
                 ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
             $__spr = sales_pull_chunk($conn, 5, 'تلقائي');
             if (($__spr['remaining'] ?? 0) === 0 && empty($__spr['errors']))
