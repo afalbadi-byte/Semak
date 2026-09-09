@@ -10563,7 +10563,12 @@ switch ($action) {
                         p.no invoice_no, p.supplier
                     FROM purchase_documents d
                     JOIN dmirror_purchases p ON p.id = d.purchase_id
-                    WHERE d.source='drive_note' AND d.doc_type='receipt' AND d.payment_id IS NULL
+                    // scope=all: كل إيصال على فاتورته يخصّ دفعتها. النطاق الافتراضي
+                    // روابط الملاحظات وحدها.
+                    WHERE d.doc_type='receipt' AND d.payment_id IS NULL
+                      " . (empty($_GET['scope']) || $_GET['scope'] !== 'all'
+                            ? "AND d.source='drive_note'"
+                            : "AND d.source IN ('daftra','drive_note')") . "
                     ORDER BY d.purchase_id, d.id");
         $plan = []; $skip = [];
         foreach ($docs as $d) {
