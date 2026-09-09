@@ -1425,6 +1425,13 @@ $conn->query("CREATE TABLE IF NOT EXISTS doc_tickets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (46)");
 } // end DDL v46
+// ─── DDL v47: مرفق غير متوفّر في المصدر ─────────────────────────────────
+// دفترة تُبقي سجلّ المرفق وقد ضاع ملفه عندها، فيظلّ العدّاد ينادي بلا فائدة.
+if ($__sv < 47) {
+ensure_column($conn, 'dmirror_attachments', 'unavailable', 'unavailable TINYINT(1) NOT NULL DEFAULT 0');
+ensure_column($conn, 'dmirror_attachments', 'unavailable_note', 'unavailable_note VARCHAR(240) DEFAULT NULL');
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (47)");
+} // end DDL v47
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -6794,7 +6801,7 @@ switch ($action) {
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents WHERE COALESCE(source,'') <> 'daftra_pdf' GROUP BY purchase_id) d
                   ON d.purchase_id = p.id
                     LEFT JOIN (SELECT entity_id FROM dmirror_attachments
-                        WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                        WHERE entity_key IN ('purchase_order','purchase_invoice') AND COALESCE(unavailable,0)=0 GROUP BY entity_id) a
                       ON a.entity_id = p.id
                 WHERE COALESCE(d.n,0)=0 AND a.entity_id IS NULL ORDER BY p.total DESC")];
         } elseif ($k === 'avg_invoice' || $k === 'docs_coverage' || $k === 'paid_pct') {
@@ -7377,6 +7384,7 @@ switch ($action) {
                 LEFT JOIN purchase_documents pd
                   ON pd.daftra_file_id = at.file_id AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
                 WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
+                      AND COALESCE(at.unavailable,0) = 0
                 ORDER BY at.archive_fail ASC, at.file_id DESC LIMIT $take"))
             while ($x = $r->fetch_assoc()) $todo[] = $x;
 
@@ -7413,7 +7421,8 @@ switch ($action) {
         if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
                 LEFT JOIN purchase_documents pd
                   ON pd.daftra_file_id = at.file_id AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
-                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL"))
+                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
+                      AND COALESCE(at.unavailable,0) = 0"))
             if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
 
         $stuck = 0;
@@ -7421,6 +7430,7 @@ switch ($action) {
                 LEFT JOIN purchase_documents pd
                   ON pd.daftra_file_id = at.file_id AND pd.drive_url IS NOT NULL AND pd.drive_url <> ''
                 WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
+                      AND COALESCE(at.unavailable,0) = 0
                   AND at.archive_fail >= 3"))
             if ($x = $r->fetch_assoc()) $stuck = (int)$x['n'];
         echo json_encode(['success'=>true, 'archived'=>$done, 'failed'=>$failed, 'remaining'=>$left,
@@ -9605,7 +9615,8 @@ switch ($action) {
                 if (!is_array($a)) continue;
                 $a = isset($a['Attachment']) && is_array($a['Attachment']) ? $a['Attachment'] : $a;
                 if (!isset($a['id'])) continue;
-                $conn->query("REPLACE INTO dmirror_attachments
+                // INSERT بدل REPLACE: العلامات المحلية لا تُمحى بإعادة المسح
+                $conn->query("INSERT INTO dmirror_attachments
                     (file_id,name,path,entity_key,entity_id,file_size,mime_type,created_at) VALUES ("
                     . (int)$a['id'] . ", '" . $E((string)($a['name'] ?? '')) . "', '"
                     . $E((string)($a['path'] ?? '')) . "', 'purchase_refund', $rid, "
@@ -9689,7 +9700,10 @@ switch ($action) {
                     . $conn->real_escape_string((string)($a['entity_key'] ?? 'purchase_order')) . "', $pid, "
                     . (int)($a['file_size'] ?? 0) . ", '"
                     . $conn->real_escape_string((string)($a['mime_type'] ?? '')) . "', "
-                    . ($a['created_at'] ?? null ? "'" . $conn->real_escape_string((string)$a['created_at']) . "'" : 'NULL') . ")");
+                    . ($a['created_at'] ?? null ? "'" . $conn->real_escape_string((string)$a['created_at']) . "'" : 'NULL') . ")
+                    ON DUPLICATE KEY UPDATE name=VALUES(name), path=VALUES(path),
+                        entity_key=VALUES(entity_key), entity_id=VALUES(entity_id),
+                        file_size=VALUES(file_size), mime_type=VALUES(mime_type)");
                 if (!$was) $added++;
             }
             $conn->query("UPDATE dmirror_purchases SET attachments=" . count($att) . " WHERE id=$pid");
@@ -9835,7 +9849,8 @@ switch ($action) {
                 LEFT JOIN purchase_documents pd
                   ON pd.daftra_file_id = at.file_id AND COALESCE(pd.drive_url,'') <> ''
                 LEFT JOIN dmirror_purchases p ON p.id = at.entity_id
-                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL"))
+                WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
+                      AND COALESCE(at.unavailable,0) = 0"))
             while ($x = $r->fetch_assoc()) $out['unarchived'][] = $x;
         echo json_encode($out, JSON_UNESCAPED_UNICODE);
         break;
@@ -9897,7 +9912,8 @@ switch ($action) {
                 if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
                         LEFT JOIN purchase_documents pd
                           ON pd.daftra_file_id = at.file_id AND COALESCE(pd.drive_url,'') <> ''
-                        WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL"))
+                        WHERE at.entity_key IN ('purchase_order','purchase_invoice') AND pd.id IS NULL
+                      AND COALESCE(at.unavailable,0) = 0"))
                     if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
                 if ($left > 0 && empty($_GET['force'])) {
                     echo json_encode(['success'=>false, 'remaining_files'=>$left,
@@ -10457,6 +10473,30 @@ switch ($action) {
         break;
     }
 
+    case 'attach_unavailable': {
+        // مرفق ضاع ملفه عند المصدر: يُعلَّم فيخرج من العدّادات ويبقى أثره
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $fid = (int)($b['file_id'] ?? $_GET['file_id'] ?? 0);
+        $on  = array_key_exists('on', $b) ? !empty($b['on']) : true;
+        $nt  = trim((string)($b['note'] ?? 'الملف غير موجود عند المصدر'));
+        if (!$fid) { echo json_encode(['success'=>false,'message'=>'file_id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("UPDATE dmirror_attachments SET unavailable=" . ($on ? 1 : 0) . ",
+                unavailable_note='" . $conn->real_escape_string($on ? $nt : '') . "'
+            WHERE file_id=$fid");
+        $aff = $conn->affected_rows;
+        acc_audit($conn, 1, 'purchase', 0, 'attach_unavailable',
+            ($on ? 'تعليم المرفق ' : 'رفع تعليم المرفق ') . $fid . ($on ? (' — ' . $nt) : ''), $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'file_id'=>$fid, 'unavailable'=>$on, 'changed'=>$aff],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
@@ -10611,7 +10651,7 @@ switch ($action) {
                             WHERE doc_type='invoice' AND COALESCE(source,'') <> 'daftra_pdf'
                             GROUP BY purchase_id) og ON og.purchase_id = p.id";
         $ATT = "LEFT JOIN (SELECT entity_id, COUNT(*) n FROM dmirror_attachments
-                           WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                           WHERE entity_key IN ('purchase_order','purchase_invoice') AND COALESCE(unavailable,0)=0 GROUP BY entity_id) a
                   ON a.entity_id = p.id
                 LEFT JOIN (SELECT at.entity_id, COUNT(*) n FROM dmirror_attachments at
                            LEFT JOIN purchase_documents pdx
@@ -11393,7 +11433,7 @@ switch ($action) {
             'docs_missing' => (int)$one("SELECT COUNT(*) FROM dmirror_purchases p
                     LEFT JOIN (SELECT purchase_id FROM purchase_documents WHERE COALESCE(source,'') <> 'daftra_pdf' GROUP BY purchase_id) d ON d.purchase_id=p.id
                     LEFT JOIN (SELECT entity_id FROM dmirror_attachments
-                        WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                        WHERE entity_key IN ('purchase_order','purchase_invoice') AND COALESCE(unavailable,0)=0 GROUP BY entity_id) a
                       ON a.entity_id = p.id
                     WHERE d.purchase_id IS NULL AND a.entity_id IS NULL"),
             'docs_coverage' => (float)$one("SELECT ROUND(100 * COUNT(DISTINCT COALESCE(d.purchase_id, a.entity_id))
@@ -11401,7 +11441,7 @@ switch ($action) {
                 FROM dmirror_purchases p
                 LEFT JOIN purchase_documents d ON d.purchase_id = p.id
                     LEFT JOIN (SELECT entity_id FROM dmirror_attachments
-                        WHERE entity_key IN ('purchase_order','purchase_invoice') GROUP BY entity_id) a
+                        WHERE entity_key IN ('purchase_order','purchase_invoice') AND COALESCE(unavailable,0)=0 GROUP BY entity_id) a
                       ON a.entity_id = p.id"),
             'paid_pct'      => (float)$one("SELECT ROUND(100 * SUM(paid) / NULLIF(SUM(total),0), 1) FROM dmirror_purchases"),
             'avg_invoice'   => (float)$one("SELECT ROUND(AVG(total),0) FROM dmirror_purchases"),
