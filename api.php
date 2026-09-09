@@ -9483,6 +9483,20 @@ switch ($action) {
             return null;
         };
 
+        // مرآة كاملة: ما لم نكن نخزّنه من صفحة المرتجع في دفترة
+        foreach ([
+            ['discount_total', 'discount_total DECIMAL(14,3) DEFAULT NULL'],
+            ['unpaid',         'unpaid DECIMAL(14,3) DEFAULT NULL'],
+            ['staff_name',     'staff_name VARCHAR(120) DEFAULT NULL'],
+            ['store_id',       'store_id INT DEFAULT NULL'],
+            ['branch_id',      'branch_id INT DEFAULT NULL'],
+            ['received_date',  'received_date DATE DEFAULT NULL'],
+            ['due_date',       'due_date DATE DEFAULT NULL'],
+            ['payment_status', 'payment_status VARCHAR(30) DEFAULT NULL'],
+            ['notes',          'notes TEXT DEFAULT NULL'],
+            ['html_notes',     'html_notes TEXT DEFAULT NULL'],
+        ] as $c) ensure_column($conn, 'dmirror_refunds', $c[0], $c[1]);
+
         $added = 0; $updated = 0; $seen = 0; $need = [];
         foreach ($rows as $it) {
             $p = $unwrap($it);
@@ -9523,6 +9537,28 @@ switch ($action) {
                     settled=VALUES(settled), purchase_id=VALUES(purchase_id), purchase_no=VALUES(purchase_no),
                     work_order_id=VALUES(work_order_id), reason=VALUES(reason),
                     modified=VALUES(modified), raw=VALUES(raw)");
+            // بقية حقول دفترة — تحديث مستقل حتى يبقى الإدراج مقروءا
+            $stf = (array)($p['Staff'] ?? []);
+            $stn = trim((string)(($stf['name'] ?? '') ?: trim((string)($stf['first_name'] ?? '')
+                    . ' ' . (string)($stf['last_name'] ?? ''))));
+            $htm = (string)$pick($p, ['html_notes'], '');
+            $nte = trim((string)$pick($p, ['notes'], ''));
+            if ($nte === '' && $htm !== '') $nte = trim(preg_replace('/\s+/u', ' ', strip_tags($htm)));
+            $rcv = $asDate($pick($p, ['received_date'], ''));
+            $due = $asDate($pick($p, ['due_date'], ''));
+            $conn->query("UPDATE dmirror_refunds SET
+                    discount_total = " . abs((float)$pick($p, ['summary_discount','discount_amount'], 0)) . ",
+                    unpaid         = " . abs((float)$pick($p, ['summary_unpaid'], 0)) . ",
+                    staff_name     = '" . $E($stn) . "',
+                    store_id       = " . (int)($p['store_id'] ?? 0) . ",
+                    branch_id      = " . (int)($p['branch_id'] ?? 0) . ",
+                    received_date  = " . ($rcv ? "'" . $rcv . "'" : 'NULL') . ",
+                    due_date       = " . ($due ? "'" . $due . "'" : 'NULL') . ",
+                    payment_status = '" . $E($p['payment_status'] ?? '') . "',
+                    notes          = '" . $E(mb_substr($nte, 0, 2000)) . "',
+                    html_notes     = '" . $E(mb_substr($htm, 0, 4000)) . "'
+                WHERE id=$id");
+
             if (!$old) { $added++; $need[] = $id; }
             elseif (abs((float)$old['total'] - $tot) > 0.009) { $updated++; $need[] = $id; }
         }
@@ -10359,6 +10395,65 @@ switch ($action) {
             $out['detail'] = $d['data'] ?? null;
         }
         echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        break;
+    }
+
+    case 'refund_doc_archive': {
+        // نسخ مرفقات المرتجعات من دفترة إلى تخزيننا — كما فُعل بمرفقات الفواتير
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية أرشفة المستندات'], JSON_UNESCAPED_UNICODE); break; }
+        if (daftra_detached($conn)) {
+            echo json_encode(['success'=>false,'detached'=>true,
+                'message'=>'التطبيق مفصول عن دفترة — السحب موقوف'], JSON_UNESCAPED_UNICODE); break; }
+        set_time_limit(280);
+        $E    = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $take = min(20, max(1, (int)($_GET['limit'] ?? 6)));
+
+        $todo = [];
+        if ($r = $conn->query("SELECT at.file_id, at.entity_id, COALESCE(at.name,'') name, COALESCE(r.no,'') rno
+                FROM dmirror_attachments at
+                LEFT JOIN dmirror_refunds r ON r.id = at.entity_id
+                LEFT JOIN refund_documents rd
+                  ON rd.daftra_file_id = at.file_id AND COALESCE(rd.drive_url,'') <> ''
+                WHERE at.entity_key = 'purchase_refund' AND rd.id IS NULL
+                ORDER BY at.file_id DESC LIMIT $take"))
+            while ($x = $r->fetch_assoc()) $todo[] = $x;
+
+        $dir = __DIR__ . '/qdocs';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $done = 0; $failed = 0; $why = '';
+        foreach ($todo as $t) {
+            list($body, $ct, $route) = daftra_file_bytes($conn, (int)$t['file_id']);
+            if ($body === null) { $failed++; $why = (string)$route; continue; }
+            $ext = daftra_ext_of((string)$ct, (string)$t['name']);
+            $tok = bin2hex(random_bytes(16));
+            if (@file_put_contents("$dir/$tok.$ext", $body) === false) { $failed++; $why = 'تعذر الحفظ'; continue; }
+            $url = 'https://' . $_SERVER['HTTP_HOST'] . "/qdocs/$tok.$ext";
+            $conn->query("INSERT INTO refund_documents (refund_id, refund_no, doc_type, file_name,
+                    drive_url, file_size, daftra_file_id, source, created_by)
+                VALUES (" . (int)$t['entity_id'] . ", '" . $E($t['rno']) . "', 'refund', '" . $E($t['name']) . "', '"
+                . $E($url) . "', " . strlen($body) . ", " . (int)$t['file_id'] . ", 'daftra', '"
+                . $E($u['name'] ?? '') . "')
+                ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), file_size=VALUES(file_size),
+                    daftra_file_id=VALUES(daftra_file_id)");
+            $done++;
+        }
+
+        $left = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM dmirror_attachments at
+                LEFT JOIN refund_documents rd
+                  ON rd.daftra_file_id = at.file_id AND COALESCE(rd.drive_url,'') <> ''
+                WHERE at.entity_key = 'purchase_refund' AND rd.id IS NULL"))
+            if ($x = $r->fetch_assoc()) $left = (int)$x['n'];
+        if ($done) acc_audit($conn, 1, 'purchase', 0, 'refund_doc_archive',
+            "أرشفة $done مرفق مرتجع إلى تخزيننا", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'archived'=>$done, 'failed'=>$failed,
+            'remaining'=>$left, 'detail'=>$why], JSON_UNESCAPED_UNICODE);
         break;
     }
 
