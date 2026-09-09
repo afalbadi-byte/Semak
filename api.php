@@ -1440,6 +1440,162 @@ ensure_column($conn, 'dmirror_treasuries', 'balance',    'balance DECIMAL(16,4) 
 ensure_column($conn, 'dmirror_treasuries', 'balance_at', 'balance_at DATETIME DEFAULT NULL');
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (48)");
 } // end DDL v48
+// ─── DDL v49: أثر المصدر على فواتير العملاء وسنداتهم ────────────────────
+// السحب من دفترة يجب أن يكون قابلاً للتكرار بلا ازدواج، فيُحفظ رقم دفترة
+// على الصفّ نفسه ويكون هو المفتاح.
+if ($__sv < 49) {
+ensure_column($conn, 'acc_invoices', 'daftra_id', 'daftra_id INT DEFAULT NULL');
+ensure_column($conn, 'acc_payments', 'daftra_id', 'daftra_id INT DEFAULT NULL');
+$conn->query("CREATE INDEX idx_acc_inv_daftra ON acc_invoices (tenant_id, daftra_id)");
+$conn->query("CREATE INDEX idx_acc_pay_daftra ON acc_payments (tenant_id, daftra_id)");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (49)");
+} // end DDL v49
+
+// ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
+// المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
+// acc_invoices ببنودها وسنداتها، وتدخل «مسودّة» عمداً: الوثيقة تُحفظ، وترحيلها
+// إلى القيود قرار محاسبي يُتَّخذ بـinv_post لا يُفتعَل في سحبٍ آليّ.
+function sales_pull_chunk($conn, $take, $actor) {
+    $tid = 1;
+    $dk  = "__DAFTRA_KEY__";
+    $E   = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+    $api = function($path) use ($dk) {
+        $ch = curl_init("https://semak.daftra.com/api2/$path");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+            CURLOPT_TIMEOUT=>15, CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+        $r = curl_exec($ch); curl_close($ch);
+        return json_decode((string)$r, true) ?: [];
+    };
+
+    $have = [];
+    if ($r = $conn->query("SELECT daftra_id FROM acc_invoices
+                           WHERE tenant_id=$tid AND doc_type='sales' AND daftra_id IS NOT NULL"))
+        while ($x = $r->fetch_assoc()) $have[(int)$x['daftra_id']] = 1;
+    $havePay = [];
+    if ($r = $conn->query("SELECT daftra_id FROM acc_payments
+                           WHERE tenant_id=$tid AND pay_type='receipt' AND daftra_id IS NOT NULL"))
+        while ($x = $r->fetch_assoc()) $havePay[(int)$x['daftra_id']] = 1;
+    $party = [];
+    if ($r = $conn->query("SELECT id, daftra_id FROM acc_parties
+                           WHERE tenant_id=$tid AND COALESCE(daftra_id,'') <> ''"))
+        while ($x = $r->fetch_assoc()) $party[(string)$x['daftra_id']] = (int)$x['id'];
+
+    $todo = []; $seen = 0;
+    for ($pg = 1; $pg <= 20; $pg++) {
+        $d = $api("invoices.json?page=$pg&limit=100");
+        $list = $d['data'] ?? [];
+        if (!$list) break;
+        foreach ($list as $row) {
+            $i = $row['Invoice'] ?? $row;
+            $did = (int)($i['id'] ?? 0); if (!$did) continue;
+            $seen++;
+            if (isset($have[$did])) continue;
+            $name = trim((string)($i['client_business_name'] ?? ''));
+            if ($name === '') $name = trim((string)($i['client_first_name'] ?? '') . ' ' . (string)($i['client_last_name'] ?? ''));
+            $todo[] = ['daftra_id'=>$did, 'no'=>(string)($i['no'] ?? ''),
+                'date'=>substr((string)($i['date'] ?? ''), 0, 10) ?: date('Y-m-d'),
+                'client_id'=>(string)($i['client_id'] ?? ''), 'client'=>$name,
+                'total'=>round((float)($i['summary_total'] ?? $i['grand_total'] ?? 0), 2),
+                'paid'=>round((float)($i['summary_paid'] ?? 0), 2),
+                'notes'=>(string)($i['notes'] ?? '')];
+        }
+        if (count($list) < 100) break;
+    }
+    $left = count($todo);
+    $todo = array_slice($todo, 0, $take);
+
+    $done = 0; $items_n = 0; $pays_n = 0; $errs = [];
+    // ميزانية وقت: السحب يجري داخل طلبٍ عاديّ، فلا يجوز أن يعلّقه بطء دفترة
+    $budget = microtime(true) + 20;
+    foreach ($todo as $p) {
+        if (microtime(true) > $budget) break;   // الباقي يكمُل في الدفعة التالية
+        $pid = $party[(string)$p['client_id']] ?? 0;
+        if (!$pid && $p['client'] !== '') {
+            $conn->query("INSERT INTO acc_parties (tenant_id, type, name, daftra_id)
+                VALUES ($tid, 'customer', '" . $E($p['client']) . "', '" . $E($p['client_id']) . "')");
+            $pid = (int)$conn->insert_id;
+            if ($pid) $party[(string)$p['client_id']] = $pid;
+        }
+        $one = $api('invoices/' . $p['daftra_id'] . '.json');
+        $inv = $one['data']['Invoice'] ?? $one['data'] ?? [];
+        $lines = [];
+        foreach ((array)($inv['InvoiceItem'] ?? []) as $it) {
+            if (!is_array($it)) continue;
+            $desc = trim((string)($it['item'] ?? $it['name'] ?? ''));
+            if ($desc === '') continue;
+            $qty  = (float)($it['quantity'] ?? 1);
+            $up   = (float)($it['unit_price'] ?? 0);
+            $dsc  = (float)($it['discount'] ?? 0);
+            $rate = is_numeric($it['tax1'] ?? null) ? (float)$it['tax1'] : 15;
+            $net  = round($qty * $up - $dsc, 2);
+            $tax  = round($net * $rate / 100, 2);
+            $lines[] = ['d'=>$desc, 'q'=>$qty, 'u'=>$up, 'x'=>$dsc, 'r'=>$rate,
+                        'net'=>$net, 'tax'=>$tax, 'lt'=>round($net + $tax, 2)];
+        }
+        $sub = 0; $taxT = 0;
+        foreach ($lines as $l) { $sub += $l['net']; $taxT += $l['tax']; }
+        $sub = round($sub, 2); $taxT = round($taxT, 2);
+        $tot = $p['total'];
+        if (!$lines) { $sub = round($tot / 1.15, 2); $taxT = round($tot - $sub, 2); }
+        elseif (abs(round($sub + $taxT, 2) - $tot) > 0.05) $tot = round($sub + $taxT, 2);
+        $paidv = round($p['paid'], 2);
+
+        $conn->query("INSERT INTO acc_invoices (tenant_id, doc_type, invoice_type, doc_kind,
+                invoice_no, party_id, party_name, issue_date, currency, subtotal, discount,
+                tax_total, total, paid, status, notes, daftra_id, created_by)
+            VALUES ($tid, 'sales', 'standard', 'invoice', '" . $E($p['no']) . "', "
+            . ($pid ?: 'NULL') . ", '" . $E($p['client']) . "', '" . $E($p['date']) . "', 'SAR',
+                $sub, 0, $taxT, $tot, $paidv, 'draft', '" . $E(mb_substr($p['notes'], 0, 1000))
+            . "', " . (int)$p['daftra_id'] . ", '" . $E($actor) . "')");
+        if ($conn->errno) { $errs[] = $p['no'] . ': ' . $conn->error; continue; }
+        $iid = (int)$conn->insert_id;
+        $done++;
+        foreach ($lines as $l) {
+            $conn->query("INSERT INTO acc_invoice_items (tenant_id, invoice_id, description, qty,
+                    unit_price, discount, tax_rate, net_amount, tax_amount, line_total)
+                VALUES ($tid, $iid, '" . $E($l['d']) . "', " . $l['q'] . ", " . $l['u'] . ", "
+                . $l['x'] . ", " . $l['r'] . ", " . $l['net'] . ", " . $l['tax'] . ", " . $l['lt'] . ")");
+            $items_n++;
+        }
+        $pd = $api('invoice_payments.json?invoice_id=' . $p['daftra_id'] . '&limit=100');
+        foreach ($pd['data'] ?? [] as $prow) {
+            $pp = $prow['InvoicePayment'] ?? $prow;
+            $pdid = (int)($pp['id'] ?? 0);
+            if (!$pdid || isset($havePay[$pdid])) continue;
+            $conn->query("INSERT INTO acc_payments (tenant_id, pay_type, party_id, invoice_id,
+                    date, amount, method, notes, daftra_id, created_by)
+                VALUES ($tid, 'receipt', " . ($pid ?: 'NULL') . ", $iid, '"
+                . $E(substr((string)($pp['date'] ?? $p['date']), 0, 10)) . "', "
+                . round((float)($pp['amount'] ?? 0), 2) . ", 'bank', '"
+                . $E(mb_substr((string)($pp['notes'] ?? ''), 0, 500)) . "', $pdid, '"
+                . $E($actor) . "')");
+            $havePay[$pdid] = 1; $pays_n++;
+        }
+    }
+    if ($done) acc_audit($conn, $tid, 'invoice', 0, 'sales_import',
+        "سحب $done فاتورة عميل و$pays_n سند قبض من دفترة إلى سجلاتنا", $actor);
+    return ['imported'=>$done, 'items'=>$items_n, 'payments'=>$pays_n,
+            'in_daftra'=>$seen, 'remaining'=>max(0, $left - $done), 'errors'=>$errs];
+}
+
+// تشغيل ذاتي: دفعة صغيرة مع أول الطلبات حتى يكتمل السحب — بلا ضغطة زر.
+// يتوقف نهائياً حين لا يبقى شيء، ولا يعيد المحاولة أكثر من مرة كل ساعة.
+if (!daftra_detached($conn)) {
+    $__sp = acc_setting($conn, 1, 'sales_pull_state', '');
+    if ($__sp !== 'done') {
+        $__spAt = (int)acc_setting($conn, 1, 'sales_pull_at', '0');
+        if (time() - $__spAt > 3600) {
+            $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval)
+                VALUES (1, 'sales_pull_at', '" . time() . "')
+                ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+            $__spr = sales_pull_chunk($conn, 5, 'تلقائي');
+            if (($__spr['remaining'] ?? 0) === 0 && empty($__spr['errors']))
+                $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval)
+                    VALUES (1, 'sales_pull_state', 'done')
+                    ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+        }
+    }
+}
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -5345,17 +5501,18 @@ switch ($action) {
         break;
 
     case 'daftra_clients':
-        // قائمة العملاء
-        $daftra_key = "__DAFTRA_KEY__";
-        $ch = curl_init("https://semak.daftra.com/api2/clients.json");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ["APIKEY: $daftra_key", "Accept: application/json"],
-            CURLOPT_TIMEOUT => 15,
-        ]);
-        $res = curl_exec($ch);
-        curl_close($ch);
-        echo $res;
+        // العملاء من acc_parties — نفس دفتر الأطراف الذي تقرأه المحاسبة.
+        // الشكل يبقى كما ترسله دفترة كي لا تنكسر الشاشات القائمة.
+        $rows = [];
+        if ($r = $conn->query("SELECT id, name, COALESCE(phone,'') phone, COALESCE(email,'') email,
+                    COALESCE(vat_number,'') vat_number, daftra_id
+                FROM acc_parties WHERE tenant_id=1 AND type='customer' AND status=1 ORDER BY name"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['Client' => ['id'=>(int)$x['id'], 'business_name'=>$x['name'],
+                    'first_name'=>'', 'last_name'=>'', 'mobile'=>$x['phone'], 'phone1'=>$x['phone'],
+                    'email'=>$x['email'], 'business_tax_number'=>$x['vat_number'],
+                    'daftra_id'=>$x['daftra_id']]];
+        echo json_encode(['data'=>$rows, 'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     // ══════════════════════════════════════════════════════════════════════
@@ -5363,45 +5520,48 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_invoices_list':
+        // من acc_invoices — نفس ما تقرأه المحاسبة والبطاقات، لا مصدرٌ ثانٍ.
         set_time_limit(30);
-        $dk   = "__DAFTRA_KEY__";
-        $base = "https://semak.daftra.com/api2";
-        $hh   = ["APIKEY: $dk", "Accept: application/json"];
-        $page = (int)($_GET['page'] ?? 1);
-        $limit = (int)($_GET['limit'] ?? 50);
-        $from = $_GET['from'] ?? '';
-        $to   = $_GET['to']   ?? '';
-        $client_id_filter = (int)($_GET['client_id'] ?? 0);
-        $qp   = "page=$page&limit=$limit";
-        if ($from) $qp .= "&from_date=$from";
-        if ($to)   $qp .= "&to_date=$to";
-        if ($client_id_filter) $qp .= "&client_id=$client_id_filter";
-        $ch = curl_init("$base/invoices.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hh, CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res  = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $data = json_decode($res, true) ?? [];
-        // تسوية البيانات
+        $tid  = 1;
+        $limit = min(500, max(5, (int)($_GET['limit'] ?? 50)));
+        $page  = max(1, (int)($_GET['page'] ?? 1));
+        $offI  = ($page - 1) * $limit;
+        $D = function($v) { return preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)$v) ? $v : ''; };
+        $from = $D($_GET['from'] ?? ''); $to = $D($_GET['to'] ?? '');
+        $cw = ["i.tenant_id=$tid", "i.doc_type='sales'", "i.status <> 'void'"];
+        if ($from) $cw[] = "i.issue_date >= '$from'";
+        if ($to)   $cw[] = "i.issue_date <= '$to'";
+        if ((int)($_GET['client_id'] ?? 0)) $cw[] = 'i.party_id = ' . (int)$_GET['client_id'];
+        $qi = trim((string)($_GET['q'] ?? ''));
+        if ($qi !== '') { $qe = $conn->real_escape_string($qi);
+            $cw[] = "(i.party_name LIKE '%$qe%' OR i.invoice_no LIKE '%$qe%')"; }
+        $WI = implode(' AND ', $cw);
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $i = $r['Invoice'] ?? $r;
-            $rows[] = [
-                'id'           => $i['id'],
-                'no'           => $i['no'] ?? '',
-                'date'         => $i['date'] ?? '',
-                'client_id'    => $i['client_id'] ?? '',
-                'client'       => $i['client_business_name'] ?? ($i['client_first_name'].' '.$i['client_last_name']),
-                'phone'        => $i['client_mobile'] ?? $i['client_phone1'] ?? $i['client_phone2'] ?? '',
-                'total'        => (float)($i['summary_total'] ?? $i['grand_total'] ?? 0),
-                'paid'         => (float)($i['summary_paid'] ?? 0),
-                'status'       => $i['status'] ?? '',
-                'work_order_id'=> $i['work_order_id'] ?? null,
-                'currency'     => $i['currency_code'] ?? 'SAR',
-                'notes'        => $i['notes'] ?? '',
+        if ($r = $conn->query("SELECT i.id, i.invoice_no, i.issue_date, i.party_id, i.party_name,
+                    COALESCE(p.phone,'') phone, ROUND(i.total,2) total, ROUND(i.paid,2) paid,
+                    i.status, i.currency, i.notes, i.daftra_id
+                FROM acc_invoices i LEFT JOIN acc_parties p ON p.id = i.party_id
+                WHERE $WI ORDER BY i.issue_date DESC, i.id DESC LIMIT $limit OFFSET $offI"))
+            while ($x = $r->fetch_assoc()) $rows[] = [
+                'id'           => (int)$x['id'],
+                'no'           => $x['invoice_no'] ?? '',
+                'date'         => $x['issue_date'] ?? '',
+                'client_id'    => $x['party_id'] ?? '',
+                'client'       => $x['party_name'] ?? '',
+                'phone'        => $x['phone'],
+                'total'        => (float)$x['total'],
+                'paid'         => (float)$x['paid'],
+                'status'       => $x['status'] ?? '',
+                'work_order_id'=> null,
+                'currency'     => $x['currency'] ?? 'SAR',
+                'notes'        => $x['notes'] ?? '',
+                'daftra_id'    => $x['daftra_id'] !== null ? (int)$x['daftra_id'] : null,
             ];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows,'meta'=>$data['meta']??[]], JSON_UNESCAPED_UNICODE);
+        $totI = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM acc_invoices i WHERE $WI"))
+            $totI = (int)($r->fetch_assoc()['n'] ?? 0);
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$totI,'source'=>'local',
+            'meta'=>[]], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_invoice_single':
@@ -5465,14 +5625,32 @@ switch ($action) {
         ], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'daftra_invoice_delete':
-        $dk = "__DAFTRA_KEY__"; $inv_id = (int)($_GET['id']??0);
-        if (!$inv_id) { echo json_encode(['success'=>false]); break; }
-        $ch = curl_init("https://semak.daftra.com/api2/invoices/$inv_id.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
-        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,204]),'http_code'=>$code]);
+    case 'daftra_invoice_delete': {
+        // الفاتورة عندنا الآن، والمحو يمحو أثراً محاسبياً. تُعلَّم «ملغاة» فتختفي
+        // من القوائم ويبقى سجلّها. ولا تُلغى فاتورة عليها تحصيل.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية إلغاء الفواتير'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = 1;
+        $inv_id = (int)($_GET['id'] ?? 0);
+        if (!$inv_id) { echo json_encode(['success'=>false,'message'=>'رقم الفاتورة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $iv = null;
+        if ($r = $conn->query("SELECT invoice_no, status, ROUND(paid,2) paid FROM acc_invoices
+                               WHERE id=$inv_id AND tenant_id=$tid LIMIT 1")) $iv = $r->fetch_assoc();
+        if (!$iv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        if ((float)$iv['paid'] > 0.01) {
+            echo json_encode(['success'=>false,
+                'message'=>'الفاتورة عليها تحصيل — أُلغِ سنداتها أولاً'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("UPDATE acc_invoices SET status='void' WHERE id=$inv_id AND tenant_id=$tid");
+        acc_audit($conn, $tid, 'invoice', $inv_id, 'void',
+            'إلغاء فاتورة ' . ($iv['invoice_no'] ?? ''), $u['name'] ?? '');
+        echo json_encode(['success'=>true,'message'=>'أُلغيت الفاتورة'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     // ══════════════════════════════════════════════════════════════════════
     // المدفوعات والتحصيل — سندات قبض/صرف مربوطة بالفاتورة والخزينة
@@ -5480,56 +5658,87 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_invoice_payments_list':
-        // قائمة دفعات العملاء — اختياريًا حسب الفاتورة
-        $dk = "__DAFTRA_KEY__";
+        // سندات القبض من acc_payments — سجلّنا نحن، لا نداءٌ لدفترة
+        $tid = 1;
         $inv_id = (int)($_GET['invoice_id'] ?? 0);
-        $page   = (int)($_GET['page'] ?? 1);
-        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $qp = "page=$page&limit=50";
-        if ($inv_id) $qp .= "&invoice_id=$inv_id";
-        if ($from)   $qp .= "&from_date=$from";
-        if ($to)     $qp .= "&to_date=$to";
-        $ch = curl_init("https://semak.daftra.com/api2/invoice_payments.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        $D = function($v) { return preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)$v) ? $v : ''; };
+        $from = $D($_GET['from'] ?? ''); $to = $D($_GET['to'] ?? '');
+        $lim_r = min(500, max(5, (int)($_GET['limit'] ?? 50)));
+        $cw = ["y.tenant_id=$tid", "y.pay_type='receipt'"];
+        if ($inv_id) $cw[] = "y.invoice_id = $inv_id";
+        if ($from) $cw[] = "y.date >= '$from'";
+        if ($to)   $cw[] = "y.date <= '$to'";
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $p = $r['InvoicePayment'] ?? $r;
-            $rows[] = [
-                'id'         => $p['id'],
-                'date'       => $p['date'] ?? '',
-                'amount'     => (float)($p['amount'] ?? 0),
-                'invoice_id' => $p['invoice_id'] ?? '',
-                'invoice_no' => $p['invoice_no'] ?? '',
-                'client'     => $p['client_business_name'] ?? ($p['client_first_name'].' '.$p['client_last_name']),
-                'client_id'  => $p['client_id'] ?? '',
-                'method'     => $p['payment_method'] ?? '',
-                'treasury'   => $p['treasury_name'] ?? '',
-                'treasury_id'=> $p['treasury_id'] ?? '',
-                'notes'      => $p['notes'] ?? '',
+        if ($r = $conn->query("SELECT y.id, y.date, ROUND(y.amount,2) amount, y.invoice_id,
+                    COALESCE(i.invoice_no,'') invoice_no, COALESCE(i.party_name,'') client,
+                    y.party_id, y.method, COALESCE(y.notes,'') notes,
+                    COALESCE(a.name,'') treasury, y.treasury_account_id
+                FROM acc_payments y
+                LEFT JOIN acc_invoices i ON i.id = y.invoice_id
+                LEFT JOIN acc_accounts a ON a.id = y.treasury_account_id
+                WHERE " . implode(' AND ', $cw) . " ORDER BY y.date DESC, y.id DESC LIMIT $lim_r"))
+            while ($x = $r->fetch_assoc()) $rows[] = [
+                'id'         => (int)$x['id'],
+                'date'       => $x['date'] ?? '',
+                'amount'     => (float)$x['amount'],
+                'invoice_id' => $x['invoice_id'] ?? '',
+                'invoice_no' => $x['invoice_no'],
+                'client'     => $x['client'],
+                'client_id'  => $x['party_id'] ?? '',
+                'method'     => $x['method'] ?? '',
+                'treasury'   => $x['treasury'],
+                'treasury_id'=> $x['treasury_account_id'] ?? '',
+                'notes'      => $x['notes'],
             ];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'daftra_invoice_payment_add':
-        // سند قبض على فاتورة — يقفل/يخفّض الفاتورة ويزيد الخزينة
-        $dk = "__DAFTRA_KEY__";
+    case 'daftra_invoice_payment_add': {
+        // القبض يُسجَّل في سجلاتنا ويحدّث المحصَّل على الفاتورة — لا كتابة في دفترة
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسجيل الدفعات'], JSON_UNESCAPED_UNICODE); break; }
+        $tid  = 1;
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $payload = ['InvoicePayment' => [
-            'invoice_id'     => $body['invoice_id']  ?? '',
-            'amount'         => (float)($body['amount'] ?? 0),
-            'date'           => $body['date']        ?? date('Y-m-d'),
-            'treasury_id'    => $body['treasury_id'] ?? '',
-            'payment_method' => $body['method']      ?? 'cash',
-            'notes'          => $body['notes']       ?? '',
-        ]];
-        $ch = curl_init("https://semak.daftra.com/api2/invoice_payments.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تم تسجيل الدفعة':'فشل التسجيل'], JSON_UNESCAPED_UNICODE);
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $iid = (int)($body['invoice_id'] ?? 0);
+        $amt = round((float)($body['amount'] ?? 0), 2);
+        if (!$iid || $amt <= 0) { echo json_encode(['success'=>false,'message'=>'الفاتورة والمبلغ مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $iv = null;
+        if ($r = $conn->query("SELECT id, party_id, total, paid, status FROM acc_invoices
+                               WHERE id=$iid AND tenant_id=$tid LIMIT 1")) $iv = $r->fetch_assoc();
+        if (!$iv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $pdate = preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)($body['date'] ?? '')) ? $body['date'] : date('Y-m-d');
+        $meth  = ($body['method'] ?? '') === 'cash' ? 'cash' : 'bank';
+        $tacc  = (int)($body['treasury_id'] ?? 0);
+        $conn->query("INSERT INTO acc_payments (tenant_id, pay_type, party_id, invoice_id, date,
+                amount, method, treasury_account_id, notes, created_by)
+            VALUES ($tid, 'receipt', " . ($iv['party_id'] !== null ? (int)$iv['party_id'] : 'NULL') . ",
+                $iid, '$pdate', $amt, '" . $E($meth) . "', " . ($tacc ?: 'NULL') . ", '"
+            . $E(mb_substr((string)($body['notes'] ?? ''), 0, 500)) . "', '" . $E($u['name'] ?? '') . "')");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        $payId = (int)$conn->insert_id;
+        $sum = 0;
+        if ($r = $conn->query("SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM acc_payments
+                               WHERE tenant_id=$tid AND pay_type='receipt' AND invoice_id=$iid"))
+            $sum = (float)($r->fetch_assoc()['s'] ?? 0);
+        $tot  = round((float)$iv['total'], 2);
+        $st   = $iv['status'];
+        if ($st !== 'draft' && $st !== 'void')
+            $st = ($sum >= $tot - 0.01) ? 'paid' : ($sum > 0 ? 'partial' : 'posted');
+        $conn->query("UPDATE acc_invoices SET paid=$sum, status='" . $E($st) . "'
+            WHERE id=$iid AND tenant_id=$tid");
+        acc_audit($conn, $tid, 'payment', $payId, 'create',
+            'قبض ' . number_format($amt, 2) . ' على فاتورة ' . $iid, $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'id'=>$payId, 'paid'=>$sum,
+            'remaining'=>round($tot - $sum, 2), 'status'=>$st,
+            'message'=>'تم تسجيل الدفعة'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     case 'daftra_supplier_payments_list':
         // دفعات الموردين من قاعدتنا: المسجَّل في التطبيق أولاً، ثم ما جاء من

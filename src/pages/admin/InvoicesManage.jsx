@@ -12,10 +12,13 @@ import useTableControls from '../../utils/useTableControls';
 import SortHeader from '../../components/SortHeader';
 import TablePager from '../../components/TablePager';
 
-import { API_URL } from '../../lib/api/client';
+import { API_URL, getAdminToken } from '../../lib/api/client';
 import { useToast } from '../../components/ui';
 import { usePartyDirectory } from '../../hooks/usePartyDirectory';
 import { AppContext } from '../../context/AppContext';
+
+// فواتير العملاء صارت تُكتب في قاعدتنا، فيلزمها جلسة كأي أمر مالي
+const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
 
 // ─── حساب حالة الفاتورة ──────────────────────────────────────────
 function invoiceStatus(total, paid) {
@@ -237,7 +240,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
   const handleDelete = async (id) => {
     setConfirmId(null);
     try {
-      const res  = await fetch(`${API_URL}?action=daftra_invoice_delete&id=${id}`);
+      const res  = await fetch(`${API_URL}?action=daftra_invoice_delete&id=${id}`, { headers: auth() });
       const data = await res.json();
       if (data.success) {
         notify('تم حذف الفاتورة بنجاح');
@@ -271,7 +274,7 @@ export default function InvoicesManage({ user, navigateTo, showToast: externalTo
     try {
       const res = await fetch(`${API_URL}?action=daftra_invoice_payment_add`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth() },
         body: JSON.stringify({
           invoice_id:  payInvoice.id,
           amount:      parseFloat(payForm.amount),
