@@ -8247,14 +8247,14 @@ switch ($action) {
         if ($r = $conn->query("SELECT mp.id, mp.date, ROUND(mp.amount,2) amt, p.no
                                FROM dmirror_payments mp
                                JOIN dmirror_purchases p ON p.id = mp.purchase_id
-                               WHERE p.TRIM(p.supplier)=TRIM('$v') AND mp.date IS NOT NULL"))
+                               WHERE TRIM(p.supplier)=TRIM('$v') AND mp.date IS NOT NULL"))
             while ($x = $r->fetch_assoc())
                 $ev[] = ['date'=>$x['date'], 'kind'=>'دفعة', 'ref'=>'على ' . $x['no'],
                          'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt']];
         if ($r = $conn->query("SELECT pp.id, pp.pay_date AS date, ROUND(pp.amount,2) amt, p.no
                                FROM purchase_payments pp
                                LEFT JOIN dmirror_purchases p ON p.id = pp.purchase_id
-                               WHERE (p.supplier='$v' OR pp.supplier='$v') AND pp.pay_date IS NOT NULL"))
+                               WHERE (TRIM(p.supplier)=TRIM('$v') OR TRIM(pp.supplier)=TRIM('$v')) AND pp.pay_date IS NOT NULL"))
             while ($x = $r->fetch_assoc())
                 $ev[] = ['date'=>$x['date'], 'kind'=>'دفعة', 'ref'=>$x['no'] ? ('على ' . $x['no']) : 'دفعة للمورد',
                          'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt']];
