@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine, Receipt, FileWarning, X } from 'lucide-react';
+import { FilePlus, RefreshCw, AlertTriangle, Paperclip, Wallet, TrendingUp, Archive, Loader2, CheckCircle2, ScanLine, Receipt, FileWarning, X, Ticket } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { passkeyEnrolledHere } from '../../lib/passkey';
@@ -26,6 +26,9 @@ export default function BuyHome({ onNew }) {
     const [gaps, setGaps]       = useState(null);   // نواقص التوثيق
     const [gapsOpen, setGapsOpen] = useState(false);
     const [gapTab, setGapTab]   = useState('neither');
+    const [tickets, setTickets] = useState(null);  // تذاكر تعديل المستندات
+    const [tkOpen, setTkOpen]   = useState(false);
+    const [tkBusy, setTkBusy]   = useState(0);
     const [clsBusy, setClsBusy] = useState(false);
 
     const load = useCallback(async (force = false) => {
@@ -42,6 +45,8 @@ export default function BuyHome({ onNew }) {
             ]);
             if (a && a.success !== false) setK(a.data || a);
             if (b && b.success) setLast((b.rows || []).slice(0, 12));
+            fetch(`${API_URL}?action=doc_tickets&status=pending`, { headers: h })
+                .then(r => r.json()).then(r => r.success && setTickets(r)).catch(() => {});
             fetch(`${API_URL}?action=buy_gaps`, { headers: h })
                 .then(r => r.json()).then(r => r.success && setGaps(r)).catch(() => {});
             fetch(`${API_URL}?action=daftra_link_status`, { headers: h })
@@ -136,6 +141,21 @@ export default function BuyHome({ onNew }) {
         { t: 'بلا مستند',      v: p.docs_missing ?? '—', icon: Paperclip,  c: 'from-rose-600 to-rose-800' },
         { t: 'فواتير الشهر',   v: p.month_count ?? '—',  icon: AlertTriangle, c: 'from-sky-600 to-sky-800' },
     ];
+
+    const decide = async (id, approve) => {
+        setTkBusy(id);
+        try {
+            const t = getAdminToken();
+            const r = await fetch(`${API_URL}?action=doc_ticket_decide`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json',
+                    ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+                body: JSON.stringify({ id, approve }),
+            }).then(x => x.json());
+            if (!r.success) alert(r.message || 'تعذر الحسم');
+            load(true);
+        } catch { alert('تعذر الاتصال'); }
+        finally { setTkBusy(0); }
+    };
 
     // نواقص التوثيق: نسخة دفترة المطبوعة لا تُحتسب مستندا
     const gt = gaps?.totals;
@@ -283,6 +303,70 @@ export default function BuyHome({ onNew }) {
                         </div>
                     </div>
                 </button>
+            )}
+
+            {tickets?.pending > 0 && (
+                <button onClick={() => setTkOpen(true)}
+                    className="w-full text-right rounded-2xl p-4 bg-gradient-to-bl from-violet-600 to-violet-800">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="flex items-center gap-2 text-white/80">
+                                <Ticket size={16} />
+                                <span className="text-[11px] font-bold">تذاكر تعديل المستندات</span>
+                            </div>
+                            <div className="text-2xl font-black mt-1 tabular-nums">{tickets.pending}</div>
+                        </div>
+                        <div className="text-[11px] text-white/75 font-bold">
+                            {tickets.is_manager ? 'بانتظار موافقتك' : 'طلباتك المعلّقة'}
+                        </div>
+                    </div>
+                </button>
+            )}
+
+            {tkOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-950/95 flex flex-col">
+                    <div className="flex items-center justify-between p-4 border-b border-white/10">
+                        <h3 className="font-black">تذاكر تعديل المستندات</h3>
+                        <button onClick={() => setTkOpen(false)} className="text-slate-400"><X size={20} /></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                        {(tickets?.data || []).map(t => (
+                            <div key={t.id} className="rounded-xl bg-white/5 p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-sm font-bold">
+                                            {t.kind === 'add' ? 'إضافة مستند' : 'حذف مستند'}
+                                            <span className="text-slate-400 font-normal"> · فاتورة #{t.invoice_no}</span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-400 mt-0.5 truncate">{t.supplier}</div>
+                                        <div className="text-[12px] mt-1">{t.file_name}</div>
+                                        <div className="text-[11px] text-slate-400 mt-1">السبب: {t.reason}</div>
+                                        <div className="text-[10px] text-slate-500 mt-1">
+                                            {t.requested_by} · {String(t.requested_at || '').slice(0, 16)}
+                                        </div>
+                                    </div>
+                                    {t.drive_url && t.kind === 'add' && (
+                                        <a href={t.drive_url} target="_blank" rel="noreferrer"
+                                            className="text-[11px] font-bold text-sky-300 shrink-0">فتح الملف</a>
+                                    )}
+                                </div>
+                                {tickets.is_manager && (
+                                    <div className="flex gap-2 mt-3">
+                                        <button onClick={() => decide(t.id, true)} disabled={tkBusy === t.id}
+                                            className="flex-1 h-10 rounded-xl bg-emerald-600 text-[12px] font-bold disabled:opacity-50">
+                                            موافقة
+                                        </button>
+                                        <button onClick={() => decide(t.id, false)} disabled={tkBusy === t.id}
+                                            className="flex-1 h-10 rounded-xl bg-white/10 text-[12px] font-bold disabled:opacity-50">
+                                            رفض
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {!(tickets?.data || []).length && <p className="text-center text-slate-500 text-sm py-8">لا تذاكر معلّقة</p>}
+                    </div>
+                </div>
             )}
 
             {gapsOpen && (

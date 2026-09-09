@@ -651,6 +651,11 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                                   } }
                                 : sec} />
                     ))}
+                    {type === 'purchase' && (
+                        <DocTicketPanel purchaseId={value}
+                            docs={(data.sections || []).find(x => x.title === 'المستندات')?.rows || []}
+                            onDone={() => setTick(v => v + 1)} />
+                    )}
                 </>
             )}
         </div>
@@ -851,6 +856,109 @@ function Section({ sec, onOpen }) {
                     })}
                 </div>
             )}
+        </div>
+    );
+}
+
+// ─── طلب تعديل مستندات فاتورة محفوظة ────────────────────────────────────
+// لا يُضاف مستند ولا يُحذف مباشرة: تُفتح تذكرة يبتّها مدير المشتريات،
+// فيبقى أثر من طلب ولماذا ومن وافق.
+function DocTicketPanel({ purchaseId, docs, onDone }) {
+    const [open, setOpen]   = useState(false);
+    const [kind, setKind]   = useState('add');
+    const [reason, setReason] = useState('');
+    const [docId, setDocId] = useState('');
+    const [file, setFile]   = useState(null);
+    const [type, setType]   = useState('invoice');
+    const [busy, setBusy]   = useState(false);
+    const [msg, setMsg]     = useState('');
+
+    const pick = e => {
+        const f2 = e.target.files?.[0];
+        if (!f2) return;
+        const rd = new FileReader();
+        rd.onload = () => setFile({ name: f2.name, dataUrl: String(rd.result), size: f2.size });
+        rd.readAsDataURL(f2);
+    };
+
+    const send = async () => {
+        if (reason.trim().length < 3) return setMsg('اذكر سبب التعديل');
+        if (kind === 'add' && !file) return setMsg('اختر الملف');
+        if (kind === 'delete' && !docId) return setMsg('اختر المستند');
+        setBusy(true); setMsg('');
+        try {
+            const t = getAdminToken();
+            const h = { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) };
+            const body = { kind, purchase_id: purchaseId, reason };
+            if (kind === 'add') {
+                const up = await fetch(`${API_URL}?action=doc_upload`, { method: 'POST', headers: h,
+                    body: JSON.stringify({ filename: file.name, data: file.dataUrl.split(',')[1] || '' }),
+                }).then(r => r.json());
+                if (!up.success) { setMsg(up.message || 'تعذر رفع الملف'); setBusy(false); return; }
+                Object.assign(body, { drive_url: up.url, file_name: file.name, doc_type: type, file_size: file.size });
+            } else body.doc_id = Number(docId);
+            const r = await fetch(`${API_URL}?action=doc_ticket_open`, { method: 'POST', headers: h,
+                body: JSON.stringify(body) }).then(x => x.json());
+            setMsg(r.message || (r.success ? 'فُتحت التذكرة' : 'تعذر الطلب'));
+            if (r.success) { setFile(null); setReason(''); setDocId(''); onDone && onDone(); }
+        } catch { setMsg('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
+
+    if (!open) return (
+        <button onClick={() => setOpen(true)}
+            className="w-full h-12 rounded-2xl bg-white/5 border border-white/10 text-[12px] font-bold text-slate-300">
+            طلب تعديل المستندات
+        </button>
+    );
+    return (
+        <div className="rounded-2xl bg-white/5 border border-white/10 p-3 space-y-3">
+            <div className="flex items-center justify-between">
+                <span className="text-[12px] font-black">طلب تعديل المستندات</span>
+                <button onClick={() => setOpen(false)} className="text-slate-400 text-[11px] font-bold">إغلاق</button>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+                الطلب لا يسري إلا بموافقة مدير المشتريات، ويُسجَّل باسمك وسببه.
+            </p>
+            <div className="flex gap-2">
+                {[['add','إضافة مستند'],['delete','حذف مستند']].map(([k, t2]) => (
+                    <button key={k} onClick={() => { setKind(k); setMsg(''); }}
+                        className={'flex-1 h-10 rounded-xl text-[12px] font-bold ' +
+                            (kind === k ? 'bg-[#c5a059] text-[#0a0f1e]' : 'bg-white/5 text-slate-300')}>
+                        {t2}
+                    </button>
+                ))}
+            </div>
+            {kind === 'add' ? (
+                <>
+                    <input type="file" onChange={pick} accept="image/*,application/pdf"
+                        className="w-full text-[11px] text-slate-300" />
+                    <div className="flex gap-2">
+                        {[['invoice','فاتورة مورّد'],['receipt','إثبات سداد'],['other','مستند آخر']].map(([k, t2]) => (
+                            <button key={k} onClick={() => setType(k)}
+                                className={'flex-1 h-9 rounded-lg text-[11px] font-bold ' +
+                                    (type === k ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-400')}>
+                                {t2}
+                            </button>
+                        ))}
+                    </div>
+                </>
+            ) : (
+                <select value={docId} onChange={e => setDocId(e.target.value)}
+                    className="w-full h-11 rounded-xl bg-black/30 border border-white/10 px-2 text-[12px] font-bold">
+                    <option value="">اختر المستند</option>
+                    {docs.map(d => (
+                        <option key={d.id} value={d.id}>{d.file_name}</option>
+                    ))}
+                </select>
+            )}
+            <input value={reason} onChange={e => setReason(e.target.value)} placeholder="سبب التعديل"
+                className="w-full h-11 rounded-xl bg-black/30 border border-white/10 px-3 text-[12px] font-bold outline-none focus:border-[#c5a059]" />
+            <button onClick={send} disabled={busy}
+                className="w-full h-11 rounded-xl bg-[#c5a059] text-[#0a0f1e] text-[12px] font-black disabled:opacity-50">
+                {busy ? 'يُرسل…' : 'افتح التذكرة'}
+            </button>
+            {msg && <p className="text-[11px] font-bold text-slate-300">{msg}</p>}
         </div>
     );
 }

@@ -1399,6 +1399,32 @@ $conn->query("CREATE TABLE IF NOT EXISTS dmirror_treasuries (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (45)");
 } // end DDL v45
+// ─── DDL v46: تذاكر تعديل مستندات الفواتير ──────────────────────────────
+// المستند لا يُضاف ولا يُحذف من فاتورة محفوظة إلا بموافقة مدير المشتريات،
+// ويبقى أثر كل طلب: من طلب، ولماذا، ومن حسم، ومتى.
+if ($__sv < 46) {
+$conn->query("CREATE TABLE IF NOT EXISTS doc_tickets (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_id   INT NOT NULL,
+    kind          ENUM('add','delete') NOT NULL,
+    doc_id        INT DEFAULT NULL,
+    doc_type      VARCHAR(20)  DEFAULT NULL,
+    file_name     VARCHAR(255) DEFAULT NULL,
+    drive_url     VARCHAR(600) DEFAULT NULL,
+    file_size     BIGINT NOT NULL DEFAULT 0,
+    reason        VARCHAR(400) DEFAULT NULL,
+    requested_by  VARCHAR(120) DEFAULT NULL,
+    requested_uid INT DEFAULT NULL,
+    requested_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status        ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    decided_by    VARCHAR(120) DEFAULT NULL,
+    decided_uid   INT DEFAULT NULL,
+    decided_at    DATETIME DEFAULT NULL,
+    decision_note VARCHAR(400) DEFAULT NULL,
+    INDEX (purchase_id), INDEX (status), INDEX (doc_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (46)");
+} // end DDL v46
 
 // مُساعد: تطبيع ما يُلصق من المتصفح إلى ترويسة Cookie صالحة.
 // يقبل: كتلة set-cookie بأسطرها وخصائصها، أو سطر "Cookie: a=1; b=2"، أو أزواجاً مفردة.
@@ -10155,6 +10181,148 @@ switch ($action) {
             "تنزيل $done مستندا من درايف إلى تخزيننا", $u['name'] ?? '');
         echo json_encode(['success'=>true, 'saved'=>$done, 'failed'=>$failed,
             'remaining'=>$left, 'detail'=>$last], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'doc_ticket_open': {
+        // تذكرة تعديل مستندات فاتورة محفوظة: إضافة أو حذف — لا تسري إلا بموافقة
+        // مدير المشتريات. الملف يُرفع أولا ويُخزَّن، ثم تُفتح التذكرة على رابطه،
+        // فلا يضيع المرفوع إن تأخّرت الموافقة.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        $isMgr = $u && (($u['role'] ?? '') === 'admin' || in_array('purchase_manager', $pm, true));
+        $mayAsk = $u && ($isMgr || in_array('finance', $pm, true) || in_array('accounting', $pm, true)
+                              || in_array('purchase_docs', $pm, true));
+        if (!$mayAsk) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية طلب تعديل المستندات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b    = json_decode(file_get_contents('php://input'), true) ?: [];
+        $kind = in_array(($b['kind'] ?? ''), ['add','delete'], true) ? $b['kind'] : '';
+        $pid  = (int)($b['purchase_id'] ?? 0);
+        $rsn  = trim((string)($b['reason'] ?? ''));
+        $E    = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        if ($kind === '' || !$pid) { echo json_encode(['success'=>false,'message'=>'النوع والفاتورة مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        if (mb_strlen($rsn) < 3) { echo json_encode(['success'=>false,'message'=>'اذكر سبب التعديل'], JSON_UNESCAPED_UNICODE); break; }
+
+        $inv = null;
+        if ($r = $conn->query("SELECT id, no, supplier FROM dmirror_purchases WHERE id=$pid LIMIT 1")) $inv = $r->fetch_assoc();
+        if (!$inv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+
+        $docId = 0; $fname = ''; $furl = ''; $ftype = 'invoice'; $fsize = 0;
+        if ($kind === 'delete') {
+            $docId = (int)($b['doc_id'] ?? 0);
+            $d = null;
+            if ($docId && $r = $conn->query("SELECT id, purchase_id, file_name, doc_type FROM purchase_documents WHERE id=$docId LIMIT 1"))
+                $d = $r->fetch_assoc();
+            if (!$d || (int)$d['purchase_id'] !== $pid) {
+                echo json_encode(['success'=>false,'message'=>'المستند غير موجود على هذه الفاتورة'], JSON_UNESCAPED_UNICODE); break; }
+            $fname = (string)$d['file_name']; $ftype = (string)$d['doc_type'];
+            if ($r = $conn->query("SELECT COUNT(*) n FROM doc_tickets WHERE status='pending' AND doc_id=$docId"))
+                if ($x = $r->fetch_assoc()) if ((int)$x['n']) {
+                    echo json_encode(['success'=>false,'message'=>'على هذا المستند تذكرة معلّقة'], JSON_UNESCAPED_UNICODE); break; }
+        } else {
+            $fname = trim((string)($b['file_name'] ?? ''));
+            $furl  = trim((string)($b['drive_url'] ?? ''));
+            $ftype = in_array(($b['doc_type'] ?? ''), ['invoice','receipt','other'], true) ? $b['doc_type'] : 'invoice';
+            $fsize = (int)($b['file_size'] ?? 0);
+            if ($fname === '' || $furl === '') {
+                echo json_encode(['success'=>false,'message'=>'ارفع الملف أولا'], JSON_UNESCAPED_UNICODE); break; }
+        }
+
+        $conn->query("INSERT INTO doc_tickets (purchase_id, kind, doc_id, doc_type, file_name, drive_url,
+                file_size, reason, requested_by, requested_uid)
+            VALUES ($pid, '" . $E($kind) . "', " . ($docId ?: 'NULL') . ", '" . $E($ftype) . "', '" . $E($fname) . "', '"
+            . $E($furl) . "', $fsize, '" . $E(mb_substr($rsn, 0, 400)) . "', '" . $E($u['name'] ?? '') . "', $uid)");
+        $tid = (int)$conn->insert_id;
+
+        acc_audit($conn, 1, 'purchase', $pid, 'doc_ticket_open',
+            ($kind === 'add' ? 'طلب إضافة مستند: ' : 'طلب حذف مستند: ') . $fname . ' — ' . $rsn, $u['name'] ?? '');
+        // إشعار لكل مدير — أعمدة الجدول: tenant_id, user_id, type, title, body, link
+        $conn->query("INSERT INTO notifications (tenant_id, user_id, type, title, body, link)
+            SELECT 1, id, 'purchase', 'تذكرة تعديل مستند', '" . $E(($u['name'] ?? '') . ' يطلب ' . ($kind === 'add' ? 'إضافة' : 'حذف')
+                . ' مستند على الفاتورة ' . $inv['no']) . "', '/buy'
+            FROM users WHERE role='admin'");
+        echo json_encode(['success'=>true, 'id'=>$tid,
+            'message'=>'فُتحت تذكرة — تسري بعد موافقة مدير المشتريات'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'doc_tickets': {
+        // التذاكر: المدير يرى الكل، وغيره يرى تذاكره
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        $isMgr = $u && (($u['role'] ?? '') === 'admin' || in_array('purchase_manager', $pm, true));
+        $st = in_array(($_GET['status'] ?? ''), ['pending','approved','rejected','all'], true) ? $_GET['status'] : 'pending';
+        $w = $st === 'all' ? '1' : ("t.status='" . $conn->real_escape_string($st) . "'");
+        if (!$isMgr) $w .= " AND t.requested_uid = $uid";
+        $rows = [];
+        if ($r = $conn->query("SELECT t.*, p.no invoice_no, p.supplier, ROUND(p.total,2) gross, p.date
+                FROM doc_tickets t LEFT JOIN dmirror_purchases p ON p.id = t.purchase_id
+                WHERE $w ORDER BY t.id DESC LIMIT 200"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        $n = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n FROM doc_tickets t WHERE t.status='pending'"
+                . ($isMgr ? '' : " AND t.requested_uid = $uid")))
+            if ($x = $r->fetch_assoc()) $n = (int)$x['n'];
+        echo json_encode(['success'=>true, 'is_manager'=>$isMgr, 'pending'=>$n, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'doc_ticket_decide': {
+        // موافقة أو رفض — والتنفيذ يقع هنا لا عند الطلب
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('purchase_manager', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'الموافقة لمدير المشتريات فقط'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b   = json_decode(file_get_contents('php://input'), true) ?: [];
+        $tid = (int)($b['id'] ?? 0);
+        $ok  = !empty($b['approve']);
+        $nt  = trim((string)($b['note'] ?? ''));
+        $E   = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $t = null;
+        if ($tid && $r = $conn->query("SELECT * FROM doc_tickets WHERE id=$tid LIMIT 1")) $t = $r->fetch_assoc();
+        if (!$t) { echo json_encode(['success'=>false,'message'=>'التذكرة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        if (($t['status'] ?? '') !== 'pending') {
+            echo json_encode(['success'=>false,'message'=>'التذكرة محسومة مسبقا'], JSON_UNESCAPED_UNICODE); break; }
+        // طالب التذكرة لا يوافق على طلبه
+        if ((int)$t['requested_uid'] === $uid && ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'لا توافق على طلبك بنفسك'], JSON_UNESCAPED_UNICODE); break; }
+
+        $applied = '';
+        if ($ok) {
+            $pid = (int)$t['purchase_id'];
+            if ($t['kind'] === 'add') {
+                $conn->query("INSERT INTO purchase_documents (purchase_id, doc_type, file_name, drive_url,
+                        file_size, source, created_by, note)
+                    VALUES ($pid, '" . $E($t['doc_type']) . "', '" . $E($t['file_name']) . "', '" . $E($t['drive_url']) . "', "
+                    . (int)$t['file_size'] . ", 'ticket', '" . $E($t['requested_by']) . "', '"
+                    . $E('تذكرة ' . $tid . ' — ' . $t['reason']) . "')
+                    ON DUPLICATE KEY UPDATE drive_url=VALUES(drive_url), doc_type=VALUES(doc_type)");
+                $applied = 'أُضيف المستند';
+            } else {
+                $conn->query("DELETE FROM purchase_documents WHERE id=" . (int)$t['doc_id'] . " AND purchase_id=$pid");
+                $applied = $conn->affected_rows > 0 ? 'حُذف المستند' : 'المستند غير موجود أصلا';
+            }
+        }
+        $conn->query("UPDATE doc_tickets SET status='" . ($ok ? 'approved' : 'rejected') . "',
+                decided_by='" . $E($u['name'] ?? '') . "', decided_uid=$uid, decided_at=NOW(),
+                decision_note='" . $E(mb_substr($nt, 0, 400)) . "'
+            WHERE id=$tid");
+        acc_audit($conn, 1, 'purchase', (int)$t['purchase_id'], 'doc_ticket_' . ($ok ? 'approve' : 'reject'),
+            ($ok ? 'وافق على' : 'رفض') . ' تذكرة ' . $tid . ' (' . ($t['kind'] === 'add' ? 'إضافة' : 'حذف')
+            . ' ' . $t['file_name'] . ')' . ($nt !== '' ? ' — ' . $nt : ''), $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'applied'=>$applied,
+            'message'=>$ok ? ('تمت الموافقة · ' . $applied) : 'رُفضت التذكرة'], JSON_UNESCAPED_UNICODE);
         break;
     }
 
