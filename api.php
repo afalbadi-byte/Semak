@@ -2136,6 +2136,25 @@ function daftra_treasuries_cache($conn) {
     return $n;
 }
 
+// رسالة بشرية لخطأ المساعد الذكي — الشاشة لا يليق بها JSON خام، والموظف
+// يحتاج أن يعرف ما يفعله الآن: أيعيد المحاولة أم يُدخل يدوياً أم يبلّغ.
+function ai_error_ar($code, $res) {
+    $d   = json_decode((string)$res, true);
+    $msg = (string)($d['error']['message'] ?? '');
+    $typ = (string)($d['error']['type'] ?? '');
+    if (stripos($msg, 'usage limit') !== false || stripos($msg, 'credit balance') !== false) {
+        $when = '';
+        if (preg_match('/regain access on (\d{4}-\d{2}-\d{2})/', $msg, $m)) $when = $m[1];
+        return 'بلغ حساب المساعد حدّ الاستهلاك المحدَّد له'
+             . ($when ? '، ويعود في ' . $when : '')
+             . '. أدخل البيانات يدوياً، أو ارفع الحدّ من لوحة Anthropic.';
+    }
+    if ($code === 429 || $typ === 'rate_limit_error')     return 'المساعد مزدحم الآن — أعد المحاولة بعد دقيقة.';
+    if ($code === 401 || $typ === 'authentication_error') return 'مفتاح المساعد غير صالح — يحتاج تحديثاً.';
+    if ($code === 529 || $typ === 'overloaded_error')     return 'خدمة المساعد مزدحمة — أعد المحاولة بعد قليل.';
+    if ($code >= 500) return 'عطل مؤقت في خدمة المساعد — أعد المحاولة.';
+    return 'تعذّر الاتصال بالمساعد (رمز ' . (int)$code . ').';
+}
 function daftra_detached($conn) {
     // مفصول عن دفترة؟ يُقرأ من الإعدادات مرة واحدة لكل طلب
     static $v = null;
@@ -6893,7 +6912,7 @@ switch ($action) {
             ]);
             $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
             if ($code !== 200) {
-                $GLOBALS['__ai_last_err'] = 'HTTP ' . $code . ' — ' . mb_substr((string)$res, 0, 200);
+                $GLOBALS['__ai_last_err'] = ai_error_ar($code, $res);
                 return null;
             }
             return json_decode($res, true);
@@ -7606,8 +7625,8 @@ switch ($action) {
             [$code, $res] = $call($payload);
         }
         if ($code !== 200) {
-            echo json_encode(['success'=>false,'message'=>'تعذر قراءة الفاتورة',
-                'detail'=>'HTTP ' . $code . ' — ' . mb_substr((string)$res, 0, 200)], JSON_UNESCAPED_UNICODE); break;
+            echo json_encode(['success'=>false,'message'=>'تعذّرت القراءة الآلية — أدخل الفاتورة يدوياً',
+                'detail'=>ai_error_ar($code, $res), 'manual'=>1], JSON_UNESCAPED_UNICODE); break;
         }
         $d   = json_decode($res, true);
         $txt = '';
@@ -7802,8 +7821,8 @@ switch ($action) {
         [$code, $res] = $call($payload);
         if ($code !== 200) { $payload['model'] = 'claude-haiku-4-5'; [$code, $res] = $call($payload); }
         if ($code !== 200) {
-            echo json_encode(['success'=>false,'message'=>'تعذر قراءة الإيصال',
-                'detail'=>'HTTP ' . $code . ' — ' . mb_substr((string)$res, 0, 200)], JSON_UNESCAPED_UNICODE); break; }
+            echo json_encode(['success'=>false,'message'=>'تعذّرت القراءة الآلية — أدخل بيانات الإيصال يدوياً',
+                'detail'=>ai_error_ar($code, $res), 'manual'=>1], JSON_UNESCAPED_UNICODE); break; }
 
         $d = json_decode($res, true); $txt = '';
         foreach ((array)($d['content'] ?? []) as $blk) if (($blk['type'] ?? '') === 'text') $txt .= $blk['text'];
