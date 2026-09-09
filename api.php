@@ -1490,6 +1490,88 @@ $conn->query("DELETE FROM acc_settings WHERE tenant_id=1
               AND skey IN ('sales_pull_state','sales_pull_at','sales_pull_tries')");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (51)");
 } // end DDL v51
+// ─── DDL v52: بقيّة وحدات دفترة تنتقل إلى سجلاتنا ───────────────────────
+// المصروف كان يُحفظ باسم الفئة وحده، والشاشة تحتاج معرّفها ومَن صرف وعلى
+// أي مشروع. وعروض الأسعار لم يكن لها جدول أصلاً.
+if ($__sv < 52) {
+foreach ([['category_id', 'category_id INT DEFAULT NULL'],
+          ['supplier_id',  'supplier_id INT DEFAULT NULL'],
+          ['staff_id',     'staff_id INT DEFAULT NULL'],
+          ['treasury_id',  'treasury_id INT DEFAULT NULL'],
+          ['work_order_id','work_order_id INT DEFAULT NULL'],
+          ['is_income',    'is_income TINYINT(1) NOT NULL DEFAULT 0'],
+          ['status',       "status VARCHAR(20) DEFAULT NULL"],
+          ['vendor',       'vendor VARCHAR(240) DEFAULT NULL'],
+          ['origin',       "origin VARCHAR(10) NOT NULL DEFAULT 'daftra'"],
+          ['created_by',   'created_by VARCHAR(120) DEFAULT NULL']] as $c)
+    ensure_column($conn, 'dmirror_expenses', $c[0], $c[1]);
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_estimates (
+    id         INT PRIMARY KEY,
+    no         VARCHAR(40) DEFAULT NULL,
+    date       DATE DEFAULT NULL,
+    client_id  INT DEFAULT NULL,
+    client     VARCHAR(255) DEFAULT NULL,
+    total      DECIMAL(16,2) NOT NULL DEFAULT 0,
+    subtotal   DECIMAL(16,2) NOT NULL DEFAULT 0,
+    status     VARCHAR(30) DEFAULT NULL,
+    currency   VARCHAR(8) DEFAULT 'SAR',
+    notes      TEXT,
+    origin     VARCHAR(10) NOT NULL DEFAULT 'daftra',
+    created_by VARCHAR(120) DEFAULT NULL,
+    synced_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("DELETE FROM acc_settings WHERE tenant_id=1
+              AND skey IN ('exp_pull_state','exp_pull_at','exp_pull_tries',
+                           'est_pull_state','est_pull_at','est_pull_tries')");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (52)");
+} // end DDL v52
+// ─── DDL v53: الشيكات وحركات الخزائن ────────────────────────────────────
+// الجدولان فارغان في دفترة اليوم، ولذلك بالذات يجب أن يوجدا عندنا قبل أن
+// تنتهي رخصتها: أوّل شيك أو حركة تُسجَّل بعدها تحتاج مكاناً تعيش فيه.
+if ($__sv < 53) {
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_cheques (
+    id          INT PRIMARY KEY,
+    kind        ENUM('receivable','payable') NOT NULL DEFAULT 'receivable',
+    no          VARCHAR(60) DEFAULT NULL,
+    bank        VARCHAR(160) DEFAULT NULL,
+    party       VARCHAR(240) DEFAULT NULL,
+    party_id    INT DEFAULT NULL,
+    amount      DECIMAL(16,2) NOT NULL DEFAULT 0,
+    issue_date  DATE DEFAULT NULL,
+    due_date    DATE DEFAULT NULL,
+    status      VARCHAR(30) NOT NULL DEFAULT 'pending',
+    treasury_id INT DEFAULT NULL,
+    note        VARCHAR(400) DEFAULT NULL,
+    origin      VARCHAR(10) NOT NULL DEFAULT 'daftra',
+    created_by  VARCHAR(120) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX (kind, status), INDEX (due_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS dmirror_treasury_tx (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    daftra_id   INT DEFAULT NULL,
+    treasury_id INT NOT NULL,
+    kind        ENUM('in','out') NOT NULL DEFAULT 'in',
+    date        DATE DEFAULT NULL,
+    amount      DECIMAL(16,2) NOT NULL DEFAULT 0,
+    note        VARCHAR(400) DEFAULT NULL,
+    origin      VARCHAR(10) NOT NULL DEFAULT 'local',
+    created_by  VARCHAR(120) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX (treasury_id, date), UNIQUE KEY uk_tx_daftra (daftra_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (53)");
+} // end DDL v53
+// ─── DDL v54: مشروع فاتورة العميل ───────────────────────────────────────
+// ملخّص المشروع يحتاج ربط فواتير العملاء به، ولا عمود يحمله عندنا. يُضاف
+// ويُملأ من دفترة بمطابقة رقم الفاتورة — لا بتخمينٍ من نصّ الملاحظات.
+if ($__sv < 54) {
+ensure_column($conn, 'acc_invoices', 'work_order_id', 'work_order_id INT DEFAULT NULL');
+$conn->query("DELETE FROM acc_settings WHERE tenant_id=1
+              AND skey IN ('wo_fill_state','wo_fill_at','wo_fill_tries')");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (54)");
+} // end DDL v54
 
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
@@ -1632,6 +1714,160 @@ function sales_pull_chunk($conn, $take, $actor) {
         "سحب $done فاتورة عميل و$pays_n سند قبض من دفترة إلى سجلاتنا", $actor);
     return ['imported'=>$done, 'items'=>$items_n, 'payments'=>$pays_n,
             'in_daftra'=>$seen, 'remaining'=>max(0, $left - $done), 'errors'=>$errs];
+}
+
+// ─── سحب المصروفات ──────────────────────────────────────────────────────
+// قائمة دفترة للمصروفات ناقصة الحقول (اسم الفئة ليس فيها)، فتُقرأ كل حركة
+// من موردها المفرد. تسع وعشرون حركة، فالكلفة زهيدة والدقّة تامّة.
+function expense_pull_chunk($conn, $take) {
+    $dk = "__DAFTRA_KEY__";
+    $E  = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+    $api = function($path) use ($dk) {
+        $ch = curl_init("https://semak.daftra.com/api2/$path");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+            CURLOPT_TIMEOUT=>15, CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+        $r = curl_exec($ch); curl_close($ch);
+        return json_decode((string)$r, true) ?: [];
+    };
+    $have = [];
+    if ($r = $conn->query("SELECT id FROM dmirror_expenses WHERE COALESCE(origin,'daftra')='daftra'"))
+        while ($x = $r->fetch_assoc()) $have[(int)$x['id']] = 1;
+    $ids = [];
+    for ($pg = 1; $pg <= 20; $pg++) {
+        $d = $api("expenses.json?page=$pg&limit=100");
+        $list = $d['data'] ?? [];
+        if (!$list) break;
+        foreach ($list as $row) {
+            $e = $row['Expense'] ?? $row;
+            $eid = (int)($e['id'] ?? 0);
+            if ($eid && !isset($have[$eid])) $ids[] = $eid;
+        }
+        if (count($list) < 100) break;
+    }
+    $left = count($ids);
+    $ids  = array_slice($ids, 0, $take);
+    $done = 0; $budget = microtime(true) + 20;
+    foreach ($ids as $eid) {
+        if (microtime(true) > $budget) break;
+        $one = $api("expenses/$eid.json");
+        $e = $one['data']['Expense'] ?? $one['data'] ?? [];
+        if (!$e || empty($e['id'])) continue;
+        $date = preg_match('/^\\d{4}-\\d{2}-\\d{2}/', (string)($e['date'] ?? ''))
+              ? substr($e['date'], 0, 10) : null;
+        // amount هو مبلغ المصروف؛ total يأتي صفراً في حركات دفترة هذه
+        $amt = abs((float)($e['amount'] ?? 0));
+        $conn->query("INSERT INTO dmirror_expenses (id, no, date, party, vendor, category,
+                category_id, supplier_id, staff_id, treasury_id, work_order_id, amount,
+                is_income, status, note, created, origin, raw)
+            VALUES (" . (int)$e['id'] . ", '" . $E((string)($e['expense_number'] ?? '')) . "',
+                " . ($date ? "'$date'" : 'NULL') . ",
+                '" . $E(mb_substr((string)($e['vendor'] ?? ''), 0, 240)) . "',
+                '" . $E(mb_substr((string)($e['vendor'] ?? ''), 0, 240)) . "',
+                '" . $E(mb_substr((string)($e['category'] ?? ''), 0, 240)) . "',
+                " . ((int)($e['expense_category_id'] ?? 0) ?: 'NULL') . ",
+                " . ((int)($e['supplier_id'] ?? 0) ?: 'NULL') . ",
+                " . ((int)($e['staff_id'] ?? 0) ?: 'NULL') . ",
+                " . ((int)($e['treasury_id'] ?? 0) ?: 'NULL') . ",
+                " . ((int)($e['work_order_id'] ?? 0) ?: 'NULL') . ",
+                $amt, " . (!empty($e['is_income']) ? 1 : 0) . ",
+                '" . $E((string)($e['status'] ?? '')) . "',
+                '" . $E(mb_substr((string)($e['note'] ?? ''), 0, 390)) . "',
+                " . (!empty($e['created']) ? "'" . $E($e['created']) . "'" : 'NULL') . ", 'daftra',
+                '" . $E(json_encode($e, JSON_UNESCAPED_UNICODE)) . "')
+            ON DUPLICATE KEY UPDATE no=VALUES(no), date=VALUES(date), party=VALUES(party),
+                vendor=VALUES(vendor), category=VALUES(category), category_id=VALUES(category_id),
+                supplier_id=VALUES(supplier_id), staff_id=VALUES(staff_id),
+                treasury_id=VALUES(treasury_id), work_order_id=VALUES(work_order_id),
+                amount=VALUES(amount), is_income=VALUES(is_income), status=VALUES(status),
+                note=VALUES(note), raw=VALUES(raw)");
+        if (!$conn->errno) $done++;
+    }
+    return ['imported'=>$done, 'remaining'=>max(0, $left - $done)];
+}
+
+// ─── مشروع فاتورة العميل من دفترة ───────────────────────────────────────
+// نداءٌ واحد يجلب القائمة، ويُسنَد work_order_id بمطابقة رقم دفترة المحفوظ
+// على الصفّ — مطابقةُ معرِّفٍ لا تخمين.
+function sales_wo_fill($conn, $take) {
+    $dk = "__DAFTRA_KEY__";
+    $ch = curl_init("https://semak.daftra.com/api2/invoices.json?limit=200");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+        CURLOPT_TIMEOUT=>15, CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+    $res = curl_exec($ch); curl_close($ch);
+    $list = (json_decode((string)$res, true) ?: [])['data'] ?? [];
+    if (!$list) return ['imported'=>0, 'remaining'=>1];   // لا نُعلنها منتهية بلا ردّ
+    $done = 0;
+    foreach ($list as $row) {
+        $i = $row['Invoice'] ?? $row;
+        $did = (int)($i['id'] ?? 0);
+        $wo  = (int)($i['work_order_id'] ?? 0);
+        if (!$did || !$wo) continue;
+        $conn->query("UPDATE acc_invoices SET work_order_id=$wo
+            WHERE tenant_id=1 AND doc_type='sales' AND daftra_id=$did");
+        if ($conn->affected_rows > 0) $done++;
+    }
+    return ['imported'=>$done, 'remaining'=>0];
+}
+
+// ─── سحب عروض الأسعار ───────────────────────────────────────────────────
+function estimate_pull_chunk($conn, $take) {
+    $dk = "__DAFTRA_KEY__";
+    $E  = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+    $ch = curl_init("https://semak.daftra.com/api2/estimates.json?limit=100");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_FOLLOWLOCATION=>true,
+        CURLOPT_TIMEOUT=>15, CURLOPT_HTTPHEADER=>["APIKEY: $dk", "Accept: application/json"]]);
+    $res = curl_exec($ch); curl_close($ch);
+    $list = (json_decode((string)$res, true) ?: [])['data'] ?? [];
+    $have = [];
+    if ($r = $conn->query("SELECT id FROM dmirror_estimates WHERE COALESCE(origin,'daftra')='daftra'"))
+        while ($x = $r->fetch_assoc()) $have[(int)$x['id']] = 1;
+    $done = 0; $left = 0;
+    foreach ($list as $row) {
+        $q = $row['Estimate'] ?? $row;
+        $qid = (int)($q['id'] ?? 0);
+        if (!$qid || isset($have[$qid])) continue;
+        if ($done >= $take) { $left++; continue; }
+        $name = trim((string)($q['client_business_name'] ?? ''));
+        if ($name === '') $name = trim((string)($q['client_first_name'] ?? '') . ' ' . (string)($q['client_last_name'] ?? ''));
+        $date = preg_match('/^\\d{4}-\\d{2}-\\d{2}/', (string)($q['date'] ?? ''))
+              ? substr($q['date'], 0, 10) : null;
+        $conn->query("INSERT INTO dmirror_estimates (id, no, date, client_id, client, total,
+                subtotal, status, currency, notes, origin)
+            VALUES ($qid, '" . $E((string)($q['no'] ?? '')) . "', " . ($date ? "'$date'" : 'NULL') . ",
+                " . ((int)($q['client_id'] ?? 0) ?: 'NULL') . ", '" . $E($name) . "',
+                " . round((float)($q['summary_total'] ?? $q['grand_total'] ?? 0), 2) . ",
+                " . round((float)($q['summary_subtotal'] ?? 0), 2) . ",
+                '" . $E((string)($q['status'] ?? '')) . "',
+                '" . $E((string)($q['currency_code'] ?? 'SAR')) . "',
+                '" . $E(mb_substr((string)($q['notes'] ?? ''), 0, 2000)) . "', 'daftra')
+            ON DUPLICATE KEY UPDATE no=VALUES(no), date=VALUES(date), client=VALUES(client),
+                total=VALUES(total), subtotal=VALUES(subtotal), status=VALUES(status),
+                notes=VALUES(notes)");
+        if (!$conn->errno) $done++;
+    }
+    return ['imported'=>$done, 'remaining'=>$left];
+}
+
+// مُشغّل السحب الذاتي: مفتاحٌ لكل وحدة، وفاصلٌ وسقفُ محاولات موحّد.
+function daftra_pull_tick($conn, $key, $fn, $take) {
+    if (acc_setting($conn, 1, $key . '_state', '') === 'done') return;
+    $at = (int)acc_setting($conn, 1, $key . '_at', '0');
+    $nt = (int)acc_setting($conn, 1, $key . '_tries', '0');
+    if (time() - $at <= 120 || $nt >= 40) return;
+    $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval) VALUES
+        (1, '" . $conn->real_escape_string($key) . "_at', '" . time() . "'),
+        (1, '" . $conn->real_escape_string($key) . "_tries', '" . ($nt + 1) . "')
+        ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+    $r = $fn($conn, $take);
+    if (($r['remaining'] ?? 0) === 0)
+        $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval) VALUES
+            (1, '" . $conn->real_escape_string($key) . "_state', 'done')
+            ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+}
+if (!daftra_detached($conn)) {
+    daftra_pull_tick($conn, 'exp_pull', 'expense_pull_chunk', 8);
+    daftra_pull_tick($conn, 'wo_fill', 'sales_wo_fill', 999);
+    daftra_pull_tick($conn, 'est_pull', 'estimate_pull_chunk', 20);
 }
 
 // تشغيل ذاتي: دفعة صغيرة مع الطلبات حتى يكتمل السحب — بلا ضغطة زر.
@@ -12934,56 +13170,73 @@ switch ($action) {
         break;
 
     case 'daftra_treasury_transactions':
-        $dk  = "__DAFTRA_KEY__";
-        $tid = (int)($_GET['treasury_id'] ?? 0);
-        $from= $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $qp  = $tid ? "treasury_id=$tid" : '';
-        if ($from) $qp .= ($qp?'&':'')."from_date=$from";
-        if ($to)   $qp .= ($qp?'&':'')."to_date=$to";
-        $ch = curl_init("https://semak.daftra.com/api2/treasury_transactions.json".($qp?"?$qp":''));
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        $tid_t = (int)($_GET['treasury_id'] ?? 0);
+        $D = function($v) { return preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)$v) ? $v : ''; };
+        $wt = ['1'];
+        if ($tid_t) $wt[] = "x.treasury_id = $tid_t";
+        if ($f4 = $D($_GET['from'] ?? '')) $wt[] = "x.date >= '$f4'";
+        if ($t4 = $D($_GET['to'] ?? ''))   $wt[] = "x.date <= '$t4'";
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $tx = $r['TreasuryTransaction'] ?? $r;
-            $rows[] = ['id'=>$tx['id'],'date'=>$tx['date']??'','type'=>$tx['type']??'','amount'=>(float)($tx['amount']??0),'notes'=>$tx['notes']??'','treasury_id'=>$tx['treasury_id']??'','treasury'=>$tx['treasury_name']??''];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        if ($r = $conn->query("SELECT x.id, x.date, x.kind, ROUND(x.amount,2) amount,
+                    COALESCE(x.note,'') note, x.treasury_id, COALESCE(t.name,'') treasury
+                FROM dmirror_treasury_tx x
+                LEFT JOIN dmirror_treasuries t ON t.id = x.treasury_id
+                WHERE " . implode(' AND ', $wt) . " ORDER BY x.date DESC, x.id DESC LIMIT 300"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>(int)$x['id'], 'date'=>$x['date'] ?? '', 'type'=>$x['kind'],
+                    'amount'=>(float)$x['amount'], 'notes'=>$x['note'],
+                    'treasury_id'=>$x['treasury_id'], 'treasury'=>$x['treasury']];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'daftra_treasury_add':
-        $dk   = "__DAFTRA_KEY__";
+    case 'daftra_treasury_add': {
+        // الحركة تُسجَّل عندنا وتُعدَّل رصيد الخزينة المحفوظ معها
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية هذا الإجراء'], JSON_UNESCAPED_UNICODE); break; }
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $payload = ['TreasuryTransaction' => [
-            'treasury_id' => $body['treasury_id'] ?? '',
-            'type'        => $body['type']        ?? 'in',
-            'date'        => $body['date']        ?? date('Y-m-d'),
-            'amount'      => (float)($body['amount'] ?? 0),
-            'notes'       => $body['notes']       ?? '',
-        ]];
-        $ch = curl_init("https://semak.daftra.com/api2/treasury_transactions.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $trs = (int)($body['treasury_id'] ?? 0);
+        $amt = round((float)($body['amount'] ?? 0), 2);
+        $knd = ($body['type'] ?? 'in') === 'out' ? 'out' : 'in';
+        $dt  = preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)($body['date'] ?? '')) ? $body['date'] : date('Y-m-d');
+        if (!$trs || $amt <= 0) {
+            echo json_encode(['success'=>false,'message'=>'الخزينة والمبلغ مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $ex = $conn->query("SELECT id FROM dmirror_treasuries WHERE id=$trs LIMIT 1");
+        if (!$ex || !$ex->num_rows) {
+            echo json_encode(['success'=>false,'message'=>'الخزينة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("INSERT INTO dmirror_treasury_tx (treasury_id, kind, date, amount, note,
+                origin, created_by)
+            VALUES ($trs, '$knd', '$dt', $amt, '"
+            . $E(mb_substr((string)($body['notes'] ?? ''), 0, 390)) . "', 'local', '"
+            . $E($u['name'] ?? '') . "')");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        $txId = (int)$conn->insert_id;
+        $conn->query("UPDATE dmirror_treasuries SET balance = COALESCE(balance,0) "
+            . ($knd === 'out' ? '-' : '+') . " $amt, balance_at = NOW() WHERE id=$trs");
+        acc_audit($conn, 1, 'treasury', $trs, $knd === 'out' ? 'withdraw' : 'deposit',
+            ($knd === 'out' ? 'صرف ' : 'إيداع ') . number_format($amt, 2) . ' في الخزينة', $u['name'] ?? '');
+        echo json_encode(['success'=>true,'id'=>$txId,'message'=>'سُجّلت الحركة'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     // ══════════════════════════════════════════════════════════════════════
     // بيانات مرجعية: المنتجات / الموردون
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_products':
-        $dk = "__DAFTRA_KEY__";
-        $ch = curl_init("https://semak.daftra.com/api2/products.json?limit=200");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        // كتالوجنا في acc_products — رُحّل من دفترة كاملاً (٥٠ صنفاً بمعرّفاتها)
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $pr = $r['Product'] ?? $r;
-            $rows[] = ['id'=>$pr['id'],'name'=>$pr['name']??'','price'=>(float)($pr['selling_price']??0),'code'=>$pr['code']??''];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        if ($r = $conn->query("SELECT daftra_id, name, unit_price, COALESCE(code,'') code
+                FROM acc_products WHERE tenant_id=1 AND status=1 ORDER BY name LIMIT 500"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>$x['daftra_id'], 'name'=>$x['name'],
+                           'price'=>(float)$x['unit_price'], 'code'=>$x['code']];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_suppliers_list':
@@ -13002,32 +13255,22 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_estimates_list':
-        $dk = "__DAFTRA_KEY__";
-        $page = (int)($_GET['page'] ?? 1);
-        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $qp = "page=$page&limit=50";
-        if ($from) $qp .= "&from_date=$from";
-        if ($to)   $qp .= "&to_date=$to";
-        $ch = curl_init("https://semak.daftra.com/api2/estimates.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $e = $r['Estimate'] ?? $r['Invoice'] ?? $r;
-            $rows[] = [
-                'id'        => $e['id'],
-                'no'        => $e['no'] ?? '',
-                'date'      => $e['date'] ?? '',
-                'client_id' => $e['client_id'] ?? '',
-                'client'    => $e['client_business_name'] ?? ($e['client_first_name'].' '.$e['client_last_name']),
-                'total'     => (float)($e['summary_total'] ?? $e['grand_total'] ?? 0),
-                'status'    => $e['status'] ?? '',
-                'notes'     => $e['notes'] ?? '',
-                'currency'  => $e['currency_code'] ?? 'SAR',
-            ];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        $D = function($v) { return preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)$v) ? $v : ''; };
+        $wq = ['1'];
+        if ($f2 = $D($_GET['from'] ?? '')) $wq[] = "date >= '$f2'";
+        if ($t2 = $D($_GET['to'] ?? ''))   $wq[] = "date <= '$t2'";
+        if ($r = $conn->query("SELECT id, no, date, client_id, client, ROUND(total,2) total,
+                    COALESCE(status,'') status, COALESCE(notes,'') notes,
+                    COALESCE(currency,'SAR') currency, COALESCE(origin,'daftra') origin
+                FROM dmirror_estimates WHERE " . implode(' AND ', $wq) . "
+                ORDER BY date DESC, id DESC LIMIT 200"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>(int)$x['id'], 'no'=>$x['no'] ?? '', 'date'=>$x['date'] ?? '',
+                    'client_id'=>$x['client_id'] ?? '', 'client'=>$x['client'] ?? '',
+                    'total'=>(float)$x['total'], 'status'=>$x['status'], 'notes'=>$x['notes'],
+                    'currency'=>$x['currency'], 'origin'=>$x['origin']];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_estimate_single':
@@ -13063,141 +13306,247 @@ switch ($action) {
         echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ بنجاح':'فشل'], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'daftra_estimate_delete':
-        $dk = "__DAFTRA_KEY__"; $eid = (int)($_GET['id']??0);
-        $ch = curl_init("https://semak.daftra.com/api2/estimates/$eid.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
-        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,204])]);
+    case 'daftra_estimate_delete': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية هذا الإجراء'], JSON_UNESCAPED_UNICODE); break; }
+        $eid = (int)($_GET['id'] ?? 0);
+        $cur = null;
+        if ($r = $conn->query("SELECT COALESCE(origin,'daftra') origin, no FROM dmirror_estimates
+                               WHERE id=$eid LIMIT 1")) $cur = $r->fetch_assoc();
+        if (!$cur) { echo json_encode(['success'=>false,'message'=>'العرض غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        if ($cur['origin'] === 'daftra' && !daftra_detached($conn)) {
+            echo json_encode(['success'=>false,
+                'message'=>'عرض مسحوب من دفترة — لا يُحذف قبل فكّ الارتباط'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM dmirror_estimates WHERE id=$eid");
+        acc_audit($conn, 1, 'estimate', $eid, 'delete', 'حذف عرض سعر ' . ($cur['no'] ?? ''), $u['name'] ?? '');
+        echo json_encode(['success'=>true,'message'=>'حُذف العرض'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
-    case 'daftra_estimate_to_invoice':
-        // تحويل عرض السعر لفاتورة
-        $dk = "__DAFTRA_KEY__"; $eid = (int)($_GET['id']??0);
-        $ch = curl_init("https://semak.daftra.com/api2/estimates/$eid/convert_to_invoice.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>'{}', CURLOPT_TIMEOUT=>20]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+    case 'daftra_estimate_to_invoice': {
+        // التحويل يُنشئ فاتورة مبيعات عندنا — مسودّة كبقيّة الفواتير،
+        // وترحيلها إلى القيود يبقى قراراً يُتَّخذ بـinv_post.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية هذا الإجراء'], JSON_UNESCAPED_UNICODE); break; }
+        $tid = 1;
+        $eid = (int)($_GET['id'] ?? 0);
+        $q = null;
+        if ($r = $conn->query("SELECT * FROM dmirror_estimates WHERE id=$eid LIMIT 1")) $q = $r->fetch_assoc();
+        if (!$q) { echo json_encode(['success'=>false,'message'=>'العرض غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $tot = round((float)$q['total'], 2);
+        $sub = round((float)$q['subtotal'], 2) ?: round($tot / 1.15, 2);
+        $tax = round($tot - $sub, 2);
+        // الطرف: يُربط برقم دفترة إن كان له طرفٌ عندنا
+        $pid = 0;
+        if (!empty($q['client_id']) && $r = $conn->query("SELECT id FROM acc_parties
+                WHERE tenant_id=$tid AND daftra_id='" . $E($q['client_id']) . "' LIMIT 1"))
+            $pid = (int)($r->fetch_assoc()['id'] ?? 0);
+        $no = 'ع-' . ($q['no'] ?: $eid);
+        $conn->query("INSERT INTO acc_invoices (tenant_id, doc_type, invoice_type, doc_kind,
+                invoice_no, party_id, party_name, issue_date, currency, subtotal, discount,
+                tax_total, total, paid, status, notes, created_by)
+            VALUES ($tid, 'sales', 'standard', 'invoice', '" . $E($no) . "', "
+            . ($pid ?: 'NULL') . ", '" . $E($q['client'] ?? '') . "', CURDATE(), 'SAR',
+                $sub, 0, $tax, $tot, 0, 'draft', '"
+            . $E('محوّلة من عرض السعر ' . ($q['no'] ?? $eid)) . "', '" . $E($u['name'] ?? '') . "')");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الإنشاء: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        $newInv = (int)$conn->insert_id;
+        $conn->query("UPDATE dmirror_estimates SET status='converted' WHERE id=$eid");
+        acc_audit($conn, $tid, 'invoice', $newInv, 'create',
+            'فاتورة من عرض سعر ' . ($q['no'] ?? $eid), $u['name'] ?? '');
+        echo json_encode(['success'=>true,'invoice_id'=>$newInv,
+            'message'=>'أُنشئت فاتورة مسودّة من العرض'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     // ══════════════════════════════════════════════════════════════════════
     // المصروفات — CRUD كامل
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_expenses_list':
-        $dk = "__DAFTRA_KEY__";
-        $page = (int)($_GET['page'] ?? 1);
-        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $qp = "page=$page&limit=50";
-        if ($from) $qp .= "&from_date=$from";
-        if ($to)   $qp .= "&to_date=$to";
-        $ch = curl_init("https://semak.daftra.com/api2/expenses.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        // من dmirror_expenses — واسم الفئة يظهر أخيراً: قائمة دفترة لم تكن
+        // ترسله أصلاً (كان الكود يقرأ category_name وهو حقلٌ لا وجود له).
+        $D = function($v) { return preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)$v) ? $v : ''; };
+        $from = $D($_GET['from'] ?? ''); $to = $D($_GET['to'] ?? '');
+        $lim_e = min(500, max(5, (int)($_GET['limit'] ?? 100)));
+        $off_e = max(0, ((int)($_GET['page'] ?? 1) - 1)) * $lim_e;
+        $cw = ['1'];
+        if ($from) $cw[] = "e.date >= '$from'";
+        if ($to)   $cw[] = "e.date <= '$to'";
+        if ((int)($_GET['work_order_id'] ?? 0)) $cw[] = 'e.work_order_id = ' . (int)$_GET['work_order_id'];
+        $qe = trim((string)($_GET['q'] ?? ''));
+        if ($qe !== '') { $qx = $conn->real_escape_string($qe);
+            $cw[] = "(e.category LIKE '%$qx%' OR e.note LIKE '%$qx%' OR e.vendor LIKE '%$qx%')"; }
+        $WE = implode(' AND ', $cw);
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $e = $r['Expense'] ?? $r;
-            $rows[] = [
-                'id'          => $e['id'],
-                'date'        => $e['date'] ?? '',
-                'amount'      => (float)($e['amount'] ?? 0),
-                'category'    => $e['category_name'] ?? $e['expense_category_name'] ?? '',
-                'category_id' => $e['expense_category_id'] ?? '',
-                'notes'       => $e['note'] ?? $e['notes'] ?? $e['description'] ?? '',
-                'supplier'    => $e['supplier_business_name'] ?? '',
-                'supplier_id' => $e['supplier_id'] ?? '',
-                'ref'         => $e['ref_no'] ?? $e['no'] ?? '',
-                'work_order_id'=> $e['work_order_id'] ?? null,
+        if ($r = $conn->query("SELECT e.id, e.no, e.date, ROUND(e.amount,2) amount,
+                    COALESCE(e.category,'') category, e.category_id, COALESCE(e.note,'') note,
+                    COALESCE(e.vendor,'') vendor, e.supplier_id, e.work_order_id,
+                    COALESCE(t.name,'') treasury, e.treasury_id, COALESCE(e.origin,'daftra') origin
+                FROM dmirror_expenses e
+                LEFT JOIN dmirror_treasuries t ON t.id = e.treasury_id
+                WHERE $WE AND COALESCE(e.is_income,0)=0
+                ORDER BY e.date DESC, e.id DESC LIMIT $lim_e OFFSET $off_e"))
+            while ($x = $r->fetch_assoc()) $rows[] = [
+                'id'           => (int)$x['id'],
+                'date'         => $x['date'] ?? '',
+                'amount'       => (float)$x['amount'],
+                'category'     => $x['category'],
+                'category_id'  => $x['category_id'] ?? '',
+                'notes'        => $x['note'],
+                'supplier'     => $x['vendor'],
+                'supplier_id'  => $x['supplier_id'] ?? '',
+                'ref'          => $x['no'] ?? '',
+                'treasury'     => $x['treasury'],
+                'work_order_id'=> $x['work_order_id'],
+                'origin'       => $x['origin'],
             ];
+        $totE = 0;
+        if ($r = $conn->query("SELECT COUNT(*) n, ROUND(COALESCE(SUM(amount),0),2) s
+                               FROM dmirror_expenses e WHERE $WE AND COALESCE(e.is_income,0)=0")) {
+            $x = $r->fetch_assoc();
+            $totE = (int)($x['n'] ?? 0); $sumE = (float)($x['s'] ?? 0);
         }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$totE,
+            'amount'=>$sumE ?? 0,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_expense_create':
-    case 'daftra_expense_update':
-        $dk = "__DAFTRA_KEY__";
+    case 'daftra_expense_update': {
+        // المصروف يُكتب عندنا. حركةُ دفترة القديمة لا تُعدَّل قبل فكّ الارتباط.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية هذا الإجراء'], JSON_UNESCAPED_UNICODE); break; }
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $exp_id = (int)($body['id'] ?? 0);
-        $is_update = ($action === 'daftra_expense_update' && $exp_id > 0);
-        $url = $is_update ? "https://semak.daftra.com/api2/expenses/$exp_id.json" : "https://semak.daftra.com/api2/expenses.json";
-        $payload = ['Expense' => [
-            'date'                => $body['date']         ?? date('Y-m-d'),
-            'amount'              => (float)($body['amount'] ?? 0),
-            'expense_category_id' => $body['category_id']  ?? '',
-            'supplier_id'         => $body['supplier_id']  ?? '',
-            'note'                => $body['notes']        ?? '',
-            'work_order_id'       => $body['work_order_id'] ?? null,
-            'treasury_id'         => $body['treasury_id']  ?? '',
-        ]];
-        if ($is_update) $payload['Expense']['id'] = $exp_id;
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>($is_update?'PUT':'POST'), CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code,'data'=>json_decode($res,true),'message'=>in_array($code,[200,201])?'تمّ':'فشل'], JSON_UNESCAPED_UNICODE);
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $eid = (int)($body['id'] ?? $_GET['id'] ?? 0);
+        $isUp = ($action === 'daftra_expense_update' && $eid > 0);
+        $amt = round((float)($body['amount'] ?? 0), 2);
+        if ($amt <= 0) { echo json_encode(['success'=>false,'message'=>'المبلغ مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $date = preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)($body['date'] ?? '')) ? $body['date'] : date('Y-m-d');
+        $cid  = (int)($body['category_id'] ?? 0);
+        $cat  = trim((string)($body['category'] ?? ''));
+        if ($cat === '' && $cid > 0 &&
+            ($r = $conn->query("SELECT category FROM dmirror_expenses WHERE category_id=$cid
+                                AND COALESCE(category,'') <> '' ORDER BY id DESC LIMIT 1")))
+            $cat = (string)($r->fetch_assoc()['category'] ?? '');
+        $sup  = (int)($body['supplier_id'] ?? 0);
+        $wo   = (int)($body['work_order_id'] ?? 0);
+        $tre  = (int)($body['treasury_id'] ?? 0);
+        $note = mb_substr((string)($body['notes'] ?? ''), 0, 390);
+        $ven  = mb_substr((string)($body['vendor'] ?? $body['supplier'] ?? ''), 0, 240);
+        if ($isUp) {
+            $cur = null;
+            if ($r = $conn->query("SELECT id, COALESCE(origin,'daftra') origin FROM dmirror_expenses
+                                   WHERE id=$eid LIMIT 1")) $cur = $r->fetch_assoc();
+            if (!$cur) { echo json_encode(['success'=>false,'message'=>'الحركة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+            if ($cur['origin'] === 'daftra' && !daftra_detached($conn)) {
+                echo json_encode(['success'=>false,
+                    'message'=>'حركة مسحوبة من دفترة — لا تُعدَّل قبل فكّ الارتباط'], JSON_UNESCAPED_UNICODE); break; }
+            $conn->query("UPDATE dmirror_expenses SET date='$date', amount=$amt,
+                    category='" . $E($cat) . "', category_id=" . ($cid ?: 'NULL') . ",
+                    supplier_id=" . ($sup ?: 'NULL') . ", work_order_id=" . ($wo ?: 'NULL') . ",
+                    treasury_id=" . ($tre ?: 'NULL') . ", vendor='" . $E($ven) . "',
+                    party='" . $E($ven) . "', note='" . $E($note) . "'
+                WHERE id=$eid");
+        } else {
+            $eid = 900001;
+            if ($r = $conn->query("SELECT COALESCE(MAX(id),0) m FROM dmirror_expenses WHERE id >= 900000"))
+                $eid = max(900001, (int)($r->fetch_assoc()['m'] ?? 0) + 1);
+            $conn->query("INSERT INTO dmirror_expenses (id, no, date, party, vendor, category,
+                    category_id, supplier_id, treasury_id, work_order_id, amount, is_income,
+                    status, note, created, origin, created_by)
+                VALUES ($eid, 'م-$eid', '$date', '" . $E($ven) . "', '" . $E($ven) . "',
+                    '" . $E($cat) . "', " . ($cid ?: 'NULL') . ", " . ($sup ?: 'NULL') . ",
+                    " . ($tre ?: 'NULL') . ", " . ($wo ?: 'NULL') . ", $amt, 0, 'issued',
+                    '" . $E($note) . "', NOW(), 'local', '" . $E($u['name'] ?? '') . "')");
+        }
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        acc_audit($conn, 1, 'expense', $eid, $isUp ? 'update' : 'create',
+            ($isUp ? 'تعديل' : 'تسجيل') . ' مصروف ' . number_format($amt, 2) . ' — ' . $cat, $u['name'] ?? '');
+        echo json_encode(['success'=>true,'id'=>$eid,'message'=>'تمّ'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     case 'daftra_expense_get':
-        $dk = "__DAFTRA_KEY__"; $exp_id = (int)($_GET['id']??0);
-        if (!$exp_id) { echo json_encode(['success'=>false]); break; }
-        $ch = curl_init("https://semak.daftra.com/api2/expenses/$exp_id.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>$code===200,'data'=>json_decode($res,true)], JSON_UNESCAPED_UNICODE);
+        $eid = (int)($_GET['id'] ?? 0);
+        if (!$eid) { echo json_encode(['success'=>false,'message'=>'رقم الحركة مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $row = null;
+        if ($r = $conn->query("SELECT e.*, COALESCE(t.name,'') treasury_name FROM dmirror_expenses e
+                LEFT JOIN dmirror_treasuries t ON t.id = e.treasury_id
+                WHERE e.id=$eid LIMIT 1")) $row = $r->fetch_assoc();
+        if ($row) unset($row['raw']);
+        echo json_encode(['success'=>(bool)$row,'data'=>$row,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'daftra_expense_delete':
-        $dk = "__DAFTRA_KEY__"; $exp_id = (int)($_GET['id']??0);
-        $ch = curl_init("https://semak.daftra.com/api2/expenses/$exp_id.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk"], CURLOPT_CUSTOMREQUEST=>'DELETE', CURLOPT_TIMEOUT=>15]);
-        curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,204])]);
+    case 'daftra_expense_delete': {
+        // الحركة المسحوبة من دفترة لا تُمحى قبل فكّ الارتباط؛ والمحلّية تُمحى
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية هذا الإجراء'], JSON_UNESCAPED_UNICODE); break; }
+        $eid = (int)($_GET['id'] ?? 0);
+        $cur = null;
+        if ($r = $conn->query("SELECT COALESCE(origin,'daftra') origin, ROUND(amount,2) amount
+                               FROM dmirror_expenses WHERE id=$eid LIMIT 1")) $cur = $r->fetch_assoc();
+        if (!$cur) { echo json_encode(['success'=>false,'message'=>'الحركة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        if ($cur['origin'] === 'daftra' && !daftra_detached($conn)) {
+            echo json_encode(['success'=>false,
+                'message'=>'حركة مسحوبة من دفترة — لا تُحذف قبل فكّ الارتباط'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("DELETE FROM dmirror_expenses WHERE id=$eid");
+        acc_audit($conn, 1, 'expense', $eid, 'delete',
+            'حذف مصروف ' . number_format((float)$cur['amount'], 2), $u['name'] ?? '');
+        echo json_encode(['success'=>true,'message'=>'حُذفت الحركة'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     case 'daftra_expense_categories':
-        $dk = "__DAFTRA_KEY__";
-        $ch = curl_init("https://semak.daftra.com/api2/expense_categories.json?limit=100");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        // الفئات من حركاتنا نفسها — ما استُعمل فعلاً هو ما يُعرض
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $c = $r['ExpenseCategory'] ?? $r;
-            $rows[] = ['id'=>$c['id'],'name'=>$c['name']??''];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        if ($r = $conn->query("SELECT category_id, MAX(category) name, COUNT(*) n
+                FROM dmirror_expenses WHERE COALESCE(category,'') <> ''
+                GROUP BY category_id ORDER BY name"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>$x['category_id'], 'name'=>$x['name'], 'count'=>(int)$x['n']];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
-    // ══════════════════════════════════════════════════════════════════════
-    // سندات القبض / مدفوعات العملاء
-    // ══════════════════════════════════════════════════════════════════════
-
     case 'daftra_incomes_list':
-        $dk = "__DAFTRA_KEY__";
-        $page = (int)($_GET['page'] ?? 1);
-        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $qp = "page=$page&limit=50";
-        if ($from) $qp .= "&from_date=$from";
-        if ($to)   $qp .= "&to_date=$to";
-        $ch = curl_init("https://semak.daftra.com/api2/incomes.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        // دفترة تحفظ الإيراد في جدول المصروفات بعلم is_income — وكذلك نحن
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $inc = $r['Income'] ?? $r;
-            $rows[] = [
-                'id'        => $inc['id'],
-                'date'      => $inc['date'] ?? '',
-                'amount'    => (float)($inc['amount'] ?? 0),
-                'client'    => $inc['client_business_name'] ?? ($inc['client_first_name'].' '.$inc['client_last_name']) ?? '',
-                'client_id' => $inc['client_id'] ?? '',
-                'notes'     => $inc['notes'] ?? '',
-                'ref'       => $inc['ref_no'] ?? '',
-                'treasury'  => $inc['treasury_name'] ?? '',
-            ];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        $D = function($v) { return preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', (string)$v) ? $v : ''; };
+        $wi = ['COALESCE(e.is_income,0)=1'];
+        if ($f3 = $D($_GET['from'] ?? '')) $wi[] = "e.date >= '$f3'";
+        if ($t3 = $D($_GET['to'] ?? ''))   $wi[] = "e.date <= '$t3'";
+        if ($r = $conn->query("SELECT e.id, e.date, ROUND(e.amount,2) amount, e.no,
+                    COALESCE(e.vendor,'') vendor, COALESCE(e.note,'') note,
+                    COALESCE(t.name,'') treasury
+                FROM dmirror_expenses e
+                LEFT JOIN dmirror_treasuries t ON t.id = e.treasury_id
+                WHERE " . implode(' AND ', $wi) . " ORDER BY e.date DESC, e.id DESC LIMIT 200"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>(int)$x['id'], 'date'=>$x['date'] ?? '',
+                    'amount'=>(float)$x['amount'], 'client'=>$x['vendor'], 'client_id'=>'',
+                    'notes'=>$x['note'], 'ref'=>$x['no'] ?? '', 'treasury'=>$x['treasury']];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_income_add':
@@ -13221,80 +13570,72 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_cheques_list':
-        $dk = "__DAFTRA_KEY__";
-        $type = $_GET['type'] ?? 'receivable'; // receivable | payable
-        $page = (int)($_GET['page'] ?? 1);
-        $from = $_GET['from'] ?? ''; $to = $_GET['to'] ?? '';
-        $endpoint = ($type === 'payable') ? 'payable_cheques' : 'receivable_cheques';
-        $qp = "page=$page&limit=50";
-        if ($from) $qp .= "&from_date=$from";
-        if ($to)   $qp .= "&to_date=$to";
-        $ch = curl_init("https://semak.daftra.com/api2/{$endpoint}.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        // الجدول فارغ اليوم، لكنه صار عندنا فأيّ شيك يُسجَّل لاحقاً له بيت
+        $knd = ($_GET['type'] ?? 'receivable') === 'payable' ? 'payable' : 'receivable';
         $rows = [];
-        $key = ($type === 'payable') ? 'PayableCheque' : 'ReceivableCheque';
-        foreach ($data['data'] ?? [] as $r) {
-            $c = $r[$key] ?? $r;
-            $rows[] = [
-                'id'          => $c['id'],
-                'no'          => $c['cheque_no'] ?? $c['no'] ?? '',
-                'amount'      => (float)($c['amount'] ?? 0),
-                'due_date'    => $c['due_date'] ?? $c['date'] ?? '',
-                'bank'        => $c['bank_name'] ?? '',
-                'status'      => $c['status'] ?? '',
-                'party'       => $c['client_business_name'] ?? $c['supplier_business_name'] ?? '',
-                'notes'       => $c['notes'] ?? '',
-                'type'        => $type,
-            ];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        if ($r = $conn->query("SELECT c.id, c.no, COALESCE(c.bank,'') bank, COALESCE(c.party,'') party,
+                    c.party_id, ROUND(c.amount,2) amount, c.issue_date, c.due_date, c.status,
+                    COALESCE(c.note,'') note, COALESCE(t.name,'') treasury
+                FROM dmirror_cheques c
+                LEFT JOIN dmirror_treasuries t ON t.id = c.treasury_id
+                WHERE c.kind='$knd' ORDER BY c.due_date DESC, c.id DESC LIMIT 300"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>(int)$x['id'], 'no'=>$x['no'] ?? '', 'bank'=>$x['bank'],
+                    'party'=>$x['party'], 'party_id'=>$x['party_id'],
+                    'amount'=>(float)$x['amount'], 'date'=>$x['issue_date'] ?? '',
+                    'due_date'=>$x['due_date'] ?? '', 'status'=>$x['status'],
+                    'notes'=>$x['note'], 'treasury'=>$x['treasury'], 'type'=>$knd];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
-    case 'daftra_cheque_update_status':
-        $dk = "__DAFTRA_KEY__";
+    case 'daftra_cheque_update_status': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية هذا الإجراء'], JSON_UNESCAPED_UNICODE); break; }
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $cheque_id = (int)($body['id'] ?? 0);
-        $type = $body['type'] ?? 'receivable';
-        $status = $body['status'] ?? '';
-        $endpoint = ($type === 'payable') ? 'payable_cheques' : 'receivable_cheques';
-        $key = ($type === 'payable') ? 'PayableCheque' : 'ReceivableCheque';
-        $payload = [$key => ['id' => $cheque_id, 'status' => $status]];
-        $ch = curl_init("https://semak.daftra.com/api2/{$endpoint}/$cheque_id.json");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json","Content-Type: application/json"], CURLOPT_CUSTOMREQUEST=>'PUT', CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_UNICODE), CURLOPT_TIMEOUT=>20]);
-        $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-        echo json_encode(['success'=>in_array($code,[200,201]),'http_code'=>$code], JSON_UNESCAPED_UNICODE);
+        $cid = (int)($body['id'] ?? 0);
+        $st  = (string)($body['status'] ?? '');
+        if (!$cid || !in_array($st, ['pending','collected','bounced','cancelled','deposited'], true)) {
+            echo json_encode(['success'=>false,'message'=>'رقم الشيك وحالته مطلوبان'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("UPDATE dmirror_cheques SET status='" . $conn->real_escape_string($st) . "'
+            WHERE id=$cid");
+        if ($conn->affected_rows < 1 && $conn->errno) {
+            echo json_encode(['success'=>false,'message'=>'تعذر التحديث'], JSON_UNESCAPED_UNICODE); break; }
+        acc_audit($conn, 1, 'cheque', $cid, 'status', 'حالة الشيك: ' . $st, $u['name'] ?? '');
+        echo json_encode(['success'=>true,'message'=>'حُدّثت حالة الشيك'], JSON_UNESCAPED_UNICODE);
         break;
+    }
 
     // ══════════════════════════════════════════════════════════════════════
     // إدارة العملاء — CRUD كامل
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_clients_list':
-        $dk = "__DAFTRA_KEY__";
-        $page = (int)($_GET['page'] ?? 1);
-        $search = $_GET['search'] ?? '';
-        $qp = "page=$page&limit=50";
-        if ($search) $qp .= "&search=$search";
-        $ch = curl_init("https://semak.daftra.com/api2/clients.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
+        // من acc_parties، والرصيد من فواتيرهم عندنا لا من دفترة
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $c = $r['Client'] ?? $r;
-            $rows[] = [
-                'id'      => $c['id'],
-                'name'    => $c['business_name'] ?? trim($c['first_name'].' '.$c['last_name']),
-                'email'   => $c['email'] ?? '',
-                'phone'   => $c['phone'] ?? $c['mobile'] ?? '',
-                'address' => $c['address'] ?? '',
-                'balance' => (float)($c['balance'] ?? 0),
-                'created' => $c['created'] ?? '',
-            ];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows,'total'=>$data['meta']['total']??count($rows)], JSON_UNESCAPED_UNICODE);
+        $sq = trim((string)($_GET['search'] ?? ''));
+        $wc = ["p.tenant_id=1", "p.type='customer'"];
+        if ($sq !== '') { $sx = $conn->real_escape_string($sq);
+            $wc[] = "(p.name LIKE '%$sx%' OR p.phone LIKE '%$sx%')"; }
+        if ($r = $conn->query("SELECT p.id, p.name, COALESCE(p.email,'') email,
+                    COALESCE(p.phone,'') phone, COALESCE(p.address,'') address, p.created_at,
+                    ROUND(COALESCE(SUM(GREATEST(i.total - i.paid, 0)),0),2) balance
+                FROM acc_parties p
+                LEFT JOIN acc_invoices i ON i.party_id = p.id AND i.tenant_id = p.tenant_id
+                     AND i.doc_type='sales' AND i.status <> 'void'
+                WHERE " . implode(' AND ', $wc) . "
+                GROUP BY p.id, p.name, p.email, p.phone, p.address, p.created_at
+                ORDER BY p.name LIMIT 500"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>(int)$x['id'], 'name'=>$x['name'], 'email'=>$x['email'],
+                    'phone'=>$x['phone'], 'address'=>$x['address'],
+                    'balance'=>(float)$x['balance'], 'created'=>$x['created_at']];
+        echo json_encode(['success'=>true,'data'=>$rows,'total'=>count($rows),
+            'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_client_create':
@@ -13366,31 +13707,21 @@ switch ($action) {
     // ══════════════════════════════════════════════════════════════════════
 
     case 'daftra_products_list':
-        $dk = "__DAFTRA_KEY__";
-        $page = (int)($_GET['page'] ?? 1);
-        $search = $_GET['search'] ?? '';
-        $qp = "page=$page&limit=50";
-        if ($search) $qp .= "&search=$search";
-        $ch = curl_init("https://semak.daftra.com/api2/products.json?$qp");
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["APIKEY: $dk","Accept: application/json"], CURLOPT_TIMEOUT=>15, CURLOPT_FOLLOWLOCATION=>true]);
-        $res = curl_exec($ch); curl_close($ch);
-        $data = json_decode($res, true) ?? [];
         $rows = [];
-        foreach ($data['data'] ?? [] as $r) {
-            $p = $r['Product'] ?? $r;
-            $rows[] = [
-                'id'            => $p['id'],
-                'name'          => $p['name']          ?? '',
-                'code'          => $p['code']          ?? '',
-                'selling_price' => (float)($p['selling_price']  ?? 0),
-                'buying_price'  => (float)($p['buying_price']   ?? 0),
-                'unit'          => $p['unit']          ?? '',
-                'category'      => $p['category_name'] ?? '',
-                'stock'         => (float)($p['quantity'] ?? $p['stock_quantity'] ?? 0),
-                'type'          => $p['product_type']  ?? $p['type'] ?? '',
-            ];
-        }
-        echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        $lim_p = min(1000, max(5, (int)($_GET['limit'] ?? 200)));
+        $qp2 = trim((string)($_GET['q'] ?? $_GET['search'] ?? ''));
+        $wp = ['tenant_id=1'];
+        if ($qp2 !== '') { $qx = $conn->real_escape_string($qp2);
+            $wp[] = "(name LIKE '%$qx%' OR code LIKE '%$qx%' OR barcode LIKE '%$qx%')"; }
+        if ($r = $conn->query("SELECT daftra_id, name, COALESCE(code,'') code, unit_price,
+                    buy_price, COALESCE(unit,'') unit, stock_balance, track_stock
+                FROM acc_products WHERE " . implode(' AND ', $wp) . " ORDER BY name LIMIT $lim_p"))
+            while ($x = $r->fetch_assoc())
+                $rows[] = ['id'=>$x['daftra_id'], 'name'=>$x['name'], 'code'=>$x['code'],
+                    'selling_price'=>(float)$x['unit_price'], 'buying_price'=>(float)$x['buy_price'],
+                    'unit'=>$x['unit'], 'category'=>'', 'stock'=>(float)$x['stock_balance'],
+                    'type'=>$x['track_stock'] ? '1' : '2'];
+        echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'daftra_product_create':
@@ -17956,87 +18287,72 @@ switch ($action) {
     }
 
     case 'daftra_v2_work_cycle_single':
-        // ─── تفاصيل مشروع واحد كاملة من Daftra v2 API ───────────────────────
+        // ملخّص المشروع من سجلاتنا. كان يسحب كل فواتير دفترة ومشترياتها
+        // ومصروفاتها في كل فتحة ثم يُصفّيها في الذاكرة — وصار استعلاماً
+        // على قاعدتنا. والتسكين يُقرأ من purchase_project أوّلاً لأنه قرارُنا
+        // نحن، وwork_order_id احتياطٌ للفواتير التي لم تُسكَّن عندنا بعد.
         $wc_id = (int)($_GET['id'] ?? 0);
-        if (!$wc_id) { echo json_encode(['success' => false, 'message' => 'id مطلوب']); break; }
-        $dk = "__DAFTRA_KEY__";
-        $hh = ["APIKEY: $dk", "Accept: application/json"];
+        if (!$wc_id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $Q = function($sql) use ($conn) { $o=[]; if($r=$conn->query($sql)) while($x=$r->fetch_assoc()) $o[]=$x; return $o; };
 
-        // التفاصيل الكاملة للمشروع
-        $ch = curl_init("https://semak.daftra.com/v2/api/entity/le_workflow-type-entity-1/$wc_id/1");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => $hh,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_FOLLOWLOCATION => true,
-        ]);
-        $res  = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($code !== 200) {
-            echo json_encode(['success' => false, 'http_code' => $code, 'message' => 'فشل جلب المشروع']);
-            break;
-        }
-        $detail = json_decode($res, true);
-
-        // ─── نجيب الملخص المالي المرتبط بنفس الـ id عبر api2 ─────────────────
-        $base2   = "https://semak.daftra.com/api2";
-        $fetch2  = function($ep) use ($base2, $hh) {
-            $ch = curl_init("$base2/$ep");
-            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hh, CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true]);
-            $r = curl_exec($ch); curl_close($ch);
-            return json_decode($r, true);
-        };
-
-        // الفواتير والمشتريات والمصروفات
-        $all_inv  = ($fetch2("invoices.json?limit=200"))['data']   ?? [];
-        $all_pur  = ($fetch2("purchase_invoices.json?limit=200"))['data'] ?? [];
-        $all_exp  = ($fetch2("expenses.json?limit=200"))['data']   ?? [];
+        $prj = $Q("SELECT project_id, name, budget, kind, ptype, margin_pct
+                   FROM project_budgets WHERE project_id=$wc_id LIMIT 1");
+        $prj = $prj ? $prj[0] : null;
 
         $matched_inv = []; $rev = 0; $paid_rev = 0;
-        foreach ($all_inv as $r) {
-            $i = $r['Invoice'] ?? [];
-            if ((int)($i['work_order_id'] ?? 0) !== $wc_id) continue;
-            $matched_inv[] = ['id'=>$i['id'],'no'=>$i['no'],'date'=>$i['date'],'client'=>$i['client_business_name']??'','client_id'=>$i['client_id']??'','total'=>(float)($i['summary_total']??0),'paid'=>(float)($i['summary_paid']??0)];
-            $rev += (float)($i['summary_total']??0);
-            $paid_rev += (float)($i['summary_paid']??0);
+        foreach ($Q("SELECT id, invoice_no no, issue_date date, party_name client, party_id,
+                        ROUND(total,2) total, ROUND(paid,2) paid
+                     FROM acc_invoices WHERE tenant_id=1 AND doc_type='sales'
+                       AND status <> 'void' AND work_order_id = $wc_id") as $i) {
+            $matched_inv[] = $i; $rev += (float)$i['total']; $paid_rev += (float)$i['paid'];
         }
 
         $matched_pur = []; $purchases = 0;
-        foreach ($all_pur as $r) {
-            $p = $r['PurchaseOrder'] ?? [];
-            if ((int)($p['work_order_id'] ?? 0) !== $wc_id) continue;
-            $matched_pur[] = ['id'=>$p['id'],'no'=>$p['no'],'date'=>$p['date'],'supplier'=>$p['supplier_business_name']??'','supplier_id'=>$p['supplier_id']??'','total'=>(float)($p['summary_total']??0),'paid'=>(float)($p['summary_paid']??0)];
-            $purchases += (float)($p['summary_total']??0);
+        foreach ($Q("SELECT p.id, p.no, p.date, p.supplier, p.supplier_id,
+                        ROUND(p.total,2) total, ROUND(p.paid,2) paid
+                     FROM dmirror_purchases p
+                     LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                     WHERE COALESCE(pp.project_id, p.work_order_id) = $wc_id
+                     ORDER BY p.date DESC") as $p) {
+            $matched_pur[] = $p; $purchases += (float)$p['total'];
         }
 
         $matched_exp = []; $expenses = 0;
-        foreach ($all_exp as $r) {
-            $e = $r['Expense'] ?? [];
-            if ((int)($e['work_order_id'] ?? 0) !== $wc_id) continue;
-            $matched_exp[] = ['id'=>$e['id'],'date'=>$e['date'],'description'=>$e['description']??'','amount'=>(float)($e['amount']??0)];
-            $expenses += (float)($e['amount']??0);
+        foreach ($Q("SELECT id, date, COALESCE(NULLIF(note,''), category) description,
+                        ROUND(amount,2) amount
+                     FROM dmirror_expenses
+                     WHERE work_order_id = $wc_id AND COALESCE(is_income,0)=0
+                     ORDER BY date DESC") as $e) {
+            $matched_exp[] = $e; $expenses += (float)$e['amount'];
         }
 
-        $budget    = (float)($detail['budget'] ?? 0);
-        $total_cost = $purchases + $expenses;
-        $net        = $rev - $total_cost;
+        $extra = 0;
+        if ($r = $conn->query("SELECT ROUND(COALESCE(SUM(amount),0),2) s
+                               FROM project_extra_costs WHERE project_id=$wc_id"))
+            $extra = (float)($r->fetch_assoc()['s'] ?? 0);
+
+        $budget     = (float)($prj['budget'] ?? 0);
+        $total_cost = round($purchases + $expenses + $extra, 2);
+        $net        = round($rev - $total_cost, 2);
         $used_pct   = $budget > 0 ? round($total_cost / $budget * 100, 1) : 0;
 
         echo json_encode([
-            'success'   => true,
-            'data'      => $detail,
-            'finance'   => [
-                'revenue'        => $rev,
-                'paid_revenue'   => $paid_rev,
-                'purchases'      => $purchases,
-                'expenses'       => $expenses,
-                'net'            => $net,
-                'budget'         => $budget,
-                'total_cost'     => $total_cost,
-                'budget_used_pct'=> $used_pct,
-                'budget_left'    => $budget - $total_cost,
+            'success' => true,
+            'source'  => 'local',
+            'data'    => $prj ? ['id'=>(int)$prj['project_id'], 'title'=>$prj['name'],
+                                 'number'=>(int)$prj['project_id'], 'budget'=>$budget,
+                                 'ptype'=>$prj['ptype'] ?? 'dev'] : null,
+            'finance' => [
+                'revenue'         => round($rev, 2),
+                'paid_revenue'    => round($paid_rev, 2),
+                'purchases'       => round($purchases, 2),
+                'expenses'        => round($expenses, 2),
+                'extra_costs'     => $extra,
+                'net'             => $net,
+                'budget'          => $budget,
+                'total_cost'      => $total_cost,
+                'budget_used_pct' => $used_pct,
+                'budget_left'     => round($budget - $total_cost, 2),
             ],
             'invoices'  => $matched_inv,
             'purchases' => $matched_pur,
