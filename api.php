@@ -1470,6 +1470,26 @@ $conn->query("DELETE FROM acc_settings WHERE tenant_id=1
               AND skey IN ('sales_pull_state','sales_pull_at','sales_pull_tries')");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (50)");
 } // end DDL v50
+// ─── DDL v51: إعادة سحب فواتير العملاء بعد تصحيح قراءة الضريبة ─────────────
+// tax1 في دفترة معرّفُ ضريبةٍ لا نسبتها، فقُرئت ١٥٪ على أنها ١٪ وخالف تفصيلُ
+// كل فاتورةٍ رأسَها. صار الرأس يُؤخذ من summary_subtotal/summary_total كما هو،
+// والبنود من tax1_percent و tax1_value. تُحذف صفوف السحب وتُسحب من جديد.
+if ($__sv < 51) {
+$conn->query("DELETE it FROM acc_invoice_items it
+    JOIN acc_invoices i ON i.id = it.invoice_id
+    WHERE i.tenant_id=1 AND i.doc_type='sales' AND i.status='draft'
+      AND i.daftra_id IS NOT NULL AND i.created_by='تلقائي'");
+$conn->query("DELETE y FROM acc_payments y
+    JOIN acc_invoices i ON i.id = y.invoice_id
+    WHERE i.tenant_id=1 AND i.doc_type='sales' AND i.status='draft'
+      AND i.daftra_id IS NOT NULL AND i.created_by='تلقائي'");
+$conn->query("DELETE FROM acc_invoices
+    WHERE tenant_id=1 AND doc_type='sales' AND status='draft'
+      AND daftra_id IS NOT NULL AND created_by='تلقائي' AND entry_id IS NULL");
+$conn->query("DELETE FROM acc_settings WHERE tenant_id=1
+              AND skey IN ('sales_pull_state','sales_pull_at','sales_pull_tries')");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (51)");
+} // end DDL v51
 
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
@@ -1545,26 +1565,34 @@ function sales_pull_chunk($conn, $take, $actor) {
             if ($desc === '') continue;
             $qty  = (float)($it['quantity'] ?? 1);
             $up   = (float)($it['unit_price'] ?? 0);
-            $dsc  = (float)($it['discount'] ?? 0);
-            $rate = is_numeric($it['tax1'] ?? null) ? (float)$it['tax1'] : 15;
+            $dsc  = (float)($it['calculated_discount'] ?? $it['discount'] ?? 0);
+            // tax1 في دفترة معرّفُ ضريبةٍ لا نسبتها (قيمته 1 للضريبة ١٥٪)،
+            // والنسبة والقيمة في حقلين مستقلّين. قراءته نسبةً تُنزل ١٥٪ إلى ١٪.
+            $rate = is_numeric($it['tax1_percent'] ?? null) ? (float)$it['tax1_percent'] : 15;
             $net  = round($qty * $up - $dsc, 2);
-            $tax  = round($net * $rate / 100, 2);
+            $tax  = is_numeric($it['tax1_value'] ?? null)
+                  ? round((float)$it['tax1_value'], 2) : round($net * $rate / 100, 2);
+            $lt   = is_numeric($it['subtotal'] ?? null)
+                  ? round((float)$it['subtotal'], 2) : round($net + $tax, 2);
             $lines[] = ['d'=>$desc, 'q'=>$qty, 'u'=>$up, 'x'=>$dsc, 'r'=>$rate,
-                        'net'=>$net, 'tax'=>$tax, 'lt'=>round($net + $tax, 2)];
+                        'net'=>$net, 'tax'=>$tax, 'lt'=>$lt];
         }
-        // الإجمالي المُعلن في دفترة هو الحقّ — فيه خصومها وتقريبها وإعداداتها
-        // الضريبية، وحسابي من البنود تخمينٌ لا يُصحّحه. فإن اتفق المجموعان
-        // أُخذ التفصيل من البنود، وإن اختلفا بقي الإجمالي كما هو وسُجّل الفرق.
-        $sub = 0; $taxT = 0;
-        foreach ($lines as $l) { $sub += $l['net']; $taxT += $l['tax']; }
-        $sub = round($sub, 2); $taxT = round($taxT, 2);
-        $tot = round($p['total'], 2);
+        // الرأس من أرقام دفترة نفسها لا من جمعي: summary_subtotal و summary_total
+        // هما ما تعرضه دفترة وتُقرّه، وأي إعادة حساب مني تخمينٌ يزيح الأرقام.
+        $tot = round(is_numeric($inv['summary_total'] ?? null)
+                     ? (float)$inv['summary_total'] : $p['total'], 2);
+        $sub = is_numeric($inv['summary_subtotal'] ?? null)
+             ? round((float)$inv['summary_subtotal'], 2) : round($tot / 1.15, 2);
+        $dis = is_numeric($inv['summary_discount'] ?? null)
+             ? round((float)$inv['summary_discount'], 2) : 0;
+        $taxT = round($tot - $sub + $dis, 2);
+        // شبكة أمان: يبقى الرأس هو المعتمد، ويُسجَّل الفرق إن خالفه مجموع البنود
         $mismatch = '';
-        if (!$lines || abs(round($sub + $taxT, 2) - $tot) > 0.05) {
-            if ($lines) $mismatch = ' — مجموع بنود دفترة ' . number_format($sub + $taxT, 2)
-                . ' لا يطابق إجمالي الفاتورة؛ الإجمالي هو المعتمد';
-            $sub  = round($tot / 1.15, 2);
-            $taxT = round($tot - $sub, 2);
+        if ($lines) {
+            $ls = 0; foreach ($lines as $l) $ls += $l['lt'];
+            if (abs(round($ls, 2) - $tot) > 0.05)
+                $mismatch = ' — مجموع بنود دفترة ' . number_format($ls, 2)
+                    . ' لا يطابق إجمالي الفاتورة؛ الإجمالي هو المعتمد';
         }
         $paidv = round($p['paid'], 2);
 
@@ -1573,7 +1601,7 @@ function sales_pull_chunk($conn, $take, $actor) {
                 tax_total, total, paid, status, notes, daftra_id, created_by)
             VALUES ($tid, 'sales', 'standard', 'invoice', '" . $E($p['no']) . "', "
             . ($pid ?: 'NULL') . ", '" . $E($p['client']) . "', '" . $E($p['date']) . "', 'SAR',
-                $sub, 0, $taxT, $tot, $paidv, 'draft', '" . $E(mb_substr($p['notes'], 0, 900) . $mismatch)
+                $sub, $dis, $taxT, $tot, $paidv, 'draft', '" . $E(mb_substr($p['notes'], 0, 900) . $mismatch)
             . "', " . (int)$p['daftra_id'] . ", '" . $E($actor) . "')");
         if ($conn->errno) { $errs[] = $p['no'] . ': ' . $conn->error; continue; }
         $iid = (int)$conn->insert_id;
