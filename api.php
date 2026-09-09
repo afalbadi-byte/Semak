@@ -9246,7 +9246,9 @@ switch ($action) {
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['from'] ?? ''))) $c[] = "r.date >= '" . $E($_GET['from']) . "'";
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['to'] ?? '')))   $c[] = "r.date <= '" . $E($_GET['to']) . "'";
         if (!empty($_GET['no_docs']))  $c[] = "(COALESCE(d.n,0) + COALESCE(a.n,0)) = 0";
-        if (!empty($_GET['no_link']))  $c[] = "r.purchase_id IS NULL";
+        // دفترة لا تربط المرتجع بفاتورة أصلا، فلا معنى لفلترة «بلا أصل».
+        // المفيد: ما لم يُسترَدّ بعد.
+        if (!empty($_GET['unsettled'])) $c[] = "r.total > COALESCE(r.settled,0) + 0.5";
         $W = implode(' AND ', $c);
         $map = ['date'=>'r.date', 'gross'=>'r.total', 'supplier'=>'r.supplier', 'no'=>'r.no',
                 'docs'=>'(COALESCE(d.n,0) + COALESCE(a.n,0))'];
@@ -9266,7 +9268,7 @@ switch ($action) {
                     LEFT JOIN dmirror_purchases p ON p.id = r.purchase_id
                     $J WHERE $W ORDER BY $sk $dir, r.id DESC LIMIT $lim OFFSET $off");
         $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(r.total),2) gross, ROUND(SUM(r.settled),2) settled,
-                        SUM(CASE WHEN r.purchase_id IS NULL THEN 1 ELSE 0 END) unlinked
+                        SUM(CASE WHEN r.purchase_id IS NULL THEN 1 ELSE 0 END) unlinked, ROUND(SUM(COALESCE(r.settled,0)),2) settled
                     FROM dmirror_refunds r $J WHERE $W");
         echo json_encode(['success'=>true, 'data'=>$rows, 'summary'=>$sum ? $sum[0] : null], JSON_UNESCAPED_UNICODE);
         break;

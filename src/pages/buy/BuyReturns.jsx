@@ -84,12 +84,13 @@ export default function BuyReturns() {
                 <div className="grid grid-cols-3 gap-2">
                     <Stat t="المرتجعات" v={sum.n || 0} />
                     <Stat t="القيمة" v={money(sum.gross)} small />
-                    <Stat t="بلا فاتورة أصل" v={sum.unlinked || 0} warn={Number(sum.unlinked) > 0} />
+                    <Stat t="غير مسترَدّ" v={money(Number(sum.gross || 0) - Number(sum.settled || 0))}
+                          small warn={Number(sum.gross) - Number(sum.settled) > 0.5} />
                 </div>
             )}
 
             <div className="flex gap-2">
-                {[['', 'الكل'], ['no_link', 'بلا فاتورة أصل'], ['no_docs', 'بلا مستند']].map(([k, t]) => (
+                {[['', 'الكل'], ['unsettled', 'غير مسترَدّ'], ['no_docs', 'بلا مستند']].map(([k, t]) => (
                     <button key={k} onClick={() => setFilter(k)}
                         className={'flex-1 h-[38px] rounded-xl text-[12px] font-bold border '
                             + (filter === k ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]'
@@ -120,9 +121,10 @@ export default function BuyReturns() {
                                 </span>
                             )}
                             <span className="mr-auto">
-                                {r.purchase_id
-                                    ? <span className="flex items-center gap-1 text-sky-300"><Link2 size={10} />فاتورة {r.purchase_no}</span>
-                                    : <span className="flex items-center gap-1 text-amber-300"><AlertTriangle size={10} />بلا أصل</span>}
+                                {Number(r.settled) >= Number(r.gross) - 0.01
+                                    ? <span className="flex items-center gap-1 text-emerald-300"><Link2 size={10} />استُرِدّ</span>
+                                    : <span className="flex items-center gap-1 text-amber-300">
+                                        <AlertTriangle size={10} />غير مسترَدّ {money(Number(r.gross) - Number(r.settled))}</span>}
                             </span>
                             <ChevronLeft size={13} />
                         </div>
@@ -189,11 +191,7 @@ function ReturnCard({ id, onBack }) {
                     <div className="rounded-xl bg-sky-500/10 p-2.5 text-[12px] text-sky-200">
                         من فاتورة {h.purchase_no} · {h.orig_supplier} · {money(h.orig_total)} · {h.orig_date || '—'}
                     </div>
-                ) : (
-                    <div className="rounded-xl bg-amber-500/10 p-2.5 text-[12px] text-amber-200 flex items-center gap-2">
-                        <AlertTriangle size={13} /> غير مربوط بفاتورة أصل
-                    </div>
-                )}
+                ) : null}
             </div>
 
             <Section t={`البنود (${(d.items || []).length})`}>
