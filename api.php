@@ -10546,6 +10546,71 @@ switch ($action) {
         break;
     }
 
+    case 'pay_link_note_receipts': {
+        // إيصالات جاءت من روابط ملاحظات الفاتورة نفسها — وضعها صاحب الحساب على
+        // فاتورتها، فالانتماء ثابت من المصدر. يبقى تحديد أيّ دفعة، ويُحسم بمبلغ
+        // الإيصال المقروء من الملف: مطابقةٌ لواحدة فقط، أو دفعةٌ وحيدة على الفاتورة.
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($r = $conn->query("SELECT name, role FROM users WHERE id=$uid LIMIT 1")) $u = $r->fetch_assoc();
+        if (!$u || ($u['role'] ?? '') !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
+        $Q = function($sql) use ($conn) { $o=[]; if($r=$conn->query($sql)) while($x=$r->fetch_assoc()) $o[]=$x; return $o; };
+        $go = !empty($_GET['apply']);
+
+        $docs = $Q("SELECT d.id, d.purchase_id, d.file_name, ROUND(COALESCE(d.auto_amount,0),2) amt,
+                        p.no invoice_no, p.supplier
+                    FROM purchase_documents d
+                    JOIN dmirror_purchases p ON p.id = d.purchase_id
+                    WHERE d.source='drive_note' AND d.doc_type='receipt' AND d.payment_id IS NULL
+                    ORDER BY d.purchase_id, d.id");
+        $plan = []; $skip = [];
+        foreach ($docs as $d) {
+            $pid = (int)$d['purchase_id'];
+            $pays = $Q("SELECT m.id, ROUND(m.amount,2) amount, m.date
+                        FROM dmirror_payments m
+                        LEFT JOIN purchase_documents pd ON pd.payment_id = m.id
+                             AND COALESCE(pd.drive_url,'') <> ''
+                        WHERE m.purchase_id = $pid AND pd.id IS NULL
+                        ORDER BY m.date, m.id");
+            if (!$pays) { $skip[] = $d + ['why'=>'كل دفعات الفاتورة مربوطة']; continue; }
+            $pick = null;
+            if (count($pays) === 1) $pick = $pays[0];
+            else {
+                // أقرب دفعة لمبلغ الإيصال، بشرط ألا تنافسها أخرى قريبة
+                $best = null; $second = null;
+                foreach ($pays as $p) {
+                    $diff = abs((float)$p['amount'] - (float)$d['amt']);
+                    if ($best === null || $diff < $best[1]) { $second = $best; $best = [$p, $diff]; }
+                    elseif ($second === null || $diff < $second[1]) $second = [$p, $diff];
+                }
+                if ($best && $best[1] <= 1.00 && (!$second || $second[1] > 1.00)) $pick = $best[0];
+            }
+            if (!$pick) { $skip[] = $d + ['why'=>'أكثر من دفعة تحتمل الإيصال']; continue; }
+            $plan[] = ['doc_id'=>(int)$d['id'], 'file'=>$d['file_name'], 'read_amount'=>(float)$d['amt'],
+                       'payment_id'=>(int)$pick['id'], 'payment_amount'=>(float)$pick['amount'],
+                       'payment_date'=>$pick['date'], 'invoice_no'=>$d['invoice_no'], 'supplier'=>$d['supplier']];
+        }
+
+        if (!$go) {
+            echo json_encode(['success'=>true, 'preview'=>true, 'will_link'=>count($plan),
+                'skipped'=>count($skip), 'plan'=>$plan, 'skip'=>$skip], JSON_UNESCAPED_UNICODE); break;
+        }
+        $done = 0;
+        foreach ($plan as $p) {
+            $conn->query("UPDATE purchase_documents SET payment_id=" . (int)$p['payment_id'] . ",
+                    payment_src='daftra'
+                WHERE id=" . (int)$p['doc_id'] . " AND payment_id IS NULL");
+            if ($conn->affected_rows > 0) $done++;
+        }
+        if ($done) acc_audit($conn, 1, 'purchase', 0, 'link_note_receipts',
+            "ربط $done إيصالا من روابط الملاحظات بدفعاتها", $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'linked'=>$done, 'skipped'=>count($skip),
+            'plan'=>$plan, 'skip'=>$skip], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'buy_localize': {
         // نقل فواتير دفترة المحذوفة (بعد نقطة الاستعادة) إلى مساحة السجلات المحلية.
         // دفترة تعيد استعمال المعرّفات بعد الاستعادة، فلو بقيت هنا بمعرّفها القديم
