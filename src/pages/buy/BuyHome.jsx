@@ -29,6 +29,7 @@ export default function BuyHome({ onNew }) {
     const [tickets, setTickets] = useState(null);  // تذاكر تعديل المستندات
     const [tkOpen, setTkOpen]   = useState(false);
     const [tkBusy, setTkBusy]   = useState(0);
+    const [toolsOpen, setToolsOpen] = useState(false);  // أدوات دفترة: صيانة لا استعمال يومي
     const [clsBusy, setClsBusy] = useState(false);
 
     const load = useCallback(async (force = false) => {
@@ -176,6 +177,18 @@ export default function BuyHome({ onNew }) {
 
             {askPk && <PasskeySetupCard onDone={() => setAskPk(false)} />}
 
+            {/* أدوات السحب من دفترة: صيانة لمرة واحدة، لا أزرار يومية.
+                تُطوى خلف سطر، وتختفي نهائيا حين يُفصل التطبيق عن دفترة. */}
+            {!k?.detached && (
+                <button onClick={() => setToolsOpen(v => !v)}
+                    className="w-full h-10 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] font-bold text-slate-400">
+                    {toolsOpen ? 'إخفاء أدوات دفترة' : 'أدوات دفترة'}
+                    {docs && docs.remaining > 0 ? ` · ${docs.remaining} مرفقا لم يُنسخ` : ''}
+                </button>
+            )}
+
+            {toolsOpen && !k?.detached && (<>
+
             {docs && docs.total > 0 && docs.remaining > 0 && (
                 <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
                     <div className="flex items-center gap-2">
@@ -264,6 +277,8 @@ export default function BuyHome({ onNew }) {
                     {rcpBusy ? 'يسحب الإيصالات...' : 'اسحب إيصالات الدفعات'}
                 </button>
             </div>
+
+            </>)}
 
             {sync && (sync.added > 0 || sync.updated > 0) && (
                 <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold">

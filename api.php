@@ -11389,6 +11389,7 @@ switch ($action) {
             'month_count'  => (int)$one("SELECT COUNT(*) FROM dmirror_purchases WHERE DATE_FORMAT(date,'%Y-%m')='$ym'"),
             'top_suppliers'=> $rows("SELECT supplier, ROUND(SUM(total),2) amount FROM dmirror_purchases
                     WHERE date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY) GROUP BY supplier ORDER BY amount DESC LIMIT 5"),
+            'detached' => daftra_detached($conn) ? 1 : 0,
             'docs_missing' => (int)$one("SELECT COUNT(*) FROM dmirror_purchases p
                     LEFT JOIN (SELECT purchase_id FROM purchase_documents WHERE COALESCE(source,'') <> 'daftra_pdf' GROUP BY purchase_id) d ON d.purchase_id=p.id
                     LEFT JOIN (SELECT entity_id FROM dmirror_attachments
