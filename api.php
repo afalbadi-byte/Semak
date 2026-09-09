@@ -13402,7 +13402,9 @@ switch ($action) {
                 'id'           => (int)$x['id'],
                 'date'         => $x['date'] ?? '',
                 'amount'       => (float)$x['amount'],
-                'category'     => $x['category'],
+                // رقم الفئة بلا اسم يظهر برقمه — دفترة لا تنشر قاموس الفئات
+                'category'     => $x['category'] !== '' ? $x['category']
+                                : ((int)$x['category_id'] > 0 ? 'فئة #' . (int)$x['category_id'] : ''),
                 'category_id'  => $x['category_id'] ?? '',
                 'notes'        => $x['note'],
                 'supplier'     => $x['vendor'],
@@ -13519,13 +13521,20 @@ switch ($action) {
     }
 
     case 'daftra_expense_categories':
-        // الفئات من حركاتنا نفسها — ما استُعمل فعلاً هو ما يُعرض
+        // الفئات من حركاتنا نفسها — ما استُعمل فعلاً هو ما يُعرض.
+        // دفترة لا تنشر قاموس الفئات في واجهتها البرمجية، وبعض الحركات تحمل
+        // رقم فئةٍ بلا اسم. تُعرض برقمها «فئة #N» بدل أن تُطمَس، وتُسمّى يدوياً.
         $rows = [];
-        if ($r = $conn->query("SELECT category_id, MAX(category) name, COUNT(*) n
-                FROM dmirror_expenses WHERE COALESCE(category,'') <> ''
+        if ($r = $conn->query("SELECT category_id, MAX(NULLIF(category,'')) name, COUNT(*) n
+                FROM dmirror_expenses
+                WHERE COALESCE(category,'') <> '' OR COALESCE(category_id,0) > 0
                 GROUP BY category_id ORDER BY name"))
             while ($x = $r->fetch_assoc())
-                $rows[] = ['id'=>$x['category_id'], 'name'=>$x['name'], 'count'=>(int)$x['n']];
+                $rows[] = ['id'=>$x['category_id'],
+                           'name'=>$x['name'] !== null && $x['name'] !== ''
+                                 ? $x['name'] : ('فئة #' . (int)$x['category_id']),
+                           'named'=>$x['name'] !== null && $x['name'] !== '' ? 1 : 0,
+                           'count'=>(int)$x['n']];
         echo json_encode(['success'=>true,'data'=>$rows,'source'=>'local'], JSON_UNESCAPED_UNICODE);
         break;
 
