@@ -9765,7 +9765,6 @@ switch ($action) {
             echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
 
         $go = !empty($_GET['apply']);
-        $__lnkv = 'v2';   // علامة نسخة — للتأكّد أنّ المنشور هو الأحدث
         set_time_limit(300);
 
         // نطاق الحذف: كل فاتورة مصدرها دفترة
@@ -10559,13 +10558,14 @@ switch ($action) {
             echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
         $Q = function($sql) use ($conn) { $o=[]; if($r=$conn->query($sql)) while($x=$r->fetch_assoc()) $o[]=$x; return $o; };
         $go = !empty($_GET['apply']);
+        $__lnkv = 'v3';   // علامة نسخة
 
+        // scope=all: كل إيصال من دفترة على فاتورته يخصّ دفعتها.
+        // بلا scope: روابط الملاحظات وحدها.
         $docs = $Q("SELECT d.id, d.purchase_id, d.file_name, ROUND(COALESCE(d.auto_amount,0),2) amt,
                         p.no invoice_no, p.supplier
                     FROM purchase_documents d
                     JOIN dmirror_purchases p ON p.id = d.purchase_id
-                    // scope=all: كل إيصال على فاتورته يخصّ دفعتها. النطاق الافتراضي
-                    // روابط الملاحظات وحدها.
                     WHERE d.doc_type='receipt' AND d.payment_id IS NULL
                       " . (empty($_GET['scope']) || $_GET['scope'] !== 'all'
                             ? "AND d.source='drive_note'"
