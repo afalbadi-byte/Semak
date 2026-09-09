@@ -1450,6 +1450,26 @@ $conn->query("CREATE INDEX idx_acc_inv_daftra ON acc_invoices (tenant_id, daftra
 $conn->query("CREATE INDEX idx_acc_pay_daftra ON acc_payments (tenant_id, daftra_id)");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (49)");
 } // end DDL v49
+// ─── DDL v50: إلغاء ما سحبته النسخة الأولى الخاطئة من فواتير العملاء ───────
+// أوّل سحبٍ آليّ حسب الإجمالي من البنود فخالف إجمالي دفترة (فاتورة ٤٠٬٠٠٠
+// نزلت ٣٥٬١٣٠). تُحذف صفوف ذلك السحب وحدها — مسودّاتٌ لا قيد لها ولا مرجع —
+// ويُعاد السحب بالمنطق المصحَّح: إجمالي دفترة هو المعتمد.
+if ($__sv < 50) {
+$conn->query("DELETE it FROM acc_invoice_items it
+    JOIN acc_invoices i ON i.id = it.invoice_id
+    WHERE i.tenant_id=1 AND i.doc_type='sales' AND i.status='draft'
+      AND i.daftra_id IS NOT NULL AND i.created_by='تلقائي'");
+$conn->query("DELETE y FROM acc_payments y
+    JOIN acc_invoices i ON i.id = y.invoice_id
+    WHERE i.tenant_id=1 AND i.doc_type='sales' AND i.status='draft'
+      AND i.daftra_id IS NOT NULL AND i.created_by='تلقائي'");
+$conn->query("DELETE FROM acc_invoices
+    WHERE tenant_id=1 AND doc_type='sales' AND status='draft'
+      AND daftra_id IS NOT NULL AND created_by='تلقائي' AND entry_id IS NULL");
+$conn->query("DELETE FROM acc_settings WHERE tenant_id=1
+              AND skey IN ('sales_pull_state','sales_pull_at')");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (50)");
+} // end DDL v50
 
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
@@ -1532,12 +1552,20 @@ function sales_pull_chunk($conn, $take, $actor) {
             $lines[] = ['d'=>$desc, 'q'=>$qty, 'u'=>$up, 'x'=>$dsc, 'r'=>$rate,
                         'net'=>$net, 'tax'=>$tax, 'lt'=>round($net + $tax, 2)];
         }
+        // الإجمالي المُعلن في دفترة هو الحقّ — فيه خصومها وتقريبها وإعداداتها
+        // الضريبية، وحسابي من البنود تخمينٌ لا يُصحّحه. فإن اتفق المجموعان
+        // أُخذ التفصيل من البنود، وإن اختلفا بقي الإجمالي كما هو وسُجّل الفرق.
         $sub = 0; $taxT = 0;
         foreach ($lines as $l) { $sub += $l['net']; $taxT += $l['tax']; }
         $sub = round($sub, 2); $taxT = round($taxT, 2);
-        $tot = $p['total'];
-        if (!$lines) { $sub = round($tot / 1.15, 2); $taxT = round($tot - $sub, 2); }
-        elseif (abs(round($sub + $taxT, 2) - $tot) > 0.05) $tot = round($sub + $taxT, 2);
+        $tot = round($p['total'], 2);
+        $mismatch = '';
+        if (!$lines || abs(round($sub + $taxT, 2) - $tot) > 0.05) {
+            if ($lines) $mismatch = ' — مجموع بنود دفترة ' . number_format($sub + $taxT, 2)
+                . ' لا يطابق إجمالي الفاتورة؛ الإجمالي هو المعتمد';
+            $sub  = round($tot / 1.15, 2);
+            $taxT = round($tot - $sub, 2);
+        }
         $paidv = round($p['paid'], 2);
 
         $conn->query("INSERT INTO acc_invoices (tenant_id, doc_type, invoice_type, doc_kind,
@@ -1545,7 +1573,7 @@ function sales_pull_chunk($conn, $take, $actor) {
                 tax_total, total, paid, status, notes, daftra_id, created_by)
             VALUES ($tid, 'sales', 'standard', 'invoice', '" . $E($p['no']) . "', "
             . ($pid ?: 'NULL') . ", '" . $E($p['client']) . "', '" . $E($p['date']) . "', 'SAR',
-                $sub, 0, $taxT, $tot, $paidv, 'draft', '" . $E(mb_substr($p['notes'], 0, 1000))
+                $sub, 0, $taxT, $tot, $paidv, 'draft', '" . $E(mb_substr($p['notes'], 0, 900) . $mismatch)
             . "', " . (int)$p['daftra_id'] . ", '" . $E($actor) . "')");
         if ($conn->errno) { $errs[] = $p['no'] . ': ' . $conn->error; continue; }
         $iid = (int)$conn->insert_id;
