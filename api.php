@@ -9765,6 +9765,7 @@ switch ($action) {
             echo json_encode(['success'=>false,'message'=>'للمدير فقط'], JSON_UNESCAPED_UNICODE); break; }
 
         $go = !empty($_GET['apply']);
+        $__lnkv = 'v2';   // علامة نسخة — للتأكّد أنّ المنشور هو الأحدث
         set_time_limit(300);
 
         // نطاق الحذف: كل فاتورة مصدرها دفترة
@@ -10599,7 +10600,7 @@ switch ($action) {
         }
 
         if (!$go) {
-            echo json_encode(['success'=>true, 'preview'=>true, 'will_link'=>count($plan),
+            echo json_encode(['success'=>true, 'preview'=>true, 'build'=>$__lnkv, 'will_link'=>count($plan),
                 'skipped'=>count($skip), 'plan'=>$plan, 'skip'=>$skip], JSON_UNESCAPED_UNICODE); break;
         }
         $done = 0;
