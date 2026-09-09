@@ -4,11 +4,13 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 import { PasskeySetupCard } from '../../components/PasskeyButton';
 import { passkeyEnrolledHere } from '../../lib/passkey';
 import { syncDaftra } from '../../lib/sync';
+import { useEntity } from './entityCtx';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
 // ─── الشاشة الأولى: أرقام اليوم وآخر الفواتير ───────────────────────────────
 export default function BuyHome({ onNew }) {
+    const { openEntity } = useEntity();
     const [k, setK]       = useState(null);
     const [last, setLast] = useState([]);
     const [busy, setBusy] = useState(false);
@@ -303,7 +305,8 @@ export default function BuyHome({ onNew }) {
                     </div>
                     <div className="flex-1 overflow-y-auto px-3 pb-6 space-y-2">
                         {gapRows.map(r => (
-                            <div key={r.id} className="rounded-xl bg-white/5 p-3">
+                            <button key={r.id} onClick={() => openEntity('purchase', r.id)}
+                                className="w-full text-right rounded-xl bg-white/5 p-3">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <div className="text-sm font-bold truncate">{r.supplier}</div>
@@ -331,7 +334,7 @@ export default function BuyHome({ onNew }) {
                                         {r.payments} دفعة
                                     </span>
                                 </div>
-                            </div>
+                            </button>
                         ))}
                         {!gapRows.length && <p className="text-center text-slate-500 text-sm py-8">لا شيء في هذه الفئة</p>}
                     </div>
@@ -347,13 +350,14 @@ export default function BuyHome({ onNew }) {
 
             <div className="space-y-2">
                 {last.map((r, i) => (
-                    <div key={i} className="rounded-xl bg-white/5 p-3">
+                    <button key={i} onClick={() => r.id && openEntity('purchase', r.id)}
+                        className="w-full text-right rounded-xl bg-white/5 p-3">
                         <div className="flex items-center justify-between gap-2">
                             <div className="text-sm font-bold truncate">{r.supplier}</div>
                             <div className="text-sm font-black tabular-nums shrink-0">{money(r.gross)}</div>
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5">#{r.no} · {r.date}</div>
-                    </div>
+                    </button>
                 ))}
                 {!last.length && !busy && <p className="text-center text-slate-500 text-sm py-6">لا فواتير هذا الشهر</p>}
             </div>

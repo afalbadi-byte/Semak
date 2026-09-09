@@ -12,6 +12,7 @@ import BuySplash from './BuySplash';
 import BuyInstallGate from './BuyInstallGate';
 import BuyChangePw from './BuyChangePw';
 import { useDepthGuard } from '../../lib/backstack';
+import { EntityProvider } from './entityStack';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
@@ -151,11 +152,13 @@ export default function BuyApp() {
             </header>
 
             <main className="flex-1 overflow-y-auto pb-24">
-                {tab === 'home'  && <BuyHome  onNew={() => setTab('new')} />}
-                {tab === 'new'   && <BuyInvoice onDone={() => setTab('home')} />}
-                {tab === 'records' && <BuyRecords />}
-                {tab === 'items' && <BuyItems />}
-                {tab === 'chat'  && <BuyChat userName={user?.name || ''} />}
+                <EntityProvider>
+                    {tab === 'home'  && <BuyHome  onNew={() => setTab('new')} />}
+                    {tab === 'new'   && <BuyInvoice onDone={() => setTab('home')} />}
+                    {tab === 'records' && <BuyRecords />}
+                    {tab === 'items' && <BuyItems />}
+                    {tab === 'chat'  && <BuyChat userName={user?.name || ''} />}
+                </EntityProvider>
             </main>
 
             <nav className="fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur border-t border-white/10 z-30">

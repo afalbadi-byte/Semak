@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
-import BuyEntity from './BuyEntity';
 import BuyReturns from './BuyReturns';
 import { SortBar } from '../../components/SortHeader';
-import { useDepthGuard } from '../../lib/backstack';
 import { syncDaftra } from '../../lib/sync';
+import { useEntity } from './entityCtx';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const short = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -19,7 +18,6 @@ export default function BuyRecords() {
     const [sum, setSum]     = useState(null);
     const [busy, setBusy]   = useState(false);
     const [filter, setFilter] = useState('');        // '' | unpaid | no_docs | daftra_doc
-    const [stack, setStack] = useState([]);          // مكدس البطاقات المفتوحة
     const [sortKey, setSortKey] = useState('date');
     const [sortDir, setSortDir] = useState('desc');
     const [more, setMore] = useState(false);
@@ -83,15 +81,8 @@ export default function BuyRecords() {
 
     useEffect(() => { if (tab !== 'returns') load(false); }, [tab, filter, sortKey, sortDir]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-    const open = (type, value) => setStack(s => s.concat({ type, value }));
-    const back = () => setStack(s => s.slice(0, -1));
-    useDepthGuard(stack.length, back);
-
-    if (stack.length) {
-        const top = stack[stack.length - 1];
-        return <BuyEntity key={top.type + top.value} type={top.type} value={top.value}
-            onOpen={open} onBack={back} depth={stack.length} />;
-    }
+    const { openEntity } = useEntity();
+    const open = (type, value) => openEntity(type, value);
 
     return (
         <div className="p-4 space-y-3">

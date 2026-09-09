@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useEntity } from './entityCtx';
 import { Search, TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 
@@ -7,6 +8,7 @@ const money = v => (v === null || v === undefined || isNaN(Number(v)))
 
 // ─── أسعار الأصناف على الجوال: الأكثر طلباً أولاً، وسعر اليوم مقابل ما قبله ──
 export default function BuyItems() {
+    const { openEntity } = useEntity();
     const [rows, setRows] = useState([]);
     const [q, setQ]       = useState('');
     const [busy, setBusy] = useState(false);
@@ -48,9 +50,17 @@ export default function BuyItems() {
                         <div key={r.product_id} className="rounded-xl bg-white/5 p-3">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
-                                    <div className="text-sm font-bold truncate">{r.name}</div>
+                                    <button onClick={() => openEntity('keyword', r.name)}
+                                        className="text-sm font-bold truncate text-right underline decoration-dotted underline-offset-4">
+                                        {r.name}
+                                    </button>
                                     <div className="text-[11px] text-slate-400 truncate">
-                                        {r.orders} طلب · {r.last_supplier || 'بلا مورد'} · {r.last_date}
+                                        {r.orders} طلب · 
+                                        {r.last_supplier
+                                            ? <button onClick={() => openEntity('supplier', r.last_supplier)}
+                                                className="underline decoration-dotted underline-offset-4">{r.last_supplier}</button>
+                                            : 'بلا مورد'}
+                                        {' · '}{r.last_date}
                                     </div>
                                 </div>
                                 <div className="text-left shrink-0">
