@@ -73,17 +73,46 @@ function Invoices() {
     const [flt, setFlt] = useState('');
     const [d, setD] = useState(null);
     const [busy, setBusy] = useState(true);
+    // تسكين جماعي — ميزة المكتب: الجوال يسكّن فاتورةً فاتورة
+    const [sel, setSel] = useState([]);
+    const [projects, setProjects] = useState([]);
+    const [pick, setPick] = useState('');
+    const [bulk, setBulk] = useState(false);
 
     const load = useCallback(() => {
         setBusy(true);
         let s = `&limit=100&q=${encodeURIComponent(q)}`;
         if (flt) s += `&${flt}=1`;
-        get('buy_list', `&kind=invoices${s}`).then(r => { setD(r); setBusy(false); });
+        get('buy_list', `&kind=invoices${s}`).then(r => { setD(r); setSel([]); setBusy(false); });
     }, [q, flt]);
     useEffect(() => { load(); }, [load]);
+    useEffect(() => { get('pbudget_list').then(r => setProjects(r.data || r.rows || [])); }, []);
+
+    const toggle = id => setSel(v => v.includes(id) ? v.filter(x => x !== id) : v.concat(id));
+
+    // يمرّ على المحدَّد واحدةً واحدة عبر المسار المحلي المُجرَّب — لا لمس لدفترة
+    const assign = async () => {
+        if (!sel.length || !pick) return;
+        setBulk(true);
+        let ok = 0;
+        for (const id of sel) {
+            const r = await fetch(`${API_URL}?action=purchase_set_project`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                body: JSON.stringify({ id, project_id: Number(pick) }),
+            }).then(x => x.json()).catch(() => ({ success: false }));
+            if (r.success) ok++;
+        }
+        setBulk(false);
+        alert(`سُكِّنت ${ok} من ${sel.length}`);
+        load();
+    };
 
     const s = d?.summary || {};
     const cols = [
+        { k: 'sel', t: '', r: r => (
+            <input type="checkbox" checked={sel.includes(r.id)} onClick={e => e.stopPropagation()}
+                onChange={() => toggle(r.id)} className="w-4 h-4 accent-[#1a365d]" />
+        ) },
         { k: 'no', t: 'الرقم', r: r => <span className="font-black">{r.no || '—'}</span> },
         { k: 'date', t: 'التاريخ' },
         { k: 'supplier', t: 'المورد', r: r => <span className="font-bold">{r.supplier}</span> },
@@ -119,6 +148,21 @@ function Invoices() {
                               { key: 'project', label: 'المشروع' }]} />
                 <button onClick={load} className="p-2.5 rounded-xl border border-slate-200 dark:border-brand-700"><RefreshCw size={15} className={busy ? 'animate-spin' : ''} /></button>
             </div>
+            {sel.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#1a365d]/20 bg-[#1a365d]/5 p-3">
+                    <span className="text-xs font-black text-[#1a365d] dark:text-brand-100">{sel.length} فاتورة محدَّدة</span>
+                    <select value={pick} onChange={e => setPick(e.target.value)}
+                        className="px-3 py-2 rounded-xl border border-slate-200 dark:border-brand-700 bg-white dark:bg-brand-800 text-xs">
+                        <option value="">اختر المشروع…</option>
+                        {projects.map(p => <option key={p.project_id} value={p.project_id}>{p.name}</option>)}
+                    </select>
+                    <button onClick={assign} disabled={!pick || bulk}
+                        className="px-4 py-2 rounded-xl bg-[#1a365d] text-white text-xs font-bold disabled:opacity-40">
+                        {bulk ? 'جارٍ التسكين…' : 'تسكين المحدَّد'}
+                    </button>
+                    <button onClick={() => setSel([])} className="text-xs font-bold text-slate-500">إلغاء التحديد</button>
+                </div>
+            )}
             <Table cols={cols} rows={d?.data} onRow={r => openEntity('purchase', r.id)} empty={busy ? 'جارٍ التحميل…' : 'لا فواتير'} />
         </div>
     );
