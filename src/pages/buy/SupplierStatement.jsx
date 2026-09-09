@@ -9,6 +9,7 @@ const KIND = {
     'فاتورة': 'text-slate-200',
     'دفعة':   'text-emerald-300',
     'مرتجع':  'text-sky-300',
+    'استرداد': 'text-amber-300',
 };
 
 // ─── كشف حساب مورد: الحركة زمنياً برصيد متحرك، قابل للطباعة والإرسال ────────
@@ -18,6 +19,7 @@ export default function SupplierStatement({ supplier, onClose }) {
     const [busy, setBusy] = useState(true);
     const [from, setFrom] = useState('');
     const [to, setTo]     = useState('');
+    const [kinds, setKinds] = useState([]);   // فارغ = كل الأنواع
 
     const load = useCallback(async () => {
         setBusy(true); setErr('');
@@ -33,10 +35,15 @@ export default function SupplierStatement({ supplier, onClose }) {
 
     useEffect(() => { load(); }, [load]);
 
+    // الرصيد المتحرك محسوب على كل الحركات؛ الفلتر يُخفي الصفوف ولا يُعيد الحساب
+    const KINDS = ['فاتورة', 'دفعة', 'مرتجع', 'استرداد'];
+    const shown = (d?.rows || []).filter(r => !kinds.length || kinds.includes(r.kind));
+    const toggle = k => setKinds(v => v.includes(k) ? v.filter(x => x !== k) : v.concat(k));
+
     // الطباعة تفتح نافذة بمحتوى الكشف وحده — بلا أزرار ولا ألوان الشاشة
     const print = () => {
         if (!d) return;
-        const rows = d.rows.map(r => `<tr>
+        const rows = shown.map(r => `<tr>
             <td>${r.date}</td><td>${r.kind}</td><td>${r.ref || ''}</td>
             <td class="n">${r.debit ? money(r.debit) : ''}</td>
             <td class="n">${r.credit ? money(r.credit) : ''}</td>
@@ -97,6 +104,23 @@ export default function SupplierStatement({ supplier, onClose }) {
                     </label>
                 </div>
 
+                {/* فلترة بالنوع — الرصيد يبقى محسوبا على كل الحركات */}
+                <div className="flex flex-wrap gap-1.5">
+                    {KINDS.map(k => (
+                        <button key={k} onClick={() => toggle(k)}
+                            className={'px-2.5 h-8 rounded-lg text-[11px] font-bold ' +
+                                (kinds.includes(k) ? 'bg-[#c5a059] text-[#0a0f1e]' : 'bg-white/5 text-slate-400')}>
+                            {k}
+                        </button>
+                    ))}
+                    {kinds.length > 0 && (
+                        <button onClick={() => setKinds([])}
+                            className="px-2.5 h-8 rounded-lg text-[11px] font-bold bg-white/10 text-slate-200">
+                            الكل
+                        </button>
+                    )}
+                </div>
+
                 {err && <p className="text-[12px] text-rose-300">{err}</p>}
                 {busy && <p className="text-[12px] text-slate-500 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> يحسب…</p>}
 
@@ -116,7 +140,7 @@ export default function SupplierStatement({ supplier, onClose }) {
                             {d.rows.length === 0 && (
                                 <p className="text-[12px] text-slate-500 text-center py-8">لا حركة في هذه المدة</p>
                             )}
-                            {d.rows.map((r, i) => (
+                            {shown.map((r, i) => (
                                 <div key={i} className="px-3 py-2 border-b border-white/5 last:border-0">
                                     <div className="flex items-center gap-2 text-[12px]">
                                         <span className={'font-black shrink-0 ' + (KIND[r.kind] || '')}>{r.kind}</span>

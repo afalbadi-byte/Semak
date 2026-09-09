@@ -8239,7 +8239,7 @@ switch ($action) {
         $ev = [];
         // الفواتير — ما علينا
         if ($r = $conn->query("SELECT id, no, date, ROUND(total,2) amt FROM dmirror_purchases
-                               WHERE supplier='$v' AND date IS NOT NULL"))
+                               WHERE TRIM(supplier)=TRIM('$v') AND date IS NOT NULL"))
             while ($x = $r->fetch_assoc())
                 $ev[] = ['date'=>$x['date'], 'kind'=>'فاتورة', 'ref'=>$x['no'],
                          'id'=>(int)$x['id'], 'debit'=>(float)$x['amt'], 'credit'=>0.0];
@@ -8247,7 +8247,7 @@ switch ($action) {
         if ($r = $conn->query("SELECT mp.id, mp.date, ROUND(mp.amount,2) amt, p.no
                                FROM dmirror_payments mp
                                JOIN dmirror_purchases p ON p.id = mp.purchase_id
-                               WHERE p.supplier='$v' AND mp.date IS NOT NULL"))
+                               WHERE p.TRIM(p.supplier)=TRIM('$v') AND mp.date IS NOT NULL"))
             while ($x = $r->fetch_assoc())
                 $ev[] = ['date'=>$x['date'], 'kind'=>'دفعة', 'ref'=>'على ' . $x['no'],
                          'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt']];
@@ -8259,11 +8259,18 @@ switch ($action) {
                 $ev[] = ['date'=>$x['date'], 'kind'=>'دفعة', 'ref'=>$x['no'] ? ('على ' . $x['no']) : 'دفعة للمورد',
                          'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt']];
         // المرتجعات — تُنقص ما علينا
-        if ($r = $conn->query("SELECT id, no, date, ROUND(total,2) amt FROM dmirror_refunds
-                               WHERE supplier='$v' AND date IS NOT NULL"))
-            while ($x = $r->fetch_assoc())
+        // المرتجع دائنٌ للمورد، وما استُرِدّ منه نقدا أو مقاصةً مدينٌ عليه.
+        // بدون سطر الاسترداد يظهر رصيد سالب وهميّ على كل مرتجع سُوِّي.
+        if ($r = $conn->query("SELECT id, no, date, ROUND(total,2) amt, ROUND(COALESCE(settled,0),2) st
+                               FROM dmirror_refunds
+                               WHERE TRIM(supplier)=TRIM('$v') AND date IS NOT NULL"))
+            while ($x = $r->fetch_assoc()) {
                 $ev[] = ['date'=>$x['date'], 'kind'=>'مرتجع', 'ref'=>$x['no'],
                          'id'=>0, 'debit'=>0.0, 'credit'=>(float)$x['amt']];
+                if ((float)$x['st'] > 0.009)
+                    $ev[] = ['date'=>$x['date'], 'kind'=>'استرداد', 'ref'=>'على مرتجع ' . $x['no'],
+                             'id'=>0, 'debit'=>(float)$x['st'], 'credit'=>0.0];
+            }
 
         usort($ev, function($a, $b) {
             if ($a['date'] !== $b['date']) return strcmp($a['date'], $b['date']);
