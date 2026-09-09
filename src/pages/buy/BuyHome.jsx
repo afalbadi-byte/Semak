@@ -455,7 +455,7 @@ export default function BuyHome({ onNew }) {
                     </div>
                     <div className="flex-1 overflow-y-auto px-3 pb-6 space-y-2">
                         {gapRows.map(r => (
-                            <button key={r.id} onClick={() => openEntity('purchase', r.id)}
+                            <button key={r.id} onClick={() => { setGapsOpen(false); openEntity('purchase', r.id); }}
                                 className="w-full text-right rounded-xl bg-white/5 p-3">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">

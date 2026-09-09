@@ -21,7 +21,7 @@ export function EntityProvider({ children }) {
         <EntityCtx.Provider value={{ openEntity }}>
             {children}
             {top && (
-                <div className="fixed inset-0 z-40 bg-[#0b1220] overflow-y-auto"
+                <div className="fixed inset-0 z-[60] bg-[#0b1220] overflow-y-auto"
                     style={{ paddingTop: 'env(safe-area-inset-top)' }}>
                     <BuyEntity key={top.type + top.value} type={top.type} value={top.value}
                         onOpen={openEntity} onBack={back} depth={stack.length} />
