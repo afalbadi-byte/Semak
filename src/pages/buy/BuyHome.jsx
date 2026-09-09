@@ -30,6 +30,9 @@ export default function BuyHome({ onNew }) {
     const [tkOpen, setTkOpen]   = useState(false);
     const [tkBusy, setTkBusy]   = useState(0);
     const [toolsOpen, setToolsOpen] = useState(false);  // أدوات دفترة: صيانة لا استعمال يومي
+    const [drillKey, setDrillKey] = useState(null);   // بطاقة مفتوحة على تفصيلها
+    const [drill, setDrill]       = useState(null);
+    const [drillBusy, setDrillBusy] = useState(false);
     const [clsBusy, setClsBusy] = useState(false);
 
     const load = useCallback(async (force = false) => {
@@ -137,11 +140,23 @@ export default function BuyHome({ onNew }) {
 
     const p = k?.purchases || {};
     const cards = [
-        { t: 'مشتريات الشهر', v: money(p.month_total), icon: TrendingUp,   c: 'from-emerald-600 to-emerald-800' },
-        { t: 'المستحق للموردين', v: money(p.unpaid),   icon: Wallet,       c: 'from-amber-600 to-amber-800' },
-        { t: 'بلا مستند',      v: p.docs_missing ?? '—', icon: Paperclip,  c: 'from-rose-600 to-rose-800' },
-        { t: 'فواتير الشهر',   v: p.month_count ?? '—',  icon: AlertTriangle, c: 'from-sky-600 to-sky-800' },
+        { t: 'مشتريات الشهر', v: money(p.month_total), icon: TrendingUp,   c: 'from-emerald-600 to-emerald-800', k: 'month_total' },
+        { t: 'المستحق للموردين', v: money(p.unpaid),   icon: Wallet,       c: 'from-amber-600 to-amber-800', k: 'unpaid' },
+        { t: 'بلا مستند',      v: p.docs_missing ?? '—', icon: Paperclip,  c: 'from-rose-600 to-rose-800', k: 'docs_missing' },
+        { t: 'فواتير الشهر',   v: p.month_count ?? '—',  icon: AlertTriangle, c: 'from-sky-600 to-sky-800', k: 'month_total' },
     ];
+
+    // كل بطاقة لها مفتاح تفصيل في الخادم — تُفتح قائمتها ومنها الفاتورة
+    const openDrill = useCallback(async key => {
+        setDrillKey(key); setDrill(null); setDrillBusy(true);
+        try {
+            const t = getAdminToken();
+            const r = await fetch(`${API_URL}?action=kpi_detail&key=${key}`,
+                { headers: t ? { Authorization: `Bearer ${t}` } : {} }).then(x => x.json());
+            setDrill(r.success ? r : { rows: [], title: 'تعذر الجلب' });
+        } catch { setDrill({ rows: [], title: 'تعذر الاتصال' }); }
+        finally { setDrillBusy(false); }
+    }, []);
 
     const decide = async (id, approve) => {
         setTkBusy(id);
@@ -290,11 +305,12 @@ export default function BuyHome({ onNew }) {
                 {cards.map((c, i) => {
                     const Icon = c.icon;
                     return (
-                        <div key={i} className={'rounded-2xl p-3 bg-gradient-to-bl ' + c.c}>
+                        <button key={i} onClick={() => c.k && openDrill(c.k)}
+                            className={'text-right rounded-2xl p-3 bg-gradient-to-bl ' + c.c}>
                             <Icon size={16} className="text-white/70" />
                             <div className="text-xl font-black mt-1 tabular-nums">{c.v}</div>
                             <div className="text-[11px] text-white/70 font-bold">{c.t}</div>
-                        </div>
+                        </button>
                     );
                 })}
             </div>
@@ -380,6 +396,41 @@ export default function BuyHome({ onNew }) {
                             </div>
                         ))}
                         {!(tickets?.data || []).length && <p className="text-center text-slate-500 text-sm py-8">لا تذاكر معلّقة</p>}
+                    </div>
+                </div>
+            )}
+
+            {drillKey && (
+                <div className="fixed inset-0 z-50 bg-slate-950/95 flex flex-col">
+                    <div className="flex items-center justify-between p-4 border-b border-white/10">
+                        <h3 className="font-black">{drill?.title || 'التفاصيل'}</h3>
+                        <button onClick={() => { setDrillKey(null); setDrill(null); }}
+                            className="text-slate-400"><X size={20} /></button>
+                    </div>
+                    {drillBusy && <p className="text-center text-slate-500 text-sm py-8">يجلب…</p>}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                        {(drill?.rows || []).map((r, i) => (
+                            <button key={i} onClick={() => { setDrillKey(null); openEntity('purchase', r.id); }}
+                                className="w-full text-right rounded-xl bg-white/5 p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-sm font-bold truncate">{r.supplier}</div>
+                                        <div className="text-[11px] text-slate-400 mt-0.5">#{r.no} · {r.date}</div>
+                                    </div>
+                                    <div className="text-left shrink-0">
+                                        <div className="text-sm font-black tabular-nums">{money(r.gross)}</div>
+                                        {Number(r.gross) - Number(r.paid) > 0.5 && (
+                                            <div className="text-[11px] text-amber-400 font-bold tabular-nums">
+                                                متبقٍ {money(Number(r.gross) - Number(r.paid))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </button>
+                        ))}
+                        {!drillBusy && !(drill?.rows || []).length && (
+                            <p className="text-center text-slate-500 text-sm py-8">لا صفوف</p>
+                        )}
                     </div>
                 </div>
             )}

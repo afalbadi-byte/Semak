@@ -8309,9 +8309,12 @@ switch ($action) {
             if ($from && $e['date'] < $from) { $opening = $bal; continue; }
             if ($to && $e['date'] > $to) continue;
             $tD += $e['debit']; $tC += $e['credit'];
-            $rows[] = ['date'=>$e['date'], 'kind'=>$e['kind'], 'ref'=>$e['ref'], 'id'=>$e['id'],
-                       'debit'=>round($e['debit'], 2), 'credit'=>round($e['credit'], 2),
-                       'balance'=>round($bal, 2)];
+            // تفاصيل الحركة تمرّ كما هي — كان البناء يُسقطها قبل الإرسال
+            $row = ['date'=>$e['date'], 'kind'=>$e['kind'], 'ref'=>$e['ref'], 'id'=>$e['id'],
+                    'debit'=>round($e['debit'], 2), 'credit'=>round($e['credit'], 2),
+                    'balance'=>round($bal, 2)];
+            foreach (['open', 'info', 'url'] as $k) if (isset($e[$k])) $row[$k] = $e[$k];
+            $rows[] = $row;
         }
         echo json_encode(['success'=>true,
             'supplier'=>$sup, 'from'=>$from, 'to'=>$to,
