@@ -98,8 +98,12 @@ html,body{width:1080px;height:1080px;background:${T.base}}
 .card{position:relative;width:1080px;height:1080px;overflow:hidden;font-family:'Cairo',Tahoma,sans-serif;background:${T.base}}
 .photo{position:absolute;left:0;right:0;bottom:0;top:${layout === 'bottom' ? '40%' : '0'};background:url('${uri(S.photo)}') ${S.photoPos || 'center'}/cover no-repeat}
 .veil{position:absolute;inset:0;background:${veil}}
-.pattern{position:absolute;inset:0;background:url('${uri(A('pattern-tile.png'))}') -40px -20px/700px auto repeat-x;opacity:${theme === 'light' ? (S.pattern ?? 0.05) : 0};mix-blend-mode:multiply;
-  -webkit-mask-image:linear-gradient(175deg,#000 0%,#000 28%,rgba(0,0,0,.4) 42%,transparent 53%);mask-image:linear-gradient(175deg,#000 0%,#000 28%,rgba(0,0,0,.4) 42%,transparent 53%)}
+${theme === 'nd'
+  // اليوم الوطني: علامة سماك المائية فاتحة فوق نسيج الهوية الوطنية، تتلاشى عند الأطراف
+  ? `.pattern{position:absolute;inset:0;background:url('${uri(A('pattern-tile.png'))}') center/620px auto repeat;opacity:${S.pattern ?? 0.08};filter:invert(1);mix-blend-mode:screen;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 50%,#000 0%,#000 38%,transparent 72%);mask-image:radial-gradient(ellipse at 50% 50%,#000 0%,#000 38%,transparent 72%)}`
+  : `.pattern{position:absolute;inset:0;background:url('${uri(A('pattern-tile.png'))}') -40px -20px/700px auto repeat-x;opacity:${theme === 'light' ? (S.pattern ?? 0.05) : 0};mix-blend-mode:multiply;
+  -webkit-mask-image:linear-gradient(175deg,#000 0%,#000 28%,rgba(0,0,0,.4) 42%,transparent 53%);mask-image:linear-gradient(175deg,#000 0%,#000 28%,rgba(0,0,0,.4) 42%,transparent 53%)}`}
 .logo{position:absolute;left:43px;top:40px;width:270px;filter:${T.logoFilter}}
 .tag{position:absolute;top:52px;right:78px;font-size:31px;font-weight:800;color:${T.ink}}
 .tag .g{color:${T.gold}}
