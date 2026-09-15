@@ -72,7 +72,8 @@ const wash = Math.max(0, Math.min(1.2, S.wash ?? 1));                // قوة �
 const a = v => Math.min(0.98, v * wash).toFixed(3);
 
 const CREAM = '244,239,230', NIGHT = T.night || '10,15,30';
-const veil = theme === 'light'
+// veil: تدرّج CSS مخصّص يتجاوز الافتراضي (مثلاً لإبقاء وسط خلفية مزخرفة ظاهراً)
+const veil = S.veil ? S.veil : theme === 'light'
   ? (layout === 'bottom'
       ? `linear-gradient(180deg, rgba(${CREAM},1) 0%, rgba(${CREAM},1) 41%, rgba(${CREAM},.25) 50%, rgba(${CREAM},.12) 75%, rgba(${CREAM},.35) 100%)`
       : `linear-gradient(180deg, rgba(${CREAM},${a(.94)}) 0%, rgba(${CREAM},${a(.8)}) 36%, rgba(${CREAM},${a(.22)}) 62%, rgba(${CREAM},${a(.45)}) 100%)`)
