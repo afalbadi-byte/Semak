@@ -4,3 +4,6 @@ preview.html
 
 # عناصر المصدر الرسمية داخل src/ تُرفع
 !*/src/*.png
+
+# شبكة إنستقرام تُولَّد من build-grid.cjs
+*.jpg
