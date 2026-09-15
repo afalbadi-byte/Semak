@@ -42,7 +42,9 @@ html,body{width:1080px;height:1080px;background:${t.color}}
 .num .a{font-size:118px}
 .num .b{font-size:176px;color:${t.accent};letter-spacing:-2px}
 .price .sar{font-family:'Saudi';font-weight:700;font-size:38px}
-.botfade{position:absolute;left:0;right:0;top:690px;bottom:0;background:linear-gradient(180deg,${t.color}00 0%,${t.color} 26%)}
+.botfade{position:absolute;left:0;right:0;top:640px;bottom:0;background:linear-gradient(180deg,${t.color}00 0%,${t.color} 24%)}
+/* جوال التحكم من نفس الصورة، مقتطع ومرفوع فوق الشريط السفلي */
+.phone{position:absolute;left:286px;top:734px;width:134px;filter:drop-shadow(0 12px 22px rgba(0,0,0,.35))}
 .strip{position:absolute;left:0;right:0;top:770px;height:46px;background:url('${b64(`${k}-p1.png`)}') center/46px 46px repeat-x}
 .wm{position:absolute;left:0;right:0;top:816px;bottom:0;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.08}
 .free{position:absolute;top:824px;right:40px;font-family:'Saudi';font-weight:700;font-size:60px;color:${t.accent};line-height:1.05}
@@ -61,6 +63,7 @@ ${K.css}
 <div class="price"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">ريال</div></div></div>
 <div class="free">ومكيفاتك علينا</div>
 <div class="spec">${UNITS.map(([n, w, btu]) => `<div>${n} ${w} <small>${btu} وحدة</small></div>`).join('')}<div>جري <small>GREE</small></div></div>
+<img class="phone" src="${b64('phone.png')}">
 <img class="icon" src="${b64(`${k}-frame.png`)}">
 <img class="slogan" src="${b64(`${k}-slogan.png`)}">
 ${K.html}
