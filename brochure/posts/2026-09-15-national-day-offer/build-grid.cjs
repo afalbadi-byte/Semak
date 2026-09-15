@@ -73,14 +73,14 @@ html,body{width:3240px;height:1440px;background:${T.color}}
 .feat{position:absolute;right:80px;top:786px;width:780px;display:grid;grid-template-columns:1fr 1fr;row-gap:16px;column-gap:24px;direction:rtl}
 .feat div{display:flex;align-items:center;gap:12px;font-family:'Plex';font-weight:700;font-size:34px;white-space:nowrap}
 .feat svg{width:36px;height:36px;fill:none;stroke:${T.accent};stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.qr{position:absolute;right:80px;top:1104px;width:200px;text-align:center}
+.qr{position:absolute;right:44px;top:1218px;width:200px;text-align:center}
 .qr .c{display:inline-block;background:#fff;border-radius:16px;padding:10px;box-shadow:0 10px 26px rgba(0,0,0,.25)}
 .qr img{display:block;width:124px;height:124px}
 .qr span{display:block;margin-top:8px;font-family:'Plex';font-weight:700;font-size:22px;white-space:nowrap}
 .rule{position:absolute;left:2380px;right:80px;top:1072px;height:2px;background:#fff;opacity:.3}
 ${K.css}
-.k-contacts{left:2380px;top:1180px;bottom:auto;width:600px;display:flex;flex-wrap:wrap;column-gap:26px}
-.k-row{height:54px} .k-row span{font-size:28px} .k-row svg{width:28px;height:28px}
+.k-contacts{left:2380px;top:1100px;bottom:auto}
+.k-row{height:58px} .k-row span{font-size:30px} .k-row svg{width:30px;height:30px}
 </style></head><body><div class="pano">
 <div class="wm w1"></div><div class="wm w2"></div><div class="wm w3"></div><div class="strip t"></div><div class="strip b"></div>
 
