@@ -1,8 +1,8 @@
 // إعلان اليوم الوطني ٩٦ — «اشترِ وحدتك بـ 663,596 ريال ومكيفاتك علينا» بألوان الطباع الستة.
-// الـ٩٦ مدموج في السعر نفسه (663,5|96) ومكبّر بلون مميّز — لا رقم منفصل.
-// الخلفية src/room.png: غرفة إعلان جري كاملة بعد إزالة كتابته، ومنظر النافذة جبال مكة وبرج الساعة من صورة البروشور (compose-room.cjs).
-// شعار المناسبة أعلى اليمين وسماك أعلى اليسار (١.٧)، الأرضية بلون الطبع (١.٥)، الرسمة والعبارة الداعمة للطبع أسفل اليمين،
-// العناوين بالخط السعودي والتفاصيل بـ IBM Plex (٣). المكيف: وحدة جري مقتطعة من صورة زوّدنا بها أحمد.
+// تخطيط شبكي بهامش ٤٨: رأس (الشعاران) · صورة الغرفة كاملة بلا طبقات فوقها · بطاقة السعر تتراكب على زاويتها السفلى
+// (وتغطي شعار المتجر) · العرض والمواصفات · تذييل التواصل والطبع · شريط نقش الطبع.
+// الـ٩٦ مدموجة في السعر (663,5|96). الخلفية src/room.png: غرفة إعلان جري بعد إزالة كتابته ومنظر مكة (compose-room.cjs).
+// الهوية: شعار المناسبة يميناً وسماك يساراً (١.٧)، أرضية بلون الطبع (١.٥)، الخط السعودي للعناوين وIBM Plex للتفاصيل (٣).
 // الاستعمال: node build.cjs [طبع]
 const puppeteer = require('C:/Users/ahmed/Semak/rega-registration/node_modules/puppeteer-core');
 const fs = require('fs');
@@ -11,17 +11,20 @@ const K = require('../nd-kliche.cjs');
 const D = __dirname;
 const b64 = (f, m = 'image/png') => `data:${m};base64,` + fs.readFileSync(path.join(D, 'src', f)).toString('base64');
 
-// لون كل طبع من صفحة ٢٥؛ لون التمييز أخضر الهوية إلا حيث لا يُقرأ
+// color: أرضية الطبع (صفحة ٢٥) · ink: لون السعر على البطاقة البيضاء · accent: لون الـ96 وسطر العرض
 const TRAITS = {
-  generosity:    { color: '#0050af', accent: '#5aba1c' },
-  determination: { color: '#971a4d', accent: '#5aba1c' },
-  vision:        { color: '#7c5d21', accent: '#5aba1c' },
-  courage:       { color: '#607c4f', accent: '#bff08f' },
-  authenticity:  { color: '#5aba1c', accent: '#002628' },
-  giving:        { color: '#6565e0', accent: '#5aba1c' },
+  generosity:    { color: '#0050af', ink: '#0050af', accent: '#5aba1c', free: '#ffffff' },
+  determination: { color: '#971a4d', ink: '#971a4d', accent: '#5aba1c', free: '#ffffff' },
+  vision:        { color: '#7c5d21', ink: '#7c5d21', accent: '#5aba1c', free: '#ffffff' },
+  courage:       { color: '#607c4f', ink: '#4c6640', accent: '#5aba1c', free: '#ffffff' },
+  authenticity:  { color: '#5aba1c', ink: '#002628', accent: '#3f8f10', free: '#002628' },
+  giving:        { color: '#6565e0', ink: '#4f4fc4', accent: '#5aba1c', free: '#ffffff' },
 };
 const PRICE_A = '663,5', PRICE_B = '96';
-const UNITS = [['5', 'مكيفات', '18,000'], ['1', 'مكيف', '24,000']];
+
+// قصّ صورة الغرفة: x 120→1600 و y 505→1347 من الأصل (١٦٠٠×١٦٠٠) داخل إطار ٩٨٤×٥٦٠
+const PH = { x: 48, y: 160, w: 984, h: 560, sx: 120, sy: 505 };
+const S = PH.w / 1480;
 
 const page = (k, t) => `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
 @font-face{font-family:'Saudi';src:url('${b64('Saudi-Bold.ttf', 'font/ttf')}');font-weight:700}
@@ -30,43 +33,51 @@ const page = (k, t) => `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta cha
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:1080px;height:1080px;background:${t.color}}
 .card{position:relative;width:1080px;height:1080px;overflow:hidden;background:${t.color};color:#fff}
-/* الخلفية: الغرفة كاملة، مقصوصة بحيث يقع شعار المتجر أسفل اليسار تحت الشريط السفلي */
-.photo{position:absolute;inset:0;background:url('${b64('room.png')}') -120px 0/1200px 1200px no-repeat}
-.topfade{position:absolute;left:0;right:0;top:0;height:200px;background:linear-gradient(180deg,${t.color}f2 0%,${t.color}b3 45%,${t.color}00 100%)}
-.semak{position:absolute;top:22px;left:34px;width:206px;filter:brightness(0) invert(1)}
-.nd{position:absolute;top:36px;right:40px;width:340px}
-.panel{position:absolute;top:150px;right:30px;width:610px;height:226px;border-radius:22px;background:${t.color}eb;box-shadow:0 14px 34px rgba(0,0,0,.28);text-align:center;padding-top:14px}
-.buy{font-family:'Saudi';font-weight:700;font-size:40px;line-height:1.1}
-.price{display:flex;justify-content:center;align-items:baseline;gap:14px;direction:rtl;margin-top:-30px}
-.num{direction:ltr;font-family:'Saudi';font-weight:700;line-height:1;white-space:nowrap}
-.num .a{font-size:118px}
-.num .b{font-size:176px;color:${t.accent};letter-spacing:-2px}
-.price .sar{font-family:'Saudi';font-weight:700;font-size:38px}
-/* الأسفل: لوحة بلون الطبع يساراً (تغطي شعار المتجر)، ويبقى جوال التحكم ظاهراً في مكانه من الصورة */
-.lpanel{position:absolute;left:0;top:760px;width:640px;bottom:0;background:${t.color};border-top-right-radius:28px;overflow:hidden;box-shadow:0 -8px 30px rgba(0,0,0,.2)}
-.strip{position:absolute;left:0;right:0;top:0;height:40px;background:url('${b64(`${k}-p1.png`)}') center/40px 40px repeat-x}
-.wm{position:absolute;left:0;right:0;top:40px;bottom:0;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.08}
-.free{position:absolute;top:50px;right:34px;font-family:'Saudi';font-weight:700;font-size:56px;color:${t.accent};line-height:1.05}
-.spec{position:absolute;top:126px;right:34px;display:flex;gap:10px;direction:rtl}
-.spec div{font-family:'Plex';font-weight:700;font-size:21px;padding:4px 14px;border-radius:999px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.45)}
-.spec small{font-weight:500;opacity:.9}
-.rpanel{position:absolute;right:24px;bottom:22px;width:250px;height:118px;border-radius:20px;background:${t.color}eb;box-shadow:0 10px 26px rgba(0,0,0,.25)}
-.icon{position:absolute;right:10px;top:10px;width:98px;height:98px}
-.slogan{position:absolute;right:118px;top:28px;width:118px}
+.wm{position:absolute;left:0;right:0;top:700px;bottom:0;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.07}
+
+.semak{position:absolute;top:14px;left:34px;width:176px;filter:brightness(0) invert(1)}
+.nd{position:absolute;top:48px;right:48px;width:320px}
+
+.photo{position:absolute;left:${PH.x}px;top:${PH.y}px;width:${PH.w}px;height:${PH.h}px;border-radius:26px;overflow:hidden;
+  background:url('${b64('room.png')}') ${-PH.sx * S}px ${-PH.sy * S}px/${1600 * S}px ${1600 * S}px no-repeat;box-shadow:0 18px 40px rgba(0,0,0,.25)}
+
+.price{position:absolute;left:48px;top:580px;width:560px;height:178px;border-radius:24px;background:#fff;color:${t.ink};
+  box-shadow:0 18px 40px rgba(0,0,0,.28);padding:22px 34px 0;text-align:right}
+.price .k{font-family:'Saudi';font-weight:700;font-size:34px;line-height:1}
+.price .v{display:flex;align-items:baseline;justify-content:flex-start;gap:12px;margin-top:-30px}
+.price .num{direction:ltr;font-family:'Saudi';font-weight:700;line-height:1;white-space:nowrap}
+.price .a{font-size:104px}
+.price .b{font-size:142px;color:${t.accent};letter-spacing:-2px}
+.price .sar{font-family:'Saudi';font-weight:700;font-size:32px}
+
+.free{position:absolute;right:48px;top:742px;font-family:'Saudi';font-weight:700;font-size:58px;line-height:1;color:${t.free}}
+.spec{position:absolute;right:48px;top:818px;text-align:right;font-family:'Plex';font-weight:500;font-size:23px;line-height:36px;color:${t.free};opacity:.95}
+.spec b{font-weight:700}
+.loc{position:absolute;left:48px;top:826px;font-family:'Plex';font-weight:500;font-size:22px;color:${t.free};opacity:.9}
+
+.rule{position:absolute;left:48px;right:48px;top:912px;height:1.5px;background:${t.free};opacity:.3}
 ${K.css}
-.k-contacts{left:34px;bottom:22px;width:580px;display:flex;flex-wrap:wrap;column-gap:26px;row-gap:2px}
-.k-row{height:38px} .k-row span{font-size:21px} .k-row svg{width:22px;height:22px}
+.k-contacts{left:48px;bottom:44px;width:600px;display:flex;flex-wrap:wrap;column-gap:24px}
+.k-row{height:34px} .k-row span{font-size:19px;color:${t.free}} .k-row svg{width:20px;height:20px;stroke:${t.free}}
+.icon{position:absolute;right:48px;bottom:40px;width:88px;height:88px}
+.slogan{position:absolute;right:150px;bottom:52px;width:118px}
+
+.strip{position:absolute;left:0;right:0;bottom:0;height:24px;background:url('${b64(`${k}-p1.png`)}') center/24px 24px repeat-x}
 </style></head><body><div class="card">
-<div class="photo"></div><div class="topfade"></div>
+<div class="wm"></div>
 <img class="semak" src="${b64('semak-logo.png')}">
 <img class="nd" src="${b64('nd-2026-logo.png')}">
-<div class="panel"><div class="buy">اشترِ وحدتك بـ</div>
-<div class="price"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">ريال</div></div></div>
-<div class="lpanel"><div class="strip"></div><div class="wm"></div>
+<div class="photo"></div>
+<div class="price"><div class="k">اشترِ وحدتك بـ</div>
+  <div class="v"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">ريال</div></div></div>
 <div class="free">ومكيفاتك علينا</div>
-<div class="spec">${UNITS.map(([n, w, btu]) => `<div>${n} ${w} <small>${btu} وحدة</small></div>`).join('')}<div>جري</div></div>
-${K.html}</div>
-<div class="rpanel"><img class="icon" src="${b64(`${k}-frame.png`)}"><img class="slogan" src="${b64(`${k}-slogan.png`)}"></div>
+<div class="spec"><b>5 مكيفات</b> جري 18,000 وحدة<br><b>مكيف</b> جري 24,000 وحدة</div>
+<div class="loc">سماك البوابة · حي البوابة، مكة المكرمة</div>
+<div class="rule"></div>
+${K.html}
+<img class="icon" src="${b64(`${k}-frame.png`)}">
+<img class="slogan" src="${b64(`${k}-slogan.png`)}">
+<div class="strip"></div>
 </div></body></html>`;
 
 (async () => {

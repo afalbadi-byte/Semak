@@ -2,7 +2,7 @@
 const sharp = require('C:/Users/ahmed/Semak/rega-registration/node_modules/sharp');
 const SRC = 'C:/Users/ahmed/Downloads/قري.jpeg';
 const MK = 'C:/Users/ahmed/Semak/brochure/lite/makkah.jpg';
-const OUT = __dirname + '/room-makkah.png';
+const OUT = __dirname + '/src/room.png';
 
 (async () => {
   const { data, info } = await sharp(SRC).removeAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -25,24 +25,31 @@ const OUT = __dirname + '/room-makkah.png';
   const fg = new Uint8Array(W * H);
   for (let y = 945; y < GYB; y++) for (let x = 0; x < GX1; x++) { const i = (y * W + x) * 3; const r = data[i], b = data[i + 2];
     if (!(b >= r + 3 || lum(i) < 70)) fg[y * W + x] = 1; }
-  const seen = new Uint8Array(W * H);
+  const seen = new Uint8Array(W * H), drop = new Uint8Array(W * H);
   for (let y = 945; y < GYB; y++) for (let x = 0; x < GX1; x++) { const k0 = y * W + x; if (!fg[k0] || seen[k0]) continue;
     const comp = [k0], st = [k0]; seen[k0] = 1; let touchesBottom = false;
     while (st.length) { const k = st.pop(); const cy = (k / W) | 0, cx = k % W; if (cy >= GYB - 2) touchesBottom = true;
       for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) { const nx = cx + dx, ny = cy + dy; if (nx < 0 || nx >= GX1 || ny < 945 || ny >= GYB) continue;
         const nk = ny * W + nx; if (fg[nk] && !seen[nk]) { seen[nk] = 1; st.push(nk); comp.push(nk); } } }
-    if (comp.length < 1500 && !touchesBottom) for (const k of comp) fg[k] = 0; }
+    if (comp.length < 1500 && !touchesBottom) for (const k of comp) { fg[k] = 0; drop[k] = 1; } }
+  // حافة ناعمة لكتل المقدّمة (متوسط ٣×٣)
+  const fgs = new Float32Array(W * H);
+  for (let y = 944; y < GYB; y++) for (let x = 1; x < GX1 - 1; x++) { let n = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) n += fg[(y + dy) * W + x + dx];
+    fgs[y * W + x] = n / 9; }
   for (let y = 440; y < GYB; y++) for (let x = 0; x < GX1; x++) {
     if (y < topY(x)) continue;
     if (mull.some(([a, b]) => x >= a && x <= b)) continue;
     const i = (y * W + x) * 3, r = data[i], g = data[i + 1], b = data[i + 2];
     // المقدّمة (الوسائد والنبات والمصباح) دافئة أو ساطعة — تبقى
-    if (fg[y * W + x]) continue;
+    if (fgs[y * W + x] >= 1) continue;
+    // تحت خط الأثاث: مزج تدريجي حسب زرقة البكسل كي لا تظهر هالة حول النبات والوسائد
+    const soft = y >= 944 ? 1 - fgs[y * W + x] : 1;
     const my = Math.min(mkH - 1, y - 455); if (my < 0) continue;
     const mx = x + offX; if (mx < 0 || mx >= mkW) continue;
     const j = (my * mkW + mx) * 3;
     // حافة ناعمة قرب إطار النافذة العلوي
-    const t = Math.min(1, (y - topY(x)) / 3);
+    const t = Math.min(1, (y - topY(x)) / 3) * soft;
     for (let c = 0; c < 3; c++) px[i + c] = Math.round(mk[j + c] * t + data[i + c] * (1 - t));
   }
 
@@ -82,6 +89,6 @@ const OUT = __dirname + '/room-makkah.png';
   for (let k = 0; k < W * H; k++) if (dil[k]) { const n = (Math.random() - .5) * 10; for (let c = 0; c < 3; c++) px[k * 3 + c] = Math.max(0, Math.min(255, px[k * 3 + c] + n)); }
 
   await sharp(px, { raw: { width: W, height: H, channels: 3 } }).png().toFile(OUT);
-  await sharp(OUT).resize(900).jpeg().toFile(__dirname + '/room-preview.jpg');
+  
   console.log('ok');
 })();
