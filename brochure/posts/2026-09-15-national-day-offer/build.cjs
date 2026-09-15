@@ -42,31 +42,31 @@ html,body{width:1080px;height:1080px;background:${t.color}}
 .num .a{font-size:118px}
 .num .b{font-size:176px;color:${t.accent};letter-spacing:-2px}
 .price .sar{font-family:'Saudi';font-weight:700;font-size:38px}
-.botfade{position:absolute;left:0;right:0;top:640px;bottom:0;background:linear-gradient(180deg,${t.color}00 0%,${t.color} 24%)}
-/* جوال التحكم من نفس الصورة، مقتطع ومرفوع فوق الشريط السفلي */
-.phone{position:absolute;left:286px;top:734px;width:134px;filter:drop-shadow(0 12px 22px rgba(0,0,0,.35))}
-.strip{position:absolute;left:0;right:0;top:770px;height:46px;background:url('${b64(`${k}-p1.png`)}') center/46px 46px repeat-x}
-.wm{position:absolute;left:0;right:0;top:816px;bottom:0;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.08}
-.free{position:absolute;top:824px;right:40px;font-family:'Saudi';font-weight:700;font-size:60px;color:${t.accent};line-height:1.05}
-.spec{position:absolute;top:902px;right:40px;display:flex;gap:10px;direction:rtl}
+/* الأسفل: لوحة بلون الطبع يساراً (تغطي شعار المتجر)، ويبقى جوال التحكم ظاهراً في مكانه من الصورة */
+.lpanel{position:absolute;left:0;top:760px;width:640px;bottom:0;background:${t.color};border-top-right-radius:28px;overflow:hidden;box-shadow:0 -8px 30px rgba(0,0,0,.2)}
+.strip{position:absolute;left:0;right:0;top:0;height:40px;background:url('${b64(`${k}-p1.png`)}') center/40px 40px repeat-x}
+.wm{position:absolute;left:0;right:0;top:40px;bottom:0;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.08}
+.free{position:absolute;top:50px;right:34px;font-family:'Saudi';font-weight:700;font-size:56px;color:${t.accent};line-height:1.05}
+.spec{position:absolute;top:126px;right:34px;display:flex;gap:10px;direction:rtl}
 .spec div{font-family:'Plex';font-weight:700;font-size:21px;padding:4px 14px;border-radius:999px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.45)}
 .spec small{font-weight:500;opacity:.9}
-.icon{position:absolute;right:40px;bottom:20px;width:104px;height:104px}
-.slogan{position:absolute;right:160px;bottom:30px;width:150px}
+.rpanel{position:absolute;right:24px;bottom:22px;width:250px;height:118px;border-radius:20px;background:${t.color}eb;box-shadow:0 10px 26px rgba(0,0,0,.25)}
+.icon{position:absolute;right:10px;top:10px;width:98px;height:98px}
+.slogan{position:absolute;right:118px;top:28px;width:118px}
 ${K.css}
-.k-row{height:40px} .k-row span{font-size:22px} .k-row svg{width:23px;height:23px}
+.k-contacts{left:34px;bottom:22px;width:580px;display:flex;flex-wrap:wrap;column-gap:26px;row-gap:2px}
+.k-row{height:38px} .k-row span{font-size:21px} .k-row svg{width:22px;height:22px}
 </style></head><body><div class="card">
-<div class="photo"></div><div class="topfade"></div><div class="botfade"></div><div class="strip"></div><div class="wm"></div>
+<div class="photo"></div><div class="topfade"></div>
 <img class="semak" src="${b64('semak-logo.png')}">
 <img class="nd" src="${b64('nd-2026-logo.png')}">
 <div class="panel"><div class="buy">اشترِ وحدتك بـ</div>
 <div class="price"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">ريال</div></div></div>
+<div class="lpanel"><div class="strip"></div><div class="wm"></div>
 <div class="free">ومكيفاتك علينا</div>
-<div class="spec">${UNITS.map(([n, w, btu]) => `<div>${n} ${w} <small>${btu} وحدة</small></div>`).join('')}<div>جري <small>GREE</small></div></div>
-<img class="phone" src="${b64('phone.png')}">
-<img class="icon" src="${b64(`${k}-frame.png`)}">
-<img class="slogan" src="${b64(`${k}-slogan.png`)}">
-${K.html}
+<div class="spec">${UNITS.map(([n, w, btu]) => `<div>${n} ${w} <small>${btu} وحدة</small></div>`).join('')}<div>جري</div></div>
+${K.html}</div>
+<div class="rpanel"><img class="icon" src="${b64(`${k}-frame.png`)}"><img class="slogan" src="${b64(`${k}-slogan.png`)}"></div>
 </div></body></html>`;
 
 (async () => {
