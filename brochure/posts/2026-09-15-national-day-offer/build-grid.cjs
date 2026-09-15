@@ -10,6 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const K = require('../nd-kliche.cjs');
 const D = __dirname;
+// رمز الريال السعودي الرسمي (SVG من الخط المفتوح @emran-alhaddad/saudi-riyal-font، رخصة OFL)
+const RIYAL = fs.readFileSync(path.join(D, 'src', 'riyal.svg'), 'utf8').replace(/<svg[^>]*>/, '<svg class="riyal" viewBox="0 0 1256 1256" fill="currentColor">');
 const b64 = (f, m = 'image/png') => `data:${m};base64,` + fs.readFileSync(path.join(D, 'src', f)).toString('base64');
 
 const T = { k: 'vision', color: '#7c5d21', ink: '#7c5d21', accent: '#5aba1c' };
@@ -51,7 +53,7 @@ html,body{width:3240px;height:1440px;background:${T.color}}
 .price{top:206px;display:flex;align-items:baseline;gap:18px;direction:rtl}
 .price .num{direction:ltr;font-family:'Saudi';font-weight:700;line-height:1;white-space:nowrap}
 .price .a{font-size:166px} .price .b{font-size:236px;color:${T.accent};letter-spacing:-3px}
-.price .sar{font-family:'Saudi';font-weight:700;font-size:54px}
+.price .sar{font-family:'Saudi';font-weight:700;font-size:54px;display:flex;align-items:flex-end} .price .sar svg{width:1.5em;height:1.5em;margin-bottom:.12em}
 .free{top:500px;font-family:'Saudi';font-weight:700;font-size:112px;line-height:1.05;color:${T.accent}}
 .photo{position:absolute;left:${PH.x}px;top:${PH.y}px;width:${PH.w}px;height:${PH.h}px;border-radius:28px;overflow:hidden;
   background:url('${b64('room.png')}') ${-PH.sx * PH.s}px ${-PH.sy * PH.s}px/${1600 * PH.s}px ${1600 * PH.s}px no-repeat;box-shadow:0 22px 46px rgba(0,0,0,.3)}
@@ -68,17 +70,17 @@ html,body{width:3240px;height:1440px;background:${T.color}}
 .stat b{display:block;font-family:'Saudi';font-weight:700;font-size:118px;line-height:1;color:${T.accent};direction:ltr;text-align:right}
 .stat span{font-family:'Plex';font-weight:700;font-size:34px}
 .ft{top:700px;font-family:'Saudi';font-weight:700;font-size:52px;line-height:1}
-.feat{position:absolute;right:80px;top:786px;width:600px;display:grid;grid-template-columns:1fr 1fr;row-gap:16px;column-gap:24px;direction:rtl}
-.feat div{display:flex;align-items:center;gap:12px;font-family:'Plex';font-weight:700;font-size:30px;white-space:nowrap}
+.feat{position:absolute;right:80px;top:786px;width:780px;display:grid;grid-template-columns:1fr 1fr;row-gap:16px;column-gap:24px;direction:rtl}
+.feat div{display:flex;align-items:center;gap:12px;font-family:'Plex';font-weight:700;font-size:34px;white-space:nowrap}
 .feat svg{width:36px;height:36px;fill:none;stroke:${T.accent};stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.qr{position:absolute;left:2380px;top:716px;width:176px;text-align:center}
-.qr .c{background:#fff;border-radius:18px;padding:12px;box-shadow:0 10px 26px rgba(0,0,0,.25)}
-.qr img{display:block;width:152px;height:152px}
-.qr span{display:block;margin-top:12px;font-family:'Plex';font-weight:700;font-size:25px;line-height:1.3}
-.rule{position:absolute;left:2380px;right:80px;top:1168px;height:2px;background:#fff;opacity:.3}
+.qr{position:absolute;right:80px;top:1104px;width:200px;text-align:center}
+.qr .c{display:inline-block;background:#fff;border-radius:16px;padding:10px;box-shadow:0 10px 26px rgba(0,0,0,.25)}
+.qr img{display:block;width:124px;height:124px}
+.qr span{display:block;margin-top:8px;font-family:'Plex';font-weight:700;font-size:22px;white-space:nowrap}
+.rule{position:absolute;left:2380px;right:80px;top:1072px;height:2px;background:#fff;opacity:.3}
 ${K.css}
-.k-contacts{left:2380px;top:1186px;bottom:auto;width:780px;display:flex;flex-wrap:wrap;column-gap:40px}
-.k-row{height:56px} .k-row span{font-size:31px} .k-row svg{width:30px;height:30px}
+.k-contacts{left:2380px;top:1180px;bottom:auto;width:600px;display:flex;flex-wrap:wrap;column-gap:26px}
+.k-row{height:54px} .k-row span{font-size:28px} .k-row svg{width:28px;height:28px}
 </style></head><body><div class="pano">
 <div class="wm w1"></div><div class="wm w2"></div><div class="wm w3"></div><div class="strip t"></div><div class="strip b"></div>
 
@@ -91,7 +93,7 @@ ${K.css}
 
 <div class="L occ">بمناسبة اليوم الوطني السعودي</div>
 <div class="L buy">اشترِ وحدتك بـ</div>
-<div class="L price"><div class="num"><span class="a">663,5</span><span class="b">96</span></div><div class="sar">ريال</div></div>
+<div class="L price"><div class="num"><span class="a">663,5</span><span class="b">96</span></div><div class="sar">${RIYAL}</div></div>
 <div class="L free">ومكيفاتك علينا</div>
 <div class="photo"></div>
 <div class="ac"><div><span>5 مكيفات جري</span><span>18,000 وحدة</span></div><hr><div><span>مكيف جري</span><span>24,000 وحدة</span></div></div>
@@ -105,7 +107,7 @@ ${K.css}
 </div>
 <div class="R ft">المميزات</div>
 <div class="feat">${FEATURES.map(f => `<div>${CHECK}<span>${f}</span></div>`).join('')}</div>
-<div class="qr"><div class="c"><img src="${b64('qr-brochure.png')}"></div><span>امسح لطلب<br>البروشور</span></div>
+<div class="qr"><div class="c"><img src="${b64('qr-brochure.png')}"></div><span>امسح لطلب البروشور</span></div>
 <div class="rule"></div>
 ${K.html}
 </div></body></html>`;

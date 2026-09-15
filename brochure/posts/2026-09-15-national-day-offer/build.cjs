@@ -9,6 +9,8 @@ const fs = require('fs');
 const path = require('path');
 const K = require('../nd-kliche.cjs');
 const D = __dirname;
+// رمز الريال السعودي الرسمي (SVG من الخط المفتوح @emran-alhaddad/saudi-riyal-font، رخصة OFL)
+const RIYAL = fs.readFileSync(path.join(D, 'src', 'riyal.svg'), 'utf8').replace(/<svg[^>]*>/, '<svg class="riyal" viewBox="0 0 1256 1256" fill="currentColor">');
 const b64 = (f, m = 'image/png') => `data:${m};base64,` + fs.readFileSync(path.join(D, 'src', f)).toString('base64');
 
 // color: أرضية الطبع (صفحة ٢٥) · ink: لون السعر على البطاقة البيضاء · accent: لون الـ96 وسطر العرض
@@ -48,7 +50,7 @@ html,body{width:1080px;height:1080px;background:${t.color}}
 .price .num{direction:ltr;font-family:'Saudi';font-weight:700;line-height:1;white-space:nowrap}
 .price .a{font-size:104px}
 .price .b{font-size:142px;color:${t.accent};letter-spacing:-2px}
-.price .sar{font-family:'Saudi';font-weight:700;font-size:32px}
+.price .sar{font-family:'Saudi';font-weight:700;font-size:32px;display:flex;align-items:flex-end} .price .sar svg{width:1.5em;height:1.5em;margin-bottom:.12em}
 
 .free{position:absolute;right:48px;top:742px;font-family:'Saudi';font-weight:700;font-size:58px;line-height:1;color:${t.free}}
 .spec{position:absolute;right:48px;top:818px;text-align:right;font-family:'Plex';font-weight:500;font-size:23px;line-height:36px;color:${t.free};opacity:.95}
@@ -69,7 +71,7 @@ ${K.css}
 <img class="nd" src="${b64('nd-2026-logo.png')}">
 <div class="photo"></div>
 <div class="price"><div class="k">اشترِ وحدتك بـ</div>
-  <div class="v"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">ريال</div></div></div>
+  <div class="v"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">${RIYAL}</div></div></div>
 <div class="free">ومكيفاتك علينا</div>
 <div class="spec"><b>5 مكيفات</b> جري 18,000 وحدة<br><b>مكيف</b> جري 24,000 وحدة</div>
 <div class="loc">سماك البوابة · حي البوابة، مكة المكرمة</div>
