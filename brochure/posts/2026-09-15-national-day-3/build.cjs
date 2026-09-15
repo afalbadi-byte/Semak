@@ -26,15 +26,19 @@ html,body{width:1080px;height:1080px;background:${CRIMSON}}
 .card{position:relative;width:1080px;height:1080px;overflow:hidden;background:${CRIMSON}}
 .nd{position:absolute;top:40px;left:50%;transform:translateX(-50%);width:${ND_W}px}
 .band{position:absolute;left:0;right:0;top:236px;height:450px;background:url('${b64('dots.png', 'image/png')}') center/auto 450px repeat-x}
-.frame{position:absolute;top:226px;left:50%;transform:translateX(-50%);width:470px;height:470px;background:${CRIMSON};padding:14px}
-.frame img{display:block;width:100%;height:100%}
+.framebox{position:absolute;top:226px;left:50%;transform:translateX(-50%);width:470px;height:470px;background:${CRIMSON}}
+.frameimg{position:absolute;top:240px;left:50%;transform:translateX(-50%);width:442px;height:442px}
 .slogan{position:absolute;top:722px;left:50%;transform:translateX(-50%);width:270px}
 .semak{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:${SEMAK_IMG}px;filter:brightness(0) invert(1)}
+/* علامة سماك المائية: النقش السداسي فاتحاً فوق العنابي وتحت عناصر الهوية */
+.wm{position:absolute;inset:0;background:url('${b64('semak-pattern.png', 'image/png')}') center/640px auto repeat;filter:invert(1);mix-blend-mode:screen;opacity:.07}
 </style></head><body><div class="card">
-<img class="nd" src="${b64('ndlogo.png', 'image/png')}">
 <div class="band"></div>
-<div class="frame"><img src="${b64('frame.png', 'image/png')}"></div>
-<img class="slogan" src="${b64('slogan.png', 'image/png')}">
+<div class="framebox"></div>
+<div class="wm"></div>
+<img class="frameimg" src="${b64('frame.png', 'image/png')}">
+<img class="nd" src="${b64('ndlogo-t.png', 'image/png')}">
+<img class="slogan" src="${b64('slogan-t.png', 'image/png')}">
 <img class="semak" src="${b64('semak-logo.png', 'image/png')}">
 </div></body></html>`;
 
