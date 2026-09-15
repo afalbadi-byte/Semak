@@ -68,12 +68,16 @@ html,body{width:3240px;height:1440px;background:${T.color}}
 .stat b{display:block;font-family:'Saudi';font-weight:700;font-size:118px;line-height:1;color:${T.accent};direction:ltr;text-align:right}
 .stat span{font-family:'Plex';font-weight:700;font-size:34px}
 .ft{top:700px;font-family:'Saudi';font-weight:700;font-size:52px;line-height:1}
-.feat{position:absolute;right:80px;top:780px;width:780px;display:grid;grid-template-columns:1fr 1fr;row-gap:16px;column-gap:24px;direction:rtl}
-.feat div{display:flex;align-items:center;gap:14px;font-family:'Plex';font-weight:700;font-size:34px}
+.feat{position:absolute;right:80px;top:786px;width:600px;display:grid;grid-template-columns:1fr 1fr;row-gap:16px;column-gap:24px;direction:rtl}
+.feat div{display:flex;align-items:center;gap:12px;font-family:'Plex';font-weight:700;font-size:30px;white-space:nowrap}
 .feat svg{width:36px;height:36px;fill:none;stroke:${T.accent};stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.rule{position:absolute;left:2380px;right:80px;top:1036px;height:2px;background:#fff;opacity:.3}
+.qr{position:absolute;left:2380px;top:716px;width:176px;text-align:center}
+.qr .c{background:#fff;border-radius:18px;padding:12px;box-shadow:0 10px 26px rgba(0,0,0,.25)}
+.qr img{display:block;width:152px;height:152px}
+.qr span{display:block;margin-top:12px;font-family:'Plex';font-weight:700;font-size:25px;line-height:1.3}
+.rule{position:absolute;left:2380px;right:80px;top:1168px;height:2px;background:#fff;opacity:.3}
 ${K.css}
-.k-contacts{left:2380px;top:1066px;bottom:auto;width:780px;display:flex;flex-wrap:wrap;column-gap:40px}
+.k-contacts{left:2380px;top:1186px;bottom:auto;width:780px;display:flex;flex-wrap:wrap;column-gap:40px}
 .k-row{height:56px} .k-row span{font-size:31px} .k-row svg{width:30px;height:30px}
 </style></head><body><div class="pano">
 <div class="wm w1"></div><div class="wm w2"></div><div class="wm w3"></div><div class="strip t"></div><div class="strip b"></div>
@@ -101,6 +105,7 @@ ${K.css}
 </div>
 <div class="R ft">المميزات</div>
 <div class="feat">${FEATURES.map(f => `<div>${CHECK}<span>${f}</span></div>`).join('')}</div>
+<div class="qr"><div class="c"><img src="${b64('qr-brochure.png')}"></div><span>امسح لطلب<br>البروشور</span></div>
 <div class="rule"></div>
 ${K.html}
 </div></body></html>`;
