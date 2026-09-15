@@ -9,6 +9,7 @@
 const puppeteer = require('C:/Users/ahmed/Semak/rega-registration/node_modules/puppeteer-core');
 const fs = require('fs');
 const path = require('path');
+const K = require('../nd-kliche.cjs'); // بيانات تواصل سماك
 const D = __dirname;
 const b64 = (f, m) => `data:${m};base64,` + fs.readFileSync(path.join(D, 'src', f)).toString('base64');
 const font = (f, w) => `@font-face{font-family:'Saudi';src:url('${b64(f, 'font/ttf')}');font-weight:${w}}`;
@@ -34,6 +35,7 @@ html,body{width:1080px;height:1080px;background:${CRIMSON}}
    تتلاشى للأعلى — لا تتقاطع مع نقش النقاط ولا تدخل المسافة الهامشية لشعار المناسبة */
 .wm{position:absolute;left:0;right:0;top:700px;bottom:0;background:url('${b64('semak-wm-bottom.png', 'image/png')}') center bottom/1080px auto no-repeat;opacity:.1;
   -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 45%);mask-image:linear-gradient(180deg,transparent 0%,#000 45%)}
+${K.css}
 </style></head><body><div class="card">
 <div class="band"></div>
 <div class="framebox"></div>
@@ -42,6 +44,7 @@ html,body{width:1080px;height:1080px;background:${CRIMSON}}
 <img class="nd" src="${b64('ndlogo-t.png', 'image/png')}">
 <img class="slogan" src="${b64('slogan-t.png', 'image/png')}">
 <img class="semak" src="${b64('semak-logo.png', 'image/png')}">
+${K.html}
 </div></body></html>`;
 
 (async () => {

@@ -10,6 +10,7 @@
 const puppeteer = require('C:/Users/ahmed/Semak/rega-registration/node_modules/puppeteer-core');
 const fs = require('fs');
 const path = require('path');
+const K = require('../nd-kliche.cjs'); // بيانات تواصل سماك
 const D = __dirname;
 const b64 = f => 'data:image/png;base64,' + fs.readFileSync(path.join(D, 'src', f)).toString('base64');
 
@@ -37,6 +38,7 @@ html,body{width:1080px;height:1080px;background:${t.color}}
 .frameimg{position:absolute;top:240px;left:50%;transform:translateX(-50%);width:442px;height:442px}
 .slogan{position:absolute;top:722px;left:50%;transform:translateX(-50%);width:270px}
 .semak{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:${SEMAK_IMG}px;filter:brightness(0) invert(1)}
+${K.css}
 </style></head><body><div class="card">
 <div class="band"></div>
 <div class="framebox"></div>
@@ -45,6 +47,7 @@ html,body{width:1080px;height:1080px;background:${t.color}}
 <img class="nd" src="${b64('ndlogo-v.png')}">
 <img class="slogan" src="${b64(`${k}-slogan.png`)}">
 <img class="semak" src="${b64('semak-logo.png')}">
+${K.html}
 </div></body></html>`;
 
 (async () => {
