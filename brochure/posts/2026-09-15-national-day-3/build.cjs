@@ -30,8 +30,10 @@ html,body{width:1080px;height:1080px;background:${CRIMSON}}
 .frameimg{position:absolute;top:240px;left:50%;transform:translateX(-50%);width:442px;height:442px}
 .slogan{position:absolute;top:722px;left:50%;transform:translateX(-50%);width:270px}
 .semak{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:${SEMAK_IMG}px;filter:brightness(0) invert(1)}
-/* علامة سماك المائية: النقش السداسي فاتحاً فوق العنابي وتحت عناصر الهوية */
-.wm{position:absolute;inset:0;background:url('${b64('semak-pattern.png', 'image/png')}') center/640px auto repeat;filter:invert(1);mix-blend-mode:screen;opacity:.07}
+/* علامة سماك المائية: النقش السداسي مرة واحدة كبيرة أسفل البطاقة خلف العبارة وشعار سماك،
+   تتلاشى للأعلى — لا تتقاطع مع نقش النقاط ولا تدخل المسافة الهامشية لشعار المناسبة */
+.wm{position:absolute;left:0;right:0;top:700px;bottom:0;background:url('${b64('semak-wm-bottom.png', 'image/png')}') center bottom/1080px auto no-repeat;opacity:.1;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 45%);mask-image:linear-gradient(180deg,transparent 0%,#000 45%)}
 </style></head><body><div class="card">
 <div class="band"></div>
 <div class="framebox"></div>
