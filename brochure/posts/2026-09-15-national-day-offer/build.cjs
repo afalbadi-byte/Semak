@@ -1,6 +1,6 @@
 // إعلان اليوم الوطني ٩٦ — «اشترِ وحدتك بـ 663,596 ريال ومكيفاتك علينا» بألوان الطباع الستة.
 // الـ٩٦ مدموج في السعر نفسه (663,5|96) ومكبّر بلون مميّز — لا رقم منفصل.
-// صورة المكيف على «قالب الإطار» الرسمي (دليل الهوية ٦.٢): النقش الفرعي للطبع يصنع إطاراً خارجياً حول الصورة.
+// الخلفية src/room.png: غرفة إعلان جري كاملة بعد إزالة كتابته، ومنظر النافذة جبال مكة وبرج الساعة من صورة البروشور (compose-room.cjs).
 // شعار المناسبة أعلى اليمين وسماك أعلى اليسار (١.٧)، الأرضية بلون الطبع (١.٥)، الرسمة والعبارة الداعمة للطبع أسفل اليمين،
 // العناوين بالخط السعودي والتفاصيل بـ IBM Plex (٣). المكيف: وحدة جري مقتطعة من صورة زوّدنا بها أحمد.
 // الاستعمال: node build.cjs [طبع]
@@ -30,37 +30,35 @@ const page = (k, t) => `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta cha
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:1080px;height:1080px;background:${t.color}}
 .card{position:relative;width:1080px;height:1080px;overflow:hidden;background:${t.color};color:#fff}
-.semak{position:absolute;top:26px;left:34px;width:220px;filter:brightness(0) invert(1)}
-.nd{position:absolute;top:58px;right:46px;width:380px}
-.wm{position:absolute;left:0;right:0;top:760px;bottom:0;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.09;
-  -webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 45%);mask-image:linear-gradient(180deg,transparent 0%,#000 45%)}
-
-.buy{position:absolute;top:196px;left:0;right:0;text-align:center;font-family:'Saudi';font-weight:700;font-size:48px}
-.price{position:absolute;top:246px;left:0;right:0;display:flex;justify-content:center;align-items:baseline;gap:18px;direction:rtl}
+/* الخلفية: الغرفة كاملة، مقصوصة بحيث يقع شعار المتجر أسفل اليسار تحت الشريط السفلي */
+.photo{position:absolute;inset:0;background:url('${b64('room.png')}') -120px 0/1200px 1200px no-repeat}
+.topfade{position:absolute;left:0;right:0;top:0;height:200px;background:linear-gradient(180deg,${t.color}f2 0%,${t.color}b3 45%,${t.color}00 100%)}
+.semak{position:absolute;top:22px;left:34px;width:206px;filter:brightness(0) invert(1)}
+.nd{position:absolute;top:36px;right:40px;width:340px}
+.panel{position:absolute;top:150px;right:30px;width:610px;height:226px;border-radius:22px;background:${t.color}eb;box-shadow:0 14px 34px rgba(0,0,0,.28);text-align:center;padding-top:14px}
+.buy{font-family:'Saudi';font-weight:700;font-size:40px;line-height:1.1}
+.price{display:flex;justify-content:center;align-items:baseline;gap:14px;direction:rtl;margin-top:-30px}
 .num{direction:ltr;font-family:'Saudi';font-weight:700;line-height:1;white-space:nowrap}
-.num .a{font-size:150px}
-.num .b{font-size:222px;color:${t.accent};letter-spacing:-2px}
-.price .sar{font-family:'Saudi';font-weight:700;font-size:48px}
-
-.frame{position:absolute;top:458px;left:50%;transform:translateX(-50%);width:640px;height:300px;padding:26px;
-  background:url('${b64(`${k}-p1.png`)}') center/150px 150px repeat;border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.22)}
-.frame img{display:block;width:100%;height:100%;object-fit:cover}
-
-.free{position:absolute;top:772px;left:0;right:0;text-align:center;font-family:'Saudi';font-weight:700;font-size:70px;color:${t.accent};line-height:1.05}
-.spec{position:absolute;top:856px;right:40px;display:flex;gap:12px;direction:rtl}
-.spec div{font-family:'Plex';font-weight:700;font-size:23px;padding:5px 16px;border-radius:999px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.45)}
+.num .a{font-size:118px}
+.num .b{font-size:176px;color:${t.accent};letter-spacing:-2px}
+.price .sar{font-family:'Saudi';font-weight:700;font-size:38px}
+.botfade{position:absolute;left:0;right:0;top:690px;bottom:0;background:linear-gradient(180deg,${t.color}00 0%,${t.color} 26%)}
+.strip{position:absolute;left:0;right:0;top:770px;height:46px;background:url('${b64(`${k}-p1.png`)}') center/46px 46px repeat-x}
+.wm{position:absolute;left:0;right:0;top:816px;bottom:0;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.08}
+.free{position:absolute;top:824px;right:40px;font-family:'Saudi';font-weight:700;font-size:60px;color:${t.accent};line-height:1.05}
+.spec{position:absolute;top:902px;right:40px;display:flex;gap:10px;direction:rtl}
+.spec div{font-family:'Plex';font-weight:700;font-size:21px;padding:4px 14px;border-radius:999px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.45)}
 .spec small{font-weight:500;opacity:.9}
-.icon{position:absolute;right:40px;bottom:22px;width:128px;height:128px}
-.slogan{position:absolute;right:186px;bottom:34px;width:180px}
+.icon{position:absolute;right:40px;bottom:20px;width:104px;height:104px}
+.slogan{position:absolute;right:160px;bottom:30px;width:150px}
 ${K.css}
 .k-row{height:40px} .k-row span{font-size:22px} .k-row svg{width:23px;height:23px}
 </style></head><body><div class="card">
-<div class="wm"></div>
+<div class="photo"></div><div class="topfade"></div><div class="botfade"></div><div class="strip"></div><div class="wm"></div>
 <img class="semak" src="${b64('semak-logo.png')}">
 <img class="nd" src="${b64('nd-2026-logo.png')}">
-<div class="buy">اشترِ وحدتك بـ</div>
-<div class="price"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">ريال</div></div>
-<div class="frame"><img src="${b64('ac.png')}"></div>
+<div class="panel"><div class="buy">اشترِ وحدتك بـ</div>
+<div class="price"><div class="num"><span class="a">${PRICE_A}</span><span class="b">${PRICE_B}</span></div><div class="sar">ريال</div></div></div>
 <div class="free">ومكيفاتك علينا</div>
 <div class="spec">${UNITS.map(([n, w, btu]) => `<div>${n} ${w} <small>${btu} وحدة</small></div>`).join('')}<div>جري <small>GREE</small></div></div>
 <img class="icon" src="${b64(`${k}-frame.png`)}">
