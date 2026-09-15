@@ -1,6 +1,6 @@
 // شبكة إنستقرام ثلاثية متصلة (بانوراما ٣٢٤٠×١٤٤٠ تُقسم إلى ثلاث منشورات ٣:٤) بلون طبع الرؤية:
 //   يسار = هدية التكييف والسعر · وسط = تصميم طبع الرؤية (قالب الرسوم) · يمين = مواصفات الشقة ومميزاتها + التواصل
-// الاتصال: شريط نقش الرؤية يعبر من الوسط إلى الجارتين، شريطا النقش أعلى وأسفل، العلامة المائية ممتدة، أرضية واحدة.
+// الاتصال: العلامة المائية شريط واحد متصل بنفس الحجم أسفل الثلاث، وشريط نقش الرؤية يعبر من الوسط إلى الجارتين، شريطا النقش أعلى وأسفل، العلامة المائية ممتدة، أرضية واحدة.
 // الحقائق: مواصفات الشقة من البروشور (build-brochure.cjs)، والعرض والمكيفات كما أرسلها أحمد.
 // صورة الغرفة src/room.png (compose-room.cjs): إعلان جري بعد إزالة كتابته ومنظر النافذة جبال مكة وبرج الساعة.
 // الاستعمال: node build-grid.cjs → grid-1-left.png · grid-2-center.png · grid-3-right.png (٢١٦٠×٢٨٨٠) + grid-preview.jpg
@@ -28,7 +28,7 @@ const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:3240px;height:1440px;background:${T.color}}
 .pano{position:relative;width:3240px;height:1440px;overflow:hidden;background:${T.color};color:#fff}
-.wm{position:absolute;left:1080px;width:1080px;bottom:30px;height:520px;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.09;-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 50%);mask-image:linear-gradient(180deg,transparent 0%,#000 50%)}
+.wm{position:absolute;left:0;right:0;bottom:30px;height:420px;background:url('${b64('pattern-tile.png')}') 0 100%/680px auto repeat-x;filter:invert(1);mix-blend-mode:screen;opacity:.09;-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 55%);mask-image:linear-gradient(180deg,transparent 0%,#000 55%)}
 .strip{position:absolute;left:0;right:0;height:30px;background:url('${b64('vision-p1.png')}') left center/30px 30px repeat-x}
 .strip.t{top:0} .strip.b{bottom:0}
 
