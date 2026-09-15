@@ -28,7 +28,7 @@ const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:3240px;height:1440px;background:${T.color}}
 .pano{position:relative;width:3240px;height:1440px;overflow:hidden;background:${T.color};color:#fff}
-.wm{position:absolute;left:0;right:0;bottom:0;height:860px;background:url('${b64('semak-wm-bottom.png')}') left bottom/1620px auto repeat-x;opacity:.07}
+.wm{position:absolute;left:1080px;width:1080px;bottom:30px;height:520px;background:url('${b64('semak-wm-bottom.png')}') center bottom/1080px auto no-repeat;opacity:.09;-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 50%);mask-image:linear-gradient(180deg,transparent 0%,#000 50%)}
 .strip{position:absolute;left:0;right:0;height:30px;background:url('${b64('vision-p1.png')}') left center/30px 30px repeat-x}
 .strip.t{top:0} .strip.b{bottom:0}
 
