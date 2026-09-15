@@ -58,22 +58,28 @@ const ICON = {
 const THEME = {
   light: { base: '#f4efe6', ink: '#1a365d', gold: '#b08a45', sub: '#1a365d', logo: A('logo-navy-hd.png'), logoFilter: 'none' },
   dark: { base: '#0a0f1e', ink: '#ffffff', gold: '#c5a059', sub: '#e6eaf1', logo: A('logo-gold-hd.png'), logoFilter: 'brightness(0) invert(1)' },
+  // اليوم الوطني — من دليل الهوية الرسمي: الأخضر الداكن أساس النظام، والأخضر الفاتح #5aba1c
+  nd: { base: '#002628', ink: '#ffffff', gold: '#5aba1c', sub: '#d9e8e0', logo: A('logo-gold-hd.png'), logoFilter: 'brightness(0) invert(1)', night: '0,38,40' },
 };
 
-const theme = S.theme === 'dark' ? 'dark' : 'light';
+const theme = THEME[S.theme] ? S.theme : 'light';
 const T = THEME[theme];
+const isDark = theme !== 'light';
 const layout = S.layout === 'bottom' ? 'bottom' : 'full';           // bottom = الصورة في النصف السفلي وأعلاه أرضية سادة
-const textPos = S.textPos || (theme === 'dark' ? 'bottom' : 'top');  // مكان العنوان
+const textPos = S.textPos || (isDark ? 'bottom' : 'top');            // مكان العنوان
 const brackets = S.brackets ?? (theme === 'light');
 const wash = Math.max(0, Math.min(1.2, S.wash ?? 1));                // قوة التفتيح/التعتيم فوق الصورة
 const a = v => Math.min(0.98, v * wash).toFixed(3);
 
-const CREAM = '244,239,230', NIGHT = '10,15,30';
+const CREAM = '244,239,230', NIGHT = T.night || '10,15,30';
 const veil = theme === 'light'
   ? (layout === 'bottom'
       ? `linear-gradient(180deg, rgba(${CREAM},1) 0%, rgba(${CREAM},1) 41%, rgba(${CREAM},.25) 50%, rgba(${CREAM},.12) 75%, rgba(${CREAM},.35) 100%)`
       : `linear-gradient(180deg, rgba(${CREAM},${a(.94)}) 0%, rgba(${CREAM},${a(.8)}) 36%, rgba(${CREAM},${a(.22)}) 62%, rgba(${CREAM},${a(.45)}) 100%)`)
     + `, radial-gradient(ellipse at 0% 100%, rgba(${CREAM},${a(.85)}) 0%, rgba(${CREAM},0) 52%)`
+  : theme === 'nd'
+  // اليوم الوطني: الأخضر الداكن هو الأرضية والصورة تُرى من خلفه
+  ? `linear-gradient(180deg, rgba(${NIGHT},${a(.84)}) 0%, rgba(${NIGHT},${a(.6)}) 32%, rgba(${NIGHT},${a(.74)}) 58%, rgba(${NIGHT},${a(.96)}) 100%)`
   : `linear-gradient(180deg, rgba(${NIGHT},${a(.55)}) 0%, rgba(${NIGHT},${a(.15)}) 30%, rgba(${NIGHT},${a(.55)}) 60%, rgba(${NIGHT},${a(.9)}) 100%), radial-gradient(ellipse at 0% 100%, rgba(${NIGHT},${a(.6)}) 0%, rgba(${NIGHT},0) 50%)`;
 
 // «سماك البوابة|مكة المكرمة» → الشطر الأول بلون النص والثاني ذهبي؛ tagBar يضع «|» بينهما
@@ -82,6 +88,8 @@ const tagHtml = tagA
   ? `<div class="tag"><span>${esc(tagA)}</span>${tagB ? `${S.tagBar ? '<span> | </span>' : ' '}<span class="g">${esc(tagB)}</span>` : ''}</div>`
   : '';
 const hasQr = S.qr !== false;
+// شعار مناسبة أعلى اليمين بدل الوسم — دليل اليوم الوطني: أعلى اليمين، وعرضه ضعف عرض شعار سماك (~170px ظاهر)
+const badgeHtml = S.badge ? `<img class="badge" src="${uri(S.badge)}">` : '';
 
 const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>
 ${fs.readFileSync(A('cairo-embedded.css'), 'utf8')}
@@ -95,12 +103,13 @@ html,body{width:1080px;height:1080px;background:${T.base}}
 .logo{position:absolute;left:43px;top:40px;width:270px;filter:${T.logoFilter}}
 .tag{position:absolute;top:52px;right:78px;font-size:31px;font-weight:800;color:${T.ink}}
 .tag .g{color:${T.gold}}
-.block{position:absolute;right:78px;${textPos === 'bottom' ? 'bottom:292px' : 'top:' + (tagA ? 150 : 132) + 'px'};text-align:right;max-width:${textPos === 'bottom' ? 930 : 660}px}
+.badge{position:absolute;top:58px;right:58px;width:${S.badgeWidth || 380}px}
+.block{position:absolute;right:78px;${textPos === 'bottom' ? 'bottom:292px' : 'top:' + (S.badge ? 210 : tagA ? 150 : 132) + 'px'};text-align:right;max-width:${textPos === 'bottom' ? 930 : 660}px}
 .in{position:relative;display:inline-block}
 .l1,.l2{font-weight:900;line-height:1.3;white-space:nowrap;font-size:${S.size || 76}px}
 .l1{color:${T.ink}} .l2{color:${T.gold}}
 .sub{margin-top:10px;font-size:${S.subSize || 30}px;font-weight:700;color:${T.sub};white-space:nowrap}
-${theme === 'dark' ? '.l1,.l2,.sub,.tag,.note{text-shadow:0 3px 18px rgba(0,0,0,.55)}' : ''}
+${isDark ? '.l1,.l2,.sub,.tag,.note{text-shadow:0 3px 18px rgba(0,0,0,.55)}' : ''}
 ${brackets ? `.in::before{content:"";position:absolute;top:-24px;right:-34px;width:58px;height:58px;border-top:3px solid ${T.gold};border-right:3px solid ${T.gold}}
 .in::after{content:"";position:absolute;left:-30px;bottom:-40px;width:58px;height:58px;border-bottom:3px solid ${T.gold};border-left:3px solid ${T.gold}}` : ''}
 .note{position:absolute;right:${hasQr ? 190 : 78}px;bottom:${hasQr ? 250 : 60}px;font-size:28px;font-weight:800;color:${T.ink}}
@@ -115,7 +124,7 @@ ${brackets ? `.in::before{content:"";position:absolute;top:-24px;right:-34px;wid
 </style></head><body><div class="card">
 <div class="photo"></div><div class="veil"></div><div class="pattern"></div>
 <img class="logo" src="${uri(T.logo)}">
-${tagHtml}
+${S.badge ? badgeHtml : tagHtml}
 <div class="block"><div class="in">
   ${S.line1 ? `<div class="l1">${esc(S.line1)}</div>` : ''}
   ${S.line2 ? `<div class="l2">${esc(S.line2)}</div>` : ''}
