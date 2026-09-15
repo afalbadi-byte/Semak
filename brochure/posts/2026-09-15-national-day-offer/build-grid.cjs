@@ -1,6 +1,6 @@
 // شبكة إنستقرام ثلاثية متصلة (بانوراما ٣٢٤٠×١٤٤٠ تُقسم إلى ثلاث منشورات ٣:٤) بلون طبع الرؤية:
 //   يسار = هدية التكييف والسعر · وسط = تصميم طبع الرؤية (قالب الرسوم) · يمين = مواصفات الشقة ومميزاتها + التواصل
-// الاتصال: العلامة المائية شريط واحد متصل بنفس الحجم أسفل الثلاث، وشريط نقش الرؤية يعبر من الوسط إلى الجارتين، شريطا النقش أعلى وأسفل، العلامة المائية ممتدة، أرضية واحدة.
+// الاتصال: العلامة المائية بنفس حجم التصميم المفرد أسفل كل صورة، والوسطى معكوسة أفقياً فتلتقي خطوطها عند الحدود، وشريط نقش الرؤية يعبر من الوسط إلى الجارتين، شريطا النقش أعلى وأسفل، العلامة المائية ممتدة، أرضية واحدة.
 // الحقائق: مواصفات الشقة من البروشور (build-brochure.cjs)، والعرض والمكيفات كما أرسلها أحمد.
 // صورة الغرفة src/room.png (compose-room.cjs): إعلان جري بعد إزالة كتابته ومنظر النافذة جبال مكة وبرج الساعة.
 // الاستعمال: node build-grid.cjs → grid-1-left.png · grid-2-center.png · grid-3-right.png (٢١٦٠×٢٨٨٠) + grid-preview.jpg
@@ -28,7 +28,10 @@ const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:3240px;height:1440px;background:${T.color}}
 .pano{position:relative;width:3240px;height:1440px;overflow:hidden;background:${T.color};color:#fff}
-.wm{position:absolute;left:0;right:0;bottom:30px;height:420px;background:url('${b64('pattern-tile.png')}') 0 100%/680px auto repeat-x;filter:invert(1);mix-blend-mode:screen;opacity:.09;-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 55%);mask-image:linear-gradient(180deg,transparent 0%,#000 55%)}
+.wm{position:absolute;bottom:30px;width:1080px;height:520px;opacity:.09;background-position:center bottom;background-size:1080px auto;background-repeat:no-repeat;-webkit-mask-image:linear-gradient(180deg,transparent 0%,#000 50%);mask-image:linear-gradient(180deg,transparent 0%,#000 50%)}
+.wm.w1{left:0;background-image:url('${b64('semak-wm-bottom.png')}')}
+.wm.w2{left:1080px;background-image:url('${b64('semak-wm-bottom-flop.png')}')}
+.wm.w3{left:2160px;background-image:url('${b64('semak-wm-bottom.png')}')}
 .strip{position:absolute;left:0;right:0;height:30px;background:url('${b64('vision-p1.png')}') left center/30px 30px repeat-x}
 .strip.t{top:0} .strip.b{bottom:0}
 
@@ -73,7 +76,7 @@ ${K.css}
 .k-contacts{left:2380px;top:1066px;bottom:auto;width:780px;display:flex;flex-wrap:wrap;column-gap:40px}
 .k-row{height:56px} .k-row span{font-size:31px} .k-row svg{width:30px;height:30px}
 </style></head><body><div class="pano">
-<div class="wm"></div><div class="strip t"></div><div class="strip b"></div>
+<div class="wm w1"></div><div class="wm w2"></div><div class="wm w3"></div><div class="strip t"></div><div class="strip b"></div>
 
 <div class="band"></div>
 <img class="nd" src="${b64('ndlogo-v.png')}">
