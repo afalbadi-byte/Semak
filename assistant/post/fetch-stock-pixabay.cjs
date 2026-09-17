@@ -5,12 +5,20 @@ const KEY=process.env.PIXABAY_KEY;
 if(!KEY){console.error('ضع المفتاح في PIXABAY_KEY');process.exit(1);}
 const OUT='C:/Users/ahmed/Semak/.claude/worktrees/post-push/assistant/post/assets/stock';
 const Q=[
- ['saudi-man','saudi man thobe'],['gulf-man','arab man kandura'],['arab-business','arab businessman'],
- ['saudi-family','arab family'],['family-home','arab family home'],['majlis','arabic majlis'],
- ['coffee','arabic coffee dallah'],['makkah-color','mecca kaaba'],['makkah-tower','makkah clock tower'],
- ['render-living','living room 3d render'],['render-interior','interior render modern'],
- ['render-kitchen','kitchen 3d render'],['render-bedroom','bedroom 3d render'],
- ['render-empty','empty room interior'],['render-lobby','lobby interior design'],
+ ['site-construction','building under construction'],
+ ['site-concrete','concrete building structure construction'],
+ ['site-scaffold','scaffolding construction building'],
+ ['site-crane','tower crane construction site'],
+ ['site-progress','apartment building construction site'],
+ ['site-worker','construction worker helmet site'],
+ ['neutral-living','beige living room interior'],
+ ['warm-living','neutral modern living room'],
+ ['minimal-living','minimalist living room interior'],
+ ['beige-bedroom','beige bedroom interior'],
+ ['warm-bedroom','modern minimalist bedroom'],
+ ['wood-interior','wood accent wall interior'],
+ ['marble-interior','marble interior luxury living'],
+ ['neutral-apartment','modern apartment interior neutral'],
 ];
 const get=(u,n=0)=>new Promise((res,rej)=>{if(n>5)return rej(new Error('redir'));https.get(u,{headers:{'User-Agent':'semak-post-tool/1.0'}},r=>{
  if(r.statusCode>=300&&r.statusCode<400&&r.headers.location){r.resume();return get(r.headers.location,n+1).then(res,rej);}

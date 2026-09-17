@@ -1,9 +1,9 @@
 {
   "name": "render-bedroom",
-  "theme": "dark",
+  "theme": "light",
   "photo": "brochure/posts/2026-09-18-render-bedroom/src/photo.jpg",
   "photoPos": "center 50%",
-  "wash": 1.05,
+  "wash": 0.85,
   "tag": "سماك العقارية|تصميمنا",
   "tagBar": true,
   "line1": "هدوءٌ يليق",
