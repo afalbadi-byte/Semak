@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, RefreshCw, Plus, Paperclip, ChevronLeft, Link2, AlertTriangle, X } from 'lucide-react';
+import { Search, RefreshCw, Plus, Paperclip, ChevronLeft, Link2, AlertTriangle, X, FolderKanban, Save, Loader2 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { openRefundDoc, openDaftraFile } from '../../lib/docs';
 import ReceiptCapture, { uploadReceipt } from '../../components/ReceiptCapture';
@@ -155,7 +155,7 @@ function ReturnCard({ id, onBack }) {
     const [file, setFile] = useState(null);
     const [busy, setBusy] = useState(false);
     const [projects, setProjects] = useState([]);
-    const [pid, setPid] = useState(0);
+    const [assign, setAssign] = useState(null);     // نافذة التسكين {project_id}
 
     const load = useCallback(() => {
         fetch(`${API_URL}?action=refund_entity&id=${id}`, { headers: auth() })
@@ -168,18 +168,16 @@ function ReturnCard({ id, onBack }) {
         fetch(`${API_URL}?action=projects_list`, { headers: auth() }).then(r => r.json())
             .then(r => { if (r.success) setProjects(r.data || []); }).catch(() => {});
     }, []);
-    useEffect(() => { if (d && d.head) setPid(Number(d.head.project_id) || 0); }, [d]);
-
     // تسكين المرتجع على مشروع — محلي بحت، لا يمس دفترة (نفس قاعدة الفواتير)
-    const assign = async (next) => {
+    const saveAssign = async () => {
         setBusy(true); setErr('');
         try {
             const r = await fetch(`${API_URL}?action=refund_set_project`, {
                 method: 'POST', headers: jsonHeaders(),
-                body: JSON.stringify({ id, project_id: Number(next) || 0 }),
+                body: JSON.stringify({ id, project_id: Number(assign.project_id) || 0 }),
             }).then(x => x.json());
             if (!r.success) { setErr(r.message || 'تعذر التسكين'); return; }
-            setPid(Number(next) || 0); load();
+            setAssign(null); load();
         } catch { setErr('تعذر الاتصال'); }
         finally { setBusy(false); }
     };
@@ -200,37 +198,64 @@ function ReturnCard({ id, onBack }) {
         finally { setBusy(false); }
     };
 
+    const AssignSheet = () => (
+        <div className="fixed inset-0 bg-black/70 z-[85] flex items-end justify-center p-0 sm:p-4"
+            onClick={() => !busy && setAssign(null)}>
+            <div dir="rtl" onClick={e => e.stopPropagation()}
+                className="bg-[#0f1e36] rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+                style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+                <div className="flex items-center justify-between">
+                    <h3 className="font-black text-[15px] flex items-center gap-2">
+                        <FolderKanban size={16} className="text-[#c5a059]" /> تسكين المرتجع على مشروع
+                    </h3>
+                    <button onClick={() => setAssign(null)} className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                        <X size={16} />
+                    </button>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                    تسكين محلي داخل التطبيق فقط — لا يمس دفترة. يُخصم المرتجع من تكلفة المشروع.
+                </p>
+                <label className="block space-y-1">
+                    <span className="text-[11px] font-bold text-slate-400">المشروع</span>
+                    <select value={assign?.project_id ?? 0}
+                        onChange={e => setAssign({ project_id: e.target.value })}
+                        className="w-full min-h-[48px] px-3 rounded-xl bg-white/[0.06] border border-white/10 text-[14px] outline-none focus:border-[#c5a059]">
+                        <option value="0">— بلا مشروع —</option>
+                        {projects.map(p => (
+                            <option key={p.project_id} value={p.project_id}>{p.name}</option>
+                        ))}
+                    </select>
+                </label>
+                <button onClick={saveAssign} disabled={busy}
+                    className="w-full min-h-[52px] rounded-2xl bg-[#c5a059] text-[#0b1628] text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60">
+                    {busy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} حفظ التسكين
+                </button>
+            </div>
+        </div>
+    );
+
     if (err && !d) return <Shell onBack={onBack}><p className="text-[13px] text-rose-300">{err}</p></Shell>;
     if (!d) return <Shell onBack={onBack}><p className="text-[13px] text-slate-400">…</p></Shell>;
 
     const h = d.head;
     return (
         <Shell onBack={onBack}>
+            {assign && <AssignSheet />}
             <div className="rounded-2xl bg-white/[0.05] border border-white/10 p-3 space-y-2">
                 <div className="flex items-center gap-2">
                     <span className="text-[15px] font-black">{h.supplier}</span>
                     <span className="text-[18px] font-black tabular-nums text-rose-300 mr-auto">−{money(h.gross)}</span>
                 </div>
                 <div className="text-[11px] text-slate-400">مرتجع {h.no} · {h.date || '—'}</div>
-                <div className="rounded-xl bg-white/[0.04] border border-white/10 p-2.5 space-y-1.5">
-                    <div className="text-[11px] font-bold text-slate-300">المشروع — يُخصم المرتجع من تكلفته</div>
-                    <div className="flex flex-wrap gap-1.5">
-                        {projects.map(p => (
-                            <button key={p.id} disabled={busy} onClick={() => assign(p.id)}
-                                className={'px-2.5 py-1.5 rounded-lg text-[11px] font-bold border '
-                                    + (Number(pid) === Number(p.id)
-                                        ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]'
-                                        : 'bg-white/5 border-white/10 text-slate-300')}>
-                                {p.name}
-                            </button>
-                        ))}
-                        <button disabled={busy} onClick={() => assign(0)}
-                            className={'px-2.5 py-1.5 rounded-lg text-[11px] font-bold border '
-                                + (!pid ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
-                                        : 'bg-white/5 border-white/10 text-slate-400')}>
-                            بلا مشروع
-                        </button>
-                    </div>
+                <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] border border-white/10 p-2.5">
+                    <FolderKanban size={14} className="text-[#c5a059] shrink-0" />
+                    <span className="text-[12px] font-bold truncate">
+                        {h.project_id ? h.project_name : <span className="text-amber-300">بلا مشروع</span>}
+                    </span>
+                    <button onClick={() => setAssign({ project_id: h.project_id || 0 })} disabled={busy}
+                        className="mr-auto min-h-[36px] px-3 rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-bold shrink-0">
+                        تسكين
+                    </button>
                 </div>
                 {h.reason && <div className="text-[12px] text-slate-300">السبب: {h.reason}</div>}
                 {h.purchase_id ? (

@@ -30,7 +30,7 @@ export default function ProjectStatement() {
                 if (!r.success) return;
                 const list = r.data || [];
                 setProjects(list);
-                if (list.length && !pid) setPid(Number(list[0].id));
+                if (list.length && !pid) setPid(Number(list[0].project_id));
             }).catch(() => {});
     }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -56,18 +56,17 @@ export default function ProjectStatement() {
 
     return (
         <div className="space-y-3">
-            {/* المشروع */}
-            <div className="flex flex-wrap gap-1.5">
-                {projects.map(p => (
-                    <button key={p.id} onClick={() => setPid(Number(p.id))}
-                        className={'px-3 py-2 rounded-xl text-[12px] font-bold border '
-                            + (Number(pid) === Number(p.id)
-                                ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]'
-                                : 'bg-white/5 border-white/10 text-slate-300')}>
-                        {p.name}
-                    </button>
-                ))}
-            </div>
+            {/* المشروع — قائمة منسدلة */}
+            <label className="block space-y-1">
+                <span className="text-[11px] font-bold text-slate-400">المشروع</span>
+                <select value={pid || 0} onChange={e => setPid(Number(e.target.value) || 0)}
+                    className="w-full min-h-[48px] px-3 rounded-xl bg-white/[0.06] border border-white/10 text-[14px] font-bold outline-none focus:border-[#c5a059]">
+                    <option value="0">— اختر مشروعاً —</option>
+                    {projects.map(p => (
+                        <option key={p.project_id} value={p.project_id}>{p.name}</option>
+                    ))}
+                </select>
+            </label>
 
             {/* المدة */}
             <div className="flex items-center gap-2">
