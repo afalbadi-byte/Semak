@@ -4517,6 +4517,22 @@ switch ($action) {
 
     // ─── إرسال البريد (SMTP عبر بريد سماك) ───────────────────────────────────
     // اختبار الإعداد: يرسل رسالة تجريبية ويُرجع جاهزية SMTP + نتيجة الإرسال.
+    // تشخيص إعداد البريد: أي الحقول مضبوط وأيها ناقص — بلا كشف كلمة المرور
+    case 'smtp_status': {
+        $cfg = smtp_config();
+        $fields = [];
+        foreach (['host','port','user','pass','from','from_name','secure'] as $k) {
+            $v = (string)($cfg[$k] ?? '');
+            $fields[$k] = ($v !== '' && strpos($v, '__SMTP') === false);
+        }
+        $missing = array_keys(array_filter($fields, function ($ok) { return !$ok; }));
+        echo json_encode(['success'=>true, 'configured'=>smtp_ready($cfg), 'fields'=>$fields, 'missing'=>$missing,
+            'host'=>$fields['host'] ? $cfg['host'] : null, 'from'=>$fields['from'] ? $cfg['from'] : null,
+            'secure'=>$fields['secure'] ? $cfg['secure'] : null, 'port'=>$fields['port'] ? $cfg['port'] : null],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'send_test_email': {
         $cfg = smtp_config();
         if (!smtp_ready($cfg)) {
