@@ -9172,14 +9172,32 @@ switch ($action) {
                     LEFT JOIN project_budgets b ON b.project_id = pp.project_id
                     WHERE p.paid > 0.5 AND (COALESCE(m.s,0) + COALESCE(l.s,0)) < p.paid - 0.5
                     ORDER BY p.date DESC, p.id DESC");
-        $gap = 0;
+        // درجة اليقين: اسم الإيصال عندنا يحمل مبلغه وتاريخه (مثل «إيصال 41,244.75 — 2026-09-05»).
+        // إن طابق المبلغُ الفجوةَ فالحالة مؤكَّدة، وإلا فهي مرشَّحة تحتاج فتح الإيصال ومراجعته.
+        $gap = 0; $sure = 0;
         foreach ($rows as &$r) {
             $r['gap'] = round((float)$r['paid'] - (float)$r['mirror_pay'] - (float)$r['local_pay'], 2);
             $gap += $r['gap'];
+            $r['receipt_amount'] = null; $r['receipt_date'] = null; $r['confidence'] = 'candidate';
+            $docs = $Q("SELECT file_name FROM purchase_documents
+                        WHERE purchase_id=" . (int)$r['id'] . " AND doc_type='receipt' ORDER BY id DESC");
+            foreach ($docs as $doc) {
+                $nm = (string)$doc['file_name'];
+                if (preg_match('/(\d{4}-\d{2}-\d{2})/', $nm, $dm)) $r['receipt_date'] = $dm[1];
+                if (preg_match_all('/\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?/u', str_replace('٫', '.', $nm), $am)) {
+                    foreach ($am[0] as $cand) {
+                        $v = (float)str_replace(',', '', $cand);
+                        if ($v > 0 && abs($v - $r['gap']) < 0.5) { $r['receipt_amount'] = round($v, 2); break; }
+                    }
+                }
+                if ($r['receipt_amount'] !== null) break;
+            }
+            if ($r['receipt_amount'] !== null) { $r['confidence'] = 'verified'; $sure++; }
+            elseif ((int)$r['receipts'] === 0) $r['confidence'] = 'no_receipt';
         }
         unset($r);
-        echo json_encode(['success'=>true, 'data'=>$rows, 'count'=>count($rows), 'gap_total'=>round($gap, 2)],
-            JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success'=>true, 'data'=>$rows, 'count'=>count($rows), 'gap_total'=>round($gap, 2),
+            'verified'=>$sure, 'candidates'=>count($rows) - $sure], JSON_UNESCAPED_UNICODE);
         break;
     }
 
@@ -9215,7 +9233,12 @@ switch ($action) {
         $amt = isset($b['amount']) ? min($gap, round((float)$b['amount'], 2)) : $gap;
         if ($amt <= 0) { echo json_encode(['success'=>false,'message'=>'المبلغ غير صالح'], JSON_UNESCAPED_UNICODE); break; }
         $method = in_array(($b['method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['method'] : 'transfer';
-        $pdate  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['date'] ?? '')) ? $b['date'] : (string)($iv['date'] ?: date('Y-m-d'));
+        $pdate  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['date'] ?? '')) ? $b['date'] : '';
+        if ($pdate === '' && ($rr = $conn->query("SELECT file_name FROM purchase_documents
+                WHERE purchase_id=$pid AND doc_type='receipt' ORDER BY id DESC LIMIT 3")))
+            while ($rx = $rr->fetch_assoc())
+                if (preg_match('/(\d{4}-\d{2}-\d{2})/', (string)$rx['file_name'], $dm)) { $pdate = $dm[1]; break; }
+        if ($pdate === '') $pdate = (string)($iv['date'] ?: date('Y-m-d'));
 
         // الإيصال: المُمرَّر أو آخر إيصال سداد مرفوع على الفاتورة
         $rurl = (string)($b['receipt_url'] ?? '');

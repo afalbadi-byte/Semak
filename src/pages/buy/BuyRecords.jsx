@@ -400,7 +400,7 @@ function PayGapCard() {
                 <span className="text-[12px] font-black text-amber-200 mr-auto tabular-nums">{money(d.gap_total)}</span>
             </div>
             <p className="text-[11px] text-amber-100/80 leading-relaxed">
-                فواتير ترويستها تقول «مُسدَّدة» بلا سطر دفعة — فلا تظهر في كشوف الحسابات.
+                فواتير ترويستها تقول «مُسدَّدة» بلا سطر دفعة. {d.verified} منها مبلغها مطابق لاسم الإيصال المرفوع، والبقية تحتاج فتح الإيصال ومراجعته قبل التسجيل.
             </p>
             <div className="space-y-1.5">
                 {(d.data || []).map(r => (
@@ -412,7 +412,11 @@ function PayGapCard() {
                         <div className="flex items-center gap-2 text-[10px] text-slate-400">
                             <span>فاتورة {r.no}</span><span>{r.date || '—'}</span>
                             <span>{r.project || 'بلا مشروع'}</span>
-                            {Number(r.receipts) ? <span className="text-emerald-300">إيصال ✓</span> : <span className="text-amber-300">بلا إيصال</span>}
+                            {r.confidence === 'verified'
+                                ? <span className="text-emerald-300">مطابق للإيصال ✓</span>
+                                : r.confidence === 'no_receipt'
+                                    ? <span className="text-rose-300">بلا إيصال</span>
+                                    : <span className="text-amber-300">يحتاج مراجعة</span>}
                             <button onClick={() => fill(r)} disabled={busy === r.id}
                                 className="mr-auto px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold disabled:opacity-40">
                                 {busy === r.id ? '…' : 'سجّل'}

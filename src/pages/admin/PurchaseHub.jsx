@@ -387,9 +387,12 @@ function PayGaps() {
         { k: 'paid', t: 'المسدَّد بالترويسة', r: r => money(r.paid) },
         { k: 'rows', t: 'سطور الدفعات', r: r => money(Number(r.mirror_pay) + Number(r.local_pay)) },
         { k: 'gap', t: 'الفجوة', r: r => <span className="font-black text-amber-600">{money(r.gap)}</span> },
-        { k: 'receipts', t: 'إيصال', r: r => Number(r.receipts)
-            ? <span className="text-emerald-600 font-bold">✓ {r.receipts}</span>
-            : <span className="text-amber-600">بلا</span> },
+        { k: 'receipts', t: 'الإيصال', r: r => r.confidence === 'verified'
+            ? <span className="text-emerald-600 font-bold" title={'مبلغ الإيصال ' + money(r.receipt_amount)}>مطابق ✓</span>
+            : r.confidence === 'no_receipt'
+                ? <span className="text-rose-600">بلا إيصال</span>
+                : <span className="text-amber-600">يحتاج مراجعة</span> },
+        { k: 'receipt_date', t: 'تاريخ الإيصال', r: r => r.receipt_date || <span className="text-slate-300">—</span> },
         { k: 'act', t: '', r: r => (
             <button onClick={e => { e.stopPropagation(); fill(r); }} disabled={busy === r.id}
                 className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold disabled:opacity-40">
@@ -402,8 +405,8 @@ function PayGaps() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <Card t="فواتير بفجوة" v={d?.count ?? '—'} warn={Number(d?.count) > 0} />
                 <Card t="مجموع الفجوة" v={money(d?.gap_total)} warn={Number(d?.gap_total) > 0.5} />
-                <Card t="لها إيصال" v={(d?.data || []).filter(r => Number(r.receipts)).length} />
-                <Card t="بلا إيصال" v={(d?.data || []).filter(r => !Number(r.receipts)).length} warn />
+                <Card t="مؤكَّدة بالإيصال" v={d?.verified ?? '—'} sub="مبلغ الإيصال = الفجوة" />
+                <Card t="تحتاج مراجعة" v={d?.candidates ?? '—'} warn />
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
                 هذه فواتير تقول ترويستها إنها مُسدَّدة، ولا يقابلها سطر دفعة — فلا تظهر الدفعة في كشوف الحسابات.
