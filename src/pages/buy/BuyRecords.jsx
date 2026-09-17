@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyReturns from './BuyReturns';
+import ProjectStatement from './ProjectStatement';
 import { SortBar } from '../../components/SortHeader';
 import { syncDaftra } from '../../lib/sync';
 import { useEntity } from './entityCtx';
@@ -79,18 +80,18 @@ export default function BuyRecords() {
         finally { setBusy(false); }
     }, [tab, q, filter, sortKey, sortDir, rows.length]);
 
-    useEffect(() => { if (tab !== 'returns') load(false); }, [tab, filter, sortKey, sortDir]);   // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { if (tab !== 'returns' && tab !== 'projects') load(false); }, [tab, filter, sortKey, sortDir]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const { openEntity } = useEntity();
     const open = (type, value) => openEntity(type, value);
 
     return (
         <div className="p-4 space-y-3">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-1.5">
                 {[['invoices', 'الفواتير'], ['suppliers', 'الموردون'], ['payments', 'الدفعات'],
-                  ['returns', 'المرتجعات']].map(([k, t]) => (
+                  ['returns', 'المرتجعات'], ['projects', 'المشاريع']].map(([k, t]) => (
                     <button key={k} onClick={() => { setTab(k); setRows([]); }}
-                        className={'h-[48px] rounded-xl text-[13px] font-black border ' +
+                        className={'h-[48px] rounded-xl text-[12px] font-black border ' +
                             (tab === k ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]' : 'bg-white/5 border-white/10 text-slate-300')}>
                         {t}
                     </button>
@@ -98,8 +99,9 @@ export default function BuyRecords() {
             </div>
 
             {tab === 'returns' && <BuyReturns />}
+            {tab === 'projects' && <ProjectStatement />}
 
-            {tab !== 'payments' && tab !== 'returns' && (
+            {tab !== 'payments' && tab !== 'returns' && tab !== 'projects' && (
             <div className="flex gap-2">
                 <div className="relative flex-1 min-w-0">
                     <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />

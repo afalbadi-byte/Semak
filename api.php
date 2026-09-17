@@ -1584,6 +1584,25 @@ ensure_column($conn, 'meetings', 'minutes_sent_at', 'minutes_sent_at DATETIME DE
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (55)");
 } // end DDL v55
 
+// ─── DDL v56: تسكين المرتجعات على المشاريع ──────────────────────────────
+// المرتجع يخصم من تكلفة المشروع، فيحتاج تسكيناً مثل الفاتورة تماماً.
+// يُبذَر من تسكين الفاتورة الأصل حتى لا نبدأ من فراغ.
+if ($__sv < 56) {
+$conn->query("CREATE TABLE IF NOT EXISTS refund_project (
+    refund_id  INT PRIMARY KEY,
+    project_id INT DEFAULT NULL,
+    note       VARCHAR(255) DEFAULT NULL,
+    set_by     VARCHAR(120) DEFAULT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX (project_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("INSERT IGNORE INTO refund_project (refund_id, project_id, note, set_by)
+    SELECT r.id, pp.project_id, 'موروث من تسكين الفاتورة الأصل', 'system'
+    FROM dmirror_refunds r JOIN purchase_project pp ON pp.purchase_id = r.purchase_id
+    WHERE pp.project_id IS NOT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (56)");
+} // end DDL v56
+
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
 // acc_invoices ببنودها وسنداتها، وتدخل «مسودّة» عمداً: الوثيقة تُحفظ، وترحيلها
@@ -9696,6 +9715,126 @@ switch ($action) {
         break;
     }
 
+    case 'refund_set_project': {
+        // تسكين محلي بحت للمرتجع على مشروع — بلا أي مساس بدفترة (نفس قاعدة تسكين الفواتير)
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة — سجّل الدخول مرة أخرى'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        if (!$u) { echo json_encode(['success'=>false,'message'=>'المستخدم غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if ((($u['role'] ?? '') !== 'admin') && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true)) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسكين المرتجعات'], JSON_UNESCAPED_UNICODE); break; }
+
+        $b  = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E  = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $id = (int)($b['id'] ?? 0);
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $rf = $conn->query("SELECT id, no FROM dmirror_refunds WHERE id=$id LIMIT 1");
+        if (!$rf || !$rf->num_rows) { echo json_encode(['success'=>false,'message'=>'المرتجع غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $rfRow = $rf->fetch_assoc();
+        $pid_pr = (int)($b['project_id'] ?? 0);
+        if ($pid_pr > 0) {
+            $conn->query("INSERT INTO refund_project (refund_id, project_id, note, set_by)
+                VALUES ($id, $pid_pr, 'تسكين من تطبيق المشتريات', '" . $E($u['name'] ?? '') . "')
+                ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), note=VALUES(note), set_by=VALUES(set_by)");
+        } else {
+            $conn->query("DELETE FROM refund_project WHERE refund_id=$id");
+        }
+        $pname = '';
+        if ($pid_pr > 0 && ($pr = $conn->query("SELECT name FROM project_budgets WHERE project_id=$pid_pr LIMIT 1")))
+            if ($prow = $pr->fetch_assoc()) $pname = $prow['name'];
+        acc_audit($conn, 1, 'purchase', $id, 'update',
+            'تسكين مرتجع ' . $rfRow['no'] . ' على ' . ($pname ?: 'بلا مشروع') . ' (محلي — بلا مساس بدفترة)', $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'id'=>$id, 'project_id'=>$pid_pr, 'project'=>$pname], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // كشف حساب المشروع: الفواتير والمرتجعات والدفعات والتكاليف الإضافية في سجل واحد
+    case 'project_statement': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $E   = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $Q   = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $pid = (int)($_GET['project_id'] ?? 0);
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'project_id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['from'] ?? '')) ? $_GET['from'] : '';
+        $to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['to'] ?? '')) ? $_GET['to'] : '';
+
+        $prj = $Q("SELECT project_id, name, budget, COALESCE(ptype,'dev') ptype, COALESCE(margin_pct,0) margin_pct
+                   FROM project_budgets WHERE project_id=$pid LIMIT 1");
+        $prj = $prj ? $prj[0] : ['project_id'=>$pid, 'name'=>'مشروع ' . $pid, 'budget'=>0, 'ptype'=>'dev', 'margin_pct'=>0];
+        $gross = ($prj['ptype'] === 'contracting');     // المقاولات بالشامل، والتطوير بالصافي (الضريبة مستردّة)
+
+        $dw = function($col) use ($from, $to, $E) {
+            $c = '';
+            if ($from !== '') $c .= " AND $col >= '" . $E($from) . "'";
+            if ($to !== '')   $c .= " AND $col <= '" . $E($to) . "'";
+            return $c;
+        };
+
+        $inv = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) total, ROUND(p.subtotal,2) subtotal,
+                          ROUND(p.paid,2) paid, COALESCE(p.origin,'daftra') origin
+                   FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                   WHERE pp.project_id = $pid" . $dw('p.date') . " ORDER BY p.date, p.id");
+        $ref = $Q("SELECT r.id, r.no, r.date, r.supplier, ROUND(r.total,2) total, ROUND(r.subtotal,2) subtotal,
+                          r.purchase_no, COALESCE(r.origin,'daftra') origin
+                   FROM dmirror_refunds r JOIN refund_project rp ON rp.refund_id = r.id
+                   WHERE rp.project_id = $pid" . $dw('r.date') . " ORDER BY r.date, r.id");
+        $pay = $Q("SELECT y.id, y.date, ROUND(y.amount,2) amount, p.no purchase_no, p.supplier
+                   FROM dmirror_payments y JOIN dmirror_purchases p ON p.id = y.purchase_id
+                   JOIN purchase_project pp ON pp.purchase_id = p.id
+                   WHERE pp.project_id = $pid" . $dw('y.date') . " ORDER BY y.date, y.id");
+        $ext = $Q("SELECT id, title, cost_date date, ROUND(amount,2) amount, note
+                   FROM project_extra_costs WHERE project_id = $pid" . $dw('cost_date') . " ORDER BY cost_date, id");
+
+        $lines = [];
+        foreach ($inv as $x) $lines[] = ['type'=>'invoice', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>$x['no'],
+            'party'=>$x['supplier'], 'debit'=>(float)($gross ? $x['total'] : $x['subtotal']),
+            'credit'=>0, 'cash'=>0, 'vat'=>round((float)$x['total'] - (float)$x['subtotal'], 2), 'origin'=>$x['origin']];
+        foreach ($ref as $x) $lines[] = ['type'=>'refund', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>$x['no'],
+            'party'=>$x['supplier'], 'debit'=>0, 'credit'=>(float)($gross ? $x['total'] : $x['subtotal']),
+            'cash'=>0, 'ref'=>$x['purchase_no'], 'origin'=>$x['origin']];
+        foreach ($ext as $x) $lines[] = ['type'=>'extra', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>'',
+            'party'=>$x['title'], 'debit'=>(float)$x['amount'], 'credit'=>0, 'cash'=>0, 'note'=>$x['note']];
+        foreach ($pay as $x) $lines[] = ['type'=>'payment', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>$x['purchase_no'],
+            'party'=>$x['supplier'], 'debit'=>0, 'credit'=>0, 'cash'=>(float)$x['amount']];
+        usort($lines, function ($a, $b) {
+            $d = strcmp((string)($a['date'] ?? ''), (string)($b['date'] ?? ''));
+            return $d !== 0 ? $d : ((int)$a['id'] - (int)$b['id']);
+        });
+        $bal = 0; $cash = 0;
+        foreach ($lines as &$l) {
+            $bal += (float)$l['debit'] - (float)$l['credit'];
+            $cash += (float)$l['cash'];
+            $l['balance'] = round($bal, 2);
+            $l['cash_cum'] = round($cash, 2);
+        }
+        unset($l);
+
+        $sum = [
+            'invoices'      => count($inv),
+            'invoiced'      => round(array_sum(array_map(function ($x) use ($gross) { return (float)($gross ? $x['total'] : $x['subtotal']); }, $inv)), 2),
+            'invoiced_gross'=> round(array_sum(array_map(function ($x) { return (float)$x['total']; }, $inv)), 2),
+            'refunds'       => count($ref),
+            'refunded'      => round(array_sum(array_map(function ($x) use ($gross) { return (float)($gross ? $x['total'] : $x['subtotal']); }, $ref)), 2),
+            'extra'         => round(array_sum(array_map(function ($x) { return (float)$x['amount']; }, $ext)), 2),
+            'paid'          => round(array_sum(array_map(function ($x) { return (float)$x['amount']; }, $pay)), 2),
+        ];
+        $sum['net_cost'] = round($sum['invoiced'] - $sum['refunded'] + $sum['extra'], 2);
+        $sum['supervision'] = ($prj['ptype'] === 'contracting' && (float)$prj['margin_pct'] > 0)
+            ? round($sum['net_cost'] * (float)$prj['margin_pct'] / 100, 2) : 0;
+        $sum['total_cost'] = round($sum['net_cost'] + $sum['supervision'], 2);
+        $sum['budget'] = round((float)$prj['budget'], 2);
+        $sum['remaining'] = round($sum['budget'] - $sum['total_cost'], 2);
+        $sum['basis'] = $gross ? 'gross' : 'net';
+        $sum['outstanding'] = round($sum['invoiced_gross'] - $sum['paid'], 2);
+
+        echo json_encode(['success'=>true, 'project'=>$prj, 'summary'=>$sum, 'lines'=>$lines,
+            'from'=>$from, 'to'=>$to], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'projects_list': {
         if (!$_jwt_claims) { echo json_encode(['success'=>false,'message'=>'يتطلب تسجيل الدخول'], JSON_UNESCAPED_UNICODE); break; }
         $rows = [];
@@ -9979,11 +10118,14 @@ switch ($action) {
                 ON a.entity_id = r.id";
         $rows = $Q("SELECT r.id, r.no, r.date, r.supplier, ROUND(r.total,2) gross, ROUND(r.subtotal,2) net,
                         ROUND(r.settled,2) settled, r.purchase_id, r.purchase_no, r.reason,
+                        rp.project_id, COALESCE(pb.name,'') project_name,
                         (COALESCE(d.n,0) + COALESCE(a.n,0)) docs, COALESCE(a.n,0) daftra_docs,
                         COALESCE(p.supplier,'') orig_supplier, ROUND(COALESCE(p.total,0),2) orig_total,
                         COALESCE(r.origin,'daftra') origin
                     FROM dmirror_refunds r
                     LEFT JOIN dmirror_purchases p ON p.id = r.purchase_id
+                    LEFT JOIN refund_project rp ON rp.refund_id = r.id
+                    LEFT JOIN project_budgets pb ON pb.project_id = rp.project_id
                     $J WHERE $W ORDER BY $sk $dir, r.id DESC LIMIT $lim OFFSET $off");
         $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(r.total),2) gross, ROUND(SUM(r.settled),2) settled,
                         SUM(CASE WHEN r.purchase_id IS NULL THEN 1 ELSE 0 END) unlinked, ROUND(SUM(COALESCE(r.settled,0)),2) settled
@@ -10001,8 +10143,11 @@ switch ($action) {
         if ($rid <= 0) { echo json_encode(['success'=>false,'message'=>'رقم المرتجع مطلوب'], JSON_UNESCAPED_UNICODE); break; }
         $Q = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
         $head = $Q("SELECT r.*, ROUND(r.total,2) gross, COALESCE(p.supplier,'') orig_supplier,
-                        ROUND(COALESCE(p.total,0),2) orig_total, p.date orig_date
+                        ROUND(COALESCE(p.total,0),2) orig_total, p.date orig_date,
+                        rp.project_id, COALESCE(pb.name,'') project_name
                     FROM dmirror_refunds r LEFT JOIN dmirror_purchases p ON p.id = r.purchase_id
+                    LEFT JOIN refund_project rp ON rp.refund_id = r.id
+                    LEFT JOIN project_budgets pb ON pb.project_id = rp.project_id
                     WHERE r.id=$rid LIMIT 1");
         if (!$head) { echo json_encode(['success'=>false,'message'=>'المرتجع غير موجود'], JSON_UNESCAPED_UNICODE); break; }
         $h = $head[0]; unset($h['raw']);
@@ -10223,6 +10368,16 @@ switch ($action) {
             $ok = ($code === 200 && isset($d['data']) && is_array($d['data']));
             $probe[] = ['endpoint'=>$cnd, 'http'=>$code, 'rows'=>$ok ? count($d['data']) : 0];
             if ($ok) { $ep = $cnd; $rows = $d['data']; break; }
+        }
+        // الصفحة الأولى وحدها كانت تُخفي كل مرتجع قديم أو معدَّل — نكمل بقية الصفحات
+        if ($ep !== '' && count($rows) >= $take) {
+            for ($pg = 2; $pg <= 20; $pg++) {
+                list($c2, $b2) = $get("$base/$ep.json?page=$pg&limit=$take");
+                $d2 = $c2 === 200 ? (json_decode((string)$b2, true) ?: []) : [];
+                if (empty($d2['data']) || !is_array($d2['data'])) break;
+                foreach ($d2['data'] as $more) $rows[] = $more;
+                if (count($d2['data']) < $take) break;
+            }
         }
         if ($ep === '') {
             echo json_encode(['success'=>false, 'probe'=>$probe,
@@ -12123,7 +12278,9 @@ switch ($action) {
     case 'pbudget_list': {
         $r = $conn->query("SELECT b.*, COALESCE(s.spent,0) invoiced, COALESCE(s.gross,0) invoiced_gross,
                 COALESCE(s.vat,0) vat, COALESCE(s.paid,0) paid,
-                COALESCE(s.invoices,0) invoices, COALESCE(e.extra,0) extra_costs
+                COALESCE(s.invoices,0) invoices, COALESCE(e.extra,0) extra_costs,
+                COALESCE(rt.ret_net,0) returns_net, COALESCE(rt.ret_gross,0) returns_gross,
+                COALESCE(rt.returns_n,0) returns_count
             FROM project_budgets b
             LEFT JOIN (SELECT pp.project_id pid, ROUND(SUM(p.subtotal),2) spent, ROUND(SUM(p.total),2) gross,
                               ROUND(SUM(p.total - p.subtotal),2) vat, ROUND(SUM(p.paid),2) paid, COUNT(*) invoices
@@ -12132,6 +12289,11 @@ switch ($action) {
               ON s.pid = b.project_id
             LEFT JOIN (SELECT project_id pid, ROUND(SUM(amount),2) extra FROM project_extra_costs GROUP BY project_id) e
               ON e.pid = b.project_id
+            LEFT JOIN (SELECT rp.project_id pid, ROUND(SUM(r.subtotal),2) ret_net, ROUND(SUM(r.total),2) ret_gross,
+                              COUNT(*) returns_n
+                       FROM dmirror_refunds r JOIN refund_project rp ON rp.refund_id = r.id
+                       WHERE rp.project_id IS NOT NULL GROUP BY rp.project_id) rt
+              ON rt.pid = b.project_id
             ORDER BY b.project_id");
         $rows = []; if ($r) while ($x = $r->fetch_assoc()) {
             $ptype  = ($x['ptype'] ?? 'dev') === 'contracting' ? 'contracting' : 'dev';
@@ -12140,6 +12302,8 @@ switch ($action) {
             $extra  = (float)$x['extra_costs'];
             // التطوير يقيس بالصافي (الضريبة مستردة)، والمقاولات بالشامل (الضريبة تكلفة على المشروع)
             $base = ($ptype === 'contracting') ? (float)$x['invoiced_gross'] : (float)$x['invoiced'];
+            // المرتجع يخفض تكلفة المشروع بنفس أساس القياس
+            $base -= ($ptype === 'contracting') ? (float)$x['returns_gross'] : (float)$x['returns_net'];
             $x['basis'] = ($ptype === 'contracting') ? 'gross' : 'net';
             // في المقاولات: الميزانية تبقى قيمة العقد، ويُضاف بند إشراف بنسبة الهامش
             // يُحتسب لحظياً من التكلفة القائمة فيتحدث تلقائياً مع كل فاتورة جديدة
@@ -12859,9 +13023,11 @@ switch ($action) {
 
         // 2) الحفظ مع رصد التغييرات مقابل النسخة السابقة
         $prev = [];
-        if ($pr = $conn->query("SELECT id, no, total, paid, work_order_id FROM dmirror_purchases")) {
+        if ($pr = $conn->query("SELECT id, no, total, paid, work_order_id, modified FROM dmirror_purchases")) {
             while ($r = $pr->fetch_assoc()) $prev[(int)$r['id']] = $r;
         }
+        // فواتير تغيّرت في دفترة (تعديل أو دفعة جديدة ولو على فترة سابقة) — تُعاد تفاصيلها
+        $touched = [];
         foreach ($rows as $id => $p) {
             $no    = $conn->real_escape_string((string)($p['no'] ?? ''));
             $date  = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($p['date'] ?? '')) ? substr($p['date'],0,10)
@@ -12878,6 +13044,13 @@ switch ($action) {
             $raw   = $conn->real_escape_string(json_encode($p, JSON_UNESCAPED_UNICODE));
             $dsql  = $date ? "'$date'" : 'NULL';
 
+            if (!isset($prev[$id])) {
+                $touched[] = $id;                                  // فاتورة جديدة
+            } elseif ((string)($prev[$id]['modified'] ?? '') !== (string)($p['modified'] ?? '')
+                   || abs((float)$prev[$id]['total'] - $tot) > 0.009
+                   || abs((float)$prev[$id]['paid'] - $paid) > 0.009) {
+                $touched[] = $id;                                  // تعديل في دفترة على فاتورة قائمة
+            }
             if (isset($prev[$id])) {
                 $o = $prev[$id];
                 foreach ([['no',(string)$o['no'],$no], ['total',(float)$o['total'],$tot],
@@ -12901,17 +13074,25 @@ switch ($action) {
         // 3) البنود والدفعات (اختياري — للفواتير الأحدث أو غير المجلوبة بعد)
         $deep_done = 0;
         if ($deep) {
-            $need = [];
-            if ($q = $conn->query("SELECT p.id FROM dmirror_purchases p
+            // الأولوية لما تغيّر في دفترة، ثم الفواتير التي لم تُجلب تفاصيلها بعد
+            $need = array_slice(array_values(array_unique($touched)), 0, $limit_deep);
+            $rest = max(0, $limit_deep - count($need));
+            if ($rest > 0 && ($q = $conn->query("SELECT p.id FROM dmirror_purchases p
                     LEFT JOIN dmirror_purchase_items i ON i.purchase_id = p.id
-                    WHERE i.id IS NULL GROUP BY p.id ORDER BY p.id DESC LIMIT $limit_deep")) {
+                    WHERE i.id IS NULL GROUP BY p.id ORDER BY p.id DESC LIMIT $rest"))) {
                 while ($r = $q->fetch_assoc()) $need[] = (int)$r['id'];
             }
+            $need = array_values(array_unique($need));
             foreach ($need as $pid) {
                 $d = $get("$base/purchase_invoices/$pid.json");
                 $o = $d['data']['PurchaseOrder'] ?? $d['data']['PurchaseInvoice'] ?? null;
                 if (!$o) { $errors[] = $pid; continue; }
                 $items = (array)($o['PurchaseOrderItem'] ?? $o['PurchaseInvoiceItem'] ?? []);
+                // ما حُذف في دفترة يُحذف عندنا: نُفرغ البنود والدفعات ثم نكتب الوارد
+                $keepI = [0]; foreach ($items as $itx) if (isset($itx['id'])) $keepI[] = (int)$itx['id'];
+                $conn->query("DELETE FROM dmirror_purchase_items WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepI) . ")");
+                $keepP = [0]; foreach ((array)($o['PurchaseOrderPayment'] ?? []) as $pyx) if (isset($pyx['id'])) $keepP[] = (int)$pyx['id'];
+                $conn->query("DELETE FROM dmirror_payments WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepP) . ")");
                 foreach ($items as $it) {
                     if (!isset($it['id'])) continue;
                     $conn->query("REPLACE INTO dmirror_purchase_items

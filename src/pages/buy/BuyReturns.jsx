@@ -115,6 +115,10 @@ export default function BuyReturns() {
                         <div className="flex items-center gap-2 text-[11px] text-slate-400">
                             <span>مرتجع {r.no}</span>
                             <span>{r.date || '—'}</span>
+                            <span className={'px-1.5 py-0.5 rounded-md text-[10px] font-bold '
+                                + (r.project_id ? 'bg-sky-500/15 text-sky-200' : 'bg-amber-500/15 text-amber-200')}>
+                                {r.project_id ? r.project_name : 'بلا مشروع'}
+                            </span>
                             {Number(r.docs) > 0 && (
                                 <span className="flex items-center gap-1 text-emerald-300">
                                     <Paperclip size={10} />{r.docs}
@@ -150,6 +154,8 @@ function ReturnCard({ id, onBack }) {
     const [err, setErr] = useState('');
     const [file, setFile] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [projects, setProjects] = useState([]);
+    const [pid, setPid] = useState(0);
 
     const load = useCallback(() => {
         fetch(`${API_URL}?action=refund_entity&id=${id}`, { headers: auth() })
@@ -157,6 +163,26 @@ function ReturnCard({ id, onBack }) {
             .catch(() => setErr('تعذر الاتصال'));
     }, [id]);
     useEffect(load, [load]);
+
+    useEffect(() => {
+        fetch(`${API_URL}?action=projects_list`, { headers: auth() }).then(r => r.json())
+            .then(r => { if (r.success) setProjects(r.data || []); }).catch(() => {});
+    }, []);
+    useEffect(() => { if (d && d.head) setPid(Number(d.head.project_id) || 0); }, [d]);
+
+    // تسكين المرتجع على مشروع — محلي بحت، لا يمس دفترة (نفس قاعدة الفواتير)
+    const assign = async (next) => {
+        setBusy(true); setErr('');
+        try {
+            const r = await fetch(`${API_URL}?action=refund_set_project`, {
+                method: 'POST', headers: jsonHeaders(),
+                body: JSON.stringify({ id, project_id: Number(next) || 0 }),
+            }).then(x => x.json());
+            if (!r.success) { setErr(r.message || 'تعذر التسكين'); return; }
+            setPid(Number(next) || 0); load();
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
 
     const attach = async () => {
         if (!file) return;
@@ -186,6 +212,26 @@ function ReturnCard({ id, onBack }) {
                     <span className="text-[18px] font-black tabular-nums text-rose-300 mr-auto">−{money(h.gross)}</span>
                 </div>
                 <div className="text-[11px] text-slate-400">مرتجع {h.no} · {h.date || '—'}</div>
+                <div className="rounded-xl bg-white/[0.04] border border-white/10 p-2.5 space-y-1.5">
+                    <div className="text-[11px] font-bold text-slate-300">المشروع — يُخصم المرتجع من تكلفته</div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {projects.map(p => (
+                            <button key={p.id} disabled={busy} onClick={() => assign(p.id)}
+                                className={'px-2.5 py-1.5 rounded-lg text-[11px] font-bold border '
+                                    + (Number(pid) === Number(p.id)
+                                        ? 'bg-[#c5a059] text-[#0b1220] border-[#c5a059]'
+                                        : 'bg-white/5 border-white/10 text-slate-300')}>
+                                {p.name}
+                            </button>
+                        ))}
+                        <button disabled={busy} onClick={() => assign(0)}
+                            className={'px-2.5 py-1.5 rounded-lg text-[11px] font-bold border '
+                                + (!pid ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
+                                        : 'bg-white/5 border-white/10 text-slate-400')}>
+                            بلا مشروع
+                        </button>
+                    </div>
+                </div>
                 {h.reason && <div className="text-[12px] text-slate-300">السبب: {h.reason}</div>}
                 {h.purchase_id ? (
                     <div className="rounded-xl bg-sky-500/10 p-2.5 text-[12px] text-sky-200">
