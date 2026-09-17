@@ -2499,7 +2499,8 @@ function mtg_recipients($conn, $m) {
     if (!$ids) return [];
     $in = implode(',', $ids);
     $out = [];
-    $r = $conn->query("SELECT id, name, email FROM users WHERE id IN ($in) AND email <> '' AND COALESCE(status,'active') <> 'disabled'");
+    // جدول المستخدمين هنا بلا عمود status — الشرط عليه كان يُفشل الاستعلام فيخرج بلا مستقبِلين
+    $r = $conn->query("SELECT id, name, email FROM users WHERE id IN ($in) AND email <> ''");
     if ($r) while ($x = $r->fetch_assoc()) $out[] = $x;
     return $out;
 }
