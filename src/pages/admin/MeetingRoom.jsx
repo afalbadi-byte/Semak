@@ -31,6 +31,7 @@ const mmss = s => Math.floor(s / 60) + ':' + String(Math.abs(s % 60)).padStart(2
 
 export default function MeetingRoom() {
     const [kpis, setKpis]       = useState(null);
+    const [staff, setStaff]     = useState([]);
     const [meeting, setMeeting] = useState(null);
     const [items, setItems]     = useState([]);
     const [prev, setPrev]       = useState(null);
@@ -56,12 +57,14 @@ export default function MeetingRoom() {
     const load = useCallback(async () => {
         setBusy(true);
         try {
-            const [k, m, r, bd] = await Promise.all([
+            const [k, m, r, bd, us] = await Promise.all([
                 fetch(`${API_URL}?action=mtg_kpis`).then(x => x.json()),
                 fetch(`${API_URL}?action=mtg_get`).then(x => x.json()),
                 fetch(`${API_URL}?action=rock_list`).then(x => x.json()),
                 fetch(`${API_URL}?action=pbudget_list`).then(x => x.json()),
+                fetch(`${API_URL}?action=get_users`).then(x => x.json()).catch(() => ({ success: false })),
             ]);
+            if (us && us.success) setStaff((us.data || []).filter(u => u.email && u.status !== 'disabled'));
             if (k.success) setKpis(k);
             if (r.success) setRocks(r.data || []);
             if (bd && bd.success) setBudgets(bd.data || []);
@@ -94,6 +97,11 @@ export default function MeetingRoom() {
         if (r.success) load();
     };
     const patchMeeting = async patch => { await post('mtg_save', { ...meeting, ...patch }); load(); };
+    const sendAgenda = async () => {
+        const r = await post('mtg_email', { id: meeting.id, what: 'agenda' });
+        window.alert(r && r.sent ? ('أُرسلت الأجندة إلى ' + r.sent + ' من الحضور')
+                                 : ('تعذّر الإرسال' + (r && r.errors && r.errors.length ? ' — ' + r.errors[0] : '')));
+    };
     const addItem = async (kind, title, section, status) => {
         if (!meeting || !title.trim()) return;
         await post('mtg_item_save', { meeting_id: meeting.id, kind, section: section || dom, title: title.trim(),
@@ -109,7 +117,11 @@ export default function MeetingRoom() {
     const delMetric = async id => { if (window.confirm('حذف هذا المؤشر؟')) { await post('score_delete', { id }); load(); } };
     const closeMeeting = async (rating, skipConfirm) => {
         if (!skipConfirm && !window.confirm('إنهاء الاجتماع وإصدار المحضر؟')) return;
-        await post('mtg_close', { id: meeting.id, kpis, rating, summary: meeting.summary || '' });
+        const r = await post('mtg_close', { id: meeting.id, kpis, rating, summary: meeting.summary || '' });
+        const n = r && r.emailed ? r.emailed : 0;
+        window.alert(n ? ('أُقفل الاجتماع وأُرسل المحضر إلى ' + n + ' من الحضور')
+                       : ('أُقفل الاجتماع، ولم يُرسل المحضر'
+                          + ((r && r.email_errors && r.email_errors.length) ? ' — ' + r.email_errors[0] : ' — لم يُختر حضور لهم بريد')));
         load();
     };
     // زر الإنهاء متاح من الترويسة في أي قسم، لا في الختام وحده
@@ -235,14 +247,15 @@ export default function MeetingRoom() {
             </div>
 
             {sec.key === 'segue' && (
-                <div className={'rounded-2xl border p-4 ' + box}>
-                    <textarea defaultValue={meeting.segue || ''} rows={5}
-                        onBlur={e => e.target.value !== (meeting.segue || '') && patchMeeting({ segue: e.target.value })}
-                        placeholder="أخبار طيبة من كل حاضر — سطر لكل شخص"
-                        className={'w-full px-3 py-2 rounded-xl text-sm ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
-                    <input defaultValue={meeting.attendees || ''} placeholder="الحضور (أسماء مفصولة بفاصلة)"
-                        onBlur={e => e.target.value !== (meeting.attendees || '') && patchMeeting({ attendees: e.target.value })}
-                        className={'w-full mt-2 px-3 py-2 rounded-xl text-sm ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
+                <div className="space-y-3">
+                    <div className={'rounded-2xl border p-4 ' + box}>
+                        <textarea defaultValue={meeting.segue || ''} rows={5}
+                            onBlur={e => e.target.value !== (meeting.segue || '') && patchMeeting({ segue: e.target.value })}
+                            placeholder="أخبار طيبة من كل حاضر — سطر لكل شخص"
+                            className={'w-full px-3 py-2 rounded-xl text-sm ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
+                    </div>
+                    <Attendees meeting={meeting} staff={staff} present={present} box={box} txt={txt}
+                        onPatch={patchMeeting} onSendAgenda={() => sendAgenda()} />
                 </div>
             )}
 
@@ -668,6 +681,68 @@ function TodoBoard({ items, present, box, txt, onAdd, onPatch, onDelete }) {
                         </div>
                     ))}
                 </div>
+            )}
+        </div>
+    );
+}
+
+
+// ── الحضور: اختيار من الموظفين + موعد الاجتماع (يُبنى عليه تنبيه الأجندة قبل نصف ساعة) ──
+function Attendees({ meeting, staff, present, box, txt, onPatch, onSendAgenda }) {
+    const ids = String(meeting.attendee_ids || '').split(',').map(x => Number(x)).filter(Boolean);
+    const toggle = (u) => {
+        const next = ids.includes(u.id) ? ids.filter(x => x !== u.id) : ids.concat(u.id);
+        const names = staff.filter(s => next.includes(s.id)).map(s => s.name).join('، ');
+        onPatch({ attendee_ids: next.join(','), attendees: names });
+    };
+    const chosen = staff.filter(s => ids.includes(s.id));
+    const fld = 'px-3 py-2 rounded-xl text-sm outline-none ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200');
+    return (
+        <div className={'rounded-2xl border p-4 ' + box}>
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+                <h4 className={'font-black text-sm ' + txt}>الحضور وموعد الاجتماع</h4>
+                <span className={'text-[11px] font-bold ' + (present ? 'text-slate-400' : 'text-slate-400')}>
+                    المحضر يُرسل لهم عند الإنهاء، والأجندة قبل الموعد بنصف ساعة
+                </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+                <input type="date" defaultValue={meeting.meet_date || ''}
+                    onBlur={e => e.target.value && e.target.value !== meeting.meet_date && onPatch({ meet_date: e.target.value })}
+                    className={fld} />
+                <input type="time" defaultValue={String(meeting.meet_time || '10:00').slice(0, 5)}
+                    onBlur={e => e.target.value && e.target.value !== String(meeting.meet_time || '').slice(0, 5) && onPatch({ meet_time: e.target.value })}
+                    className={fld} />
+                <button onClick={onSendAgenda} disabled={!chosen.length}
+                    className="px-3 py-2 rounded-xl text-xs font-bold bg-brand-900 text-white disabled:opacity-40">
+                    إرسال الأجندة الآن
+                </button>
+            </div>
+            {!staff.length ? (
+                <p className="text-xs text-slate-400">لا يوجد موظفون ببريد مفعّل — أضفهم من صفحة المستخدمين.</p>
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {staff.map(u => {
+                        const on = ids.includes(u.id);
+                        return (
+                            <button key={u.id} onClick={() => toggle(u)}
+                                className={'flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition ' +
+                                    (on ? 'bg-emerald-600 text-white shadow'
+                                        : present ? 'bg-white/10 text-slate-200' : 'bg-white border border-slate-200 text-slate-600')}>
+                                <span className={'w-4 h-4 rounded-md flex items-center justify-center ' +
+                                    (on ? 'bg-white/25' : 'border border-slate-300')}>{on && <Check size={11} />}</span>
+                                <span>{u.name}</span>
+                                <span className={on ? 'opacity-70' : 'text-slate-400'}>{u.email}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+            {chosen.length > 0 && (
+                <p className={'text-[11px] mt-3 ' + (present ? 'text-slate-400' : 'text-slate-500')}>
+                    سيصل المحضر إلى {chosen.length} من الحضور
+                    {meeting.minutes_sent_at ? ' · آخر إرسال ' + String(meeting.minutes_sent_at).slice(0, 16) : ''}
+                    {meeting.agenda_sent_at ? ' · أُرسلت الأجندة ' + String(meeting.agenda_sent_at).slice(0, 16) : ''}
+                </p>
             )}
         </div>
     );

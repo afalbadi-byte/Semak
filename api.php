@@ -1045,6 +1045,11 @@ ensure_column($conn, "meetings", "headlines",  "headlines TEXT");
 ensure_column($conn, "meetings", "cascading",  "cascading TEXT");
 ensure_column($conn, "meetings", "rating",     "rating DECIMAL(3,1) DEFAULT NULL");
 ensure_column($conn, "meeting_items", "kind",  "kind VARCHAR(10) NOT NULL DEFAULT 'issue'");
+// الحضور بالاختيار من الموظفين + موعد الاجتماع بالساعة، لإرسال المحضر والأجندة بالبريد
+ensure_column($conn, "meetings", "meet_time",      "meet_time TIME NOT NULL DEFAULT '10:00:00'");
+ensure_column($conn, "meetings", "attendee_ids",   "attendee_ids VARCHAR(300) DEFAULT NULL");
+ensure_column($conn, "meetings", "agenda_sent_at", "agenda_sent_at DATETIME DEFAULT NULL");
+ensure_column($conn, "meetings", "minutes_sent_at","minutes_sent_at DATETIME DEFAULT NULL");
 $conn->query("CREATE TABLE IF NOT EXISTS rocks (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     title      VARCHAR(300) NOT NULL,
@@ -2480,6 +2485,111 @@ function send_email($to, $subject, $html, $alt = '') {
 }
 
 // ─── أدوات التحقق بخطوتين عند الدخول ──────────────────────────────────────────
+
+// ─── بريد غرفة الاجتماعات: المحضر عند الإنهاء، والأجندة قبل الموعد بنصف ساعة ────
+// المستقبِلون = موظفون مختارون في صفحة المقدمة (attendee_ids) ولهم بريد مفعّل
+function mtg_recipients($conn, $m) {
+    $ids = array_values(array_filter(array_map('intval', explode(',', (string)($m['attendee_ids'] ?? '')))));
+    if (!$ids) return [];
+    $in = implode(',', $ids);
+    $out = [];
+    $r = $conn->query("SELECT id, name, email FROM users WHERE id IN ($in) AND email <> '' AND COALESCE(status,'active') <> 'disabled'");
+    if ($r) while ($x = $r->fetch_assoc()) $out[] = $x;
+    return $out;
+}
+
+function mtg_items_html($conn, $mid, $onlyOpen = false) {
+    $w = $onlyOpen ? " AND status IN ('open','doing')" : '';
+    $r = $conn->query("SELECT kind, section, title, decision, owner, due_date, status FROM meeting_items
+                       WHERE meeting_id=" . (int)$mid . "$w ORDER BY kind, section, sort_index, id");
+    $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
+    if (!$rows) return '<p style="color:#94a3b8">لا بنود</p>';
+    $names = ['projects'=>'المشاريع','gov'=>'الحكومية','purchases'=>'المشتريات','cash'=>'السيولة','sales'=>'المبيعات','other'=>'عام'];
+    $stat  = ['open'=>'للتنفيذ','doing'=>'قيد التنفيذ','done'=>'منجزة','cancelled'=>'ملغاة'];
+    $h = '<table style="width:100%;border-collapse:collapse;font-size:14px">';
+    foreach ($rows as $x) {
+        $badge = $x['kind'] === 'todo' ? '#7c3aed' : '#e11d48';
+        $sc = $x['status'] === 'done' ? '#059669' : ($x['status'] === 'doing' ? '#d97706' : '#64748b');
+        $h .= '<tr><td style="padding:9px 0;border-bottom:1px solid #e2e8f0">'
+            . '<span style="display:inline-block;background:' . $badge . ';color:#fff;font-size:11px;padding:2px 7px;border-radius:6px">'
+            . ($x['kind'] === 'todo' ? 'مهمة' : 'قضية') . '</span> '
+            . '<span style="color:#94a3b8;font-size:12px">' . htmlspecialchars($names[$x['section']] ?? 'عام') . '</span><br>'
+            . '<b style="color:#1a365d">' . htmlspecialchars($x['title']) . '</b>'
+            . ($x['decision'] ? '<br><span style="color:#475569">' . nl2br(htmlspecialchars($x['decision'])) . '</span>' : '')
+            . '<br><span style="color:' . $sc . ';font-size:12px;font-weight:bold">' . ($stat[$x['status']] ?? $x['status']) . '</span>'
+            . ($x['owner'] ? ' <span style="color:#64748b;font-size:12px">· ' . htmlspecialchars($x['owner']) . '</span>' : '')
+            . ($x['due_date'] ? ' <span style="color:#64748b;font-size:12px">· ' . htmlspecialchars($x['due_date']) . '</span>' : '')
+            . '</td></tr>';
+    }
+    return $h . '</table>';
+}
+
+// يرسل المحضر لكل الحضور ويعيد [عدد المرسل, أخطاء]
+function mtg_send_minutes($conn, $mid) {
+    $r = $conn->query("SELECT * FROM meetings WHERE id=" . (int)$mid . " LIMIT 1");
+    $m = $r ? $r->fetch_assoc() : null;
+    if (!$m) return [0, ['الاجتماع غير موجود']];
+    $to = mtg_recipients($conn, $m);
+    if (!$to) return [0, ['لم يُختر حضور لهم بريد']];
+    $body = '<p style="color:#64748b">' . htmlspecialchars($m['meet_date']) . ' · ' . htmlspecialchars(substr((string)$m['meet_time'], 0, 5)) . '</p>'
+        . ($m['summary'] ? '<h3 style="color:#1a365d;margin:18px 0 6px">خلاصة الاجتماع</h3><p>' . nl2br(htmlspecialchars($m['summary'])) . '</p>' : '')
+        . ($m['cascading'] ? '<h3 style="color:#1a365d;margin:18px 0 6px">ما يُبلَّغ للفريق</h3><p>' . nl2br(htmlspecialchars($m['cascading'])) . '</p>' : '')
+        . ($m['headlines'] ? '<h3 style="color:#1a365d;margin:18px 0 6px">المستجدات</h3><p>' . nl2br(htmlspecialchars($m['headlines'])) . '</p>' : '')
+        . '<h3 style="color:#1a365d;margin:18px 0 6px">المهام والقضايا</h3>' . mtg_items_html($conn, $mid)
+        . ($m['rating'] !== null ? '<p style="margin-top:18px;color:#64748b">تقييم الاجتماع: <b>' . (float)$m['rating'] . ' / 10</b></p>' : '');
+    $html = email_template('محضر ' . ($m['title'] ?: 'الاجتماع'), $body);
+    $sent = 0; $errs = [];
+    foreach ($to as $u) {
+        $res = send_email($u['email'], 'محضر الاجتماع · ' . $m['meet_date'], $html);
+        if (!empty($res['ok'])) $sent++; else $errs[] = $u['email'] . ': ' . ($res['error'] ?? 'فشل');
+    }
+    if ($sent) $conn->query("UPDATE meetings SET minutes_sent_at=NOW() WHERE id=" . (int)$mid);
+    return [$sent, $errs];
+}
+
+// أجندة الاجتماع القادم: الأقسام وتوقيتها + البنود المفتوحة المرحّلة
+function mtg_send_agenda($conn, $mid) {
+    $r = $conn->query("SELECT * FROM meetings WHERE id=" . (int)$mid . " LIMIT 1");
+    $m = $r ? $r->fetch_assoc() : null;
+    if (!$m) return [0, ['الاجتماع غير موجود']];
+    $to = mtg_recipients($conn, $m);
+    if (!$to) return [0, ['لم يُختر حضور لهم بريد']];
+    $agenda = [['المقدمة', 5], ['لوحة الأرقام', 5], ['أولويات 90 يوماً', 5], ['مستجدات', 5], ['اللوحة: المهام والقضايا', 65], ['الختام', 5]];
+    $rows = '';
+    foreach ($agenda as $a) $rows .= '<tr><td style="padding:6px 0;border-bottom:1px solid #e2e8f0"><b style="color:#1a365d">' . $a[0]
+        . '</b></td><td style="padding:6px 0;border-bottom:1px solid #e2e8f0;color:#64748b;text-align:left">' . $a[1] . ' د</td></tr>';
+    $body = '<p style="color:#64748b">يبدأ الاجتماع بعد نصف ساعة — ' . htmlspecialchars($m['meet_date']) . ' الساعة '
+          . htmlspecialchars(substr((string)$m['meet_time'], 0, 5)) . '</p>'
+          . '<table style="width:100%;border-collapse:collapse;font-size:14px">' . $rows . '</table>'
+          . '<h3 style="color:#1a365d;margin:18px 0 6px">بنود مفتوحة تُناقش</h3>' . mtg_items_html($conn, (int)$m['id'], true);
+    $html = email_template('أجندة ' . ($m['title'] ?: 'الاجتماع'), $body);
+    $sent = 0; $errs = [];
+    foreach ($to as $u) {
+        $res = send_email($u['email'], 'أجندة الاجتماع · بعد نصف ساعة', $html);
+        if (!empty($res['ok'])) $sent++; else $errs[] = $u['email'] . ': ' . ($res['error'] ?? 'فشل');
+    }
+    return [$sent, $errs];
+}
+
+// نبضة: تُنادى من أي طلب (مرة كل خمس دقائق) أو من جدولة خارجية.
+// ترسل أجندة كل اجتماع مفتوح يبدأ خلال ٣٠ دقيقة ولم تُرسل أجندته بعد.
+function mtg_tick($conn) {
+    $r = $conn->query("SELECT id FROM meetings
+        WHERE status='open' AND agenda_sent_at IS NULL
+          AND TIMESTAMP(meet_date, meet_time) BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 MINUTE)");
+    $ids = []; if ($r) while ($x = $r->fetch_assoc()) $ids[] = (int)$x['id'];
+    $done = [];
+    foreach ($ids as $id) {
+        // احجز أولاً حتى لا يرسل طلبان متزامنان نسختين
+        $conn->query("UPDATE meetings SET agenda_sent_at=NOW() WHERE id=$id AND agenda_sent_at IS NULL");
+        if (!$conn->affected_rows) continue;
+        [$n, $e] = mtg_send_agenda($conn, $id);
+        if (!$n) $conn->query("UPDATE meetings SET agenda_sent_at=NULL WHERE id=$id");   // أعد المحاولة لاحقاً
+        $done[] = ['meeting' => $id, 'sent' => $n, 'errors' => $e];
+    }
+    return $done;
+}
+
 function mask_email($e) {
     if (!$e || strpos($e, '@') === false) return $e;
     list($u, $d) = explode('@', $e, 2);
@@ -2986,6 +3096,21 @@ if ($_jwt_tid && $_jwt_tid !== 1) {
         $_tenantColor = $_tenantSettings['primary_color'] ?? $_tenantColor;
     }
     unset($__ts, $__tr);
+}
+
+
+// نبضة أجندة الاجتماع: تمرّ مع حركة النظام مرة كل خمس دقائق فقط (بديل الجدولة الخارجية).
+// النداء المباشر متاح أيضاً: api.php?action=mtg_tick
+if (function_exists('mtg_tick')) {
+    $__mtgLast = 0;
+    $__mtgRow = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='mtg_tick_at' LIMIT 1");
+    if ($__mtgRow && ($__mtgX = $__mtgRow->fetch_assoc())) $__mtgLast = strtotime((string)$__mtgX['sval']);
+    if (time() - $__mtgLast > 300) {
+        $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval) VALUES (1,'mtg_tick_at',NOW())
+                      ON DUPLICATE KEY UPDATE sval=NOW()");
+        try { mtg_tick($conn); } catch (Throwable $e) { /* لا يعطّل الطلب */ }
+    }
+    unset($__mtgLast, $__mtgRow, $__mtgX);
 }
 
 switch ($action) {
@@ -12220,8 +12345,12 @@ switch ($action) {
         $id = (int)($b['id'] ?? 0);
         $ttl = trim((string)($b['title'] ?? '')) ?: ('اجتماع سماك الدوري ' . date('Y-m-d'));
         $dt  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['meet_date'] ?? '')) ? $b['meet_date'] : date('Y-m-d');
-        $set = "title='" . $E($ttl) . "', meet_date='$dt', segue='" . $E($b['segue'] ?? '') . "', headlines='" . $E($b['headlines'] ?? '') . "', cascading='" . $E($b['cascading'] ?? '') . "', attendees='" . $E($b['attendees'] ?? '')
-             . "', summary='" . $E($b['summary'] ?? '') . "', created_by='" . $E($b['created_by'] ?? '') . "'";
+        $tm  = preg_match('/^\d{2}:\d{2}(:\d{2})?$/', (string)($b['meet_time'] ?? '')) ? substr($b['meet_time'], 0, 5) . ':00' : '10:00:00';
+        // قائمة معرّفات الموظفين المختارين للحضور — تُنظَّف إلى أرقام مفصولة بفاصلة
+        $aids = implode(',', array_values(array_filter(array_map('intval',
+                 explode(',', (string)($b['attendee_ids'] ?? ''))))));
+        $set = "title='" . $E($ttl) . "', meet_date='$dt', meet_time='$tm', segue='" . $E($b['segue'] ?? '') . "', headlines='" . $E($b['headlines'] ?? '') . "', cascading='" . $E($b['cascading'] ?? '') . "', attendees='" . $E($b['attendees'] ?? '')
+             . "', attendee_ids='" . $E($aids) . "', summary='" . $E($b['summary'] ?? '') . "', created_by='" . $E($b['created_by'] ?? '') . "'";
         if ($id) { $conn->query("UPDATE meetings SET $set WHERE id=$id"); }
         else {
             $conn->query("INSERT INTO meetings SET $set");
@@ -12285,7 +12414,27 @@ switch ($action) {
         $rt = (!isset($b['rating']) || $b['rating'] === '') ? 'NULL' : (float)$b['rating'];
         $conn->query("UPDATE meetings SET status='closed', closed_at=NOW(), rating=$rt, summary='" . $E($b['summary'] ?? '')
             . "', kpi_snapshot='$snap' WHERE id=$id");
-        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        // المحضر يُرسل بالبريد للحضور المختارين — إلا إن طُلب خلاف ذلك
+        $sent = 0; $errs = [];
+        if (empty($b['no_email'])) { [$sent, $errs] = mtg_send_minutes($conn, $id); }
+        echo json_encode(['success'=>true, 'emailed'=>$sent, 'email_errors'=>$errs], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // إرسال المحضر أو الأجندة يدوياً
+    case 'mtg_email': {
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $id = (int)($b['id'] ?? $_GET['id'] ?? 0);
+        $what = ($b['what'] ?? $_GET['what'] ?? 'minutes') === 'agenda' ? 'agenda' : 'minutes';
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'id مطلوب']); break; }
+        [$n, $e] = $what === 'agenda' ? mtg_send_agenda($conn, $id) : mtg_send_minutes($conn, $id);
+        echo json_encode(['success'=>$n > 0, 'sent'=>$n, 'errors'=>$e], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // نبضة الأجندة — تُنادى من جدولة خارجية أو تلقائياً مع حركة النظام
+    case 'mtg_tick': {
+        echo json_encode(['success'=>true, 'done'=>mtg_tick($conn)], JSON_UNESCAPED_UNICODE);
         break;
     }
 
