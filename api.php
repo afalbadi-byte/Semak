@@ -9154,6 +9154,97 @@ switch ($action) {
         break;
     }
 
+    // فواتير ترويستها تقول «مُسدّدة» ولا سطر دفعة لها — فجوة تُشوّه كشوف الحسابات
+    case 'pay_gap_list': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $Q = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $rows = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) total, ROUND(p.paid,2) paid,
+                        COALESCE(m.s,0) mirror_pay, COALESCE(l.s,0) local_pay,
+                        COALESCE(b.name,'') project, COALESCE(p.origin,'daftra') origin,
+                        (SELECT COUNT(*) FROM purchase_documents d WHERE d.purchase_id=p.id AND d.doc_type='receipt') receipts
+                    FROM dmirror_purchases p
+                    LEFT JOIN (SELECT purchase_id, ROUND(SUM(amount),2) s FROM dmirror_payments GROUP BY purchase_id) m
+                           ON m.purchase_id = p.id
+                    LEFT JOIN (SELECT purchase_id, ROUND(SUM(amount),2) s FROM purchase_payments GROUP BY purchase_id) l
+                           ON l.purchase_id = p.id
+                    LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                    LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                    WHERE p.paid > 0.5 AND (COALESCE(m.s,0) + COALESCE(l.s,0)) < p.paid - 0.5
+                    ORDER BY p.date DESC, p.id DESC");
+        $gap = 0;
+        foreach ($rows as &$r) {
+            $r['gap'] = round((float)$r['paid'] - (float)$r['mirror_pay'] - (float)$r['local_pay'], 2);
+            $gap += $r['gap'];
+        }
+        unset($r);
+        echo json_encode(['success'=>true, 'data'=>$rows, 'count'=>count($rows), 'gap_total'=>round($gap, 2)],
+            JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // تسجيل الدفعة الناقصة لفاتورة واحدة — بمبلغ الفجوة نفسها وربط إيصالها إن وُجد.
+    // لا تلمس دفترة، ولا تُنشئ شيئاً إن لم تكن هناك فجوة فعلية.
+    case 'pay_gap_fill': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $u = null;
+        if ($ur = $conn->query("SELECT name, role, permissions FROM users WHERE id=$uid LIMIT 1")) $u = $ur->fetch_assoc();
+        $pm = json_decode((string)($u['permissions'] ?? '[]'), true); if (!is_array($pm)) $pm = [];
+        if (!$u || (($u['role'] ?? '') !== 'admin' && !in_array('finance', $pm, true) && !in_array('accounting', $pm, true))) {
+            echo json_encode(['success'=>false,'message'=>'لا تملك صلاحية تسجيل الدفعات'], JSON_UNESCAPED_UNICODE); break; }
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $pid = (int)($b['purchase_id'] ?? 0);
+        if (!$pid) { echo json_encode(['success'=>false,'message'=>'purchase_id مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+
+        $iv = null;
+        if ($r = $conn->query("SELECT id, no, date, supplier, ROUND(total,2) total, ROUND(paid,2) paid
+                               FROM dmirror_purchases WHERE id=$pid LIMIT 1")) $iv = $r->fetch_assoc();
+        if (!$iv) { echo json_encode(['success'=>false,'message'=>'الفاتورة غير موجودة'], JSON_UNESCAPED_UNICODE); break; }
+        $have = 0;
+        foreach (["SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM dmirror_payments WHERE purchase_id=$pid",
+                  "SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM purchase_payments WHERE purchase_id=$pid"] as $q)
+            if ($r = $conn->query($q)) $have += (float)($r->fetch_assoc()['s'] ?? 0);
+        $gap = round((float)$iv['paid'] - $have, 2);
+        if ($gap <= 0.5) {
+            echo json_encode(['success'=>false, 'message'=>'لا فجوة في هذه الفاتورة — الدفعات مطابقة للترويسة',
+                'paid'=>(float)$iv['paid'], 'payments'=>$have], JSON_UNESCAPED_UNICODE); break;
+        }
+        // المبلغ من الفجوة لا من إدخال حر — فلا يزيد المسدّد عمّا تقوله الترويسة
+        $amt = isset($b['amount']) ? min($gap, round((float)$b['amount'], 2)) : $gap;
+        if ($amt <= 0) { echo json_encode(['success'=>false,'message'=>'المبلغ غير صالح'], JSON_UNESCAPED_UNICODE); break; }
+        $method = in_array(($b['method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['method'] : 'transfer';
+        $pdate  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['date'] ?? '')) ? $b['date'] : (string)($iv['date'] ?: date('Y-m-d'));
+
+        // الإيصال: المُمرَّر أو آخر إيصال سداد مرفوع على الفاتورة
+        $rurl = (string)($b['receipt_url'] ?? '');
+        $rdoc = 0;
+        if ($rurl === '' && ($r = $conn->query("SELECT id, COALESCE(drive_url,'') u FROM purchase_documents
+                WHERE purchase_id=$pid AND doc_type='receipt' AND COALESCE(drive_url,'') <> '' ORDER BY id DESC LIMIT 1")))
+            if ($x = $r->fetch_assoc()) { $rurl = (string)$x['u']; $rdoc = (int)$x['id']; }
+
+        $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date,
+                reference, receipt_url, note, created_by)
+            VALUES ($pid, '" . $E($iv['supplier']) . "', $amt, '" . $E($method) . "', '$pdate', '"
+            . $E(mb_substr((string)($b['reference'] ?? ''), 0, 110)) . "', '" . $E($rurl) . "', '"
+            . $E('تسجيل الدفعة الناقصة مطابقةً لترويسة الفاتورة' . ($rdoc ? ' وإيصالها المرفوع' : ''))
+            . "', '" . $E($u['name'] ?? '') . "')");
+        if ($conn->errno) { echo json_encode(['success'=>false,'message'=>'تعذر الحفظ: ' . $conn->error], JSON_UNESCAPED_UNICODE); break; }
+        $payId = (int)$conn->insert_id;
+        // الإيصال يُربط بالدفعة المحلية (payment_src='local') فيظهر تحتها في البطاقة
+        if ($rdoc) $conn->query("UPDATE purchase_documents SET payment_id=$payId, payment_src='local'
+                                 WHERE id=$rdoc AND payment_id IS NULL");
+
+        acc_audit($conn, 1, 'purchase', $pid, 'update',
+            'تسجيل دفعة ' . number_format($amt, 2) . ' على فاتورة ' . $iv['no']
+            . ' — سدّ فجوة بين ترويسة الفاتورة وسطور الدفعات' . ($rdoc ? ' وربط الإيصال' : ''), $u['name'] ?? '');
+        echo json_encode(['success'=>true, 'payment_id'=>$payId, 'amount'=>$amt, 'date'=>$pdate,
+            'receipt_linked'=>$rdoc ? 1 : 0, 'invoice'=>$iv['no'],
+            'message'=>'سُجّلت دفعة ' . number_format($amt, 2) . ' على فاتورة ' . $iv['no']], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'pay_proofs': {
         // تدقيق: أي دفعة بلا إيصال يثبتها — الإيصال إمّا رابط على الدفعة أو مستند على فاتورتها
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
@@ -12452,6 +12543,14 @@ switch ($action) {
                             return $tnm[(string)$t['treasury_id']] ?? ('خزينة ' . $t['treasury_id']);
                         }, $trs))];
                 }
+                // فجوة الدفعات: الترويسة تقول مُسدَّد وسطور الدفعات أقلّ — تُعرض للواجهة لتقترح تسجيلها
+                $payHave = 0;
+                foreach (["SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM dmirror_payments WHERE purchase_id=$pid",
+                          "SELECT ROUND(COALESCE(SUM(amount),0),2) s FROM purchase_payments WHERE purchase_id=$pid"] as $gq)
+                    if ($gr = $conn->query($gq)) $payHave += (float)($gr->fetch_assoc()['s'] ?? 0);
+                $out['pay_gap'] = round(max(0, (float)$h['paid'] - $payHave), 2);
+                $out['pay_gap_receipt'] = (int)($Q("SELECT COUNT(*) n FROM purchase_documents
+                    WHERE purchase_id=$pid AND doc_type='receipt' AND COALESCE(drive_url,'') <> ''")[0]['n'] ?? 0);
                 $out['sections'][] = ['title'=>'البنود',
                     'cols'=>[['k'=>'item','t'=>'الصنف'],['k'=>'quantity','t'=>'الكمية'],
                              ['k'=>'unit_price','t'=>'سعر الوحدة'],['k'=>'subtotal','t'=>'الإجمالي']],

@@ -134,6 +134,21 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
         finally { setBusy(false); }
     };
 
+    // تسجيل الدفعة الناقصة على الفاتورة: المبلغ من الفجوة نفسها، والإيصال المرفوع يُربط بها
+    const fillPayGap = async () => {
+        const gap = Number(data?.pay_gap) || 0;
+        if (!(gap > 0.5)) return;
+        if (!window.confirm('تسجيل دفعة ' + money(gap) + ' على هذه الفاتورة مطابقةً لترويستها'
+            + (Number(data?.pay_gap_receipt) ? ' وربط إيصالها المرفوع؟' : '؟'))) return;
+        setBusy(true); setErr('');
+        try {
+            const r = await post('pay_gap_fill', { purchase_id: value });
+            if (!r.success) { setErr(r.message || 'تعذر التسجيل'); return; }
+            setTick(t => t + 1);
+        } catch { setErr('تعذر الاتصال'); }
+        finally { setBusy(false); }
+    };
+
     const applyAdvance = async () => {
         setBusy(true); setErr('');
         try {
@@ -198,6 +213,13 @@ export default function BuyEntity({ type, value, onOpen, onBack, depth = 0 }) {
                         disabled={busy}
                         className="min-h-[44px] px-3 rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-bold flex items-center gap-1.5">
                         <Pencil size={14} /> تعديل
+                    </button>
+                )}
+                {/* الترويسة تقول «مُسدَّد» ولا سطر دفعة — تُسجَّل بضغطة ويُربط إيصالها */}
+                {type === 'purchase' && data && Number(data.pay_gap) > 0.5 && (
+                    <button onClick={fillPayGap} disabled={busy}
+                        className="min-h-[44px] px-3 rounded-xl bg-emerald-500/15 text-emerald-300 text-[12px] font-bold flex items-center gap-1.5">
+                        <Wallet size={14} /> سجّل الدفعة الناقصة {money(data.pay_gap)}
                     </button>
                 )}
                 {type === 'purchase' && data && (
