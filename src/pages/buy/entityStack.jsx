@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import BuyEntity from './BuyEntity';
 import { useDepthGuard } from '../../lib/backstack';
 import { EntityCtx, useEntity } from './entityCtx';
@@ -8,7 +8,14 @@ import { EntityCtx, useEntity } from './entityCtx';
 // كان المكدّس حبيس السجلات، فما كانت أسماء الرئيسية والأسعار والمساعد روابط.
 
 export function EntityProvider({ children }) {
-    const [stack, setStack] = useState([]);
+    // المكدّس يُحفظ في الجلسة: تحديث الصفحة يعيدك لآخر بطاقة كنت فيها لا للرئيسية
+    const [stack, setStack] = useState(() => {
+        try { const s = JSON.parse(sessionStorage.getItem('buy_stack') || '[]'); return Array.isArray(s) ? s : []; }
+        catch (e) { return []; }
+    });
+    useEffect(() => {
+        try { sessionStorage.setItem('buy_stack', JSON.stringify(stack.slice(-12))); } catch (e) {}
+    }, [stack]);
     const openEntity = useCallback((type, value) => {
         if (!type || value === undefined || value === null || value === '') return;
         setStack(s => s.concat({ type, value }));

@@ -69,7 +69,11 @@ const isPhone = () => {
 };
 
 export default function BuyApp() {
-    const [tab, setTab]   = useState('home');
+    // التبويب يُحفظ فيبقى المستخدم مكانه بعد تحديث الصفحة أو السحب للتحديث
+    const [tab, setTab]   = useState(() => {
+        try { return sessionStorage.getItem('buy_tab') || 'home'; } catch (e) { return 'home'; }
+    });
+    useEffect(() => { try { sessionStorage.setItem('buy_tab', tab); } catch (e) {} }, [tab]);
     // الترحيب يُعرض أول مرة فقط لكل جهاز
     useDepthGuard(tab === 'home' ? 0 : 1, () => setTab('home'));
     const [splash, setSplash] = useState(() => {

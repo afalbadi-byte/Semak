@@ -2734,6 +2734,153 @@ function pr_table($cols, $rows, $foot = null) {
     return $h . '</table>';
 }
 
+
+// ─── المزامنة الدائمة مع دفترة ───────────────────────────────────────────────
+// نبضة خفيفة تعمل بعد إرسال الرد للمستخدم (fastcgi_finish_request) فلا تُبطئ أي شاشة:
+//   • كل 10 دقائق: أحدث صفحة فواتير (100) — تلتقط الجديد وأي تعديل أو دفعة على فاتورة قائمة
+//   • كل 6 ساعات: مسح كامل لكل الصفحات — يلتقط تعديلات الفترات السابقة البعيدة
+// والتفاصيل (بنود/دفعات/مرفقات) تُعاد لكل فاتورة تغيّر modified أو إجماليها أو مسددها.
+function dmirror_cfg_get($conn, $k) {
+    $r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='" . $conn->real_escape_string($k) . "' LIMIT 1");
+    return ($r && ($x = $r->fetch_assoc())) ? (string)$x['sval'] : '';
+}
+function dmirror_cfg_set($conn, $k, $v) {
+    $conn->query("INSERT INTO acc_settings (tenant_id, skey, sval) VALUES (1,'"
+        . $conn->real_escape_string($k) . "','" . $conn->real_escape_string($v) . "')
+        ON DUPLICATE KEY UPDATE sval=VALUES(sval)");
+}
+
+function dmirror_pull($conn, $full = false, $deepBudget = 8) {
+    if (function_exists('daftra_detached') && daftra_detached($conn)) return ['skipped' => 'detached'];
+    $dk = "__DAFTRA_KEY__";
+    $base = 'https://semak.daftra.com/api2';
+    $hdrs = ["APIKEY: $dk", 'Accept: application/json'];
+    $get = function($url) use ($hdrs) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$hdrs,
+            CURLOPT_TIMEOUT=>20, CURLOPT_FOLLOWLOCATION=>true]);
+        $r = curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+        return $c === 200 ? (json_decode($r, true) ?: null) : null;
+    };
+    $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+
+    $rows = [];
+    $pages = $full ? 40 : 1;
+    for ($page = 1; $page <= $pages; $page++) {
+        $d = $get("$base/purchase_invoices.json?page=$page&limit=100");
+        if (!$d || empty($d['data'])) break;
+        foreach ($d['data'] as $it) {
+            $p = $it['PurchaseOrder'] ?? $it['PurchaseInvoice'] ?? $it;
+            if (isset($p['id'])) $rows[(int)$p['id']] = $p;
+        }
+        if (count($d['data']) < 100) break;
+    }
+    if (!$rows) return ['fetched' => 0];
+
+    $ids = implode(',', array_map('intval', array_keys($rows)));
+    $prev = [];
+    if ($pr = $conn->query("SELECT id, total, paid, modified FROM dmirror_purchases WHERE id IN ($ids)"))
+        while ($x = $pr->fetch_assoc()) $prev[(int)$x['id']] = $x;
+
+    $touched = []; $saved = 0;
+    foreach ($rows as $id => $p) {
+        $no   = $E((string)($p['no'] ?? ''));
+        $date = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($p['date'] ?? '')) ? substr($p['date'], 0, 10)
+              : (preg_match('#^(\d{2})/(\d{2})/(\d{4})#', (string)($p['date'] ?? ''), $m) ? "$m[3]-$m[2]-$m[1]" : null);
+        $tot  = (float)($p['summary_total'] ?? 0);
+        $sub  = (float)($p['summary_subtotal'] ?? 0);
+        $paid = (float)($p['summary_paid'] ?? 0);
+        $sid  = (int)($p['supplier_id'] ?? 0);
+        $sup  = $E((string)($p['supplier_business_name'] ?? $p['supplier'] ?? ''));
+        $adj  = (float)($p['adjustment_value'] ?? 0);
+        $wo   = isset($p['work_order_id']) && $p['work_order_id'] !== null ? (int)$p['work_order_id'] : 'NULL';
+        $cr   = !empty($p['created'])  ? "'" . $E($p['created'])  . "'" : 'NULL';
+        $mo   = !empty($p['modified']) ? "'" . $E($p['modified']) . "'" : 'NULL';
+        $raw  = $E(json_encode($p, JSON_UNESCAPED_UNICODE));
+        $dsql = $date ? "'$date'" : 'NULL';
+
+        if (!isset($prev[$id])) $touched[] = $id;
+        elseif ((string)($prev[$id]['modified'] ?? '') !== (string)($p['modified'] ?? '')
+             || abs((float)$prev[$id]['total'] - $tot) > 0.009
+             || abs((float)$prev[$id]['paid'] - $paid) > 0.009) $touched[] = $id;
+
+        $conn->query("REPLACE INTO dmirror_purchases
+            (id,no,date,supplier_id,supplier,total,subtotal,paid,adjustment,work_order_id,created,modified,raw)
+            VALUES ($id,'$no',$dsql,$sid,'$sup',$tot,$sub,$paid,$adj,$wo,$cr,$mo,'$raw')");
+        $saved++;
+    }
+
+    // التفاصيل: ما تغيّر أولاً، ثم فواتير دفترة التي لم تُجلب بنودها بعد
+    $need = array_slice(array_values(array_unique($touched)), 0, $deepBudget);
+    $rest = max(0, $deepBudget - count($need));
+    if ($rest > 0 && ($q = $conn->query("SELECT p.id FROM dmirror_purchases p
+            LEFT JOIN dmirror_purchase_items i ON i.purchase_id = p.id
+            WHERE i.id IS NULL AND COALESCE(p.origin,'daftra')='daftra'
+            GROUP BY p.id ORDER BY p.id DESC LIMIT $rest")))
+        while ($x = $q->fetch_assoc()) $need[] = (int)$x['id'];
+
+    $deep = 0;
+    foreach (array_unique($need) as $pid) {
+        $d = $get("$base/purchase_invoices/$pid.json");
+        $o = $d['data']['PurchaseOrder'] ?? $d['data']['PurchaseInvoice'] ?? null;
+        if (!$o) continue;
+        $items = (array)($o['PurchaseOrderItem'] ?? $o['PurchaseInvoiceItem'] ?? []);
+        $keepI = [0]; foreach ($items as $itx) if (isset($itx['id'])) $keepI[] = (int)$itx['id'];
+        $conn->query("DELETE FROM dmirror_purchase_items WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepI) . ")");
+        foreach ($items as $it) {
+            if (!isset($it['id'])) continue;
+            $conn->query("REPLACE INTO dmirror_purchase_items
+                (id,purchase_id,item,description,quantity,unit_price,discount,tax1,subtotal,product_id) VALUES ("
+                . (int)$it['id'] . ", $pid, '" . $E((string)($it['item'] ?? $it['name'] ?? '')) . "', '"
+                . $E((string)($it['description'] ?? '')) . "', " . (float)($it['quantity'] ?? 0) . ", "
+                . (float)($it['unit_price'] ?? 0) . ", " . (float)($it['discount'] ?? 0) . ", '"
+                . $E((string)($it['tax1'] ?? '')) . "', " . (float)($it['subtotal'] ?? 0) . ", "
+                . (int)($it['product_id'] ?? 0) . ")");
+        }
+        $pays = (array)($o['PurchaseOrderPayment'] ?? []);
+        $keepP = [0]; foreach ($pays as $pyx) if (isset($pyx['id'])) $keepP[] = (int)$pyx['id'];
+        $conn->query("DELETE FROM dmirror_payments WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepP) . ")");
+        foreach ($pays as $pay) {
+            if (!isset($pay['id'])) continue;
+            $pd = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($pay['date'] ?? '')) ? "'" . substr($pay['date'], 0, 10) . "'" : 'NULL';
+            $conn->query("REPLACE INTO dmirror_payments (id,purchase_id,amount,date,treasury_id,created) VALUES ("
+                . (int)$pay['id'] . ", $pid, " . (float)($pay['amount'] ?? 0) . ", $pd, "
+                . (int)($pay['treasury_id'] ?? 0) . ", "
+                . (!empty($pay['created']) ? "'" . $E($pay['created']) . "'" : 'NULL') . ")");
+        }
+        $att = (array)($o['Attachments'] ?? []);
+        foreach ($att as $a) {
+            if (!isset($a['id'])) continue;
+            $conn->query("REPLACE INTO dmirror_attachments (file_id,name,path,entity_key,entity_id,file_size,mime_type,created_at) VALUES ("
+                . (int)$a['id'] . ", '" . $E((string)($a['name'] ?? '')) . "', '" . $E((string)($a['path'] ?? '')) . "', '"
+                . $E((string)($a['entity_key'] ?? 'purchase_order')) . "', $pid, " . (int)($a['file_size'] ?? 0) . ", '"
+                . $E((string)($a['mime_type'] ?? '')) . "', "
+                . (!empty($a['created_at']) ? "'" . $E($a['created_at']) . "'" : 'NULL') . ")");
+        }
+        $conn->query("UPDATE dmirror_purchases SET items_count=" . count($items) . ", attachments=" . count($att) . " WHERE id=$pid");
+        $deep++;
+    }
+    return ['fetched' => $saved, 'changed' => count($touched), 'deep' => $deep, 'full' => $full ? 1 : 0];
+}
+
+// النبضة: تقرّر أي مسح يلزم الآن وتكتب أثره في dmirror_runs
+function dmirror_tick($conn, $force = false) {
+    $now = time();
+    $last = strtotime(dmirror_cfg_get($conn, 'dmirror_tick_at') ?: '1970-01-01');
+    $lastFull = strtotime(dmirror_cfg_get($conn, 'dmirror_full_at') ?: '1970-01-01');
+    if (!$force && $now - $last < 600) return ['skipped' => 'throttled'];
+    $full = ($now - $lastFull) > 21600;             // مسح كامل كل ٦ ساعات
+    dmirror_cfg_set($conn, 'dmirror_tick_at', date('Y-m-d H:i:s'));
+    $conn->query("INSERT INTO dmirror_runs (scope) VALUES ('" . ($full ? 'auto-full' : 'auto') . "')");
+    $run = (int)$conn->insert_id;
+    $res = dmirror_pull($conn, $full, $full ? 25 : 8);
+    if ($full) dmirror_cfg_set($conn, 'dmirror_full_at', date('Y-m-d H:i:s'));
+    $conn->query("UPDATE dmirror_runs SET ended_at=NOW(), fetched=" . (int)($res['fetched'] ?? 0)
+        . ", changed=" . (int)($res['changed'] ?? 0) . ", ok=1, note='"
+        . $conn->real_escape_string('auto deep=' . (int)($res['deep'] ?? 0)) . "' WHERE id=$run");
+    return $res + ['run_id' => $run];
+}
+
 function mask_email($e) {
     if (!$e || strpos($e, '@') === false) return $e;
     list($u, $d) = explode('@', $e, 2);
@@ -3243,8 +3390,14 @@ if ($_jwt_tid && $_jwt_tid !== 1) {
 }
 
 
-// نبضة أجندة الاجتماع: تمرّ مع حركة النظام مرة كل خمس دقائق فقط (بديل الجدولة الخارجية).
-// النداء المباشر متاح أيضاً: api.php?action=mtg_tick
+// النبضات الخلفية: تعمل بعد إرسال الرد للمستخدم فلا تُبطئ الطلب.
+// المزامنة مع دفترة كل ١٠ دقائق (ومسح كامل كل ٦ ساعات)، وأجندة الاجتماع كل ٥ دقائق.
+register_shutdown_function(function () use ($conn) {
+    if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+    @ignore_user_abort(true);
+    try { if (function_exists('dmirror_tick')) dmirror_tick($conn); } catch (Throwable $e) { /* لا يعطّل شيئاً */ }
+});
+
 if (function_exists('mtg_tick')) {
     $__mtgLast = 0;
     $__mtgRow = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='mtg_tick_at' LIMIT 1");
@@ -9896,10 +10049,10 @@ switch ($action) {
                    FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
                    WHERE pp.project_id = $pid" . $dw('p.date') . " ORDER BY p.date, p.id");
         $ref = $Q("SELECT r.id, r.no, r.date, r.supplier, ROUND(r.total,2) total, ROUND(r.subtotal,2) subtotal,
-                          r.purchase_no, COALESCE(r.origin,'daftra') origin
+                          r.purchase_no, r.purchase_id, COALESCE(r.origin,'daftra') origin
                    FROM dmirror_refunds r JOIN refund_project rp ON rp.refund_id = r.id
                    WHERE rp.project_id = $pid" . $dw('r.date') . " ORDER BY r.date, r.id");
-        $pay = $Q("SELECT y.id, y.date, ROUND(y.amount,2) amount, p.no purchase_no, p.supplier
+        $pay = $Q("SELECT y.id, y.date, ROUND(y.amount,2) amount, p.no purchase_no, p.supplier, p.id purchase_id
                    FROM dmirror_payments y JOIN dmirror_purchases p ON p.id = y.purchase_id
                    JOIN purchase_project pp ON pp.purchase_id = p.id
                    WHERE pp.project_id = $pid" . $dw('y.date') . " ORDER BY y.date, y.id");
@@ -9909,14 +10062,14 @@ switch ($action) {
         $lines = [];
         foreach ($inv as $x) $lines[] = ['type'=>'invoice', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>$x['no'],
             'party'=>$x['supplier'], 'debit'=>(float)($gross ? $x['total'] : $x['subtotal']),
-            'credit'=>0, 'cash'=>0, 'vat'=>round((float)$x['total'] - (float)$x['subtotal'], 2), 'origin'=>$x['origin']];
+            'credit'=>0, 'cash'=>0, 'vat'=>round((float)$x['total'] - (float)$x['subtotal'], 2), 'origin'=>$x['origin'], 'purchase_id'=>(int)$x['id'], 'supplier'=>$x['supplier']];
         foreach ($ref as $x) $lines[] = ['type'=>'refund', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>$x['no'],
             'party'=>$x['supplier'], 'debit'=>0, 'credit'=>(float)($gross ? $x['total'] : $x['subtotal']),
-            'cash'=>0, 'ref'=>$x['purchase_no'], 'origin'=>$x['origin']];
+            'cash'=>0, 'ref'=>$x['purchase_no'], 'origin'=>$x['origin'], 'purchase_id'=>(int)($x['purchase_id'] ?? 0), 'supplier'=>$x['supplier']];
         foreach ($ext as $x) $lines[] = ['type'=>'extra', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>'',
             'party'=>$x['title'], 'debit'=>(float)$x['amount'], 'credit'=>0, 'cash'=>0, 'note'=>$x['note']];
         foreach ($pay as $x) $lines[] = ['type'=>'payment', 'id'=>(int)$x['id'], 'date'=>$x['date'], 'no'=>$x['purchase_no'],
-            'party'=>$x['supplier'], 'debit'=>0, 'credit'=>0, 'cash'=>(float)$x['amount']];
+            'party'=>$x['supplier'], 'debit'=>0, 'credit'=>0, 'cash'=>(float)$x['amount'], 'purchase_id'=>(int)$x['purchase_id'], 'supplier'=>$x['supplier']];
         usort($lines, function ($a, $b) {
             $d = strcmp((string)($a['date'] ?? ''), (string)($b['date'] ?? ''));
             return $d !== 0 ? $d : ((int)$a['id'] - (int)$b['id']);
@@ -13494,6 +13647,12 @@ switch ($action) {
         $conn->query("UPDATE dmirror_runs SET ended_at=NOW(), fetched=$fetched, changed=$changed, ok=1, note='" . $conn->real_escape_string("deep=$deep_done errors=" . count($errors)) . "' WHERE id=$run_id");
 
         echo json_encode(['success'=>true, 'run_id'=>$run_id, 'fetched'=>$fetched, 'changed'=>$changed, 'deep_synced'=>$deep_done, 'errors'=>count($errors)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // تشغيل نبضة المزامنة يدوياً أو من جدولة خارجية: force=1 يتجاوز الخنق
+    case 'dmirror_tick': {
+        echo json_encode(['success'=>true, 'result'=>dmirror_tick($conn, !empty($_GET['force']))], JSON_UNESCAPED_UNICODE);
         break;
     }
 

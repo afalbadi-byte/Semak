@@ -14,7 +14,11 @@ const auth = () => { const t = getAdminToken(); return t ? { Authorization: `Bea
 
 // ─── السجلات: الفواتير والموردون، وكل صف يفتح بطاقته ────────────────────────
 export default function BuyRecords() {
-    const [tab, setTab]     = useState('invoices');
+    // التبويب يُحفظ فيبقى المستخدم مكانه بعد تحديث الصفحة
+    const [tab, setTab]     = useState(() => {
+        try { return sessionStorage.getItem('buy_rec_tab') || 'invoices'; } catch (e) { return 'invoices'; }
+    });
+    useEffect(() => { try { sessionStorage.setItem('buy_rec_tab', tab); } catch (e) {} }, [tab]);
     const [q, setQ]         = useState('');
     const [rows, setRows]   = useState([]);
     const [sum, setSum]     = useState(null);

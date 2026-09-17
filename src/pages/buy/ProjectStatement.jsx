@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Printer, Loader2, RefreshCw } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { openPrintReport } from '../../lib/printReport';
+import { useEntity } from './entityCtx';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const auth  = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
@@ -24,6 +25,7 @@ export default function ProjectStatement() {
     const [busy, setBusy] = useState(false);
     const [err, setErr]   = useState('');
     const [kinds, setKinds] = useState([]);           // فارغ = كل الأنواع
+    const { openEntity } = useEntity();               // كل رقم رابط يفتح تفاصيله
 
     useEffect(() => {
         fetch(`${API_URL}?action=projects_list`, { headers: auth() }).then(r => r.json())
@@ -92,12 +94,12 @@ export default function ProjectStatement() {
                 <>
                     {/* الخلاصة */}
                     <div className="grid grid-cols-2 gap-2">
-                        <Card t="فواتير المشروع" v={money(s.invoiced)} sub={`${s.invoices} فاتورة · ${basis}`} />
-                        <Card t="المرتجعات" v={'−' + money(s.refunded)} sub={`${s.refunds} مرتجع`} tone="sky" />
-                        <Card t="تكاليف إضافية" v={money(s.extra)} tone="violet" />
+                        <Card t="فواتير المشروع" v={money(s.invoiced)} sub={`${s.invoices} فاتورة · ${basis}`} onClick={() => setKinds(['invoice'])} />
+                        <Card t="المرتجعات" v={'−' + money(s.refunded)} sub={`${s.refunds} مرتجع`} tone="sky" onClick={() => setKinds(['refund'])} />
+                        <Card t="تكاليف إضافية" v={money(s.extra)} tone="violet" onClick={() => setKinds(['extra'])} />
                         <Card t="صافي التكلفة" v={money(s.net_cost)} tone="gold" />
                         {s.supervision > 0 && <Card t="إشراف سماك" v={money(s.supervision)} tone="violet" />}
-                        <Card t="المسدد للموردين" v={money(s.paid)} tone="emerald" />
+                        <Card t="المسدد للموردين" v={money(s.paid)} tone="emerald" onClick={() => setKinds(['payment'])} />
                         <Card t="المتبقي للموردين" v={money(s.outstanding)} sub="من إجمالي الفواتير شامل الضريبة"
                               tone={Number(s.outstanding) > 0.5 ? 'amber' : 'emerald'} />
                         {Number(s.budget) > 0 && (
@@ -131,8 +133,10 @@ export default function ProjectStatement() {
                         {lines.map((l, i) => {
                             const k = KIND[l.type] || KIND.invoice;
                             return (
-                                <div key={l.type + l.id + i}
-                                    className="rounded-2xl bg-white/[0.05] border border-white/10 p-3 space-y-1">
+                                <button type="button" key={l.type + l.id + i}
+                                    onClick={() => { if (l.purchase_id) openEntity('purchase', l.purchase_id);
+                                                     else if (l.supplier) openEntity('supplier', l.supplier); }}
+                                    className="w-full text-right rounded-2xl bg-white/[0.05] border border-white/10 p-3 space-y-1 active:scale-[.99] transition">
                                     <div className="flex items-center gap-2">
                                         <span className={'px-1.5 py-0.5 rounded-md text-[10px] font-black ' + k.c}>{k.t}</span>
                                         <span className="text-[13px] font-bold truncate">{l.party || '—'}</span>
@@ -150,7 +154,7 @@ export default function ProjectStatement() {
                                             {l.type === 'payment' ? `مسدد تراكمي ${money(l.cash_cum)}` : `الرصيد ${money(l.balance)}`}
                                         </span>
                                     </div>
-                                </div>
+                                </button>
                             );
                         })}
                         {!busy && !lines.length && (
@@ -165,17 +169,19 @@ export default function ProjectStatement() {
     );
 }
 
-function Card({ t, v, sub, tone }) {
+function Card({ t, v, sub, tone, onClick }) {
     const tones = {
         gold: 'bg-[#c5a059]/12 text-[#e6c88a]', emerald: 'bg-emerald-500/10 text-emerald-200',
         amber: 'bg-amber-500/10 text-amber-200', rose: 'bg-rose-500/10 text-rose-200',
         sky: 'bg-sky-500/10 text-sky-200', violet: 'bg-violet-500/10 text-violet-200',
     };
     return (
-        <div className={'rounded-xl p-2.5 ' + (tones[tone] || 'bg-white/[0.05] text-slate-200')}>
+        <button type="button" onClick={onClick} disabled={!onClick}
+            className={'w-full text-right rounded-xl p-2.5 transition ' + (onClick ? 'active:scale-[.98] hover:brightness-110 ' : '')
+                + (tones[tone] || 'bg-white/[0.05] text-slate-200')}>
             <div className="text-[10px] opacity-70 font-bold">{t}</div>
             <div className="text-[15px] font-black tabular-nums mt-0.5">{v}</div>
             {sub && <div className="text-[10px] opacity-60 mt-0.5">{sub}</div>}
-        </div>
+        </button>
     );
 }
