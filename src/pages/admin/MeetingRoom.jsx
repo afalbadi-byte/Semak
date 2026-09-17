@@ -95,9 +95,10 @@ export default function MeetingRoom() {
         if (r.success) load();
     };
     const patchMeeting = async patch => { await post('mtg_save', { ...meeting, ...patch }); load(); };
-    const addItem = async (kind, title, section) => {
+    const addItem = async (kind, title, section, status) => {
         if (!meeting || !title.trim()) return;
-        await post('mtg_item_save', { meeting_id: meeting.id, kind, section: section || dom, title: title.trim() });
+        await post('mtg_item_save', { meeting_id: meeting.id, kind, section: section || dom, title: title.trim(),
+            status: status || 'open' });
         setDraft(''); load();
     };
     const patchItem = async (it, patch) => { await post('mtg_item_save', { ...it, ...patch }); load(); };
@@ -371,41 +372,10 @@ export default function MeetingRoom() {
             )}
 
             {sec.key === 'todos' && (
-                <div className="grid md:grid-cols-2 gap-4">
-                    <div className={'rounded-2xl border p-4 ' + box}>
-                        <h4 className={'font-black text-sm mb-2 ' + txt}>مهام هذا الاجتماع</h4>
-                        <div className="space-y-2">
-                            {todos.map(it => (
-                                <div key={it.id} className={'flex items-start gap-2 p-2 rounded-xl ' + (present ? 'bg-white/5' : 'bg-slate-50')}>
-                                    <button onClick={() => patchItem(it, { status: it.status === 'done' ? 'open' : 'done' })}
-                                        className={'mt-0.5 w-5 h-5 rounded-md flex items-center justify-center shrink-0 ' +
-                                            (it.status === 'done' ? 'bg-emerald-500 text-white' : 'border-2 border-slate-300')}>
-                                        {it.status === 'done' && <Check size={13} />}
-                                    </button>
-                                    <div className="flex-1">
-                                        <div className={'text-sm font-bold ' + (it.status === 'done' ? 'line-through opacity-60 ' : '') + txt}>{it.title}</div>
-                                        <div className="flex gap-2 mt-1">
-                                            <input defaultValue={it.owner || ''} placeholder="المسؤول"
-                                                onBlur={e => e.target.value !== (it.owner || '') && patchItem(it, { owner: e.target.value })}
-                                                className={'px-2 py-1 rounded-lg text-[11px] w-24 ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
-                                            <input type="date" defaultValue={it.due_date || ''}
-                                                onBlur={e => e.target.value !== (it.due_date || '') && patchItem(it, { due_date: e.target.value })}
-                                                className={'px-2 py-1 rounded-lg text-[11px] ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
-                                        </div>
-                                    </div>
-                                    <button onClick={() => delItem(it.id)} className="text-red-400"><Trash2 size={14} /></button>
-                                </div>
-                            ))}
-                            {!todos.length && <div className="text-center text-sm text-slate-400 py-4">لا مهام بعد</div>}
-                        </div>
-                        <div className="flex gap-2 mt-3">
-                            <input value={draft} onChange={e => setDraft(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && addItem('todo', draft)}
-                                placeholder="مهمة جديدة..."
-                                className={'flex-1 px-3 py-2 rounded-xl text-sm ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
-                            <button onClick={() => addItem('todo', draft)} className="px-4 py-2 rounded-xl bg-brand-900 text-white"><Plus size={16} /></button>
-                        </div>
-                    </div>
+                <div className="space-y-4">
+                    <TodoBoard todos={todos} present={present} box={box} txt={txt}
+                        onAdd={(title, status) => addItem('todo', title, null, status)}
+                        onPatch={patchItem} onDelete={delItem} />
                     <div className={'rounded-2xl border p-4 ' + box}>
                         <h4 className={'font-black text-sm mb-2 flex items-center gap-1.5 ' + txt}>
                             <Clock size={14} /> من الاجتماع السابق {prev ? '· ' + prev.meet_date : ''}
@@ -414,7 +384,7 @@ export default function MeetingRoom() {
                             {prevTodos.map(p => (
                                 <div key={p.id} className={'text-xs p-2 rounded-lg ' + (present ? 'bg-white/5' : 'bg-slate-50')}>
                                     <span className={p.status === 'done' ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
-                                        {p.status === 'done' ? 'منجزة: ' : 'معلقة: '}
+                                        {p.status === 'done' ? 'منجزة: ' : p.status === 'doing' ? 'جارية: ' : 'معلقة: '}
                                     </span>
                                     <span className={present ? 'text-slate-200' : 'text-slate-700'}>{p.title}</span>
                                     {p.decision && <div className="text-[11px] text-slate-400 mt-0.5">{p.decision}</div>}
@@ -513,7 +483,7 @@ export default function MeetingRoom() {
                         <div className={'mt-4 p-3 rounded-xl text-xs ' + (present ? 'bg-white/5 text-slate-300' : 'bg-slate-50 text-slate-600')}>
                             <div className="font-black mb-1">ملخص سريع</div>
                             <div>القضايا: {issues.length} · المحلولة: {issues.filter(i => i.status === 'done').length}</div>
-                            <div>المهام: {todos.length} · المنجزة: {todos.filter(i => i.status === 'done').length}</div>
+                            <div>المهام: {todos.length} · الجارية: {todos.filter(i => i.status === 'doing').length} · المنجزة: {todos.filter(i => i.status === 'done').length}</div>
                             <div>الأولويات المتعثرة: {rocks.filter(r => r.status === 'off_track').length} من {rocks.length}</div>
                         </div>
                     </div>
@@ -523,6 +493,118 @@ export default function MeetingRoom() {
         {drill && <KpiDrill item={drill} onClose={() => setDrill(null)} />}
         </div>
         </Wrap>
+    );
+}
+
+
+// ── لوحة كانبان للمهام: ثلاثة أعمدة، سحب وإفلات على الحاسب وأزرار نقل على الجوال ──
+const COLS = [
+    { key: 'open',  name: 'للتنفيذ',      tone: 'bg-slate-400' },
+    { key: 'doing', name: 'قيد التنفيذ',  tone: 'bg-amber-500' },
+    { key: 'done',  name: 'منجزة',        tone: 'bg-emerald-500' },
+];
+
+function TodoCard({ it, present, txt, onPatch, onDelete, colIdx }) {
+    const late = it.due_date && it.status !== 'done' && it.due_date < new Date().toISOString().slice(0, 10);
+    const inp = 'px-2 py-1 rounded-lg text-[11px] ' + (present ? 'bg-white/10 text-white placeholder-slate-400' : 'border border-slate-200');
+    return (
+        <div draggable onDragStart={e => e.dataTransfer.setData('text/plain', String(it.id))}
+            className={'p-2.5 rounded-xl border cursor-grab active:cursor-grabbing ' +
+                (present ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200 shadow-sm')}>
+            <textarea defaultValue={it.title} rows={2}
+                onBlur={e => e.target.value.trim() && e.target.value !== it.title && onPatch(it, { title: e.target.value.trim() })}
+                className={'w-full resize-none bg-transparent text-sm font-bold leading-6 outline-none ' +
+                    (it.status === 'done' ? 'line-through opacity-60 ' : '') + txt} />
+            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                <input defaultValue={it.owner || ''} placeholder="المسؤول"
+                    onBlur={e => e.target.value !== (it.owner || '') && onPatch(it, { owner: e.target.value })}
+                    className={inp + ' w-20'} />
+                <input type="date" defaultValue={it.due_date || ''}
+                    onBlur={e => e.target.value !== (it.due_date || '') && onPatch(it, { due_date: e.target.value })}
+                    className={inp + (late ? ' text-red-600 font-bold' : '')} />
+            </div>
+            <div className="flex items-center gap-1 mt-1.5">
+                <button disabled={colIdx === 0} onClick={() => onPatch(it, { status: COLS[colIdx - 1].key })}
+                    title="إرجاع" className="px-2 py-1 rounded-lg text-xs bg-slate-100 text-slate-600 disabled:opacity-30">→</button>
+                <button disabled={colIdx === COLS.length - 1} onClick={() => onPatch(it, { status: COLS[colIdx + 1].key })}
+                    title="تقديم" className="px-2 py-1 rounded-lg text-xs bg-slate-100 text-slate-600 disabled:opacity-30">←</button>
+                <button onClick={() => onPatch(it, { status: 'cancelled' })} title="إلغاء"
+                    className="px-2 py-1 rounded-lg text-[11px] bg-slate-100 text-slate-500">إلغاء</button>
+                <button onClick={() => onDelete(it.id)} className="ms-auto text-red-400"><Trash2 size={13} /></button>
+            </div>
+        </div>
+    );
+}
+
+function TodoBoard({ todos, present, box, txt, onAdd, onPatch, onDelete }) {
+    const [drafts, setDrafts] = useState({ open: '', doing: '', done: '' });
+    const [over, setOver] = useState(null);
+    const [showCancelled, setShowCancelled] = useState(false);
+    const cancelled = todos.filter(i => i.status === 'cancelled');
+    const submit = (col) => { const v = (drafts[col] || '').trim(); if (!v) return; onAdd(v, col); setDrafts(d => ({ ...d, [col]: '' })); };
+    const drop = (e, col) => {
+        e.preventDefault(); setOver(null);
+        const id = Number(e.dataTransfer.getData('text/plain'));
+        const it = todos.find(x => Number(x.id) === id);
+        if (it && it.status !== col) onPatch(it, { status: col });
+    };
+    return (
+        <div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {COLS.map((c, ci) => {
+                    const list = todos.filter(i => i.status === c.key);
+                    return (
+                        <div key={c.key} onDragOver={e => { e.preventDefault(); setOver(c.key); }}
+                            onDragLeave={() => setOver(o => (o === c.key ? null : o))} onDrop={e => drop(e, c.key)}
+                            className={'rounded-2xl border p-3 transition ' + box +
+                                (over === c.key ? ' ring-2 ring-brand-500 border-brand-400' : '')}>
+                            <div className="flex items-center gap-2 mb-2.5">
+                                <span className={'w-2.5 h-2.5 rounded-full ' + c.tone} />
+                                <h4 className={'font-black text-sm ' + txt}>{c.name}</h4>
+                                <span className={'ms-auto text-xs font-bold ' + (present ? 'text-slate-300' : 'text-slate-400')}>{list.length}</span>
+                            </div>
+                            <div className="space-y-2 min-h-[60px]">
+                                {list.map(it => (
+                                    <TodoCard key={it.id} it={it} present={present} txt={txt}
+                                        onPatch={onPatch} onDelete={onDelete} colIdx={ci} />
+                                ))}
+                                {!list.length && (
+                                    <div className={'text-center text-xs py-5 rounded-xl border border-dashed ' +
+                                        (present ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-400')}>
+                                        اسحب مهمة هنا
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex gap-1.5 mt-2.5">
+                                <input value={drafts[c.key]} onChange={e => setDrafts(d => ({ ...d, [c.key]: e.target.value }))}
+                                    onKeyDown={e => e.key === 'Enter' && submit(c.key)} placeholder="مهمة جديدة..."
+                                    className={'flex-1 px-2.5 py-1.5 rounded-lg text-xs ' +
+                                        (present ? 'bg-white/10 text-white placeholder-slate-400' : 'border border-slate-200')} />
+                                <button onClick={() => submit(c.key)} className="px-2.5 py-1.5 rounded-lg bg-brand-900 text-white"><Plus size={14} /></button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            {cancelled.length > 0 && (
+                <div className="mt-3">
+                    <button onClick={() => setShowCancelled(v => !v)} className="text-xs font-bold text-slate-400">
+                        الملغاة ({cancelled.length}) {showCancelled ? '▲' : '▼'}
+                    </button>
+                    {showCancelled && (
+                        <div className="mt-2 space-y-1.5">
+                            {cancelled.map(it => (
+                                <div key={it.id} className={'flex items-center gap-2 text-xs p-2 rounded-lg ' + (present ? 'bg-white/5 text-slate-300' : 'bg-slate-50 text-slate-500')}>
+                                    <span className="line-through flex-1">{it.title}</span>
+                                    <button onClick={() => onPatch(it, { status: 'open' })} className="px-2 py-1 rounded-lg bg-slate-200 text-slate-700 font-bold">إرجاع</button>
+                                    <button onClick={() => onDelete(it.id)} className="text-red-400"><Trash2 size={13} /></button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 

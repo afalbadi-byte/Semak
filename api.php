@@ -12231,12 +12231,13 @@ switch ($action) {
             $p = $r ? $r->fetch_assoc() : null;
             if ($p) {
                 $pid = (int)$p['id'];
-                $q = $conn->query("SELECT * FROM meeting_items WHERE meeting_id=$pid AND status='open'");
+                // المهمة الجارية تُرحَّل جارية، والمفتوحة مفتوحة — ونوع البند (مهمة/قضية) يُرحَّل معه
+                $q = $conn->query("SELECT * FROM meeting_items WHERE meeting_id=$pid AND status IN ('open','doing')");
                 if ($q) while ($x = $q->fetch_assoc()) {
-                    $conn->query("INSERT INTO meeting_items (meeting_id, section, title, decision, owner, due_date, status, carried_from)
-                        VALUES ($id, '" . $E($x['section']) . "', '" . $E($x['title']) . "', '" . $E($x['decision'])
+                    $conn->query("INSERT INTO meeting_items (meeting_id, kind, section, title, decision, owner, due_date, status, carried_from)
+                        VALUES ($id, '" . $E($x['kind'] ?? 'issue') . "', '" . $E($x['section']) . "', '" . $E($x['title']) . "', '" . $E($x['decision'])
                         . "', '" . $E($x['owner']) . "', " . ($x['due_date'] ? "'" . $E($x['due_date']) . "'" : 'NULL')
-                        . ", 'open', " . (int)$x['id'] . ")");
+                        . ", '" . $E($x['status']) . "', " . (int)$x['id'] . ")");
                 }
             }
         }
@@ -12252,10 +12253,15 @@ switch ($action) {
         $ttl = trim((string)($b['title'] ?? ''));
         if (!$id && (!$mid || $ttl === '')) { echo json_encode(['success'=>false,'message'=>'meeting_id والعنوان مطلوبان']); break; }
         $sec = in_array(($b['section'] ?? ''), ['projects','gov','purchases','cash','sales','other'], true) ? $b['section'] : 'other';
-        $st  = in_array(($b['status'] ?? ''), ['open','done','cancelled'], true) ? $b['status'] : 'open';
+        // doing = قيد التنفيذ (عمود لوحة كانبان بين «للتنفيذ» و«منجزة»)
+        $st  = in_array(($b['status'] ?? ''), ['open','doing','done','cancelled'], true) ? $b['status'] : 'open';
         $due = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['due_date'] ?? '')) ? "'" . $b['due_date'] . "'" : 'NULL';
+        // نوع البند: مهمة أم قضية — كان يُهمَل فتُحفظ المهمة الجديدة قضيةً فتختفي من قائمة المهام
+        $kind = in_array(($b['kind'] ?? ''), ['todo','issue'], true) ? $b['kind'] : '';
         $set = "section='" . $E($sec) . "', title='" . $E($ttl) . "', decision='" . $E($b['decision'] ?? '')
-             . "', owner='" . $E($b['owner'] ?? '') . "', due_date=$due, status='" . $E($st) . "'";
+             . "', owner='" . $E($b['owner'] ?? '') . "', due_date=$due, status='" . $E($st) . "'"
+             . ($kind !== '' ? ", kind='" . $E($kind) . "'" : '')
+             . (isset($b['sort_index']) ? ', sort_index=' . (int)$b['sort_index'] : '');
         if ($id) $conn->query("UPDATE meeting_items SET $set WHERE id=$id");
         else { $conn->query("INSERT INTO meeting_items SET meeting_id=$mid, $set"); $id = (int)$conn->insert_id; }
         echo json_encode(['success'=>true,'id'=>$id], JSON_UNESCAPED_UNICODE);
