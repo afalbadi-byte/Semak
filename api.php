@@ -1045,11 +1045,6 @@ ensure_column($conn, "meetings", "headlines",  "headlines TEXT");
 ensure_column($conn, "meetings", "cascading",  "cascading TEXT");
 ensure_column($conn, "meetings", "rating",     "rating DECIMAL(3,1) DEFAULT NULL");
 ensure_column($conn, "meeting_items", "kind",  "kind VARCHAR(10) NOT NULL DEFAULT 'issue'");
-// الحضور بالاختيار من الموظفين + موعد الاجتماع بالساعة، لإرسال المحضر والأجندة بالبريد
-ensure_column($conn, "meetings", "meet_time",      "meet_time TIME NOT NULL DEFAULT '10:00:00'");
-ensure_column($conn, "meetings", "attendee_ids",   "attendee_ids VARCHAR(300) DEFAULT NULL");
-ensure_column($conn, "meetings", "agenda_sent_at", "agenda_sent_at DATETIME DEFAULT NULL");
-ensure_column($conn, "meetings", "minutes_sent_at","minutes_sent_at DATETIME DEFAULT NULL");
 $conn->query("CREATE TABLE IF NOT EXISTS rocks (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     title      VARCHAR(300) NOT NULL,
@@ -1577,6 +1572,17 @@ $conn->query("DELETE FROM acc_settings WHERE tenant_id=1
               AND skey IN ('wo_fill_state','wo_fill_at','wo_fill_tries')");
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (54)");
 } // end DDL v54
+
+// ─── DDL v55: بريد غرفة الاجتماعات ──────────────────────────────────────
+// الحضور يُختارون من الموظفين (بريدهم) ليصلهم المحضر عند الإنهاء،
+// وساعة الاجتماع تُحدَّد ليُرسل تنبيه الأجندة قبلها بنصف ساعة.
+if ($__sv < 55) {
+ensure_column($conn, 'meetings', 'meet_time',       "meet_time TIME NOT NULL DEFAULT '10:00:00'");
+ensure_column($conn, 'meetings', 'attendee_ids',    'attendee_ids VARCHAR(300) DEFAULT NULL');
+ensure_column($conn, 'meetings', 'agenda_sent_at',  'agenda_sent_at DATETIME DEFAULT NULL');
+ensure_column($conn, 'meetings', 'minutes_sent_at', 'minutes_sent_at DATETIME DEFAULT NULL');
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (55)");
+} // end DDL v55
 
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
