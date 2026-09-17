@@ -13,8 +13,7 @@ const AGENDA = [
     { key: 'scorecard', name: 'لوحة الأرقام',       min: 5,  icon: Target,     color: 'from-blue-600 to-blue-800',       hint: 'كل رقم له مالك: على المسار أو خارجه — بلا نقاش هنا' },
     { key: 'rocks',     name: 'أولويات 90 يوماً',   min: 5,  icon: Flag,       color: 'from-emerald-600 to-emerald-800', hint: 'حالة كل أولوية فقط، وما تعثّر يتحول لقضية' },
     { key: 'headlines', name: 'مستجدات',            min: 5,  icon: Megaphone,  color: 'from-amber-600 to-amber-800',     hint: 'أخبار العملاء والموردين والموظفين بجملة واحدة' },
-    { key: 'todos',     name: 'مهام الاجتماع السابق', min: 5, icon: ListChecks, color: 'from-violet-600 to-violet-800',   hint: 'منجزة أم لا — وغير المنجز يتحول لقضية' },
-    { key: 'ids',       name: 'القضايا: تحديد ونقاش وحل', min: 60, icon: AlertTriangle, color: 'from-rose-600 to-rose-800', hint: 'رتّب الأهم ثلاثاً، وناقش حتى الحل بمالك وموعد' },
+    { key: 'todos',     name: 'اللوحة: المهام والقضايا', min: 65, icon: ListChecks, color: 'from-violet-600 to-violet-800', hint: 'كل بند في عموده — ناقش حتى الحل، ولكل بطاقة مالك وموعد' },
     { key: 'conclude',  name: 'الختام',             min: 5,  icon: Check,      color: 'from-slate-600 to-slate-800',     hint: 'ما يُبلَّغ للفريق، وتقييم الاجتماع من عشرة' },
 ];
 
@@ -373,8 +372,8 @@ export default function MeetingRoom() {
 
             {sec.key === 'todos' && (
                 <div className="space-y-4">
-                    <TodoBoard todos={todos} present={present} box={box} txt={txt}
-                        onAdd={(title, status) => addItem('todo', title, null, status)}
+                    <TodoBoard items={items} present={present} box={box} txt={txt}
+                        onAdd={(title, status, kind, section) => addItem(kind || 'todo', title, section, status)}
                         onPatch={patchItem} onDelete={delItem} />
                     <div className={'rounded-2xl border p-4 ' + box}>
                         <h4 className={'font-black text-sm mb-2 flex items-center gap-1.5 ' + txt}>
@@ -391,63 +390,6 @@ export default function MeetingRoom() {
                                 </div>
                             ))}
                             {!prevTodos.length && <div className="text-xs text-slate-400">لا يوجد سابق</div>}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {sec.key === 'ids' && (
-                <div className="space-y-3">
-                    <div className="flex gap-1.5 flex-wrap no-print">
-                        {DOMAINS.map(d => (
-                            <button key={d.key} onClick={() => setDom(d.key)}
-                                className={'px-3 py-1.5 rounded-lg text-xs font-bold ' +
-                                    (dom === d.key ? 'bg-rose-600 text-white' : present ? 'bg-white/10 text-slate-300' : 'bg-slate-100 text-slate-600')}>
-                                {d.name} ({issues.filter(i => i.section === d.key).length})
-                            </button>
-                        ))}
-                    </div>
-                    <div className={'rounded-2xl border p-4 ' + box}>
-                        <div className="space-y-2">
-                            {issues.filter(i => i.section === dom).map(it => (
-                                <div key={it.id} className={'rounded-xl p-3 ' + (present ? 'bg-white/5' : 'bg-slate-50')}>
-                                    <div className="flex items-start gap-2">
-                                        <button onClick={() => patchItem(it, { status: it.status === 'done' ? 'open' : 'done' })}
-                                            className={'mt-0.5 w-5 h-5 rounded-md flex items-center justify-center shrink-0 ' +
-                                                (it.status === 'done' ? 'bg-emerald-500 text-white' : 'border-2 border-slate-300')}>
-                                            {it.status === 'done' && <Check size={13} />}
-                                        </button>
-                                        <div className="flex-1">
-                                            <div className={'text-sm font-bold ' + (it.status === 'done' ? 'line-through opacity-60 ' : '') + txt}>
-                                                {it.title}
-                                                {it.carried_from ? <span className="mr-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">مرحل</span> : null}
-                                            </div>
-                                            <textarea defaultValue={it.decision || ''} rows={2} placeholder="الحل المتفق عليه..."
-                                                onBlur={e => e.target.value !== (it.decision || '') && patchItem(it, { decision: e.target.value })}
-                                                className={'w-full mt-1.5 px-2 py-1.5 rounded-lg text-xs resize-none ' + (present ? 'bg-white/10 text-white' : 'bg-white border border-slate-200')} />
-                                            <div className="flex gap-2 mt-1.5">
-                                                <input defaultValue={it.owner || ''} placeholder="المسؤول"
-                                                    onBlur={e => e.target.value !== (it.owner || '') && patchItem(it, { owner: e.target.value })}
-                                                    className={'px-2 py-1 rounded-lg text-[11px] w-24 ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
-                                                <input type="date" defaultValue={it.due_date || ''}
-                                                    onBlur={e => e.target.value !== (it.due_date || '') && patchItem(it, { due_date: e.target.value })}
-                                                    className={'px-2 py-1 rounded-lg text-[11px] ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
-                                                <button onClick={() => patchItem(it, { kind: 'todo' })}
-                                                    className="text-[11px] px-2 py-1 rounded-lg bg-violet-600 text-white font-bold">حوّلها لمهمة</button>
-                                            </div>
-                                        </div>
-                                        <button onClick={() => delItem(it.id)} className="text-red-400"><Trash2 size={14} /></button>
-                                    </div>
-                                </div>
-                            ))}
-                            {!issues.filter(i => i.section === dom).length && <div className="text-center text-sm text-slate-400 py-6">لا قضايا في هذا المحور</div>}
-                        </div>
-                        <div className="flex gap-2 mt-3">
-                            <input value={draft} onChange={e => setDraft(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && addItem('issue', draft)}
-                                placeholder="أضف قضية..."
-                                className={'flex-1 px-3 py-2 rounded-xl text-sm ' + (present ? 'bg-white/10 text-white' : 'border border-slate-200')} />
-                            <button onClick={() => addItem('issue', draft)} className="px-4 py-2 rounded-xl bg-rose-600 text-white"><Plus size={16} /></button>
                         </div>
                     </div>
                 </div>
@@ -497,111 +439,234 @@ export default function MeetingRoom() {
 }
 
 
-// ── لوحة كانبان للمهام: ثلاثة أعمدة، سحب وإفلات على الحاسب وأزرار نقل على الجوال ──
+// ── لوحة كانبان واحدة: المهام والقضايا معاً، بطاقة غنية وسحب وإفلات ──
 const COLS = [
-    { key: 'open',  name: 'للتنفيذ',      tone: 'bg-slate-400' },
-    { key: 'doing', name: 'قيد التنفيذ',  tone: 'bg-amber-500' },
-    { key: 'done',  name: 'منجزة',        tone: 'bg-emerald-500' },
+    { key: 'open',  name: 'للتنفيذ',     ring: 'ring-slate-300',   dot: 'bg-slate-400',   head: 'from-slate-500/90 to-slate-700/90' },
+    { key: 'doing', name: 'قيد التنفيذ', ring: 'ring-amber-300',   dot: 'bg-amber-500',   head: 'from-amber-500/90 to-amber-700/90' },
+    { key: 'done',  name: 'منجزة',       ring: 'ring-emerald-300', dot: 'bg-emerald-500', head: 'from-emerald-500/90 to-emerald-700/90' },
 ];
+const DOM_TONE = {
+    projects:  { chip: 'bg-blue-100 text-blue-700',       bar: 'bg-blue-500' },
+    gov:       { chip: 'bg-teal-100 text-teal-700',       bar: 'bg-teal-500' },
+    purchases: { chip: 'bg-indigo-100 text-indigo-700',   bar: 'bg-indigo-500' },
+    cash:      { chip: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-500' },
+    sales:     { chip: 'bg-fuchsia-100 text-fuchsia-700', bar: 'bg-fuchsia-500' },
+    other:     { chip: 'bg-slate-100 text-slate-600',     bar: 'bg-slate-400' },
+};
+const domName = k => (DOMAINS.find(d => d.key === k) || { name: 'عام' }).name;
+const today = () => new Date().toISOString().slice(0, 10);
+// صياغة عربية سليمة لعدد الأيام: يوم · يومان · أيام · يوماً
+const dayWord = n => (n === 1 ? 'يوماً' : n === 2 ? 'يومين' : n <= 10 ? n + ' أيام' : n + ' يوماً');
 
-function TodoCard({ it, present, txt, onPatch, onDelete, colIdx }) {
-    const late = it.due_date && it.status !== 'done' && it.due_date < new Date().toISOString().slice(0, 10);
-    const inp = 'px-2 py-1 rounded-lg text-[11px] ' + (present ? 'bg-white/10 text-white placeholder-slate-400' : 'border border-slate-200');
+function ItemCard({ it, present, txt, onPatch, onDelete, colIdx }) {
+    const [open, setOpen] = useState(false);
+    const isIssue = it.kind === 'issue';
+    const tone = DOM_TONE[it.section] || DOM_TONE.other;
+    const late = it.due_date && it.status !== 'done' && it.due_date < today();
+    const days = it.due_date ? Math.round((new Date(it.due_date) - new Date(today())) / 86400000) : null;
+    const inp = 'px-2 py-1 rounded-lg text-[11px] outline-none ' +
+        (present ? 'bg-white/10 text-white placeholder-slate-400' : 'bg-white border border-slate-200');
     return (
         <div draggable onDragStart={e => e.dataTransfer.setData('text/plain', String(it.id))}
-            className={'p-2.5 rounded-xl border cursor-grab active:cursor-grabbing ' +
-                (present ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200 shadow-sm')}>
-            <textarea defaultValue={it.title} rows={2}
-                onBlur={e => e.target.value.trim() && e.target.value !== it.title && onPatch(it, { title: e.target.value.trim() })}
-                className={'w-full resize-none bg-transparent text-sm font-bold leading-6 outline-none ' +
-                    (it.status === 'done' ? 'line-through opacity-60 ' : '') + txt} />
-            <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                <input defaultValue={it.owner || ''} placeholder="المسؤول"
-                    onBlur={e => e.target.value !== (it.owner || '') && onPatch(it, { owner: e.target.value })}
-                    className={inp + ' w-20'} />
-                <input type="date" defaultValue={it.due_date || ''}
-                    onBlur={e => e.target.value !== (it.due_date || '') && onPatch(it, { due_date: e.target.value })}
-                    className={inp + (late ? ' text-red-600 font-bold' : '')} />
+            className={'group relative overflow-hidden rounded-2xl border transition-all duration-200 cursor-grab active:cursor-grabbing ' +
+                'hover:-translate-y-0.5 hover:shadow-lg ' +
+                (present ? 'bg-white/[0.07] border-white/10' : 'bg-white border-slate-200 shadow-sm')}>
+            <span className={'absolute inset-y-0 start-0 w-1.5 ' + tone.bar} />
+            <div className="p-3 ps-4">
+                <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                    <span className={'text-[10px] font-black px-1.5 py-0.5 rounded-md ' +
+                        (isIssue ? 'bg-rose-100 text-rose-700' : 'bg-violet-100 text-violet-700')}>
+                        {isIssue ? 'قضية' : 'مهمة'}
+                    </span>
+                    <span className={'text-[10px] font-bold px-1.5 py-0.5 rounded-md ' + tone.chip}>{domName(it.section)}</span>
+                    {it.carried_from ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700">مُرحّل</span> : null}
+                    {late ? <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-red-100 text-red-700">متأخر {dayWord(Math.abs(days))}</span>
+                          : (days !== null && it.status !== 'done' && days <= 3
+                             ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-orange-100 text-orange-700">{days === 0 ? 'اليوم' : days === 1 ? 'غداً' : days === 2 ? 'بعد غد' : 'خلال ' + dayWord(days)}</span>
+                             : null)}
+                    <button onClick={() => onDelete(it.id)}
+                        className="ms-auto text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><Trash2 size={13} /></button>
+                </div>
+
+                <textarea defaultValue={it.title} rows={2}
+                    onBlur={e => e.target.value.trim() && e.target.value !== it.title && onPatch(it, { title: e.target.value.trim() })}
+                    className={'w-full resize-none bg-transparent text-sm font-bold leading-6 outline-none ' +
+                        (it.status === 'done' ? 'line-through opacity-60 ' : '') + txt} />
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    <input defaultValue={it.owner || ''} placeholder="المسؤول"
+                        onBlur={e => e.target.value !== (it.owner || '') && onPatch(it, { owner: e.target.value })}
+                        className={inp + ' w-20'} />
+                    <input type="date" defaultValue={it.due_date || ''}
+                        onBlur={e => e.target.value !== (it.due_date || '') && onPatch(it, { due_date: e.target.value })}
+                        className={inp + (late ? ' text-red-600 font-bold' : '')} />
+                    <button onClick={() => setOpen(v => !v)}
+                        className={'text-[11px] font-bold px-2 py-1 rounded-lg ' +
+                            (present ? 'bg-white/10 text-slate-200' : 'bg-slate-100 text-slate-600')}>
+                        {open ? 'إخفاء' : (it.decision ? 'القرار ✓' : 'تفاصيل')}
+                    </button>
+                </div>
+
+                {open && (
+                    <div className="mt-2 space-y-1.5">
+                        <textarea defaultValue={it.decision || ''} rows={3} placeholder={isIssue ? 'الحل المتفق عليه...' : 'ملاحظات المهمة...'}
+                            onBlur={e => e.target.value !== (it.decision || '') && onPatch(it, { decision: e.target.value })}
+                            className={'w-full px-2 py-1.5 rounded-lg text-xs resize-none outline-none ' +
+                                (present ? 'bg-white/10 text-white' : 'bg-slate-50 border border-slate-200')} />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <select defaultValue={it.section || 'other'} onChange={e => onPatch(it, { section: e.target.value })}
+                                className={inp}>
+                                {DOMAINS.map(d => <option key={d.key} value={d.key}>{d.name}</option>)}
+                                <option value="other">عام</option>
+                            </select>
+                            <button onClick={() => onPatch(it, { kind: isIssue ? 'todo' : 'issue' })}
+                                className={'text-[11px] font-bold px-2 py-1 rounded-lg ' +
+                                    (isIssue ? 'bg-violet-600 text-white' : 'bg-rose-600 text-white')}>
+                                {isIssue ? 'حوّلها مهمة' : 'حوّلها قضية'}
+                            </button>
+                            <button onClick={() => onPatch(it, { status: 'cancelled' })}
+                                className={'text-[11px] font-bold px-2 py-1 rounded-lg ' +
+                                    (present ? 'bg-white/10 text-slate-300' : 'bg-slate-100 text-slate-500')}>إلغاء</button>
+                        </div>
+                    </div>
+                )}
             </div>
-            <div className="flex items-center gap-1 mt-1.5">
+
+            <div className={'flex items-center gap-1 px-3 py-1.5 border-t ' +
+                (present ? 'border-white/10 bg-white/[0.03]' : 'border-slate-100 bg-slate-50/70')}>
                 <button disabled={colIdx === 0} onClick={() => onPatch(it, { status: COLS[colIdx - 1].key })}
-                    title="إرجاع" className="px-2 py-1 rounded-lg text-xs bg-slate-100 text-slate-600 disabled:opacity-30">→</button>
+                    className="px-2 py-0.5 rounded-lg text-xs font-black text-slate-500 hover:bg-slate-200 disabled:opacity-25">→</button>
+                <span className={'text-[10px] font-bold ' + (present ? 'text-slate-400' : 'text-slate-400')}>{COLS[colIdx].name}</span>
                 <button disabled={colIdx === COLS.length - 1} onClick={() => onPatch(it, { status: COLS[colIdx + 1].key })}
-                    title="تقديم" className="px-2 py-1 rounded-lg text-xs bg-slate-100 text-slate-600 disabled:opacity-30">←</button>
-                <button onClick={() => onPatch(it, { status: 'cancelled' })} title="إلغاء"
-                    className="px-2 py-1 rounded-lg text-[11px] bg-slate-100 text-slate-500">إلغاء</button>
-                <button onClick={() => onDelete(it.id)} className="ms-auto text-red-400"><Trash2 size={13} /></button>
+                    className="px-2 py-0.5 rounded-lg text-xs font-black text-slate-500 hover:bg-slate-200 disabled:opacity-25">←</button>
+                {it.owner ? <span className={'ms-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md ' +
+                    (present ? 'bg-white/10 text-slate-200' : 'bg-slate-200 text-slate-600')}>{it.owner}</span> : null}
             </div>
         </div>
     );
 }
 
-function TodoBoard({ todos, present, box, txt, onAdd, onPatch, onDelete }) {
+function TodoBoard({ items, present, box, txt, onAdd, onPatch, onDelete }) {
     const [drafts, setDrafts] = useState({ open: '', doing: '', done: '' });
     const [over, setOver] = useState(null);
     const [showCancelled, setShowCancelled] = useState(false);
-    const cancelled = todos.filter(i => i.status === 'cancelled');
-    const submit = (col) => { const v = (drafts[col] || '').trim(); if (!v) return; onAdd(v, col); setDrafts(d => ({ ...d, [col]: '' })); };
+    const [fKind, setFKind] = useState('all');
+    const [fDom, setFDom] = useState('all');
+    const [newKind, setNewKind] = useState('todo');
+
+    const live = items.filter(i => i.status !== 'cancelled');
+    const shown = live.filter(i => (fKind === 'all' || (i.kind || 'issue') === fKind)
+        && (fDom === 'all' || (i.section || 'other') === fDom));
+    const cancelled = items.filter(i => i.status === 'cancelled');
+    const done = live.filter(i => i.status === 'done').length;
+    const pct = live.length ? Math.round((done / live.length) * 100) : 0;
+
+    const submit = col => {
+        const v = (drafts[col] || '').trim();
+        if (!v) return;
+        onAdd(v, col, newKind, fDom === 'all' ? 'other' : fDom);
+        setDrafts(d => ({ ...d, [col]: '' }));
+    };
     const drop = (e, col) => {
         e.preventDefault(); setOver(null);
         const id = Number(e.dataTransfer.getData('text/plain'));
-        const it = todos.find(x => Number(x.id) === id);
+        const it = items.find(x => Number(x.id) === id);
         if (it && it.status !== col) onPatch(it, { status: col });
     };
+    const chip = on => 'px-2.5 py-1 rounded-full text-[11px] font-bold transition ' +
+        (on ? 'bg-brand-900 text-white shadow' : present ? 'bg-white/10 text-slate-300' : 'bg-white text-slate-600 border border-slate-200');
+
     return (
-        <div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="space-y-3">
+            {/* شريط الفلاتر والتقدّم */}
+            <div className={'rounded-2xl border p-3 ' + box}>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <button onClick={() => setFKind('all')} className={chip(fKind === 'all')}>الكل ({live.length})</button>
+                    <button onClick={() => setFKind('todo')} className={chip(fKind === 'todo')}>مهام ({live.filter(i => i.kind === 'todo').length})</button>
+                    <button onClick={() => setFKind('issue')} className={chip(fKind === 'issue')}>قضايا ({live.filter(i => i.kind !== 'todo').length})</button>
+                    <span className={'mx-1 h-4 w-px ' + (present ? 'bg-white/20' : 'bg-slate-200')} />
+                    <button onClick={() => setFDom('all')} className={chip(fDom === 'all')}>كل المحاور</button>
+                    {DOMAINS.map(d => (
+                        <button key={d.key} onClick={() => setFDom(d.key)} className={chip(fDom === d.key)}>
+                            {d.name} ({live.filter(i => i.section === d.key).length})
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-2 mt-2.5">
+                    <div className={'flex-1 h-2 rounded-full overflow-hidden ' + (present ? 'bg-white/10' : 'bg-slate-100')}>
+                        <div className="h-full rounded-full bg-gradient-to-l from-emerald-400 to-emerald-600 transition-all duration-500"
+                            style={{ width: pct + '%' }} />
+                    </div>
+                    <span className={'text-xs font-black ' + txt}>{pct}%</span>
+                    <span className={'text-[11px] font-bold ' + (present ? 'text-slate-400' : 'text-slate-400')}>{done} من {live.length}</span>
+                </div>
+            </div>
+
+            {/* الأعمدة */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
                 {COLS.map((c, ci) => {
-                    const list = todos.filter(i => i.status === c.key);
+                    const list = shown.filter(i => i.status === c.key);
                     return (
                         <div key={c.key} onDragOver={e => { e.preventDefault(); setOver(c.key); }}
                             onDragLeave={() => setOver(o => (o === c.key ? null : o))} onDrop={e => drop(e, c.key)}
-                            className={'rounded-2xl border p-3 transition ' + box +
-                                (over === c.key ? ' ring-2 ring-brand-500 border-brand-400' : '')}>
-                            <div className="flex items-center gap-2 mb-2.5">
-                                <span className={'w-2.5 h-2.5 rounded-full ' + c.tone} />
-                                <h4 className={'font-black text-sm ' + txt}>{c.name}</h4>
-                                <span className={'ms-auto text-xs font-bold ' + (present ? 'text-slate-300' : 'text-slate-400')}>{list.length}</span>
+                            className={'rounded-2xl border overflow-hidden transition ' + box +
+                                (over === c.key ? ' ring-2 ' + c.ring : '')}>
+                            <div className={'flex items-center gap-2 px-3 py-2 bg-gradient-to-l ' + c.head}>
+                                <span className="w-2 h-2 rounded-full bg-white/90" />
+                                <h4 className="font-black text-sm text-white">{c.name}</h4>
+                                <span className="ms-auto text-[11px] font-black text-white/90 bg-white/20 px-2 py-0.5 rounded-full">{list.length}</span>
                             </div>
-                            <div className="space-y-2 min-h-[60px]">
+                            <div className="p-2.5 space-y-2.5 min-h-[90px]">
                                 {list.map(it => (
-                                    <TodoCard key={it.id} it={it} present={present} txt={txt}
+                                    <ItemCard key={it.id} it={it} present={present} txt={txt}
                                         onPatch={onPatch} onDelete={onDelete} colIdx={ci} />
                                 ))}
                                 {!list.length && (
-                                    <div className={'text-center text-xs py-5 rounded-xl border border-dashed ' +
+                                    <div className={'text-center text-xs py-6 rounded-xl border border-dashed ' +
                                         (present ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-400')}>
-                                        اسحب مهمة هنا
+                                        اسحب بطاقة هنا
                                     </div>
                                 )}
-                            </div>
-                            <div className="flex gap-1.5 mt-2.5">
-                                <input value={drafts[c.key]} onChange={e => setDrafts(d => ({ ...d, [c.key]: e.target.value }))}
-                                    onKeyDown={e => e.key === 'Enter' && submit(c.key)} placeholder="مهمة جديدة..."
-                                    className={'flex-1 px-2.5 py-1.5 rounded-lg text-xs ' +
-                                        (present ? 'bg-white/10 text-white placeholder-slate-400' : 'border border-slate-200')} />
-                                <button onClick={() => submit(c.key)} className="px-2.5 py-1.5 rounded-lg bg-brand-900 text-white"><Plus size={14} /></button>
+                                <div className="flex gap-1.5 pt-0.5">
+                                    <input value={drafts[c.key]} onChange={e => setDrafts(d => ({ ...d, [c.key]: e.target.value }))}
+                                        onKeyDown={e => e.key === 'Enter' && submit(c.key)}
+                                        placeholder={newKind === 'todo' ? 'مهمة جديدة...' : 'قضية جديدة...'}
+                                        className={'flex-1 px-2.5 py-1.5 rounded-xl text-xs outline-none ' +
+                                            (present ? 'bg-white/10 text-white placeholder-slate-400' : 'bg-white border border-slate-200')} />
+                                    <button onClick={() => submit(c.key)}
+                                        className={'px-2.5 py-1.5 rounded-xl text-white ' + (newKind === 'todo' ? 'bg-violet-600' : 'bg-rose-600')}>
+                                        <Plus size={14} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     );
                 })}
             </div>
-            {cancelled.length > 0 && (
-                <div className="mt-3">
-                    <button onClick={() => setShowCancelled(v => !v)} className="text-xs font-bold text-slate-400">
+
+            {/* نوع البند الجديد + الملغاة */}
+            <div className="flex items-center gap-2 flex-wrap">
+                <span className={'text-[11px] font-bold ' + (present ? 'text-slate-400' : 'text-slate-400')}>البطاقة الجديدة:</span>
+                <button onClick={() => setNewKind('todo')} className={chip(newKind === 'todo')}>مهمة</button>
+                <button onClick={() => setNewKind('issue')} className={chip(newKind === 'issue')}>قضية</button>
+                {cancelled.length > 0 && (
+                    <button onClick={() => setShowCancelled(v => !v)}
+                        className={'ms-auto text-[11px] font-bold ' + (present ? 'text-slate-400' : 'text-slate-400')}>
                         الملغاة ({cancelled.length}) {showCancelled ? '▲' : '▼'}
                     </button>
-                    {showCancelled && (
-                        <div className="mt-2 space-y-1.5">
-                            {cancelled.map(it => (
-                                <div key={it.id} className={'flex items-center gap-2 text-xs p-2 rounded-lg ' + (present ? 'bg-white/5 text-slate-300' : 'bg-slate-50 text-slate-500')}>
-                                    <span className="line-through flex-1">{it.title}</span>
-                                    <button onClick={() => onPatch(it, { status: 'open' })} className="px-2 py-1 rounded-lg bg-slate-200 text-slate-700 font-bold">إرجاع</button>
-                                    <button onClick={() => onDelete(it.id)} className="text-red-400"><Trash2 size={13} /></button>
-                                </div>
-                            ))}
+                )}
+            </div>
+            {showCancelled && (
+                <div className="space-y-1.5">
+                    {cancelled.map(it => (
+                        <div key={it.id} className={'flex items-center gap-2 text-xs p-2 rounded-xl ' +
+                            (present ? 'bg-white/5 text-slate-300' : 'bg-slate-50 text-slate-500')}>
+                            <span className="line-through flex-1">{it.title}</span>
+                            <button onClick={() => onPatch(it, { status: 'open' })}
+                                className="px-2 py-1 rounded-lg bg-slate-200 text-slate-700 font-bold">إرجاع</button>
+                            <button onClick={() => onDelete(it.id)} className="text-red-400"><Trash2 size={13} /></button>
                         </div>
-                    )}
+                    ))}
                 </div>
             )}
         </div>
