@@ -113,6 +113,7 @@ export default function BuyRecords() {
 
             {tab === 'returns' && <BuyReturns />}
             {tab === 'projects' && <ProjectStatement />}
+            {tab === 'payments' && <PayGapCard />}
 
             {tab !== 'payments' && tab !== 'returns' && tab !== 'projects' && (
             <div className="flex gap-2">
@@ -363,6 +364,62 @@ export default function BuyRecords() {
                 {rows.length > 0 && !more && tab !== 'returns' && (
                     <p className="text-center text-[11px] text-slate-600 py-2">عُرضت كل النتائج ({rows.length})</p>
                 )}
+            </div>
+        </div>
+    );
+}
+
+// ─── الدفعات المفقودة: فاتورة ترويستها مُسدَّدة بلا سطر دفعة ────────────────────
+function PayGapCard() {
+    const [d, setD] = useState(null);
+    const [busy, setBusy] = useState(0);
+    const load = useCallback(() => {
+        fetch(`${API_URL}?action=pay_gap_list`, { headers: auth() })
+            .then(r => r.json()).then(r => { if (r.success) setD(r); }).catch(() => {});
+    }, []);
+    useEffect(() => { load(); }, [load]);
+
+    const fill = async (row) => {
+        if (!window.confirm('تسجيل دفعة ' + money(row.gap) + ' على فاتورة ' + row.no + '؟')) return;
+        setBusy(row.id);
+        try {
+            const r = await fetch(`${API_URL}?action=pay_gap_fill`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                body: JSON.stringify({ purchase_id: row.id }),
+            }).then(x => x.json());
+            if (!r.success) alert(r.message || 'تعذر التسجيل'); else load();
+        } catch { alert('تعذر الاتصال'); }
+        finally { setBusy(0); }
+    };
+
+    if (!d || !d.count) return null;
+    return (
+        <div className="rounded-2xl bg-amber-500/10 border border-amber-500/25 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+                <span className="text-[13px] font-black text-amber-200">دفعات مفقودة ({d.count})</span>
+                <span className="text-[12px] font-black text-amber-200 mr-auto tabular-nums">{money(d.gap_total)}</span>
+            </div>
+            <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                فواتير ترويستها تقول «مُسدَّدة» بلا سطر دفعة — فلا تظهر في كشوف الحسابات.
+            </p>
+            <div className="space-y-1.5">
+                {(d.data || []).map(r => (
+                    <div key={r.id} className="rounded-xl bg-black/20 p-2.5 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[12px] font-bold truncate">{r.supplier}</span>
+                            <span className="text-[12px] font-black tabular-nums text-amber-200 mr-auto">{money(r.gap)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                            <span>فاتورة {r.no}</span><span>{r.date || '—'}</span>
+                            <span>{r.project || 'بلا مشروع'}</span>
+                            {Number(r.receipts) ? <span className="text-emerald-300">إيصال ✓</span> : <span className="text-amber-300">بلا إيصال</span>}
+                            <button onClick={() => fill(r)} disabled={busy === r.id}
+                                className="mr-auto px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold disabled:opacity-40">
+                                {busy === r.id ? '…' : 'سجّل'}
+                            </button>
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     );

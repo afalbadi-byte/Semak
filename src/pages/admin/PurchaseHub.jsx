@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     ShoppingCart, Users, FileWarning, Receipt, RotateCcw, Ticket,
-    RefreshCw, Search, AlertTriangle, CheckCircle2, ChevronLeft,
+    RefreshCw, Search, AlertTriangle, CheckCircle2, ChevronLeft, Wallet,
 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import ExportButton from '../../components/ExportButton';
@@ -23,6 +23,7 @@ const TABS = [
     { k: 'suppliers', t: 'الموردون',        i: Users },
     { k: 'proofs',    t: 'إثباتات السداد',  i: Receipt },
     { k: 'gaps',      t: 'فجوات التوثيق',   i: FileWarning },
+    { k: 'paygap',    t: 'الدفعات المفقودة', i: Wallet },
     { k: 'refunds',   t: 'المرتجعات',       i: RotateCcw },
     { k: 'tickets',   t: 'تذاكر المستندات', i: Ticket },
 ];
@@ -353,6 +354,71 @@ function Gaps() {
     );
 }
 
+
+// ─── الدفعات المفقودة: ترويسة الفاتورة تقول «مُسدَّد» ولا سطر دفعة يقابله ───────
+function PayGaps() {
+    const { openEntity } = useEntity();
+    const [d, setD] = useState(null);
+    const [busy, setBusy] = useState(0);
+    const load = useCallback(() => { get('pay_gap_list').then(setD); }, []);
+    useEffect(() => { load(); }, [load]);
+
+    const fill = async (row) => {
+        if (!window.confirm('تسجيل دفعة ' + money(row.gap) + ' على فاتورة ' + row.no
+            + (Number(row.receipts) ? ' وربط إيصالها المرفوع؟' : '؟'))) return;
+        setBusy(row.id);
+        try {
+            const r = await fetch(`${API_URL}?action=pay_gap_fill`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                body: JSON.stringify({ purchase_id: row.id }),
+            }).then(x => x.json());
+            if (!r.success) alert(r.message || 'تعذر التسجيل');
+            else load();
+        } catch { alert('تعذر الاتصال'); }
+        finally { setBusy(0); }
+    };
+
+    const cols = [
+        { k: 'no', t: 'الرقم', r: r => <span className="font-black">{r.no || '—'}</span> },
+        { k: 'date', t: 'التاريخ' },
+        { k: 'supplier', t: 'المورد', r: r => <span className="font-bold">{r.supplier}</span> },
+        { k: 'project', t: 'المشروع', r: r => r.project || <span className="text-slate-300">بلا</span> },
+        { k: 'total', t: 'الإجمالي', r: r => money(r.total) },
+        { k: 'paid', t: 'المسدَّد بالترويسة', r: r => money(r.paid) },
+        { k: 'rows', t: 'سطور الدفعات', r: r => money(Number(r.mirror_pay) + Number(r.local_pay)) },
+        { k: 'gap', t: 'الفجوة', r: r => <span className="font-black text-amber-600">{money(r.gap)}</span> },
+        { k: 'receipts', t: 'إيصال', r: r => Number(r.receipts)
+            ? <span className="text-emerald-600 font-bold">✓ {r.receipts}</span>
+            : <span className="text-amber-600">بلا</span> },
+        { k: 'act', t: '', r: r => (
+            <button onClick={e => { e.stopPropagation(); fill(r); }} disabled={busy === r.id}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold disabled:opacity-40">
+                {busy === r.id ? '…' : 'سجّل الدفعة'}
+            </button>
+        ) },
+    ];
+    return (
+        <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Card t="فواتير بفجوة" v={d?.count ?? '—'} warn={Number(d?.count) > 0} />
+                <Card t="مجموع الفجوة" v={money(d?.gap_total)} warn={Number(d?.gap_total) > 0.5} />
+                <Card t="لها إيصال" v={(d?.data || []).filter(r => Number(r.receipts)).length} />
+                <Card t="بلا إيصال" v={(d?.data || []).filter(r => !Number(r.receipts)).length} warn />
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+                هذه فواتير تقول ترويستها إنها مُسدَّدة، ولا يقابلها سطر دفعة — فلا تظهر الدفعة في كشوف الحسابات.
+                التسجيل يكون بمبلغ الفجوة نفسها فقط، بتاريخ الفاتورة، ويربط الإيصال المرفوع إن وُجد. لا يمس دفترة.
+            </p>
+            <div className="flex items-center gap-2">
+                <ExportButton rows={d?.data || []} filename="الدفعات-المفقودة"
+                    columns={[{ key: 'no', label: 'الرقم' }, { key: 'date', label: 'التاريخ' }, { key: 'supplier', label: 'المورد' },
+                              { key: 'project', label: 'المشروع' }, { key: 'paid', label: 'المسدَّد' }, { key: 'gap', label: 'الفجوة' }]} />
+            </div>
+            <Table cols={cols} rows={d?.data} onRow={r => openEntity('purchase', r.id)} empty="لا فجوات — كل دفعة لها سطر" />
+        </div>
+    );
+}
+
 // ─── المرتجعات ──────────────────────────────────────────────────────────────
 function Refunds() {
     const { openEntity } = useEntity();
@@ -504,6 +570,7 @@ export default function PurchaseHub() {
                 {tab === 'suppliers' && <Suppliers />}
                 {tab === 'proofs'    && <Proofs />}
                 {tab === 'gaps'      && <Gaps />}
+                {tab === 'paygap'    && <PayGaps />}
                 {tab === 'refunds'   && <Refunds />}
                 {tab === 'tickets'   && <Tickets />}
             </div>
