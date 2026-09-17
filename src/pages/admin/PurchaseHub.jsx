@@ -358,7 +358,20 @@ function Refunds() {
     const { openEntity } = useEntity();
     const [d, setD] = useState(null);
     const [f, setF] = useState('');
-    useEffect(() => { get('refund_list', `&limit=100${f ? `&${f}=1` : ''}`).then(setD); }, [f]);
+    const [projects, setProjects] = useState([]);
+    useEffect(() => {
+        fetch(`${API_URL}?action=projects_list`, { headers: auth() }).then(r => r.json())
+            .then(r => { if (r.success) setProjects(r.data || []); }).catch(() => {});
+    }, []);
+    // تسكين المرتجع على مشروع — محلي بحت، لا يمس دفترة
+    const assignRefund = async (id, project_id) => {
+        await fetch(`${API_URL}?action=refund_set_project`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+            body: JSON.stringify({ id, project_id: Number(project_id) || 0 }),
+        }).catch(() => {});
+    };
+    const reload = useCallback(() => { get('refund_list', `&limit=100${f ? `&${f}=1` : ''}`).then(setD); }, [f]);
+    useEffect(() => { reload(); }, [reload]);
     const s = d?.summary || {};
     const cols = [
         { k: 'no', t: 'الرقم', r: r => <span className="font-black">{r.no || '—'}</span> },
@@ -370,6 +383,15 @@ function Refunds() {
             const v = Number(r.gross) - Number(r.settled);
             return v > 0.5 ? <span className="font-bold text-amber-600">{money(v)}</span> : <span className="text-emerald-600">—</span>;
         } },
+        { k: 'project', t: 'المشروع', r: r => (
+            <select value={r.project_id || 0} onClick={e => e.stopPropagation()}
+                onChange={async e => { await assignRefund(r.id, e.target.value); reload(); }}
+                className={'px-2 py-1 rounded-lg text-[11px] font-bold border ' +
+                    (r.project_id ? 'border-slate-200 text-slate-700' : 'border-amber-300 text-amber-700 bg-amber-50')}>
+                <option value="0">بلا مشروع</option>
+                {projects.map(p => <option key={p.project_id} value={p.project_id}>{p.name}</option>)}
+            </select>
+        ) },
         { k: 'docs', t: 'المستندات', r: r => Number(r.docs) || <span className="text-amber-600">بلا</span> },
     ];
     return (

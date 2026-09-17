@@ -33,6 +33,7 @@ const PurchaseDocs      = React.lazy(() => import('./PurchaseDocs'));
 const PurchaseHub       = React.lazy(() => import('./PurchaseHub'));
 const TaxReports        = React.lazy(() => import('./TaxReports'));
 const MeetingRoom       = React.lazy(() => import('./MeetingRoom'));
+const ProjectStatements = React.lazy(() => import('./ProjectStatements'));
 const MeetingMinutes    = React.lazy(() => import('./MeetingMinutes'));
 const EntityView        = React.lazy(() => import('./EntityView'));
 const ItemPrices        = React.lazy(() => import('./ItemPrices'));
@@ -1065,6 +1066,7 @@ function DashboardInner({ onLogout }) {
                 { id:'tax_reports',  tabId:'tax_reports',  label:'مركز التقارير',      icon:BarChart3, permKey:'finance', color:'sky' },
                 { id:'item_prices',  tabId:'item_prices',  label:'متابعة أسعار الأصناف', icon:Package, permKey:'finance', color:'rose' },
                 { id:'meeting',      tabId:'meeting',      label:'غرفة الاجتماع',      icon:Presentation, permKey:'finance', color:'violet' },
+                { id:'proj_stmt',   tabId:'proj_stmt',   label:'كشوف حسابات المشاريع', icon:BarChart3, permKey:'finance', color:'emerald' },
                 { id:'qs',          tabId:'qs',          label:'التمتير والتكاليف',    icon:Ruler,          permKey:'qs',          color:'emerald'},
                 { id:'work_cycles', tabId:'work_cycles', label:'أوامر ومراحل العمل',  icon:ClipboardCheck, permKey:'finance', color:'amber'  },
                 { id:'suppliers',   tabId:'suppliers',   label:'إدارة الموردين',       icon:Truck,          permKey:'finance', color:'amber'  },
@@ -1104,6 +1106,7 @@ function DashboardInner({ onLogout }) {
                 { id:'purchase_hub', tabId:'purchase_hub', label:'مركز المشتريات', icon:ShoppingCart, permKey:'finance', color:'amber' },
                 { id:'tax_reports',  tabId:'tax_reports',  label:'مركز التقارير',      icon:BarChart3, permKey:'finance', color:'sky' },
                 { id:'meeting',      tabId:'meeting',      label:'غرفة الاجتماع',      icon:Presentation, permKey:'finance', color:'violet' },
+                { id:'proj_stmt',   tabId:'proj_stmt',   label:'كشوف حسابات المشاريع', icon:BarChart3, permKey:'finance', color:'emerald' },
                 { id:'expenses',    tabId:'expenses',    label:'المصروفات',           icon:Tag,          permKey:'finance', color:'red'     },
                 { id:'payments',    tabId:'payments',    label:'المدفوعات والتحصيل',  icon:ArrowRightLeft,permKey:'finance', color:'green'   },
                 { id:'cheques',     tabId:'cheques',     label:'الشيكات',             icon:CreditCard,   permKey:'finance', color:'indigo'  },
@@ -1177,7 +1180,7 @@ function DashboardInner({ onLogout }) {
         parties:'كشوف حسابات الأطراف', activity_log:'سجل النشاط', security:'الأمان والبريد',
         subscription:'الاشتراك والباقة',
         rega:'قيد المطور العقاري',
-        minutes:'محاضر الاجتماعات', meeting:'غرفة الاجتماع', tax_reports:'مركز التقارير',
+        minutes:'محاضر الاجتماعات', meeting:'غرفة الاجتماع', tax_reports:'مركز التقارير', proj_stmt:'كشوف حسابات المشاريع',
         purchase_docs:'مستندات المشتريات', purchase_hub:'مركز المشتريات', month_close:'القفلة الشهرية', campaign:'الحملات التسويقية',
         ent:'بطاقة', item_prices:'متابعة أسعار الأصناف',
     };
@@ -1631,6 +1634,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'tax_reports'  && hasPermission('finance')   && <div className="animate-fadeIn"><TaxReports /></div>}
                 {activeTab === 'item_prices'  && hasPermission('finance')   && <div className="animate-fadeIn"><ItemPrices /></div>}
                 {activeTab === 'meeting'      && hasPermission('finance')   && <div className="animate-fadeIn"><MeetingRoom /></div>}
+                {activeTab === 'proj_stmt'    && hasPermission('finance')   && <div className="animate-fadeIn"><ProjectStatements /></div>}
                 {activeTab === 'minutes'      && <div className="animate-fadeIn"><MeetingMinutes /></div>}
                 {activeTab === 'ent'          && entity && <EntityView type={entity.type} value={entity.value} />}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}
