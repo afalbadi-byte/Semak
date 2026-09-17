@@ -13077,9 +13077,11 @@ switch ($action) {
             // الأولوية لما تغيّر في دفترة، ثم الفواتير التي لم تُجلب تفاصيلها بعد
             $need = array_slice(array_values(array_unique($touched)), 0, $limit_deep);
             $rest = max(0, $limit_deep - count($need));
+            // فواتير التطبيق المحلية ليست في دفترة أصلاً — طلب تفاصيلها يرجع 404 ويتكرر كل مرة
             if ($rest > 0 && ($q = $conn->query("SELECT p.id FROM dmirror_purchases p
                     LEFT JOIN dmirror_purchase_items i ON i.purchase_id = p.id
-                    WHERE i.id IS NULL GROUP BY p.id ORDER BY p.id DESC LIMIT $rest"))) {
+                    WHERE i.id IS NULL AND COALESCE(p.origin,'daftra')='daftra'
+                    GROUP BY p.id ORDER BY p.id DESC LIMIT $rest"))) {
                 while ($r = $q->fetch_assoc()) $need[] = (int)$r['id'];
             }
             $need = array_values(array_unique($need));
