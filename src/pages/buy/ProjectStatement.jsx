@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Printer, Loader2, RefreshCw } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
+import { openPrintReport } from '../../lib/printReport';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const auth  = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
@@ -78,7 +79,7 @@ export default function ProjectStatement() {
                     className="w-[44px] h-[44px] rounded-xl bg-white/10 flex items-center justify-center shrink-0">
                     <RefreshCw size={16} className={busy ? 'animate-spin' : ''} />
                 </button>
-                <button onClick={() => window.print()}
+                <button onClick={() => openPrintReport('project_statement', { project_id: pid, from, to })}
                     className="w-[44px] h-[44px] rounded-xl bg-white/10 flex items-center justify-center shrink-0">
                     <Printer size={16} />
                 </button>

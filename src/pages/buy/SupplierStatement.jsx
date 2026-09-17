@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Printer, Loader2 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
+import { openPrintReport } from '../../lib/printReport';
 import { useEntity } from './entityCtx';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -44,41 +45,9 @@ export default function SupplierStatement({ supplier, onClose }) {
     const toggle = k => setKinds(v => v.includes(k) ? v.filter(x => x !== k) : v.concat(k));
 
     // الطباعة تفتح نافذة بمحتوى الكشف وحده — بلا أزرار ولا ألوان الشاشة
-    const print = () => {
-        if (!d) return;
-        const rows = shown.map(r => `<tr>
-            <td>${r.date}</td><td>${r.kind}</td><td>${r.ref || ''}</td>
-            <td class="n">${r.debit ? money(r.debit) : ''}</td>
-            <td class="n">${r.credit ? money(r.credit) : ''}</td>
-            <td class="n b">${money(r.balance)}</td></tr>`).join('');
-        const w = window.open('', '_blank');
-        if (!w) { setErr('المتصفح منع نافذة الطباعة'); return; }
-        w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-            <title>كشف حساب — ${d.supplier}</title><style>
-            body{font-family:system-ui,'Segoe UI',Tahoma,sans-serif;margin:24px;color:#111}
-            h1{font-size:18px;margin:0 0 2px} .sub{font-size:12px;color:#555;margin-bottom:14px}
-            table{width:100%;border-collapse:collapse;font-size:12px}
-            th,td{border:1px solid #ccc;padding:5px 7px;text-align:right}
-            th{background:#f2f2f2} .n{text-align:left;font-variant-numeric:tabular-nums} .b{font-weight:700}
-            tfoot td{font-weight:700;background:#fafafa}
-            </style></head><body>
-            <h1>كشف حساب مورد — ${d.supplier}</h1>
-            <div class="sub">سماك الخير · ${d.from || 'من البداية'} إلى ${d.to || 'اليوم'}
-                 · رصيد افتتاحي ${money(d.opening)}</div>
-            <table><thead><tr><th>التاريخ</th><th>البيان</th><th>المرجع</th>
-                <th class="n">عليه</th><th class="n">له</th><th class="n">الرصيد</th></tr></thead>
-            <tbody>${rows}</tbody>
-            <tfoot><tr><td colspan="3">الإجمالي</td>
-                <td class="n">${money(d.total_debit)}</td>
-                <td class="n">${money(d.total_credit)}</td>
-                <td class="n">${money(d.closing)}</td></tr></tfoot></table>
-            <p style="font-size:11px;color:#666;margin-top:14px">
-                الرصيد الموجب مستحقٌّ للمورد. حُرِّر في ${new Date().toLocaleDateString('en-CA')}.</p>
-            </body></html>`);
-        w.document.close();
-        w.focus();
-        w.print();
-    };
+    // الطباعة بنموذج سماك الرسمي (نفس كليشة عرض السعر والعقد)
+    const print = () => openPrintReport('supplier_statement', { supplier, from, to });
+
 
     return (
         <div className="fixed inset-0 z-[90] bg-[#0b1628] overflow-y-auto" dir="rtl">

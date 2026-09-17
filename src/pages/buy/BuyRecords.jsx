@@ -3,6 +3,7 @@ import { Search, RefreshCw, Paperclip, ChevronLeft, Wallet, ShieldCheck, ShieldA
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import BuyReturns from './BuyReturns';
 import ProjectStatement from './ProjectStatement';
+import { openPrintReport } from '../../lib/printReport';
 import { SortBar } from '../../components/SortHeader';
 import { syncDaftra } from '../../lib/sync';
 import { useEntity } from './entityCtx';
@@ -97,6 +98,14 @@ export default function BuyRecords() {
                     </button>
                 ))}
             </div>
+
+            {['invoices', 'returns', 'payments', 'projects'].includes(tab) && (
+                <button onClick={() => openPrintReport(
+                    tab === 'invoices' ? 'purchases' : tab === 'projects' ? 'projects_summary' : tab)}
+                    className="w-full h-[44px] rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[12px] font-bold flex items-center justify-center gap-2">
+                    طباعة التقرير بهوية سماك
+                </button>
+            )}
 
             {tab === 'returns' && <BuyReturns />}
             {tab === 'projects' && <ProjectStatement />}

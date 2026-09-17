@@ -2616,6 +2616,124 @@ function mtg_tick($conn) {
     return $done;
 }
 
+
+// ─── نماذج الطباعة: ترويسة سماك نفسها المستعملة في عرض السعر وعقد التشطيب ──────
+// أرضية كحلية #1a365d وشريط ذهبي #c5a059، شعار وعلامة مائية من صور الموقع،
+// وتذييل ببيانات المنشأة. كل تقرير في التطبيق يخرج بهذا القالب — مصدر واحد للشكل.
+function semak_print_css() {
+    return '@page{size:A4;margin:10mm 0}'
+        . '*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}'
+        . "html,body{margin:0;padding:0;background:#fff;color:#0f172a;font-family:'Cairo',Tahoma,Arial,sans-serif;font-size:11.5px;line-height:1.6}"
+        . '.no-print{text-align:center;padding:10px}'
+        . '.no-print button{background:#1a365d;color:#fff;border:0;padding:10px 26px;border-radius:8px;font-family:inherit;font-size:14px;cursor:pointer}'
+        . '@media print{.no-print{display:none}}'
+        . '.hbar{height:6mm;display:flex}.hbar>div:first-child{width:75%;background:#1a365d}.hbar>div:last-child{width:25%;background:#c5a059}'
+        . '.hmain{padding:2.5mm 12mm;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9}'
+        . '.hmain img{height:19mm;width:auto;object-fit:contain}'
+        . '.hinfo{text-align:left;border-left:4px solid #c5a059;padding-left:10px;direction:ltr}'
+        . '.hinfo h1{margin:0;font-size:18px;font-weight:900;color:#1a365d;line-height:1.2}'
+        . '.hinfo .tagline{color:#c5a059;font-weight:700;font-size:10px;margin-top:2px}'
+        . '.hinfo .cr{color:#94a3b8;font-size:8px;margin-top:2px}'
+        . '.docbar{padding:2mm 12mm;background:#f8fafc;display:flex;justify-content:space-between;gap:10px;'
+        . 'border-bottom:1px dashed #e2e8f0;font-size:10px;flex-wrap:wrap}'
+        . '.docbar .label{font-weight:900;color:#1a365d;font-size:12px}.docbar strong{color:#1a365d}'
+        . '.wm{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:62%;max-width:520px;opacity:.07;z-index:0}'
+        . '.content{padding:4mm 12mm 2mm;position:relative;z-index:1}'
+        . 'h2.title{text-align:center;font-size:19px;font-weight:900;color:#1a365d;margin:1mm 0}'
+        . '.subtitle{text-align:center;color:#64748b;font-size:11px;margin-bottom:3mm}.subtitle b{color:#c5a059}'
+        . 'table{width:100%;border-collapse:collapse;margin:2mm 0;font-size:11px}'
+        . 'th{background:#1a365d;color:#fff;padding:6px 8px;font-size:11px;text-align:right;white-space:nowrap}'
+        . 'td{border:1px solid #e2e8f0;padding:4px 8px;vertical-align:top}'
+        . 'td.c{text-align:center}td.n{text-align:left;direction:ltr;font-variant-numeric:tabular-nums}'
+        . 'tr:nth-child(even) td{background:#fbfcfe}'
+        . 'tfoot td{background:#f1f5f9;font-weight:900;color:#1a365d;border-top:2px solid #1a365d}'
+        . '.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;margin:2mm 0 3mm}'
+        . '.card{border:1px solid #e2e8f0;border-radius:10px;padding:5px 9px;background:#fafbfc}'
+        . '.card .k{font-size:9px;color:#64748b;font-weight:700}'
+        . '.card .v{font-size:13.5px;font-weight:900;color:#1a365d;direction:ltr;text-align:right}'
+        . '.card.gold{border-color:#c5a059;background:#fffdf7}.card.gold .v{color:#8a6d2f}'
+        . '.note{font-size:10px;color:#64748b;margin-top:2mm}'
+        . '.sig{margin-top:10mm;display:flex;justify-content:space-between;gap:20mm}'
+        . '.sig>div{width:60mm}.sig .who{font-weight:900;color:#1a365d}.sig .role{font-size:10px;color:#64748b}'
+        . '.sig .line{border-bottom:1px solid #94a3b8;height:14mm;margin-top:3mm}'
+        . '.footer{padding:3mm 12mm 0}'
+        . '.finner{background:#1a365d;color:#fff;border-radius:12px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center}'
+        . '.finner .name{font-weight:700;font-size:11px;color:#c5a059}'
+        . '.finner .addr{color:rgba(255,255,255,.85);font-size:8px;margin-top:2px}'
+        . '.fright{direction:ltr;text-align:left;font-size:9px}.fright .phone{font-weight:700;font-size:10px}'
+        . '.fright .url{color:rgba(255,255,255,.85);margin-top:2px}'
+        . '.neg{color:#b91c1c}.pos{color:#047857}';
+}
+
+function semak_print_open($title, $docLabel, $meta = []) {
+    $m = '';
+    foreach ($meta as $k => $v)
+        $m .= '<span>' . htmlspecialchars((string)$k) . ': <strong>' . htmlspecialchars((string)$v) . '</strong></span>&nbsp;&nbsp;';
+    return '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">'
+        . '<title>' . htmlspecialchars($title) . ' — سماك العقارية</title>'
+        . '<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">'
+        . '<style>' . semak_print_css() . '</style></head><body>'
+        . '<div class="no-print"><button onclick="window.print()">طباعة / حفظ PDF</button></div>'
+        . '<img class="wm" src="/images/semak-watermark.png" alt="">'
+        . '<div class="hbar"><div></div><div></div></div>'
+        . '<div class="hmain"><img src="/images/logo-main.png" alt="سماك العقارية">'
+        . '<div class="hinfo"><h1>Semak Real Estate</h1>'
+        . '<div class="tagline">Semak Al-Emara Real Estate Development Est.</div>'
+        . '<div class="cr">CR: 7051031099</div>'
+        . '<div class="cr">Tel: 920032842 &nbsp;|&nbsp; info@semak.sa &nbsp;|&nbsp; semak.sa</div>'
+        . '</div></div>'
+        . '<div class="docbar"><div><span class="label">' . htmlspecialchars($docLabel) . '</span></div>'
+        . '<div>' . $m . 'تاريخ الطباعة: <strong>' . date('Y-m-d H:i') . '</strong></div></div>'
+        . '<div class="content">';
+}
+
+function semak_print_close($withSignature = false) {
+    $sig = $withSignature
+        ? '<div class="sig"><div><div class="who">المحاسب</div><div class="role">سماك العقارية</div><div class="line"></div></div>'
+          . '<div><div class="who">المهندس/ أحمد البادي</div><div class="role">المدير التنفيذي</div><div class="line"></div></div></div>'
+        : '';
+    return $sig . '</div><div class="footer"><div class="finner"><div>'
+        . '<div class="name">سماك العقارية</div>'
+        . '<div class="addr">المملكة العربية السعودية، مكة المكرمة، حي البوابة &nbsp;|&nbsp; س.ت 7051031099</div></div>'
+        . '<div class="fright"><div class="phone">920032842</div>'
+        . '<div class="url">semak.sa &nbsp;|&nbsp; info@semak.sa</div></div></div></div></body></html>';
+}
+
+function pr_money($v, $dec = 2) { return number_format((float)$v, $dec, '.', ','); }
+function pr_cards($items) {   // [العنوان => القيمة] أو [العنوان => [القيمة, 'gold']]
+    $h = '<div class="cards">';
+    foreach ($items as $k => $v) {
+        $cls = ''; $val = $v;
+        if (is_array($v)) { $val = $v[0]; $cls = ' ' . ($v[1] ?? ''); }
+        $h .= '<div class="card' . $cls . '"><div class="k">' . htmlspecialchars((string)$k) . '</div>'
+            . '<div class="v">' . htmlspecialchars((string)$val) . '</div></div>';
+    }
+    return $h . '</div>';
+}
+function pr_table($cols, $rows, $foot = null) {
+    $h = '<table><thead><tr>';
+    foreach ($cols as $c) $h .= '<th>' . htmlspecialchars((string)$c) . '</th>';
+    $h .= '</tr></thead><tbody>';
+    foreach ($rows as $r) {
+        $h .= '<tr>';
+        foreach ($r as $cell) {
+            if (is_array($cell)) $h .= '<td class="' . ($cell[1] ?? '') . '">' . htmlspecialchars((string)$cell[0]) . '</td>';
+            else $h .= '<td>' . htmlspecialchars((string)$cell) . '</td>';
+        }
+        $h .= '</tr>';
+    }
+    $h .= '</tbody>';
+    if ($foot) {
+        $h .= '<tfoot><tr>';
+        foreach ($foot as $cell) {
+            if (is_array($cell)) $h .= '<td class="' . ($cell[1] ?? '') . '">' . htmlspecialchars((string)$cell[0]) . '</td>';
+            else $h .= '<td>' . htmlspecialchars((string)$cell) . '</td>';
+        }
+        $h .= '</tr></tfoot>';
+    }
+    return $h . '</table>';
+}
+
 function mask_email($e) {
     if (!$e || strpos($e, '@') === false) return $e;
     list($u, $d) = explode('@', $e, 2);
@@ -9832,6 +9950,251 @@ switch ($action) {
 
         echo json_encode(['success'=>true, 'project'=>$prj, 'summary'=>$sum, 'lines'=>$lines,
             'from'=>$from, 'to'=>$to], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // نموذج طباعة بهوية سماك لأي تقرير — يُفتح في تبويب ويُحفظ PDF
+    case 'print_report': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<div dir="rtl" style="font-family:Tahoma;padding:40px;text-align:center">انتهت الجلسة — سجّل الدخول ثم أعد الطباعة</div>';
+            break;
+        }
+        header('Content-Type: text/html; charset=utf-8');
+        $E  = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $Q  = function($sql) use ($conn) { $r = $conn->query($sql); $o = []; if ($r) while ($x = $r->fetch_assoc()) $o[] = $x; return $o; };
+        $ty = (string)($_GET['type'] ?? '');
+        $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['from'] ?? '')) ? $_GET['from'] : '';
+        $to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['to'] ?? '')) ? $_GET['to'] : '';
+        $period = ($from || $to) ? (($from ?: '—') . ' إلى ' . ($to ?: '—')) : 'كل الفترات';
+        $dw = function($col) use ($from, $to, $E) {
+            $c = '';
+            if ($from !== '') $c .= " AND $col >= '" . $E($from) . "'";
+            if ($to !== '')   $c .= " AND $col <= '" . $E($to) . "'";
+            return $c;
+        };
+        $out = ''; $title = 'تقرير'; $label = 'تقرير'; $meta = ['الفترة' => $period]; $sig = false;
+
+        if ($ty === 'project_statement') {
+            $pid = (int)($_GET['project_id'] ?? 0);
+            $p = $Q("SELECT project_id, name, budget, COALESCE(ptype,'dev') ptype, COALESCE(margin_pct,0) margin_pct
+                     FROM project_budgets WHERE project_id=$pid LIMIT 1");
+            $p = $p ? $p[0] : null;
+            if (!$p) { echo semak_print_open('كشف حساب', 'كشف حساب مشروع', $meta) . '<p>المشروع غير موجود</p>' . semak_print_close(); break; }
+            $gross = ($p['ptype'] === 'contracting');
+            $inv = $Q("SELECT p.id, p.no, p.date, p.supplier, ROUND(p.total,2) total, ROUND(p.subtotal,2) subtotal, ROUND(p.paid,2) paid
+                       FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                       WHERE pp.project_id = $pid" . $dw('p.date') . " ORDER BY p.date, p.id");
+            $ref = $Q("SELECT r.id, r.no, r.date, r.supplier, ROUND(r.total,2) total, ROUND(r.subtotal,2) subtotal, r.purchase_no
+                       FROM dmirror_refunds r JOIN refund_project rp ON rp.refund_id = r.id
+                       WHERE rp.project_id = $pid" . $dw('r.date') . " ORDER BY r.date, r.id");
+            $pay = $Q("SELECT y.id, y.date, ROUND(y.amount,2) amount, p.no purchase_no, p.supplier
+                       FROM dmirror_payments y JOIN dmirror_purchases p ON p.id = y.purchase_id
+                       JOIN purchase_project pp ON pp.purchase_id = p.id
+                       WHERE pp.project_id = $pid" . $dw('y.date') . " ORDER BY y.date, y.id");
+            $ext = $Q("SELECT id, title, cost_date date, ROUND(amount,2) amount FROM project_extra_costs
+                       WHERE project_id = $pid" . $dw('cost_date') . " ORDER BY cost_date, id");
+            $lines = [];
+            foreach ($inv as $x) $lines[] = ['d'=>$x['date'], 'k'=>'فاتورة', 'no'=>$x['no'], 'party'=>$x['supplier'],
+                'debit'=>(float)($gross ? $x['total'] : $x['subtotal']), 'credit'=>0, 'cash'=>0];
+            foreach ($ref as $x) $lines[] = ['d'=>$x['date'], 'k'=>'مرتجع', 'no'=>$x['no'], 'party'=>$x['supplier'],
+                'debit'=>0, 'credit'=>(float)($gross ? $x['total'] : $x['subtotal']), 'cash'=>0];
+            foreach ($ext as $x) $lines[] = ['d'=>$x['date'], 'k'=>'تكلفة إضافية', 'no'=>'', 'party'=>$x['title'],
+                'debit'=>(float)$x['amount'], 'credit'=>0, 'cash'=>0];
+            foreach ($pay as $x) $lines[] = ['d'=>$x['date'], 'k'=>'دفعة', 'no'=>$x['purchase_no'], 'party'=>$x['supplier'],
+                'debit'=>0, 'credit'=>0, 'cash'=>(float)$x['amount']];
+            usort($lines, function ($a, $b) { return strcmp((string)$a['d'], (string)$b['d']); });
+            $bal = 0; $rows = [];
+            $tD = 0; $tC = 0; $tP = 0;
+            foreach ($lines as $l) {
+                $bal += $l['debit'] - $l['credit'];
+                $tD += $l['debit']; $tC += $l['credit']; $tP += $l['cash'];
+                $rows[] = [[$l['d'] ?: '—', 'c'], [$l['k'], 'c'], [$l['no'] ?: '—', 'c'], $l['party'],
+                    [$l['debit'] ? pr_money($l['debit']) : '', 'n'],
+                    [$l['credit'] ? pr_money($l['credit']) : '', 'n'],
+                    [$l['cash'] ? pr_money($l['cash']) : '', 'n'],
+                    [pr_money($bal), 'n']];
+            }
+            $netCost = $tD - $tC;
+            $sup = ($p['ptype'] === 'contracting' && (float)$p['margin_pct'] > 0) ? $netCost * (float)$p['margin_pct'] / 100 : 0;
+            $title = 'كشف حساب مشروع — ' . $p['name'];
+            $label = 'كشف حساب مشروع';
+            $meta = ['المشروع' => $p['name'], 'الفترة' => $period,
+                     'الأساس' => $gross ? 'شامل الضريبة' : 'صافي بلا ضريبة'];
+            $out = '<h2 class="title">كشف حساب مشروع ' . htmlspecialchars($p['name']) . '</h2>'
+                . '<div class="subtitle">من <b>' . htmlspecialchars($from ?: 'البداية') . '</b> إلى <b>'
+                . htmlspecialchars($to ?: 'اليوم') . '</b></div>'
+                . pr_cards([
+                    'الفواتير (' . count($inv) . ')' => pr_money($tD),
+                    'المرتجعات (' . count($ref) . ')' => '−' . pr_money($tC),
+                    'صافي التكلفة' => [pr_money($netCost + $sup), 'gold'],
+                    'المسدد للموردين' => pr_money($tP),
+                  ])
+                . pr_table(['التاريخ', 'النوع', 'المستند', 'الطرف', 'مدين', 'دائن', 'مدفوع', 'الرصيد'], $rows,
+                    ['', '', '', 'الإجمالي', [pr_money($tD), 'n'], [pr_money($tC), 'n'], [pr_money($tP), 'n'], [pr_money($netCost), 'n']])
+                . ($sup > 0 ? '<div class="note">إشراف سماك (' . (float)$p['margin_pct'] . '%): ' . pr_money($sup) . ' ريال</div>' : '')
+                . ((float)$p['budget'] > 0 ? '<div class="note">الميزانية: ' . pr_money($p['budget'])
+                    . ' · المتبقي: ' . pr_money((float)$p['budget'] - ($netCost + $sup)) . '</div>' : '')
+                . '<div class="note">المبالغ بالريال السعودي. «مدين» تكلفة على المشروع، و«دائن» مرتجع يخفّضها، و«مدفوع» نقد خرج للموردين.</div>';
+            $sig = true;
+
+        } elseif ($ty === 'supplier_statement') {
+            $sup = trim((string)($_GET['supplier'] ?? ''));
+            $v = $E($sup);
+            $inv = $Q("SELECT p.id, p.no, p.date, ROUND(p.total,2) total, ROUND(p.paid,2) paid, COALESCE(b.name,'') project
+                       FROM dmirror_purchases p LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                       LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                       WHERE TRIM(p.supplier)=TRIM('$v') AND p.date IS NOT NULL" . $dw('p.date') . " ORDER BY p.date, p.id");
+            $pay = $Q("SELECT y.id, y.date, ROUND(y.amount,2) amount, p.no
+                       FROM dmirror_payments y JOIN dmirror_purchases p ON p.id = y.purchase_id
+                       WHERE TRIM(p.supplier)=TRIM('$v') AND y.date IS NOT NULL" . $dw('y.date') . " ORDER BY y.date, y.id");
+            $ref = $Q("SELECT id, no, date, ROUND(total,2) total, ROUND(COALESCE(settled,0),2) settled
+                       FROM dmirror_refunds WHERE TRIM(supplier)=TRIM('$v') AND date IS NOT NULL" . $dw('date') . " ORDER BY date, id");
+            $lines = [];
+            foreach ($inv as $x) $lines[] = ['d'=>$x['date'], 'k'=>'فاتورة', 'no'=>$x['no'], 'info'=>$x['project'] ?: '—',
+                'debit'=>(float)$x['total'], 'credit'=>0];
+            foreach ($pay as $x) $lines[] = ['d'=>$x['date'], 'k'=>'دفعة', 'no'=>'على ' . $x['no'], 'info'=>'—',
+                'debit'=>0, 'credit'=>(float)$x['amount']];
+            foreach ($ref as $x) {
+                $lines[] = ['d'=>$x['date'], 'k'=>'مرتجع', 'no'=>$x['no'], 'info'=>'—', 'debit'=>0, 'credit'=>(float)$x['total']];
+                if ((float)$x['settled'] > 0.009)
+                    $lines[] = ['d'=>$x['date'], 'k'=>'استرداد مرتجع', 'no'=>$x['no'], 'info'=>'—',
+                        'debit'=>(float)$x['settled'], 'credit'=>0];
+            }
+            usort($lines, function ($a, $b) { return strcmp((string)$a['d'], (string)$b['d']); });
+            $bal = 0; $rows = []; $tD = 0; $tC = 0;
+            foreach ($lines as $l) {
+                $bal += $l['debit'] - $l['credit']; $tD += $l['debit']; $tC += $l['credit'];
+                $rows[] = [[$l['d'] ?: '—', 'c'], [$l['k'], 'c'], [$l['no'] ?: '—', 'c'], $l['info'],
+                    [$l['debit'] ? pr_money($l['debit']) : '', 'n'],
+                    [$l['credit'] ? pr_money($l['credit']) : '', 'n'],
+                    [pr_money($bal), 'n']];
+            }
+            $title = 'كشف حساب مورد — ' . $sup;
+            $label = 'كشف حساب مورد';
+            $meta = ['المورد' => $sup, 'الفترة' => $period];
+            $out = '<h2 class="title">كشف حساب ' . htmlspecialchars($sup) . '</h2>'
+                . '<div class="subtitle">الرصيد الموجب مستحقٌّ <b>للمورد</b></div>'
+                . pr_cards([
+                    'فواتير (' . count($inv) . ')' => pr_money($tD),
+                    'مدفوع ومرتجع' => pr_money($tC),
+                    'الرصيد المستحق' => [pr_money($bal), 'gold'],
+                    'عدد الحركات' => count($rows),
+                  ])
+                . pr_table(['التاريخ', 'النوع', 'المستند', 'المشروع', 'عليه', 'له', 'الرصيد'], $rows,
+                    ['', '', '', 'الإجمالي', [pr_money($tD), 'n'], [pr_money($tC), 'n'], [pr_money($bal), 'n']])
+                . '<div class="note">المبالغ بالريال السعودي شاملة الضريبة.</div>';
+            $sig = true;
+
+        } elseif ($ty === 'purchases') {
+            $pidF = (int)($_GET['project_id'] ?? 0);
+            $w = $pidF > 0 ? " AND pp.project_id = $pidF" : '';
+            $rowsQ = $Q("SELECT p.no, p.date, p.supplier, ROUND(p.subtotal,2) subtotal, ROUND(p.total,2) total,
+                            ROUND(p.paid,2) paid, COALESCE(b.name,'—') project
+                         FROM dmirror_purchases p
+                         LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                         LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                         WHERE p.date IS NOT NULL" . $dw('p.date') . $w . " ORDER BY p.date, p.id");
+            $rows = []; $tS = 0; $tT = 0; $tP = 0;
+            foreach ($rowsQ as $x) {
+                $tS += (float)$x['subtotal']; $tT += (float)$x['total']; $tP += (float)$x['paid'];
+                $rows[] = [[$x['date'], 'c'], [$x['no'], 'c'], $x['supplier'], $x['project'],
+                    [pr_money($x['subtotal']), 'n'], [pr_money((float)$x['total'] - (float)$x['subtotal']), 'n'],
+                    [pr_money($x['total']), 'n'], [pr_money($x['paid']), 'n'],
+                    [pr_money((float)$x['total'] - (float)$x['paid']), 'n']];
+            }
+            $title = 'تقرير فواتير المشتريات'; $label = 'تقرير مشتريات';
+            $out = '<h2 class="title">فواتير المشتريات</h2>'
+                . pr_cards(['عدد الفواتير' => count($rows), 'قبل الضريبة' => pr_money($tS),
+                            'الإجمالي' => [pr_money($tT), 'gold'], 'المسدد' => pr_money($tP)])
+                . pr_table(['التاريخ', 'رقم الفاتورة', 'المورد', 'المشروع', 'قبل الضريبة', 'الضريبة', 'الإجمالي', 'المسدد', 'المتبقي'], $rows,
+                    ['', '', '', 'الإجمالي', [pr_money($tS), 'n'], [pr_money($tT - $tS), 'n'],
+                     [pr_money($tT), 'n'], [pr_money($tP), 'n'], [pr_money($tT - $tP), 'n']]);
+
+        } elseif ($ty === 'returns') {
+            $pidF = (int)($_GET['project_id'] ?? 0);
+            $w = $pidF > 0 ? " AND rp.project_id = $pidF" : '';
+            $rowsQ = $Q("SELECT r.no, r.date, r.supplier, r.purchase_no, ROUND(r.total,2) total,
+                            ROUND(r.subtotal,2) subtotal, ROUND(COALESCE(r.settled,0),2) settled, COALESCE(b.name,'—') project
+                         FROM dmirror_refunds r
+                         LEFT JOIN refund_project rp ON rp.refund_id = r.id
+                         LEFT JOIN project_budgets b ON b.project_id = rp.project_id
+                         WHERE r.date IS NOT NULL" . $dw('r.date') . $w . " ORDER BY r.date, r.id");
+            $rows = []; $tT = 0; $tS = 0;
+            foreach ($rowsQ as $x) {
+                $tT += (float)$x['total']; $tS += (float)$x['settled'];
+                $rows[] = [[$x['date'], 'c'], [$x['no'], 'c'], $x['supplier'], [$x['purchase_no'] ?: '—', 'c'], $x['project'],
+                    [pr_money($x['subtotal']), 'n'], [pr_money($x['total']), 'n'], [pr_money($x['settled']), 'n'],
+                    [pr_money((float)$x['total'] - (float)$x['settled']), 'n']];
+            }
+            $title = 'تقرير مرتجعات المشتريات'; $label = 'تقرير مرتجعات';
+            $out = '<h2 class="title">مرتجعات المشتريات</h2>'
+                . pr_cards(['عدد المرتجعات' => count($rows), 'قيمة المرتجعات' => [pr_money($tT), 'gold'],
+                            'المسترَدّ' => pr_money($tS), 'غير المسترَدّ' => pr_money($tT - $tS)])
+                . pr_table(['التاريخ', 'رقم المرتجع', 'المورد', 'الفاتورة الأصل', 'المشروع', 'قبل الضريبة', 'الإجمالي', 'المسترَدّ', 'المتبقي'], $rows,
+                    ['', '', '', '', 'الإجمالي', '', [pr_money($tT), 'n'], [pr_money($tS), 'n'], [pr_money($tT - $tS), 'n']]);
+
+        } elseif ($ty === 'payments') {
+            $rowsQ = $Q("SELECT y.date, ROUND(y.amount,2) amount, p.no, p.supplier, COALESCE(t.name,'—') treasury,
+                            COALESCE(b.name,'—') project
+                         FROM dmirror_payments y JOIN dmirror_purchases p ON p.id = y.purchase_id
+                         LEFT JOIN dmirror_treasuries t ON t.id = y.treasury_id
+                         LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
+                         LEFT JOIN project_budgets b ON b.project_id = pp.project_id
+                         WHERE y.date IS NOT NULL" . $dw('y.date') . " ORDER BY y.date, y.id");
+            $rows = []; $tot = 0;
+            foreach ($rowsQ as $x) {
+                $tot += (float)$x['amount'];
+                $rows[] = [[$x['date'], 'c'], [$x['no'], 'c'], $x['supplier'], $x['project'], $x['treasury'],
+                    [pr_money($x['amount']), 'n']];
+            }
+            $title = 'تقرير الدفعات للموردين'; $label = 'تقرير دفعات';
+            $out = '<h2 class="title">الدفعات للموردين</h2>'
+                . pr_cards(['عدد الدفعات' => count($rows), 'إجمالي المدفوع' => [pr_money($tot), 'gold'],
+                            'الفترة' => $period, 'المصدر' => 'مرآة دفترة'])
+                . pr_table(['التاريخ', 'الفاتورة', 'المورد', 'المشروع', 'الخزينة', 'المبلغ'], $rows,
+                    ['', '', '', '', 'الإجمالي', [pr_money($tot), 'n']]);
+
+        } elseif ($ty === 'projects_summary') {
+            $rowsQ = $Q("SELECT b.project_id, b.name, b.budget, COALESCE(b.ptype,'dev') ptype, COALESCE(b.margin_pct,0) margin_pct,
+                            COALESCE(s.net,0) net, COALESCE(s.gross,0) gross, COALESCE(s.paid,0) paid, COALESCE(s.n,0) n,
+                            COALESCE(e.extra,0) extra, COALESCE(rt.ret_net,0) ret_net, COALESCE(rt.ret_gross,0) ret_gross
+                         FROM project_budgets b
+                         LEFT JOIN (SELECT pp.project_id pid, SUM(p.subtotal) net, SUM(p.total) gross, SUM(p.paid) paid, COUNT(*) n
+                                    FROM dmirror_purchases p JOIN purchase_project pp ON pp.purchase_id = p.id
+                                    GROUP BY pp.project_id) s ON s.pid = b.project_id
+                         LEFT JOIN (SELECT project_id pid, SUM(amount) extra FROM project_extra_costs GROUP BY project_id) e
+                                    ON e.pid = b.project_id
+                         LEFT JOIN (SELECT rp.project_id pid, SUM(r.subtotal) ret_net, SUM(r.total) ret_gross
+                                    FROM dmirror_refunds r JOIN refund_project rp ON rp.refund_id = r.id
+                                    GROUP BY rp.project_id) rt ON rt.pid = b.project_id
+                         ORDER BY b.project_id");
+            $rows = []; $tCost = 0; $tBud = 0;
+            foreach ($rowsQ as $x) {
+                $g = ($x['ptype'] === 'contracting');
+                $base = ($g ? (float)$x['gross'] : (float)$x['net']) - ($g ? (float)$x['ret_gross'] : (float)$x['ret_net']);
+                $cost = $base + (float)$x['extra'];
+                $sup2 = ($g && (float)$x['margin_pct'] > 0) ? $cost * (float)$x['margin_pct'] / 100 : 0;
+                $tot = $cost + $sup2;
+                $tCost += $tot; $tBud += (float)$x['budget'];
+                $rows[] = [$x['name'], [$g ? 'مقاولات' : 'تطوير', 'c'], [(int)$x['n'], 'c'],
+                    [pr_money($base), 'n'], [pr_money($x['extra']), 'n'], [pr_money($sup2), 'n'],
+                    [pr_money($tot), 'n'], [pr_money($x['budget']), 'n'],
+                    [pr_money((float)$x['budget'] - $tot), 'n']];
+            }
+            $title = 'ملخص المشاريع والتكاليف'; $label = 'ملخص مشاريع';
+            $out = '<h2 class="title">ملخص المشاريع</h2>'
+                . pr_cards(['عدد المشاريع' => count($rows), 'إجمالي التكلفة' => [pr_money($tCost), 'gold'],
+                            'إجمالي الميزانيات' => pr_money($tBud), 'الفرق' => pr_money($tBud - $tCost)])
+                . pr_table(['المشروع', 'النوع', 'فواتير', 'تكلفة الفواتير', 'تكاليف إضافية', 'إشراف', 'إجمالي التكلفة', 'الميزانية', 'المتبقي'], $rows,
+                    ['الإجمالي', '', '', '', '', '', [pr_money($tCost), 'n'], [pr_money($tBud), 'n'], [pr_money($tBud - $tCost), 'n']])
+                . '<div class="note">التطوير يُقاس بالصافي (الضريبة مستردّة) والمقاولات بالشامل، والمرتجعات مخصومة.</div>';
+
+        } else {
+            $out = '<h2 class="title">نوع تقرير غير معروف</h2><p class="note">' . htmlspecialchars($ty) . '</p>';
+        }
+
+        echo semak_print_open($title, $label, $meta) . $out . semak_print_close($sig);
         break;
     }
 
