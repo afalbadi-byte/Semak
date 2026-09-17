@@ -2881,6 +2881,31 @@ function dmirror_tick($conn, $force = false) {
     return $res + ['run_id' => $run];
 }
 
+
+// أسماء إيصالاتنا تحمل مبلغها وتاريخها («إيصال 1,853.40 — 2026-09-05»)، فتُقرأ منها الدفعات.
+// الفاتورة الواحدة قد تُسدَّد على دفعات، فكل إيصال دفعةٌ مستقلة بمبلغه وتاريخه لا دفعة واحدة مجمّعة.
+function pay_receipts_parse($conn, $pid) {
+    $out = [];
+    $r = $conn->query("SELECT id, file_name, COALESCE(drive_url,'') u, payment_id
+                       FROM purchase_documents WHERE purchase_id=" . (int)$pid . " AND doc_type='receipt' ORDER BY id");
+    if (!$r) return $out;
+    while ($x = $r->fetch_assoc()) {
+        $nm = (string)$x['file_name'];
+        $date = preg_match('/(\d{4}-\d{2}-\d{2})/', $nm, $dm) ? $dm[1] : null;
+        $tmp = $date ? str_replace($date, ' ', $nm) : $nm;
+        $tmp = preg_replace('/\d{4}-\d{2}/', ' ', $tmp);           // بقايا تواريخ مقطوعة
+        $amt = null;
+        if (preg_match_all('/\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+\.\d{1,2}|\d+/u', $tmp, $am))
+            foreach ($am[0] as $c) {
+                $v = (float)str_replace(',', '', $c);
+                if ($amt === null || $v > $amt) $amt = $v;            // أكبر رقم في الاسم هو المبلغ
+            }
+        $out[] = ['doc_id'=>(int)$x['id'], 'name'=>$nm, 'amount'=>$amt !== null ? round($amt, 2) : null,
+                  'date'=>$date, 'url'=>$x['u'], 'linked'=>(int)($x['payment_id'] ?? 0)];
+    }
+    return $out;
+}
+
 function mask_email($e) {
     if (!$e || strpos($e, '@') === false) return $e;
     list($u, $d) = explode('@', $e, 2);
@@ -9178,22 +9203,20 @@ switch ($action) {
         foreach ($rows as &$r) {
             $r['gap'] = round((float)$r['paid'] - (float)$r['mirror_pay'] - (float)$r['local_pay'], 2);
             $gap += $r['gap'];
-            $r['receipt_amount'] = null; $r['receipt_date'] = null; $r['confidence'] = 'candidate';
-            $docs = $Q("SELECT file_name FROM purchase_documents
-                        WHERE purchase_id=" . (int)$r['id'] . " AND doc_type='receipt' ORDER BY id DESC");
-            foreach ($docs as $doc) {
-                $nm = (string)$doc['file_name'];
-                if (preg_match('/(\d{4}-\d{2}-\d{2})/', $nm, $dm)) $r['receipt_date'] = $dm[1];
-                if (preg_match_all('/\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?/u', str_replace('٫', '.', $nm), $am)) {
-                    foreach ($am[0] as $cand) {
-                        $v = (float)str_replace(',', '', $cand);
-                        if ($v > 0 && abs($v - $r['gap']) < 0.5) { $r['receipt_amount'] = round($v, 2); break; }
-                    }
-                }
-                if ($r['receipt_amount'] !== null) break;
-            }
-            if ($r['receipt_amount'] !== null) { $r['confidence'] = 'verified'; $sure++; }
-            elseif ((int)$r['receipts'] === 0) $r['confidence'] = 'no_receipt';
+            // كل إيصالات الفاتورة: مجموعها يُقارَن بالفجوة (الفاتورة قد تُسدَّد على دفعات)
+            $rcs = pay_receipts_parse($conn, (int)$r['id']);
+            $sum = 0; $withAmt = 0;
+            foreach ($rcs as $rc) if ($rc['amount'] !== null) { $sum += $rc['amount']; $withAmt++; }
+            $r['receipts_n']     = count($rcs);
+            $r['receipts_total'] = round($sum, 2);
+            $r['receipts_list']  = $rcs;
+            $r['receipt_date']   = $rcs ? ($rcs[count($rcs) - 1]['date'] ?? null) : null;
+            if (!$rcs)                                   $r['confidence'] = 'no_receipt';
+            elseif ($withAmt && abs($sum - $r['gap']) < 0.5) $r['confidence'] = 'verified';
+            elseif ($withAmt && $sum < $r['gap'] - 0.5)  $r['confidence'] = 'partial';
+            elseif ($withAmt && $sum > $r['gap'] + 0.5)  $r['confidence'] = 'over';
+            else                                         $r['confidence'] = 'candidate';
+            if ($r['confidence'] === 'verified') $sure++;
         }
         unset($r);
         echo json_encode(['success'=>true, 'data'=>$rows, 'count'=>count($rows), 'gap_total'=>round($gap, 2),
@@ -9240,12 +9263,36 @@ switch ($action) {
                 if (preg_match('/(\d{4}-\d{2}-\d{2})/', (string)$rx['file_name'], $dm)) { $pdate = $dm[1]; break; }
         if ($pdate === '') $pdate = (string)($iv['date'] ?: date('Y-m-d'));
 
-        // الإيصال: المُمرَّر أو آخر إيصال سداد مرفوع على الفاتورة
+        // الإيصالات: إن جمعت الفجوة تماماً سُجّلت دفعةٌ لكل إيصال بمبلغه وتاريخه
+        $rcs = pay_receipts_parse($conn, $pid);
+        $rsum = 0; $allAmt = count($rcs) > 0;
+        foreach ($rcs as $rc) { if ($rc['amount'] === null) $allAmt = false; else $rsum += $rc['amount']; }
+        if ($allAmt && abs($rsum - $gap) < 0.5 && count($rcs) > 1 && empty($b['single'])) {
+            $made = [];
+            foreach ($rcs as $rc) {
+                $d = $rc['date'] ?: (string)($iv['date'] ?: date('Y-m-d'));
+                $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date,
+                        reference, receipt_url, note, created_by)
+                    VALUES ($pid, '" . $E($iv['supplier']) . "', " . $rc['amount'] . ", '" . $E($method) . "', '"
+                    . $E($d) . "', '', '" . $E($rc['url']) . "', '"
+                    . $E('دفعة من إيصال مرفوع — ' . mb_substr($rc['name'], 0, 80)) . "', '" . $E($u['name'] ?? '') . "')");
+                $newId = (int)$conn->insert_id;
+                if ($rc['doc_id'] && !$rc['linked'])
+                    $conn->query("UPDATE purchase_documents SET payment_id=$newId, payment_src='local' WHERE id=" . $rc['doc_id']);
+                $made[] = ['payment_id'=>$newId, 'amount'=>$rc['amount'], 'date'=>$d];
+            }
+            acc_audit($conn, 1, 'purchase', $pid, 'update',
+                'تسجيل ' . count($made) . ' دفعات من إيصالاتها على فاتورة ' . $iv['no']
+                . ' بمجموع ' . number_format($rsum, 2), $u['name'] ?? '');
+            echo json_encode(['success'=>true, 'payments'=>$made, 'count'=>count($made), 'amount'=>round($rsum, 2),
+                'invoice'=>$iv['no'], 'message'=>'سُجّلت ' . count($made) . ' دفعات بمجموع '
+                . number_format($rsum, 2) . ' على فاتورة ' . $iv['no']], JSON_UNESCAPED_UNICODE);
+            break;
+        }
+
         $rurl = (string)($b['receipt_url'] ?? '');
         $rdoc = 0;
-        if ($rurl === '' && ($r = $conn->query("SELECT id, COALESCE(drive_url,'') u FROM purchase_documents
-                WHERE purchase_id=$pid AND doc_type='receipt' AND COALESCE(drive_url,'') <> '' ORDER BY id DESC LIMIT 1")))
-            if ($x = $r->fetch_assoc()) { $rurl = (string)$x['u']; $rdoc = (int)$x['id']; }
+        if ($rurl === '' && $rcs) { $last = $rcs[count($rcs) - 1]; $rurl = $last['url']; $rdoc = $last['doc_id']; }
 
         $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date,
                 reference, receipt_url, note, created_by)

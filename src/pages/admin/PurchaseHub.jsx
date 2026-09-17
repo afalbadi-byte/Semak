@@ -387,11 +387,16 @@ function PayGaps() {
         { k: 'paid', t: 'المسدَّد بالترويسة', r: r => money(r.paid) },
         { k: 'rows', t: 'سطور الدفعات', r: r => money(Number(r.mirror_pay) + Number(r.local_pay)) },
         { k: 'gap', t: 'الفجوة', r: r => <span className="font-black text-amber-600">{money(r.gap)}</span> },
-        { k: 'receipts', t: 'الإيصال', r: r => r.confidence === 'verified'
-            ? <span className="text-emerald-600 font-bold" title={'مبلغ الإيصال ' + money(r.receipt_amount)}>مطابق ✓</span>
+        { k: 'rcs', t: 'الإيصالات', r: r => Number(r.receipts_n) ? (r.receipts_n + ' · ' + money(r.receipts_total)) : <span className="text-slate-300">—</span> },
+        { k: 'receipts', t: 'الحالة', r: r => r.confidence === 'verified'
+            ? <span className="text-emerald-600 font-bold" title={'مجموع الإيصالات ' + money(r.receipts_total)}>مطابق ✓</span>
             : r.confidence === 'no_receipt'
                 ? <span className="text-rose-600">بلا إيصال</span>
-                : <span className="text-amber-600">يحتاج مراجعة</span> },
+                : r.confidence === 'partial'
+                    ? <span className="text-amber-600">إيصالات ناقصة</span>
+                    : r.confidence === 'over'
+                        ? <span className="text-rose-600">إيصالات أكبر</span>
+                        : <span className="text-amber-600">يحتاج مراجعة</span> },
         { k: 'receipt_date', t: 'تاريخ الإيصال', r: r => r.receipt_date || <span className="text-slate-300">—</span> },
         { k: 'act', t: '', r: r => (
             <button onClick={e => { e.stopPropagation(); fill(r); }} disabled={busy === r.id}

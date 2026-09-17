@@ -412,11 +412,14 @@ function PayGapCard() {
                         <div className="flex items-center gap-2 text-[10px] text-slate-400">
                             <span>فاتورة {r.no}</span><span>{r.date || '—'}</span>
                             <span>{r.project || 'بلا مشروع'}</span>
+                            {Number(r.receipts_n) > 0 && <span>{r.receipts_n} إيصال</span>}
                             {r.confidence === 'verified'
-                                ? <span className="text-emerald-300">مطابق للإيصال ✓</span>
+                                ? <span className="text-emerald-300">مطابق ✓</span>
                                 : r.confidence === 'no_receipt'
                                     ? <span className="text-rose-300">بلا إيصال</span>
-                                    : <span className="text-amber-300">يحتاج مراجعة</span>}
+                                    : r.confidence === 'partial'
+                                        ? <span className="text-amber-300">إيصالات ناقصة</span>
+                                        : <span className="text-amber-300">يحتاج مراجعة</span>}
                             <button onClick={() => fill(r)} disabled={busy === r.id}
                                 className="mr-auto px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold disabled:opacity-40">
                                 {busy === r.id ? '…' : 'سجّل'}
