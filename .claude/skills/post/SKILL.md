@@ -63,7 +63,8 @@ description: يصنع منشور إنستقرام/واتساب لسماك على
    - Artifact بـ `action: "read"` على الرابط أدناه، ثم انشر `preview.html` بـ `url` نفسه:
      `https://claude.ai/code/artifact/f5b146c7-d9b6-4475-85cc-39aeffbd0df1` (صفحة «منشور سماك» — أحمد يحفظ منها بالضغط المطوّل على الجوال).
    - وأرسل الـPNG و`caption.txt` بـ SendUserFile.
-8. **لا تحذف** منشورات سابقة في `brochure/posts/`.
+8. **صفحة تعديل النص:** `node assistant/post/make-editor.cjs <out.html> <spec1.json> [...]` تبني صفحة فيها كل التصاميم بنصوص قابلة للكتابة مباشرةً وزر «حفظ الصورة» (2160×2160 عبر html2canvas). القالب يُؤخذ من الأداة نفسها (POST_EMIT_HTML=1) فلا يوجد قالب ثانٍ. حدّ الـArtifact ١٦ ميجا: ٨ تصاميم في الصفحة تقريباً.
+9. **لا تحذف** منشورات سابقة في `brochure/posts/`.
 
 ## ردّك لأحمد
 

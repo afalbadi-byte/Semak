@@ -148,6 +148,9 @@ for (const el of document.querySelectorAll('.l1,.l2,.sub')) {
 }
 </script></body></html>`;
 
+// POST_EMIT_HTML=1 يطبع HTML البطاقة بدل توليد الصورة — تستعمله أداة المحرّر (make-editor.cjs)
+if (process.env.POST_EMIT_HTML) { process.stdout.write(html); process.exit(0); }
+
 (async () => {
   if (!CHROME) throw new Error('لم أجد Chrome ولا Edge — عيّن CHROME_PATH');
   const b = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu'] });
