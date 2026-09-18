@@ -142,6 +142,26 @@ if ($__v < 2) {
     oh_col('oh_users', 'logo',    "ADD COLUMN logo VARCHAR(200) DEFAULT NULL");
     $conn->query("REPLACE INTO oh_meta (k, v) VALUES ('schema', '2')");
 }
+if ($__v < 3) {
+    $conn->query("CREATE TABLE IF NOT EXISTS oh_passkeys (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        cred_id VARCHAR(255) NOT NULL UNIQUE,
+        pubkey TEXT NOT NULL,
+        sign_count BIGINT NOT NULL DEFAULT 0,
+        name VARCHAR(120) DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_used DATETIME DEFAULT NULL,
+        INDEX (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("CREATE TABLE IF NOT EXISTS oh_challenges (
+        ch VARCHAR(64) PRIMARY KEY,
+        user_id INT DEFAULT NULL,
+        kind VARCHAR(8) NOT NULL,
+        exp INT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("REPLACE INTO oh_meta (k, v) VALUES ('schema', '3')");
+}
 
 function oh_log($uid, $action, $entity = null, $id = null, $data = null) {
     global $conn;
@@ -179,6 +199,85 @@ function seed_cats($uid, $lang = 'ar') {
     foreach ($cats as $i => $c)
         $conn->query("INSERT INTO oh_cats (user_id, name, icon, color, sort) VALUES ($uid, '" . E($c[0]) . "', '{$c[1]}', '{$c[2]}', $i)");
     $conn->query("INSERT INTO oh_funds (user_id, name, kind, color) VALUES ($uid, 'الصندوق الرئيسي', 'custody', '#0f766e')");
+}
+
+// ─── الدخول بالبصمة (WebAuthn / مفاتيح المرور) ─────────────────────────────
+// الجوّال يتحقّق من صاحبه ببصمته أو وجهه، ثم يوقّع تحدّياً بمفتاحٍ خاصّ لا
+// يغادر الجهاز. نحفظ المفتاح العام وحده، فلا بصمة ولا كلمة مرور تصل خادمنا.
+// النطاق semak.sa يجمع semak.sa/ohda وohda.semak.sa، فالمفتاح يصلح للاثنين.
+function pk_rp() { $h = strtolower($_SERVER['HTTP_HOST'] ?? ''); return preg_match('/(^|\.)semak\.sa$/', $h) ? 'semak.sa' : $h; }
+function pk_origin_ok($o) {
+    $h = parse_url((string)$o, PHP_URL_HOST); $sc = parse_url((string)$o, PHP_URL_SCHEME);
+    if ($sc !== 'https' || !$h) return false;
+    $rp = pk_rp();
+    return $h === $rp || substr($h, -strlen('.' . $rp)) === '.' . $rp;
+}
+function pk_challenge($kind, $uid) {
+    global $conn;
+    $conn->query("DELETE FROM oh_challenges WHERE exp < " . time());
+    $ch = b64u(random_bytes(32));
+    $conn->query("INSERT INTO oh_challenges (ch, user_id, kind, exp) VALUES ('$ch', " . ($uid ? (int)$uid : 'NULL') . ", '$kind', " . (time() + 300) . ")");
+    return $ch;
+}
+// التحدّي يُستهلك مرّةً واحدة: يُحذف لحظة التحقّق نجح أو فشل
+function pk_take($ch, $kind) {
+    global $conn;
+    $ch = E($ch);
+    $row = $conn->query("SELECT * FROM oh_challenges WHERE ch='$ch' AND kind='" . E($kind) . "' AND exp >= " . time())->fetch_assoc();
+    $conn->query("DELETE FROM oh_challenges WHERE ch='$ch'");
+    return $row;
+}
+function cbor_len($s, &$o, $ai) {
+    if ($ai < 24) return $ai;
+    if ($ai === 24) return ord($s[$o++]);
+    if ($ai === 25) { $v = unpack('n', substr($s, $o, 2))[1]; $o += 2; return $v; }
+    if ($ai === 26) { $v = unpack('N', substr($s, $o, 4))[1]; $o += 4; return $v; }
+    if ($ai === 27) { $v = unpack('J', substr($s, $o, 8))[1]; $o += 8; return $v; }
+    throw new Exception('cbor');
+}
+function cbor_dec($s, &$o) {
+    if ($o >= strlen($s)) throw new Exception('cbor');
+    $b = ord($s[$o++]); $mt = $b >> 5; $ai = $b & 31;
+    $n = cbor_len($s, $o, $ai);
+    switch ($mt) {
+        case 0: return $n;
+        case 1: return -1 - $n;
+        case 2: case 3: $v = substr($s, $o, $n); $o += $n; return $v;
+        case 4: $a = []; for ($i = 0; $i < $n; $i++) $a[] = cbor_dec($s, $o); return $a;
+        case 5: $m = []; for ($i = 0; $i < $n; $i++) { $k = cbor_dec($s, $o); $m[$k] = cbor_dec($s, $o); } return $m;
+        case 6: return cbor_dec($s, $o);
+        default: return $ai === 21 ? true : ($ai === 20 ? false : null);
+    }
+}
+function der_len($n) { if ($n < 128) return chr($n); $b = ''; while ($n > 0) { $b = chr($n & 255) . $b; $n >>= 8; } return chr(0x80 | strlen($b)) . $b; }
+function der($tag, $body) { return chr($tag) . der_len(strlen($body)) . $body; }
+function der_int($x) { $x = ltrim($x, "\0"); if ($x === '' || (ord($x[0]) & 0x80)) $x = "\0" . $x; return der(0x02, $x); }
+// مفتاح COSE (ES256 أو RS256) إلى PEM يفهمه openssl
+function cose_pem($k) {
+    if (!is_array($k)) return null;
+    if (($k[1] ?? 0) === 2 && ($k[-1] ?? 0) === 1 && isset($k[-2], $k[-3]) && strlen($k[-2]) === 32 && strlen($k[-3]) === 32)
+        $spki = hex2bin('3059301306072a8648ce3d020106082a8648ce3d030107034200') . "\x04" . $k[-2] . $k[-3];
+    elseif (($k[1] ?? 0) === 3 && isset($k[-1], $k[-2]))
+        $spki = der(0x30, der(0x30, hex2bin('06092a864886f70d0101010500')) . der(0x03, "\0" . der(0x30, der_int($k[-1]) . der_int($k[-2]))));
+    else return null;
+    return "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($spki), 64, "\n") . "-----END PUBLIC KEY-----\n";
+}
+// التحقّق من بيانات العميل: النوع والتحدّي والأصل
+function pk_client($cdj, $type, $kind) {
+    $c = json_decode($cdj, true);
+    if (!$c || ($c['type'] ?? '') !== $type) return [null, 'بيانات غير صالحة'];
+    if (!pk_origin_ok($c['origin'] ?? '')) return [null, 'مصدر الطلب غير موثوق'];
+    $row = pk_take((string)($c['challenge'] ?? ''), $kind);
+    if (!$row) return [null, 'انتهت مهلة التحقّق، أعد المحاولة'];
+    return [$row, null];
+}
+// بيانات المصادقِ: بصمة النطاق، ووجود المستخدم وتحقّقه (البصمة أو الوجه)
+function pk_authdata($ad) {
+    if (strlen($ad) < 37) return null;
+    if (!hash_equals(hash('sha256', pk_rp(), true), substr($ad, 0, 32))) return null;
+    $flags = ord($ad[32]);
+    if (!($flags & 0x01) || !($flags & 0x04)) return null;          // حضورٌ وتحقّقٌ إلزاميان
+    return ['flags' => $flags, 'count' => unpack('N', substr($ad, 33, 4))[1]];
 }
 
 // ─── ملفّ الحساب ────────────────────────────────────────────────────────────
@@ -535,6 +634,92 @@ case 'logo': {
     header('Cache-Control: private, max-age=3600');
     readfile($full);
     exit;
+}
+
+// ─── مفاتيح المرور ──────────────────────────────────────────────────────────
+case 'pk_reg_options': {
+    $u = need(); $uid = (int)$u['id'];
+    $ex = [];
+    $r = $conn->query("SELECT cred_id FROM oh_passkeys WHERE user_id=$uid");
+    while ($r && ($x = $r->fetch_assoc())) $ex[] = ['type' => 'public-key', 'id' => $x['cred_id']];
+    out(['success' => true, 'options' => [
+        'challenge' => pk_challenge('reg', $uid),
+        'rp' => ['id' => pk_rp(), 'name' => 'Ohda'],
+        'user' => ['id' => b64u('ohda:' . $uid), 'name' => $u['username'], 'displayName' => $u['name']],
+        'pubKeyCredParams' => [['type' => 'public-key', 'alg' => -7], ['type' => 'public-key', 'alg' => -257]],
+        'authenticatorSelection' => ['authenticatorAttachment' => 'platform', 'userVerification' => 'required', 'residentKey' => 'required', 'requireResidentKey' => true],
+        'attestation' => 'none', 'timeout' => 60000, 'excludeCredentials' => $ex,
+    ]]);
+}
+
+case 'pk_reg_verify': {
+    $u = need(); $uid = (int)$u['id']; $b = body();
+    [$row, $err] = pk_client(b64u_dec((string)($b['clientDataJSON'] ?? '')), 'webauthn.create', 'reg');
+    if ($err) fail($err);
+    if ((int)$row['user_id'] !== $uid) fail('بيانات غير صالحة');
+    try {
+        $o = 0; $att = cbor_dec(b64u_dec((string)($b['attestationObject'] ?? '')), $o);
+        $ad = $att['authData'] ?? '';
+        $info = pk_authdata($ad);
+        if (!$info || !($info['flags'] & 0x40)) fail('لم يُتحقَّق من البصمة');
+        $len = unpack('n', substr($ad, 53, 2))[1];
+        $cid = substr($ad, 55, $len);
+        $oo = 55 + $len; $cose = cbor_dec($ad, $oo);
+    } catch (\Throwable $e) { fail('تعذّرت قراءة بيانات الجهاز'); }
+    $pem = cose_pem($cose);
+    if (!$pem || !openssl_pkey_get_public($pem)) fail('نوع مفتاح غير مدعوم');
+    $cidB = b64u($cid);
+    $name = mb_substr(trim((string)($b['name'] ?? '')), 0, 120) ?: 'جهاز';
+    $conn->query("INSERT INTO oh_passkeys (user_id, cred_id, pubkey, sign_count, name) VALUES ($uid, '" . E($cidB) . "', '" . E($pem) . "', "
+        . (int)$info['count'] . ", '" . E($name) . "') ON DUPLICATE KEY UPDATE pubkey=VALUES(pubkey), name=VALUES(name)");
+    oh_log($uid, 'passkey_add', 'passkey', (int)$conn->insert_id, $name);
+    out(['success' => true]);
+}
+
+// خيارات الدخول بلا اسم مستخدم: الجهاز يعرض مفاتيحه المحفوظة لهذا النطاق
+case 'pk_auth_options': {
+    out(['success' => true, 'options' => [
+        'challenge' => pk_challenge('auth', 0), 'rpId' => pk_rp(),
+        'userVerification' => 'required', 'timeout' => 60000, 'allowCredentials' => [],
+    ]]);
+}
+
+case 'pk_auth_verify': {
+    $b = body();
+    [$row, $err] = pk_client(b64u_dec((string)($b['clientDataJSON'] ?? '')), 'webauthn.get', 'auth');
+    if ($err) fail($err);
+    $cid = E((string)($b['id'] ?? ''));
+    $k = $conn->query("SELECT k.*, u.active FROM oh_passkeys k JOIN oh_users u ON u.id=k.user_id WHERE k.cred_id='$cid' LIMIT 1")->fetch_assoc();
+    if (!$k) { oh_log(null, 'passkey_fail', null, null, 'unknown'); fail('هذه البصمة غير مسجّلة — ادخل بكلمة المرور ثم فعّلها من الإعدادات'); }
+    if ((int)$k['active'] !== 1) fail('الحساب موقوف');
+    $ad = b64u_dec((string)($b['authenticatorData'] ?? ''));
+    $info = pk_authdata($ad);
+    if (!$info) fail('لم يُتحقَّق من البصمة');
+    $cdj = b64u_dec((string)($b['clientDataJSON'] ?? ''));
+    $ok = openssl_verify($ad . hash('sha256', $cdj, true), b64u_dec((string)($b['signature'] ?? '')), $k['pubkey'], OPENSSL_ALGO_SHA256);
+    if ($ok !== 1) { oh_log((int)$k['user_id'], 'passkey_fail', 'passkey', (int)$k['id']); fail('تعذّر التحقّق من البصمة'); }
+    // عدّاد التوقيع يكشف نسخ المفتاح؛ الأجهزة التي تُبقيه صفراً تُعفى
+    if ($info['count'] > 0 && $info['count'] <= (int)$k['sign_count']) { oh_log((int)$k['user_id'], 'passkey_clone', 'passkey', (int)$k['id']); fail('تعذّر التحقّق من البصمة'); }
+    $conn->query("UPDATE oh_passkeys SET sign_count=" . (int)$info['count'] . ", last_used=NOW() WHERE id=" . (int)$k['id']);
+    $conn->query("UPDATE oh_users SET last_login=NOW() WHERE id=" . (int)$k['user_id']);
+    oh_log((int)$k['user_id'], 'passkey_login', 'passkey', (int)$k['id']);
+    out(['success' => true, 'token' => make_token($k['user_id'])]);
+}
+
+case 'pk_list': {
+    $u = need(); $uid = (int)$u['id'];
+    $rows = [];
+    $r = $conn->query("SELECT id, name, created_at, last_used FROM oh_passkeys WHERE user_id=$uid ORDER BY id");
+    while ($r && ($x = $r->fetch_assoc())) $rows[] = $x;
+    out(['success' => true, 'data' => $rows]);
+}
+
+case 'pk_delete': {
+    $u = need(); $uid = (int)$u['id'];
+    $id = (int)(body()['id'] ?? 0);
+    $conn->query("DELETE FROM oh_passkeys WHERE id=$id AND user_id=$uid");
+    oh_log($uid, 'passkey_remove', 'passkey', $id);
+    out(['success' => true]);
 }
 
 // ─── المستخدمون (المدير) ────────────────────────────────────────────────────

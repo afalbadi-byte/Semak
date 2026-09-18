@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
     KeyRound, Users, HardDrive, Trash2, PieChart, LogOut, ChevronLeft, UserPlus, CheckCircle2, AlertTriangle,
-    Link2, Download, FileDown, Building2, Languages, MessageCircle,
+    Link2, Download, FileDown, Building2, Languages, MessageCircle, Fingerprint, ScanFace, ShieldCheck, Smartphone, Clock,
 } from 'lucide-react';
+import { pkSupported, pkRegister, pkHere, pkCancelled, forgetHere } from '../lib/passkey';
+import { IDLE_OPTIONS, idleMinutes, setIdleMinutes } from '../lib/idle';
 import { call } from '../lib/api';
 import { t } from '../lib/i18n';
 import { fullDate } from '../lib/fmt';
@@ -58,6 +60,8 @@ export default function Settings({ q }) {
                     <Seg value={lang} onChange={l => changeLang(l, true)} options={[{ v: 'ar', t: 'العربية' }, { v: 'en', t: 'English' }]} />
                 </Card>
 
+                <SecurityCard />
+
                 <Card className="divide-y divide-paper-2 overflow-hidden">
                     <Row icon={Building2} label={t('إعداد الحساب')} sub={t('الشعار واسم المنشأة والرقم الضريبي وبيانات المستفيد')} hrefTo="#/profile" />
                     <Row icon={PieChart} label={t('الميزانية والتصنيفات')} sub={t('سقفٌ شهري لكل تصنيف')} hrefTo="#/budgets" />
@@ -78,6 +82,71 @@ export default function Settings({ q }) {
 
             <PwSheet open={pw} onClose={() => setPw(false)} />
         </div>
+    );
+}
+
+// ─── الأمان: الدخول بالبصمة والخروج التلقائي ────────────────────────────────
+function SecurityCard() {
+    const toast = useToast();
+    const [keys, setKeys] = useState(null);
+    const [can, setCan] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [idle, setIdle] = useState(idleMinutes());
+    const ios = /iPhone|iPad|Mac/.test(navigator.userAgent || '');
+    const BioIcon = ios ? ScanFace : Fingerprint;
+    const load = () => call('pk_list').then(r => setKeys(r.success ? r.data : []));
+    useEffect(() => { load(); pkSupported().then(setCan); }, []);
+
+    const add = async () => {
+        setBusy(true);
+        try { await pkRegister(); toast(t(ios ? 'فُعّل الدخول بـ Face ID' : 'فُعّل الدخول بالبصمة')); load(); }
+        catch (e) { if (!pkCancelled(e)) toast(t(e.message || 'تعذّر التفعيل'), 'err'); }
+        setBusy(false);
+    };
+    const remove = async k => {
+        if (!window.confirm(t('إزالة «{n}» من أجهزة الدخول بالبصمة؟', { n: k.name }))) return;
+        const r = await call('pk_delete', { body: { id: k.id } });
+        if (r.success) { if (keys.length === 1) forgetHere(); toast(t('أُزيل الجهاز')); load(); }
+    };
+    const label = m => (m === 0 ? t('أبداً') : m === 60 ? t('ساعة') : t('{n} د', { n: m }));
+
+    return (
+        <Card className="p-4 space-y-4">
+            <div className="flex items-center gap-2 font-bold text-[14px]"><ShieldCheck size={17} className="text-brand" />{t('الأمان')}</div>
+
+            <div>
+                <div className="flex items-center gap-2 mb-2">
+                    <BioIcon size={16} className="text-ink-2" />
+                    <span className="text-[13px] font-semibold flex-1">{t(ios ? 'الدخول بـ Face ID' : 'الدخول بالبصمة')}</span>
+                    {can && !pkHere() ? <Btn kind="soft" className="!h-8 !px-3 text-[12px]" busy={busy} onClick={add}>{t('فعّله على هذا الجهاز')}</Btn> : null}
+                </div>
+                {!can ? <p className="text-[12px] text-ink-3">{t('هذا الجهاز أو المتصفّح لا يدعم الدخول بالبصمة.')}</p> : null}
+                {keys && keys.length ? (
+                    <div className="rounded-xl border border-paper-2 divide-y divide-paper-2">
+                        {keys.map(k => (
+                            <div key={k.id} className="flex items-center gap-2.5 px-3 py-2">
+                                <Smartphone size={15} className="text-ink-3 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-[13px] font-semibold truncate">{k.name}</div>
+                                    <div className="text-[11px] text-ink-3">{k.last_used ? t('آخر استعمال') + ' ' + fullDate(k.last_used.slice(0, 10)) : t('أُضيف') + ' ' + fullDate(k.created_at.slice(0, 10))}</div>
+                                </div>
+                                <button onClick={() => remove(k)} className="text-[12px] text-red-700 font-semibold px-2">{t('إزالة')}</button>
+                            </div>
+                        ))}
+                    </div>
+                ) : keys && can ? <p className="text-[12px] text-ink-3">{t('لا أجهزة مسجّلة بعد.')}</p> : null}
+            </div>
+
+            <div>
+                <div className="flex items-center gap-2 mb-2">
+                    <Clock size={16} className="text-ink-2" />
+                    <span className="text-[13px] font-semibold">{t('الخروج التلقائي بعد عدم النشاط')}</span>
+                </div>
+                <Seg value={idle} onChange={m => { setIdle(m); setIdleMinutes(m); toast(t('حُفظ')); }}
+                    options={IDLE_OPTIONS.map(m => ({ v: m, t: label(m) }))} />
+                <p className="text-[11px] text-ink-3 mt-1.5">{t('يُطبَّق على هذا الجهاز، ويحتسب حتى لو أُغلق التطبيق.')}</p>
+            </div>
+        </Card>
     );
 }
 

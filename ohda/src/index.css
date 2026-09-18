@@ -19,3 +19,49 @@ input[type="date"] { min-height: 2.75rem; }
   .print-break { break-before: page; }
   a[href^="http"] { color: #1d4ed8 !important; text-decoration: underline; }
 }
+
+/* ── دخلة صفحة الدخول ─────────────────────────────────────────────────────
+   الخلفية تتنفّس، والإيصال يصعد وتُكتب سطوره، ثم تسقط العملة وترتدّ،
+   ثم يظهر الاسم وتصعد بطاقة الدخول. في غير أوّل فتحٍ تُختصر الدخلة. */
+.oh-hero {
+  background:
+    radial-gradient(120% 80% at 80% 0%, rgba(226,163,59,.20), transparent 60%),
+    radial-gradient(90% 70% at 0% 100%, rgba(255,255,255,.08), transparent 60%),
+    linear-gradient(160deg, #13806f 0%, #0b5a51 55%, #083f39 100%);
+}
+@media (max-width: 1023px) { .oh-hero { border-radius: 0 0 36px 36px; } }
+.oh-orb { position: absolute; border-radius: 9999px; filter: blur(40px); opacity: .35; pointer-events: none; }
+.oh-orb1 { width: 220px; height: 220px; background: #e2a33b; top: -60px; inset-inline-end: -40px; animation: oh-float 9s ease-in-out infinite; }
+.oh-orb2 { width: 260px; height: 260px; background: #1aa392; bottom: -90px; inset-inline-start: -70px; animation: oh-float 11s ease-in-out infinite reverse; }
+.oh-orb3 { width: 120px; height: 120px; background: #fffdf9; top: 40%; inset-inline-start: 12%; opacity: .12; animation: oh-float 13s ease-in-out infinite; }
+@keyframes oh-float { 0%,100% { transform: translate(0,0) } 50% { transform: translate(18px,-22px) } }
+
+.oh-mark .oh-tile, .oh-mark .oh-rcpt, .oh-mark .oh-coin,
+.oh-mark .oh-l1, .oh-mark .oh-l2, .oh-mark .oh-l3, .oh-mark .oh-l4 { transform-box: fill-box; animation-fill-mode: both; }
+.oh-mark .oh-tile { transform-origin: center; animation: oh-pop .55s cubic-bezier(.2,.9,.3,1.2) both; }
+.oh-mark .oh-rcpt { animation: oh-rise .6s cubic-bezier(.2,.8,.2,1) .3s both; }
+.oh-mark .oh-l1, .oh-mark .oh-l2, .oh-mark .oh-l3, .oh-mark .oh-l4 { transform-origin: left center; animation: oh-write .38s ease-out both; }
+.oh-mark .oh-l1 { animation-delay: .75s } .oh-mark .oh-l2 { animation-delay: .88s } .oh-mark .oh-l3 { animation-delay: 1.01s } .oh-mark .oh-l4 { animation-delay: 1.16s }
+.oh-mark .oh-coin { transform-origin: center; animation: oh-drop .8s cubic-bezier(.3,1.4,.5,1) 1.25s both; }
+.oh-title { animation: oh-fadeup .6s ease-out 1.65s both; }
+.oh-sub   { animation: oh-fadeup .6s ease-out 1.8s both; }
+.oh-card  { animation: oh-card .7s cubic-bezier(.2,.8,.2,1) 1.9s both; }
+@keyframes oh-pop    { from { transform: scale(.55); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+@keyframes oh-rise   { from { transform: translateY(70px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes oh-write  { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+@keyframes oh-drop   { 0% { transform: translateY(-300px) scale(.5); opacity: 0 } 60% { opacity: 1 } 100% { transform: none; opacity: 1 } }
+@keyframes oh-fadeup { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes oh-card   { from { transform: translateY(46px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+/* الدخلة المختصرة: كل شيءٍ في ثلث ثانية */
+.oh-quick .oh-mark *, .oh-quick .oh-mark, .oh-quick .oh-title, .oh-quick .oh-sub, .oh-quick .oh-card {
+  animation-delay: 0s !important; animation-duration: .35s !important;
+}
+
+/* زرّ البصمة ينبض برفق ليُعرف أنه الطريق الأقصر */
+.oh-pulse { animation: oh-glow 2.4s ease-in-out 2.6s infinite; }
+@keyframes oh-glow { 0%,100% { box-shadow: 0 10px 24px -8px rgba(15,107,97,.45) } 50% { box-shadow: 0 10px 34px -4px rgba(15,107,97,.75) } }
+
+@media (prefers-reduced-motion: reduce) {
+  .oh-login *, .oh-login { animation: none !important; }
+}

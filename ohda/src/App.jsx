@@ -1,9 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { LayoutGrid, ReceiptText, Plus, Wallet, Settings as Cog, PieChart, ChevronRight, LogOut, Languages } from 'lucide-react';
+import { LayoutGrid, ReceiptText, Plus, Wallet, Settings as Cog, PieChart, ChevronRight, LogOut, Languages, Fingerprint, ScanFace } from 'lucide-react';
 import { call, token } from './lib/api';
 import { useRoute, href, back } from './lib/router';
 import { t, setLang, getLang } from './lib/i18n';
-import { Spinner, ToastHost } from './ui';
+import { Spinner, ToastHost, Sheet, Btn, useToast } from './ui';
+import { watchIdle, expired, touch } from './lib/idle';
+import { pkSupported, pkHere, pkRegister, pkCancelled } from './lib/passkey';
 import Login from './screens/Login';
 import Dashboard from './screens/Dashboard';
 import Txns from './screens/Txns';
@@ -37,6 +39,8 @@ export default function App() {
     const [cats, setCats] = useState([]);
     const [funds, setFunds] = useState([]);
     const [lang, setL] = useState(getLang());
+    const [reason, setReason] = useState('');      // سبب الخروج: idle
+    const [askBio, setAskBio] = useState(false);
 
     // تبديل اللغة يعيد رسم التطبيق كلّه باتجاهه الجديد
     const changeLang = useCallback(async (l, persist) => {
@@ -61,7 +65,9 @@ export default function App() {
             setState(s.needs_setup ? 'setup' : 'anon');
             return;
         }
+        if (expired()) { token.clear(); setReason('idle'); setState('anon'); return; }
         if (!(await reloadMe())) { setState('anon'); return; }
+        touch(true);
         await Promise.all([reloadCats(), reloadFunds()]);
         setState('ok');
     }, [reloadCats, reloadFunds, reloadMe]);
@@ -73,14 +79,29 @@ export default function App() {
         return () => window.removeEventListener('ohda:logout', f);
     }, []);
 
-    const logout = () => { token.clear(); setMe(null); setState('anon'); window.location.hash = '/'; };
+    const logout = () => { token.clear(); setMe(null); setReason(''); setState('anon'); window.location.hash = '/'; };
+
+    // الخروج التلقائي بعد المدّة المختارة بلا نشاط
+    useEffect(() => {
+        if (state !== 'ok') return undefined;
+        return watchIdle(() => { token.clear(); setMe(null); setReason('idle'); setState('anon'); });
+    }, [state]);
+
+    // بعد الدخول بكلمة المرور على جهازٍ يدعم البصمة: عرضٌ واحد لتفعيلها
+    const afterLogin = async info => {
+        // دخولٌ جديد يبدأ عدّاد النشاط من الآن، وإلا عدّه الإقلاعُ منتهياً فأخرجه فوراً
+        touch(true); setReason(''); setState('loading'); await boot();
+        let dismissed = false;
+        try { dismissed = localStorage.getItem('ohda_pk_ask') === 'no'; } catch (e) { /* تجاهل */ }
+        if (info && info.via === 'password' && !pkHere() && !dismissed && await pkSupported()) setAskBio(true);
+    };
 
     if (state === 'loading') return <div className="min-h-screen bg-paper"><Spinner className="pt-40" /></div>;
     if (state === 'anon' || state === 'setup')
         return (
             <ToastHost>
-                <Login key={lang} setup={state === 'setup'} lang={lang} onLang={l => changeLang(l, false)}
-                    onDone={() => { setState('loading'); boot(); }} />
+                <Login key={lang} setup={state === 'setup'} lang={lang} onLang={l => changeLang(l, false)} reason={reason}
+                    onDone={afterLogin} />
             </ToastHost>
         );
 
@@ -88,8 +109,34 @@ export default function App() {
         <ToastHost>
             <DataCtx.Provider value={{ me, profile, logo, flags, cats, funds, lang, changeLang, reloadCats, reloadFunds, reloadMe, logout, reboot: boot }}>
                 <Shell key={lang} />
+                <BioOffer open={askBio} onClose={() => setAskBio(false)} />
             </DataCtx.Provider>
         </ToastHost>
+    );
+}
+
+// ─── عرض تفعيل البصمة بعد الدخول ────────────────────────────────────────────
+function BioOffer({ open, onClose }) {
+    const toast = useToast();
+    const [busy, setBusy] = useState(false);
+    const ios = /iPhone|iPad|Mac/.test(navigator.userAgent || '');
+    const I = ios ? ScanFace : Fingerprint;
+    const enable = async () => {
+        setBusy(true);
+        try { await pkRegister(); toast(t(ios ? 'فُعّل الدخول بـ Face ID' : 'فُعّل الدخول بالبصمة')); onClose(); }
+        catch (e) { if (!pkCancelled(e)) toast(t(e.message || 'تعذّر التفعيل'), 'err'); }
+        setBusy(false);
+    };
+    const later = () => { try { localStorage.setItem('ohda_pk_ask', 'no'); } catch (e) { /* تجاهل */ } onClose(); };
+    return (
+        <Sheet open={open} onClose={later} title={t(ios ? 'الدخول بـ Face ID' : 'الدخول بالبصمة')}>
+            <div className="text-center space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-brand-50 text-brand mx-auto flex items-center justify-center"><I size={32} /></div>
+                <p className="text-[14px] text-ink-2 leading-7">{t('ادخل في المرّة القادمة بلمسةٍ واحدة بدل كلمة المرور. البصمة لا تغادر جهازك.')}</p>
+                <Btn className="w-full !h-12" busy={busy} onClick={enable}>{t('فعّلها على هذا الجهاز')}</Btn>
+                <button onClick={later} className="text-[13px] text-ink-3 font-semibold">{t('ليس الآن')}</button>
+            </div>
+        </Sheet>
     );
 }
 
