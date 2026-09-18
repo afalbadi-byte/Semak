@@ -1,589 +1,857 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-    MousePointer2, Hand, Pen, Eraser, StickyNote, Square, Circle, Diamond,
-    ArrowUpRight, Minus, Type, Undo2, Redo2, Download, Trash2, ZoomIn, ZoomOut,
-    Crosshair, Users, Loader2,
+    MousePointer2, Hand, Pen, Highlighter, Eraser, StickyNote, Square, Circle, Diamond,
+    Triangle, Star, ArrowUpRight, Minus, Spline, Type, Frame, MessageCircle, Image as ImageIcon,
+    Undo2, Redo2, Download, Trash2, ZoomIn, ZoomOut, Maximize, Users, Loader2, LayoutTemplate,
+    Search, Lock, Unlock, Copy, ChevronUp, ChevronDown, AlignHorizontalJustifyStart,
+    AlignVerticalJustifyStart, Grid3x3, Magnet, Map as MapIcon,
 } from 'lucide-react';
-import { API_URL, getAdminToken } from '../../lib/api/client';
+import useBoard, { uid } from './board/useBoard';
+import {
+    rawBounds, aabb, groupBounds, hitTest, insideRect, moveItem, resizeItem, scaleItem,
+    rotateItem, handlePoints, nearestAnchor, snapMove, alignDelta, isSeg, isBoxy,
+} from './board/geometry';
+import { Shape, TextBox } from './board/render';
+import { TEMPLATES } from './board/templates';
+import exportImage, { download } from './board/exportImage';
 
 // ════════════════════════════════════════════════════════════════════════════
-//  سبورة الاجتماع — لوح لا نهائي يعمل عليه الحاضرون معاً
+//  سبورة الاجتماع — لوح لا نهائي بإمكانات لوحات العمل المعروفة
 //  ─────────────────────────────────────────────────────────────────────────
-//  العناصر تُحفظ في الخادم عنصراً عنصراً، والمزامنة تجلب ما تغيّر بعد رقم
-//  النسخة فقط. فمن يحرّك ملاحظة لا يمسح ما رسمه غيره، ولا نُرسل اللوح كاملاً
-//  في كل حركة. التراجع محلّي: لكل عملية نقيضها محفوظ في مكدّس عند صاحبها.
+//  تحديد متعدّد وتحجيم ودوران، موصّلات تتبع الأشكال، إطارات وصور وتعليقات،
+//  قوالب جاهزة، التقاط وأدلّة محاذاة، خريطة مصغّرة، ومؤشّرات الحاضرين.
+//  الرسم في SVG والنصّ في HTML فوقه، والتفاعل كلّه على طبقة واحدة تلتقط
+//  المؤشّر وتحسب الإصابة هندسياً — فلا تتنازع العناصر على الأحداث.
 // ════════════════════════════════════════════════════════════════════════════
 
-const COLORS = ['#f6c343', '#ffffff', '#60a5fa', '#34d399', '#f87171', '#c084fc', '#fb923c', '#94a3b8'];
-const NOTE_BG = { '#f6c343': '#f6c343', '#60a5fa': '#93c5fd', '#34d399': '#6ee7b7', '#f87171': '#fca5a5', '#c084fc': '#d8b4fe', '#fb923c': '#fdba74', '#ffffff': '#f1f5f9', '#94a3b8': '#cbd5e1' };
+const COLORS = ['#f6c343', '#ffffff', '#60a5fa', '#34d399', '#f87171', '#c084fc', '#fb923c', '#22d3ee', '#a3e635', '#94a3b8'];
+const SVG_HALF = 50000;
+const SHAPE_KINDS = ['rect', 'roundrect', 'ellipse', 'diamond', 'triangle', 'star'];
 
 const TOOLS = [
-    { k: 'sel',     t: 'تحديد',   icon: MousePointer2 },
-    { k: 'pan',     t: 'تحريك',   icon: Hand },
-    { k: 'pen',     t: 'قلم',     icon: Pen },
-    { k: 'note',    t: 'ملاحظة',  icon: StickyNote },
-    { k: 'text',    t: 'نص',      icon: Type },
-    { k: 'rect',    t: 'مستطيل',  icon: Square },
-    { k: 'ellipse', t: 'دائرة',   icon: Circle },
-    { k: 'diamond', t: 'معيّن',   icon: Diamond },
-    { k: 'arrow',   t: 'سهم',     icon: ArrowUpRight },
-    { k: 'line',    t: 'خط',      icon: Minus },
-    { k: 'erase',   t: 'ممحاة',   icon: Eraser },
+    { k: 'sel',    t: 'تحديد (V)',   icon: MousePointer2 },
+    { k: 'pan',    t: 'تحريك (H)',   icon: Hand },
+    { k: 'pen',    t: 'قلم (P)',     icon: Pen },
+    { k: 'marker', t: 'مضيء (M)',    icon: Highlighter },
+    { k: 'note',   t: 'ملاحظة (N)',  icon: StickyNote },
+    { k: 'text',   t: 'نص (T)',      icon: Type },
+    { k: 'shape',  t: 'شكل (R)',     icon: Square },
+    { k: 'connector', t: 'موصّل (C)', icon: Spline },
+    { k: 'arrow',  t: 'سهم (A)',     icon: ArrowUpRight },
+    { k: 'line',   t: 'خط (L)',      icon: Minus },
+    { k: 'frame',  t: 'إطار (F)',    icon: Frame },
+    { k: 'comment',t: 'تعليق',       icon: MessageCircle },
+    { k: 'erase',  t: 'ممحاة (E)',   icon: Eraser },
 ];
-
-const uid = () => 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-const SVG_HALF = 50000;
-
-// ─── الحدود الخارجية لعنصر، بإحداثيات اللوح ────────────────────────────────
-function bounds(it) {
-    const d = it.data || {};
-    if (it.kind === 'pen') {
-        const p = d.pts || [];
-        if (!p.length) return null;
-        let x1 = p[0][0], y1 = p[0][1], x2 = x1, y2 = y1;
-        for (const [x, y] of p) { if (x < x1) x1 = x; if (y < y1) y1 = y; if (x > x2) x2 = x; if (y > y2) y2 = y; }
-        return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-    }
-    if (it.kind === 'arrow' || it.kind === 'line')
-        return { x: Math.min(d.x1, d.x2), y: Math.min(d.y1, d.y2), w: Math.abs(d.x2 - d.x1), h: Math.abs(d.y2 - d.y1) };
-    if (it.kind === 'text') return { x: d.x, y: d.y, w: d.w || 220, h: d.h || 40 };
-    return { x: d.x, y: d.y, w: d.w || 0, h: d.h || 0 };
-}
-
-function hit(it, x, y, pad) {
-    const b = bounds(it);
-    if (!b) return false;
-    const p = pad || 8;
-    return x >= b.x - p && x <= b.x + b.w + p && y >= b.y - p && y <= b.y + b.h + p;
-}
-
-// تحريك عنصر بمقدار — كل نوع يُزاح بطريقته
-function moved(it, dx, dy) {
-    const d = { ...(it.data || {}) };
-    if (it.kind === 'pen') d.pts = (d.pts || []).map(([x, y]) => [x + dx, y + dy]);
-    else if (it.kind === 'arrow' || it.kind === 'line') { d.x1 += dx; d.y1 += dy; d.x2 += dx; d.y2 += dy; }
-    else { d.x += dx; d.y += dy; }
-    return { ...it, data: d };
-}
+const SHAPE_ICONS = { rect: Square, roundrect: Square, ellipse: Circle, diamond: Diamond, triangle: Triangle, star: Star };
 
 export default function MeetBoard({ boardId, userName, dense }) {
-    const [items, setItems]   = useState({});      // id → عنصر
-    const [rev, setRev]       = useState(0);
-    const [tool, setTool]     = useState('sel');
-    const [color, setColor]   = useState('#f6c343');
-    const [sel, setSel]       = useState(null);
-    const [edit, setEdit]     = useState(null);    // معرّف العنصر الذي يُكتب فيه
-    const [view, setView]     = useState({ x: 0, y: 0, k: 1 });
-    const [draft, setDraft]   = useState(null);    // ما يُرسم الآن قبل حفظه
-    const [sync, setSync]     = useState('idle');  // idle | busy | err
-    const [peers, setPeers]   = useState([]);
-    const [pal, setPal]       = useState(false);
+    const B = useBoard(boardId, {});
+    const { items } = B;
 
-    const wrap    = useRef(null);
-    const pending = useRef(new Map());             // ما ينتظر الإرسال
-    const gesture = useRef(null);
-    const undoS   = useRef([]);
-    const redoS   = useRef([]);
-    const itemsR  = useRef({});
-    const revR    = useRef(0);
-    itemsR.current = items; revR.current = rev;
+    const [tool, setTool]   = useState('sel');
+    const [shape, setShape] = useState('rect');
+    const [style, setStyle] = useState({ color: '#f6c343', fill: 'none', sw: 3, dash: '', size: 22 });
+    const [sel, setSel]     = useState([]);
+    const [edit, setEdit]   = useState(null);
+    const [view, setView]   = useState({ x: 0, y: 0, k: 1 });
+    const [draft, setDraft] = useState(null);
+    const [marquee, setMarquee] = useState(null);
+    const [guides, setGuides]   = useState([]);
+    const [snapOn, setSnapOn]   = useState(true);
+    const [gridOn, setGridOn]   = useState(false);
+    const [menu, setMenu]       = useState(null);
+    const [panel, setPanel]     = useState(null);   // colors | templates | search | export
+    const [query, setQuery]     = useState('');
+    const [showMap, setShowMap] = useState(!dense);
+    const [note, setNote]       = useState('');     // رسالة عابرة أعلى اللوح
 
-    const tk = () => getAdminToken();
-    const hdr = () => ({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk() });
+    const wrap = useRef(null);
+    const file = useRef(null);
+    const g    = useRef(null);            // الحركة الجارية
+    const ptrs = useRef(new Map());
+    const clip = useRef([]);
+    const tap  = useRef({ t: 0, x: 0, y: 0 });   // النقرة السابقة — للنقر المزدوج واللمس المزدوج
+    const viewR = useRef(view); viewR.current = view;
+    const itemsR = useRef(items); itemsR.current = items;
+    const selR = useRef(sel); selR.current = sel;
+    const toolR = useRef(tool); toolR.current = tool;
 
-    // ─── المزامنة ───────────────────────────────────────────────────────────
-    const absorb = useCallback(list => {
-        if (!list || !list.length) return;
-        setItems(prev => {
-            const nx = { ...prev };
-            for (const it of list) {
-                if (it.deleted) delete nx[it.id];
-                else nx[it.id] = { id: it.id, kind: it.kind, z: it.z, data: it.data || {}, by: it.updated_by };
-            }
-            return nx;
-        });
-        const names = list.map(i => i.updated_by).filter(n => n && n !== userName);
-        if (names.length) setPeers(p => Array.from(new Set(p.concat(names))).slice(-4));
-    }, [userName]);
+    const list = useMemo(() => Object.values(items).sort((a, b) => (a.z || 0) - (b.z || 0)), [items]);
+    const selItems = useMemo(() => sel.map(id => items[id]).filter(Boolean), [sel, items]);
+    const selBox = useMemo(() => (selItems.length ? groupBounds(selItems) : null), [selItems]);
+    const single = selItems.length === 1 ? selItems[0] : null;
+    const flash = m => { setNote(m); setTimeout(() => setNote(''), 2600); };
 
-    const pull = useCallback(async () => {
-        if (!boardId) return;
-        try {
-            const r = await fetch(`${API_URL}?action=board_get&board=${encodeURIComponent(boardId)}&since=${revR.current}`,
-                { headers: { Authorization: 'Bearer ' + tk() } }).then(x => x.json());
-            if (r && r.success) {
-                absorb(r.items);
-                if (r.rev > revR.current) { revR.current = r.rev; setRev(r.rev); }
-                setSync('idle');
-            }
-        } catch (e) { setSync('err'); }
-    }, [boardId, absorb]);
+    // ─── إحداثيات ───────────────────────────────────────────────────────────
+    const toWorld = useCallback((cx, cy) => {
+        const r = wrap.current.getBoundingClientRect();
+        const v = viewR.current;
+        return { x: (cx - r.left - v.x) / v.k, y: (cy - r.top - v.y) / v.k };
+    }, []);
 
-    const flush = useCallback(async () => {
-        if (!boardId || !pending.current.size) return;
-        const batch = Array.from(pending.current.values());
-        pending.current.clear();
-        setSync('busy');
-        try {
-            const r = await fetch(`${API_URL}?action=board_save`, {
-                method: 'POST', headers: hdr(), body: JSON.stringify({ board: boardId, items: batch }),
-            }).then(x => x.json());
-            // رقم النسخة يتقدّم بكتابتنا، فنتجاوز صدى عناصرنا في السحب التالي
-            if (r && r.success && r.rev > revR.current) { revR.current = r.rev; setRev(r.rev); }
-            setSync('idle');
-        } catch (e) { setSync('err'); }
-    }, [boardId]);
-
-    useEffect(() => {
-        if (!boardId) return;
-        pull();
-        const a = setInterval(pull, 2500);
-        const b = setInterval(flush, 700);
-        return () => { clearInterval(a); clearInterval(b); flush(); };
-    }, [boardId, pull, flush]);
-
-    // ─── الكتابة المحلّية ────────────────────────────────────────────────────
-    const push = useCallback((it, del) => {
-        pending.current.set(it.id, { id: it.id, kind: it.kind, z: it.z || 0, data: it.data, deleted: del ? 1 : 0 });
-        setItems(prev => {
-            const nx = { ...prev };
-            if (del) delete nx[it.id]; else nx[it.id] = it;
-            return nx;
+    const zoomAt = useCallback((cx, cy, f) => {
+        setView(v => {
+            const k = Math.min(6, Math.max(0.08, v.k * f));
+            const r = wrap.current.getBoundingClientRect();
+            const px = cx - r.left, py = cy - r.top;
+            return { k, x: px - ((px - v.x) / v.k) * k, y: py - ((py - v.y) / v.k) * k };
         });
     }, []);
 
-    // كل عملية تُسجَّل مع نقيضها فيمكن التراجع عنها
-    const act = useCallback((it, del, before) => {
-        undoS.current.push({ it, del: !!del, before: before === undefined ? itemsR.current[it.id] : before });
-        if (undoS.current.length > 120) undoS.current.shift();
-        redoS.current = [];
-        push(it, del);
-    }, [push]);
+    const focusBox = useCallback((box, margin) => {
+        if (!box) return;
+        const r = wrap.current.getBoundingClientRect();
+        const m = margin || 80;
+        const k = Math.min(3, Math.max(0.08, Math.min((r.width - m) / Math.max(40, box.w), (r.height - m) / Math.max(40, box.h))));
+        setView({ k, x: r.width / 2 - (box.x + box.w / 2) * k, y: r.height / 2 - (box.y + box.h / 2) * k });
+    }, []);
 
-    const undo = () => {
-        const e = undoS.current.pop();
-        if (!e) return;
-        redoS.current.push(e);
-        if (e.before) push(e.before, false); else push(e.it, true);
-        setSel(null);
-    };
-    const redo = () => {
-        const e = redoS.current.pop();
-        if (!e) return;
-        undoS.current.push(e);
-        push(e.it, e.del);
-        setSel(null);
+    const fit = () => focusBox(groupBounds(list) || { x: -300, y: -200, w: 600, h: 400 });
+
+    // ─── إنشاء ──────────────────────────────────────────────────────────────
+    const nextZ = () => (list.length ? Math.max(...list.map(i => i.z || 0)) + 1 : 1);
+    const mk = (kind, data, z) => ({ id: uid(), kind, z: z || nextZ(), data });
+
+    const addAt = (kind, p) => {
+        let it = null;
+        if (kind === 'note')
+            it = mk('note', { x: p.x - 85, y: p.y - 60, w: 170, h: 120, text: '', color: style.color });
+        else if (kind === 'text')
+            it = mk('text', { x: p.x - 110, y: p.y - 16, w: 220, h: 34, text: '', size: style.size, color: style.color });
+        else if (kind === 'comment')
+            it = mk('comment', { x: p.x, y: p.y, w: 28, h: 28, text: '', by: userName, at: new Date().toISOString().slice(0, 16).replace('T', ' ') });
+        if (!it) return;
+        B.commit(it);
+        setSel([it.id]); setEdit(it.id); setTool('sel');
     };
 
-    const clearAll = async () => {
-        if (!window.confirm('مسح السبورة كاملة؟ يبقى ما مُسح في سجل الخادم ولا يُحذف نهائياً.')) return;
+    const dropTemplate = t => {
+        const r = wrap.current.getBoundingClientRect();
+        const p = toWorld(r.left + r.width / 2 - 300, r.top + r.height / 2 - 220);
+        const built = t.build(p.x, p.y);
+        const z0 = nextZ();
+        built.forEach((b, i) => { b.z = z0 + i; });
+        B.commit(built);
+        setSel(built.map(b => b.id));
+        setPanel(null);
+        flash('أُضيف قالب «' + t.name + '»');
+    };
+
+    // ─── صور ────────────────────────────────────────────────────────────────
+    const placeImage = useCallback(async (f, at) => {
         try {
-            const r = await fetch(`${API_URL}?action=board_clear`, {
-                method: 'POST', headers: hdr(), body: JSON.stringify({ board: boardId }),
-            }).then(x => x.json());
-            if (r && r.success) { setItems({}); revR.current = r.rev; setRev(r.rev); setSel(null); }
-        } catch (e) { setSync('err'); }
+            const url = await B.upload(f);
+            const im = new Image();
+            im.onload = () => {
+                const k = Math.min(1, 520 / Math.max(im.width, im.height));
+                const w = im.width * k, h = im.height * k;
+                const it = mk('image', { x: at.x - w / 2, y: at.y - h / 2, w, h, src: url });
+                B.commit(it); setSel([it.id]);
+            };
+            im.src = url;
+        } catch (e) { flash(e.message || 'تعذّر رفع الصورة'); }
+    }, [B]);
+
+    useEffect(() => {
+        const onPaste = e => {
+            const f = Array.from(e.clipboardData?.files || [])[0];
+            if (f && f.type.startsWith('image/')) {
+                const r = wrap.current.getBoundingClientRect();
+                placeImage(f, toWorld(r.left + r.width / 2, r.top + r.height / 2));
+                return;
+            }
+            // لصق عناصر منسوخة داخل السبورة نفسها
+            if (clip.current.length && !edit) pasteClip();
+        };
+        window.addEventListener('paste', onPaste);
+        return () => window.removeEventListener('paste', onPaste);
+    });
+
+    const onDrop = e => {
+        e.preventDefault();
+        const f = Array.from(e.dataTransfer.files || [])[0];
+        if (f && f.type.startsWith('image/')) placeImage(f, toWorld(e.clientX, e.clientY));
     };
 
-    // ─── تحويل الإحداثيات ───────────────────────────────────────────────────
-    const toWorld = useCallback((cx, cy) => {
-        const b = wrap.current.getBoundingClientRect();
-        return { x: (cx - b.left - view.x) / view.k, y: (cy - b.top - view.y) / view.k };
-    }, [view]);
-
-    const zoomAt = (cx, cy, factor) => {
-        setView(v => {
-            const k = Math.min(4, Math.max(0.15, v.k * factor));
-            const b = wrap.current.getBoundingClientRect();
-            const px = cx - b.left, py = cy - b.top;
-            return { k, x: px - ((px - v.x) / v.k) * k, y: py - ((py - v.y) / v.k) * k };
+    // ─── نسخ ولصق ───────────────────────────────────────────────────────────
+    const copySel = () => { clip.current = selItems.map(i => JSON.parse(JSON.stringify(i))); flash(selItems.length + ' عنصر في الحافظة'); };
+    const pasteClip = (offset) => {
+        if (!clip.current.length) return;
+        const map = {};
+        const z0 = nextZ();
+        const off = offset || 24;
+        const out = clip.current.map((it, i) => {
+            const nid = uid(); map[it.id] = nid;
+            return { ...it, id: nid, z: z0 + i, data: { ...it.data } };
         });
+        // الموصّلات المنسوخة تُعاد ربطها بالنسخ الجديدة لا بالأصول
+        for (const it of out) {
+            const d = it.data;
+            if (d.from && map[d.from.id]) d.from = { ...d.from, id: map[d.from.id] };
+            if (d.to && map[d.to.id]) d.to = { ...d.to, id: map[d.to.id] };
+        }
+        const moved = out.map(it => moveItem(it, off, off));
+        B.commit(moved);
+        setSel(moved.map(i => i.id));
+    };
+    const duplicate = () => { copySel(); setTimeout(() => pasteClip(24), 0); };
+
+    // ─── تعديل الخصائص ──────────────────────────────────────────────────────
+    const patchSel = patch => {
+        if (!selItems.length) return;
+        B.commit(selItems.map(it => ({ id: it.id, before: it, after: { ...it, data: { ...it.data, ...patch } } })));
+    };
+    const zOrder = how => {
+        if (!selItems.length) return;
+        const zs = list.map(i => i.z || 0);
+        const top = Math.max(0, ...zs), bot = Math.min(0, ...zs);
+        B.commit(selItems.map((it, i) => ({ id: it.id, before: it,
+            after: { ...it, z: how === 'front' ? top + 1 + i : how === 'back' ? bot - 1 - i
+                : (it.z || 0) + (how === 'up' ? 1 : -1) } })));
+    };
+    const align = how => {
+        if (selItems.length < 2 || !selBox) return;
+        B.commit(selItems.map(it => {
+            const d = alignDelta(it, selBox, how);
+            return { id: it.id, before: it, after: moveItem(it, d.dx, d.dy) };
+        }));
+    };
+    const toggleLock = () => {
+        const lock = !selItems.every(i => i.data && i.data.locked);
+        patchSel({ locked: lock ? 1 : 0 });
+        flash(lock ? 'قُفلت العناصر' : 'فُتح القفل');
+    };
+    const delSel = () => { if (selItems.length) { B.remove(selItems.filter(i => !(i.data && i.data.locked))); setSel([]); } };
+
+    // ─── الحركة ─────────────────────────────────────────────────────────────
+    const pickAt = p => {
+        const arr = list.slice().reverse();
+        return arr.find(it => !(it.data && it.data.locked) && hitTest(it, p, 6 / view.k)) || null;
     };
 
-    const fit = () => {
-        const all = Object.values(items).map(bounds).filter(Boolean);
-        if (!all.length) { setView({ x: 0, y: 0, k: 1 }); return; }
-        const x1 = Math.min(...all.map(b => b.x)), y1 = Math.min(...all.map(b => b.y));
-        const x2 = Math.max(...all.map(b => b.x + b.w)), y2 = Math.max(...all.map(b => b.y + b.h));
-        const b = wrap.current.getBoundingClientRect();
-        const k = Math.min(3, Math.max(0.15, Math.min((b.width - 60) / Math.max(40, x2 - x1), (b.height - 60) / Math.max(40, y2 - y1))));
-        setView({ k, x: b.width / 2 - ((x1 + x2) / 2) * k, y: b.height / 2 - ((y1 + y2) / 2) * k });
+    const handleHit = p => {
+        if (!selBox || !selItems.length) return null;
+        const r = 9 / view.k;
+        const deg = single && isBoxy(single.kind) ? (single.data.rot || 0) : 0;
+        const base = single && isBoxy(single.kind) ? rawBounds(single) : selBox;
+        const hp = handlePoints(base, deg);
+        for (const k of Object.keys(hp))
+            if (Math.hypot(hp[k].x - p.x, hp[k].y - p.y) <= r) return { key: k, base, deg };
+        return null;
     };
-
-    // ─── اللمس والمؤشّر ─────────────────────────────────────────────────────
-    const ptrs = useRef(new Map());
 
     const down = e => {
-        if (edit) return;
+        if (e.button === 2) return;                              // اليمين لقائمة السياق
+        setMenu(null); setPanel(null);
         ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (ptrs.current.size === 2) {                         // إصبعان: تكبير وتحريك
+        if (ptrs.current.size === 2) {
             const [a, b] = Array.from(ptrs.current.values());
-            gesture.current = { mode: 'pinch', d: Math.hypot(a.x - b.x, a.y - b.y), k: view.k, view };
+            g.current = { mode: 'pinch', d: Math.hypot(a.x - b.x, a.y - b.y), v: viewR.current };
             return;
         }
-        e.currentTarget.setPointerCapture(e.pointerId);
+        wrap.current.setPointerCapture(e.pointerId);
         const p = toWorld(e.clientX, e.clientY);
+        const T = toolR.current;
 
-        if (tool === 'pan' || (tool === 'sel' && e.button === 1)) {
-            gesture.current = { mode: 'pan', sx: e.clientX, sy: e.clientY, v: view }; return;
-        }
-        if (tool === 'sel') {
-            const under = Object.values(items).sort((a, b) => (b.z || 0) - (a.z || 0)).find(it => hit(it, p.x, p.y, 10));
-            if (under) { setSel(under.id); gesture.current = { mode: 'move', id: under.id, p, orig: under, before: under }; }
-            else { setSel(null); gesture.current = { mode: 'pan', sx: e.clientX, sy: e.clientY, v: view }; }
+        // حدث dblclick لا يصل بعد أسر المؤشّر، ولا وجود له في اللمس أصلاً،
+        // فنكشف النقرتين بأنفسنا: زمنٌ قريب وموضعٌ لم يتزحزح.
+        const now = Date.now();
+        const isDouble = now - tap.current.t < 350
+            && Math.abs(e.clientX - tap.current.x) < 10 && Math.abs(e.clientY - tap.current.y) < 10;
+        tap.current = { t: now, x: e.clientX, y: e.clientY };
+        if (isDouble && T === 'sel') { g.current = { mode: 'dbl', p }; return; }
+
+        if (T === 'pan' || e.button === 1 || e.altKey) { g.current = { mode: 'pan', sx: e.clientX, sy: e.clientY, v: view }; return; }
+
+        if (T === 'sel') {
+            const h = handleHit(p);
+            if (h) {
+                const orig = {}; selItems.forEach(i => { orig[i.id] = i; });
+                g.current = h.key === 'rotate'
+                    ? { mode: 'rotate', orig, center: { x: h.base.x + h.base.w / 2, y: h.base.y + h.base.h / 2 }, start: p, deg0: h.deg }
+                    : { mode: 'resize', orig, key: h.key, base: h.base, group: !single };
+                return;
+            }
+            const under = pickAt(p);
+            if (under) {
+                let nx = sel;
+                if (e.shiftKey) nx = sel.includes(under.id) ? sel.filter(i => i !== under.id) : sel.concat(under.id);
+                else if (!sel.includes(under.id)) nx = [under.id];
+                setSel(nx);
+                const orig = {}; nx.forEach(id => { if (items[id]) orig[id] = items[id]; });
+                g.current = { mode: 'move', orig, start: p, moved: false };
+            } else {
+                if (!e.shiftKey) setSel([]);
+                g.current = { mode: 'marquee', start: p, add: e.shiftKey ? sel : [] };
+                setMarquee({ x: p.x, y: p.y, w: 0, h: 0 });
+            }
             return;
         }
-        if (tool === 'erase') { gesture.current = { mode: 'erase' }; eraseAt(p); return; }
-        if (tool === 'pen') { gesture.current = { mode: 'pen' }; setDraft({ id: uid(), kind: 'pen', data: { pts: [[p.x, p.y]], color, w: 3 } }); return; }
-        if (tool === 'note') {
-            const it = { id: uid(), kind: 'note', z: Date.now() % 100000,
-                data: { x: p.x - 90, y: p.y - 60, w: 180, h: 120, text: '', color } };
-            act(it); setSel(it.id); setEdit(it.id); setTool('sel'); return;
+
+        if (T === 'erase') { g.current = { mode: 'erase', hit: [] }; eraseAt(p); return; }
+        if (T === 'note' || T === 'text' || T === 'comment') { g.current = { mode: 'create', kind: T, p }; return; }
+        if (T === 'pen' || T === 'marker') {
+            g.current = { mode: 'pen' };
+            setDraft(mk('pen', { pts: [[p.x, p.y]], color: style.color, w: T === 'marker' ? 18 : style.sw, marker: T === 'marker' ? 1 : 0 }));
+            return;
         }
-        if (tool === 'text') {
-            const it = { id: uid(), kind: 'text', z: Date.now() % 100000,
-                data: { x: p.x, y: p.y - 14, w: 240, h: 34, text: '', color, size: 22 } };
-            act(it); setSel(it.id); setEdit(it.id); setTool('sel'); return;
+        if (T === 'connector') {
+            const from = pickAt(p);
+            g.current = { mode: 'seg', connector: true, from };
+            setDraft(mk('connector', { x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: style.color, w: style.sw, curve: 1,
+                from: from ? { id: from.id, anchor: nearestAnchor(from, p).anchor } : null }));
+            return;
         }
-        if (tool === 'arrow' || tool === 'line') {
-            gesture.current = { mode: 'seg' };
-            setDraft({ id: uid(), kind: tool, data: { x1: p.x, y1: p.y, x2: p.x, y2: p.y, color, w: 3 } }); return;
+        if (T === 'arrow' || T === 'line') {
+            g.current = { mode: 'seg' };
+            setDraft(mk(T, { x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: style.color, w: style.sw, dash: style.dash }));
+            return;
         }
-        gesture.current = { mode: 'shape', p };
-        setDraft({ id: uid(), kind: tool, data: { x: p.x, y: p.y, w: 0, h: 0, color, sw: 3 } });
+        if (T === 'frame') {
+            g.current = { mode: 'box', p, kind: 'frame' };
+            setDraft(mk('frame', { x: p.x, y: p.y, w: 0, h: 0, title: 'إطار', color: '#64748b' }));
+            return;
+        }
+        g.current = { mode: 'box', p, kind: shape };
+        setDraft(mk(shape, { x: p.x, y: p.y, w: 0, h: 0, color: style.color, fill: style.fill, sw: style.sw, dash: style.dash, text: '' }));
     };
 
     const eraseAt = p => {
-        const under = Object.values(itemsR.current).find(it => hit(it, p.x, p.y, 6));
-        if (under) act(under, true);
+        const u = pickAt(p);
+        if (u) { B.remove(u); }
     };
 
     const move = e => {
+        const p = toWorld(e.clientX, e.clientY);
+        B.setCursor(p.x, p.y, toolR.current, selR.current.length);
         if (ptrs.current.has(e.pointerId)) ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        const g = gesture.current;
-        if (!g) return;
-        if (g.mode === 'pinch') {
+        const gg = g.current;
+        if (!gg) return;
+
+        if (gg.mode === 'pinch') {
             if (ptrs.current.size < 2) return;
             const [a, b] = Array.from(ptrs.current.values());
-            const d = Math.hypot(a.x - b.x, a.y - b.y);
-            const f = d / (g.d || 1);
-            setView(v => {
-                const k = Math.min(4, Math.max(0.15, g.k * f));
-                const r = wrap.current.getBoundingClientRect();
-                const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
-                return { k, x: cx - ((cx - g.view.x) / g.view.k) * k, y: cy - ((cy - g.view.y) / g.view.k) * k };
-            });
+            const f = Math.hypot(a.x - b.x, a.y - b.y) / (gg.d || 1);
+            const r = wrap.current.getBoundingClientRect();
+            const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
+            const k = Math.min(6, Math.max(0.08, gg.v.k * f));
+            setView({ k, x: cx - ((cx - gg.v.x) / gg.v.k) * k, y: cy - ((cy - gg.v.y) / gg.v.k) * k });
             return;
         }
-        if (g.mode === 'pan') {
-            setView({ k: g.v.k, x: g.v.x + (e.clientX - g.sx), y: g.v.y + (e.clientY - g.sy) });
+        if (gg.mode === 'pan') { setView({ k: gg.v.k, x: gg.v.x + (e.clientX - gg.sx), y: gg.v.y + (e.clientY - gg.sy) }); return; }
+        if (gg.mode === 'erase') { eraseAt(p); return; }
+
+        if (gg.mode === 'marquee') {
+            const r = { x: Math.min(gg.start.x, p.x), y: Math.min(gg.start.y, p.y),
+                w: Math.abs(p.x - gg.start.x), h: Math.abs(p.y - gg.start.y) };
+            setMarquee(r);
+            const inside = list.filter(it => insideRect(it, r)).map(i => i.id);
+            setSel(Array.from(new Set(gg.add.concat(inside))));
             return;
         }
-        const p = toWorld(e.clientX, e.clientY);
-        if (g.mode === 'erase') { eraseAt(p); return; }
-        if (g.mode === 'move') {
-            const cur = itemsR.current[g.id];
-            if (!cur) return;
-            const nx = moved(g.orig, p.x - g.p.x, p.y - g.p.y);
-            setItems(prev => ({ ...prev, [g.id]: nx }));
-            g.last = nx;
+
+        if (gg.mode === 'move') {
+            let dx = p.x - gg.start.x, dy = p.y - gg.start.y;
+            const ids = Object.keys(gg.orig);
+            if (snapOn && ids.length) {
+                const box = groupBounds(ids.map(i => gg.orig[i]));
+                const others = list.filter(i => ids.indexOf(i.id) < 0 && i.kind !== 'pen').map(aabb).filter(Boolean);
+                const s = snapMove({ ...box, x: box.x + dx, y: box.y + dy }, others, view.k, gridOn ? 20 : 0);
+                dx += s.dx; dy += s.dy;
+                setGuides(s.guides);
+            }
+            gg.moved = Math.abs(dx) + Math.abs(dy) > 0.5;
+            gg.last = ids.map(i => moveItem(gg.orig[i], dx, dy));
+            B.preview(gg.last);
             return;
         }
-        if (g.mode === 'pen') {
-            setDraft(d => d && { ...d, data: { ...d.data, pts: d.data.pts.concat([[p.x, p.y]]) } });
+
+        if (gg.mode === 'resize') {
+            const ids = Object.keys(gg.orig);
+            if (!gg.group) {
+                const it = gg.orig[ids[0]];
+                gg.last = [resizeItem(it, gg.key, p, e.shiftKey)];
+            } else {
+                const b = gg.base, key = gg.key;
+                const fx = key.indexOf('w') >= 0 ? b.x + b.w : b.x;
+                const fy = key.indexOf('n') >= 0 ? b.y + b.h : b.y;
+                let sx = key.indexOf('w') >= 0 ? (fx - p.x) / (b.w || 1) : key.indexOf('e') >= 0 ? (p.x - fx) / (b.w || 1) : 1;
+                let sy = key.indexOf('n') >= 0 ? (fy - p.y) / (b.h || 1) : key.indexOf('s') >= 0 ? (p.y - fy) / (b.h || 1) : 1;
+                sx = Math.max(0.05, sx); sy = Math.max(0.05, sy);
+                if (e.shiftKey) { const m = Math.max(sx, sy); sx = m; sy = m; }
+                gg.last = ids.map(i => scaleItem(gg.orig[i], { x: fx, y: fy }, sx, sy));
+            }
+            B.preview(gg.last);
             return;
         }
-        if (g.mode === 'seg') { setDraft(d => d && { ...d, data: { ...d.data, x2: p.x, y2: p.y } }); return; }
-        if (g.mode === 'shape') {
-            setDraft(d => d && { ...d, data: { ...d.data,
-                x: Math.min(g.p.x, p.x), y: Math.min(g.p.y, p.y),
-                w: Math.abs(p.x - g.p.x), h: Math.abs(p.y - g.p.y) } });
+
+        if (gg.mode === 'rotate') {
+            const a0 = Math.atan2(gg.start.y - gg.center.y, gg.start.x - gg.center.x);
+            const a1 = Math.atan2(p.y - gg.center.y, p.x - gg.center.x);
+            let deg = ((a1 - a0) * 180) / Math.PI;
+            if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+            gg.last = Object.keys(gg.orig).map(i => rotateItem(gg.orig[i], deg, gg.center));
+            B.preview(gg.last);
+            return;
+        }
+
+        if (gg.mode === 'pen') { setDraft(d => d && { ...d, data: { ...d.data, pts: d.data.pts.concat([[p.x, p.y]]) } }); return; }
+
+        if (gg.mode === 'seg') {
+            let to = null;
+            if (gg.connector) {
+                const u = pickAt(p);
+                if (u && (!gg.from || u.id !== gg.from.id)) to = { id: u.id, anchor: nearestAnchor(u, p).anchor };
+            }
+            setDraft(d => d && { ...d, data: { ...d.data, x2: p.x, y2: p.y, to } });
+            return;
+        }
+
+        if (gg.mode === 'box') {
+            let w = Math.abs(p.x - gg.p.x), h = Math.abs(p.y - gg.p.y);
+            if (e.shiftKey) { const m = Math.max(w, h); w = m; h = m; }
+            setDraft(d => d && { ...d, data: { ...d.data, x: Math.min(gg.p.x, p.x), y: Math.min(gg.p.y, p.y), w, h } });
         }
     };
 
     const up = e => {
         ptrs.current.delete(e.pointerId);
-        const g = gesture.current;
-        gesture.current = null;
-        if (!g) return;
-        if (g.mode === 'move' && g.last) { act(g.last, false, g.before); return; }
+        const gg = g.current;
+        g.current = null;
+        setGuides([]);
+        setMarquee(null);
+        if (!gg) return;
+
+        if (gg.mode === 'create') { addAt(gg.kind, gg.p); return; }
+        if (gg.mode === 'dbl') {
+            const u = pickAt(gg.p);
+            if (u && (u.kind === 'comment' || u.kind === 'note' || u.kind === 'text' || isBoxy(u.kind))) {
+                setSel([u.id]); setEdit(u.id);
+            } else if (!u) addAt('note', gg.p);
+            return;
+        }
+
+        if ((gg.mode === 'move' || gg.mode === 'resize' || gg.mode === 'rotate') && gg.last) {
+            if (gg.mode !== 'move' || gg.moved)
+                B.commit(gg.last.map(it => ({ id: it.id, before: gg.orig[it.id], after: it })));
+            return;
+        }
         if (!draft) return;
         const d = draft;
         setDraft(null);
-        if (d.kind === 'pen' && (d.data.pts || []).length < 2) return;
-        const b = bounds(d);
-        if (d.kind !== 'pen' && b && b.w < 4 && b.h < 4) return;
-        act({ ...d, z: Date.now() % 100000 });
+        if (d.kind === 'pen') { if ((d.data.pts || []).length > 1) B.commit(d); return; }
+        if (isSeg(d.kind)) {
+            const len = Math.hypot(d.data.x2 - d.data.x1, d.data.y2 - d.data.y1);
+            if (len > 8) { B.commit(d); setSel([d.id]); }
+            return;
+        }
+        if (d.data.w < 6 && d.data.h < 6) {
+            // نقرة مجرّدة بأداة شكل: شكلٌ بمقاس افتراضي، كما تفعل اللوحات المعروفة
+            const nd = { ...d, data: { ...d.data, w: 160, h: 110, x: d.data.x - 80, y: d.data.y - 55 } };
+            B.commit(nd); setSel([nd.id]); setTool('sel');
+            return;
+        }
+        B.commit(d); setSel([d.id]);
+        if (d.kind !== 'frame') setTool('sel');
     };
 
     const wheel = e => {
-        if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 0.89); return; }
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.1 : 0.9); return; }
         setView(v => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
     };
 
-    // مفاتيح سريعة كما في لوحات العمل المعروفة
+    const context = e => {
+        e.preventDefault();
+        const p = toWorld(e.clientX, e.clientY);
+        const u = pickAt(p);
+        if (u && !sel.includes(u.id)) setSel([u.id]);
+        const r = wrap.current.getBoundingClientRect();
+        setMenu({ x: e.clientX - r.left, y: e.clientY - r.top, on: !!u });
+    };
+
+    // ─── لوحة المفاتيح ──────────────────────────────────────────────────────
     useEffect(() => {
-        const k = e => {
-            if (edit) return;
+        const onKey = e => {
             const t = (e.target.tagName || '').toLowerCase();
-            if (t === 'input' || t === 'textarea') return;
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
-            if ((e.key === 'Delete' || e.key === 'Backspace') && sel) {
-                const it = itemsR.current[sel]; if (it) { act(it, true); setSel(null); } return;
+            if (t === 'input' || t === 'textarea') {
+                if (e.key === 'Escape') e.target.blur();
+                return;
             }
-            const map = { v: 'sel', h: 'pan', p: 'pen', n: 'note', t: 'text', r: 'rect', o: 'ellipse', a: 'arrow', l: 'line', e: 'erase' };
-            if (map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
+            const meta = e.ctrlKey || e.metaKey;
+            if (meta && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? B.redo() : B.undo(); return; }
+            if (meta && e.key.toLowerCase() === 'y') { e.preventDefault(); B.redo(); return; }
+            if (meta && e.key.toLowerCase() === 'a') { e.preventDefault(); setSel(list.filter(i => !(i.data && i.data.locked)).map(i => i.id)); return; }
+            if (meta && e.key.toLowerCase() === 'c') { copySel(); return; }
+            if (meta && e.key.toLowerCase() === 'x') { copySel(); delSel(); return; }
+            if (meta && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); return; }
+            if (meta && e.key.toLowerCase() === 'l') { e.preventDefault(); toggleLock(); return; }
+            if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delSel(); return; }
+            if (e.key === 'Escape') { setSel([]); setEdit(null); setPanel(null); setMenu(null); return; }
+            if (e.key === 'Enter' && single) { setEdit(single.id); return; }
+            if (e.key.startsWith('Arrow') && selItems.length) {
+                e.preventDefault();
+                const step = e.shiftKey ? 20 : 2;
+                const dx = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0;
+                const dy = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0;
+                B.commit(selItems.map(it => ({ id: it.id, before: it, after: moveItem(it, dx, dy) })));
+                return;
+            }
+            if (e.key === ']') { zOrder('front'); return; }
+            if (e.key === '[') { zOrder('back'); return; }
+            const map = { v: 'sel', h: 'pan', p: 'pen', m: 'marker', n: 'note', t: 'text', r: 'shape',
+                c: 'connector', a: 'arrow', l: 'line', f: 'frame', e: 'erase' };
+            const k = map[e.key.toLowerCase()];
+            if (k) setTool(k);
         };
-        window.addEventListener('keydown', k);
-        return () => window.removeEventListener('keydown', k);
-    }, [sel, edit, act]);
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    });
 
-    // ─── تصدير صورة ─────────────────────────────────────────────────────────
-    const exportPng = () => {
-        const all = Object.values(items);
-        if (!all.length) { window.alert('السبورة فارغة'); return; }
-        const bs = all.map(bounds).filter(Boolean);
-        const pad = 40;
-        const x1 = Math.min(...bs.map(b => b.x)) - pad, y1 = Math.min(...bs.map(b => b.y)) - pad;
-        const x2 = Math.max(...bs.map(b => b.x + b.w)) + pad, y2 = Math.max(...bs.map(b => b.y + b.h)) + pad;
-        const s = Math.min(2, 2400 / Math.max(1, x2 - x1));
-        const cv = document.createElement('canvas');
-        cv.width = Math.round((x2 - x1) * s); cv.height = Math.round((y2 - y1) * s);
-        const c = cv.getContext('2d');
-        c.fillStyle = '#0f172a'; c.fillRect(0, 0, cv.width, cv.height);
-        c.setTransform(s, 0, 0, s, -x1 * s, -y1 * s);
-        c.lineCap = 'round'; c.lineJoin = 'round';
-        const wrapText = (text, w, size, lh) => {
-            c.font = '700 ' + size + 'px Cairo, system-ui, sans-serif';
-            const out = [];
-            for (const para of String(text || '').split('\n')) {
-                let line = '';
-                for (const word of para.split(' ')) {
-                    const probe = line ? line + ' ' + word : word;
-                    if (c.measureText(probe).width > w && line) { out.push(line); line = word; } else line = probe;
-                }
-                out.push(line);
-            }
-            return out;
-        };
-        for (const it of all.sort((a, b) => (a.z || 0) - (b.z || 0))) {
-            const d = it.data || {};
-            c.strokeStyle = d.color || '#fff'; c.fillStyle = d.color || '#fff'; c.lineWidth = d.w || d.sw || 3;
-            if (it.kind === 'pen') {
-                const p = d.pts || []; if (p.length < 2) continue;
-                c.beginPath(); c.moveTo(p[0][0], p[0][1]);
-                for (let i = 1; i < p.length; i++) c.lineTo(p[i][0], p[i][1]);
-                c.stroke();
-            } else if (it.kind === 'line' || it.kind === 'arrow') {
-                c.beginPath(); c.moveTo(d.x1, d.y1); c.lineTo(d.x2, d.y2); c.stroke();
-                if (it.kind === 'arrow') {
-                    const a = Math.atan2(d.y2 - d.y1, d.x2 - d.x1), L = 16;
-                    c.beginPath(); c.moveTo(d.x2, d.y2);
-                    c.lineTo(d.x2 - L * Math.cos(a - 0.4), d.y2 - L * Math.sin(a - 0.4));
-                    c.lineTo(d.x2 - L * Math.cos(a + 0.4), d.y2 - L * Math.sin(a + 0.4));
-                    c.closePath(); c.fill();
-                }
-            } else if (it.kind === 'rect') { c.strokeRect(d.x, d.y, d.w, d.h); }
-            else if (it.kind === 'ellipse') {
-                c.beginPath(); c.ellipse(d.x + d.w / 2, d.y + d.h / 2, Math.abs(d.w / 2), Math.abs(d.h / 2), 0, 0, 6.2832); c.stroke();
-            } else if (it.kind === 'diamond') {
-                c.beginPath(); c.moveTo(d.x + d.w / 2, d.y); c.lineTo(d.x + d.w, d.y + d.h / 2);
-                c.lineTo(d.x + d.w / 2, d.y + d.h); c.lineTo(d.x, d.y + d.h / 2); c.closePath(); c.stroke();
-            } else if (it.kind === 'note') {
-                c.fillStyle = NOTE_BG[d.color] || '#f6c343';
-                c.fillRect(d.x, d.y, d.w, d.h);
-                c.fillStyle = '#0f172a';
-                const lines = wrapText(d.text, d.w - 20, 15, 22);
-                lines.forEach((ln, i) => c.fillText(ln, d.x + d.w - 10 - c.measureText(ln).width, d.y + 26 + i * 22));
-            } else if (it.kind === 'text') {
-                c.fillStyle = d.color || '#fff';
-                const size = d.size || 22;
-                const lines = wrapText(d.text, d.w || 240, size, size * 1.4);
-                lines.forEach((ln, i) => c.fillText(ln, (d.x + (d.w || 240)) - c.measureText(ln).width, d.y + size + i * size * 1.4));
-            }
+    // ─── التصدير ────────────────────────────────────────────────────────────
+    const doExport = async what => {
+        setPanel(null);
+        let src = list, area = null, name = null;
+        if (what === 'sel') { if (!selItems.length) { flash('لا تحديد'); return; } src = selItems; }
+        if (what === 'frame') {
+            const fr = single && single.kind === 'frame' ? single : list.find(i => i.kind === 'frame' && sel.includes(i.id));
+            if (!fr) { flash('اختر إطاراً أولاً'); return; }
+            area = rawBounds(fr);
+            src = list.filter(i => { const b = aabb(i); return b && b.x >= area.x - 4 && b.y >= area.y - 4 && b.x + b.w <= area.x + area.w + 4 && b.y + b.h <= area.y + area.h + 4; });
+            name = (fr.data.title || 'إطار');
         }
-        const a = document.createElement('a');
-        a.href = cv.toDataURL('image/png');
-        a.download = 'سبورة-سماك-' + new Date().toISOString().slice(0, 10) + '.png';
-        a.click();
+        if (!src.length) { flash('لا شيء للتصدير'); return; }
+        const cv = await exportImage(src, area, {});
+        if (cv) download(cv, name);
     };
 
-    // ─── الرسم ──────────────────────────────────────────────────────────────
-    const vector = useMemo(
-        () => Object.values(items).filter(i => i.kind !== 'note' && i.kind !== 'text').sort((a, b) => (a.z || 0) - (b.z || 0)),
-        [items]);
-    const html = useMemo(
-        () => Object.values(items).filter(i => i.kind === 'note' || i.kind === 'text').sort((a, b) => (a.z || 0) - (b.z || 0)),
-        [items]);
+    // ─── البحث ──────────────────────────────────────────────────────────────
+    const hits = useMemo(() => {
+        const q = query.trim();
+        if (!q) return [];
+        return list.filter(i => ((i.data && (i.data.text || i.data.title)) || '').indexOf(q) >= 0).slice(0, 30);
+    }, [query, list]);
 
-    const shape = (it, ghost) => {
-        const d = it.data || {};
-        const sw = d.w || d.sw || 3;
-        const on = !ghost && sel === it.id;
-        const common = { stroke: d.color || '#fff', strokeWidth: sw, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round',
-            opacity: ghost ? 0.75 : 1 };
-        if (it.kind === 'pen') {
-            const p = d.pts || [];
-            if (!p.length) return null;
-            return <path key={it.id} d={'M' + p.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L')} {...common} />;
-        }
-        if (it.kind === 'line' || it.kind === 'arrow')
-            return (
-                <g key={it.id}>
-                    <line x1={d.x1} y1={d.y1} x2={d.x2} y2={d.y2} {...common}
-                        markerEnd={it.kind === 'arrow' ? 'url(#mk-' + (d.color || '#fff').replace('#', '') + ')' : undefined} />
-                </g>
-            );
-        if (it.kind === 'rect')
-            return <rect key={it.id} x={d.x} y={d.y} width={d.w} height={d.h} rx="6" {...common}
-                className={on ? 'outline-dashed' : ''} />;
-        if (it.kind === 'ellipse')
-            return <ellipse key={it.id} cx={d.x + d.w / 2} cy={d.y + d.h / 2} rx={Math.abs(d.w / 2)} ry={Math.abs(d.h / 2)} {...common} />;
-        if (it.kind === 'diamond')
-            return <polygon key={it.id}
-                points={`${d.x + d.w / 2},${d.y} ${d.x + d.w},${d.y + d.h / 2} ${d.x + d.w / 2},${d.y + d.h} ${d.x},${d.y + d.h / 2}`}
-                {...common} />;
-        return null;
+    // ─── الخريطة المصغّرة ───────────────────────────────────────────────────
+    const mapBox = useMemo(() => {
+        const b = groupBounds(list);
+        if (!b) return null;
+        const pad = Math.max(b.w, b.h) * 0.15 + 100;
+        return { x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 };
+    }, [list]);
+
+    const MAP_W = 176, MAP_H = 118;
+    const mapK = mapBox ? Math.min(MAP_W / mapBox.w, MAP_H / mapBox.h) : 1;
+    const viewport = () => {
+        if (!wrap.current) return null;
+        const r = wrap.current.getBoundingClientRect();
+        return { x: -view.x / view.k, y: -view.y / view.k, w: r.width / view.k, h: r.height / view.k };
     };
 
-    const selB = sel && items[sel] ? bounds(items[sel]) : null;
+    // ─── الواجهة ────────────────────────────────────────────────────────────
     const btn = on => 'w-9 h-9 rounded-xl flex items-center justify-center transition shrink-0 ' +
         (on ? 'bg-gold-500 text-slate-900' : 'bg-white/10 text-slate-200 hover:bg-white/20');
+    const sbtn = 'px-2.5 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold flex items-center gap-1 shrink-0';
+    const ShapeIcon = SHAPE_ICONS[shape] || Square;
+    const hp = selBox ? handlePoints(single && isBoxy(single.kind) ? rawBounds(single) : selBox,
+        single && isBoxy(single.kind) ? (single.data.rot || 0) : 0) : null;
+    const K = view.k;
+    const showStyle = selItems.length > 0 || ['pen', 'marker', 'shape', 'arrow', 'line', 'connector', 'note', 'text'].indexOf(tool) >= 0;
 
     return (
-        <div className="relative w-full h-full overflow-hidden bg-[#0f172a] select-none" dir="ltr">
-            {/* اللوح */}
+        <div className="relative w-full h-full overflow-hidden bg-[#0f172a] select-none" dir="ltr"
+            onDrop={onDrop} onDragOver={e => e.preventDefault()}>
+
             <div ref={wrap} className="absolute inset-0 touch-none"
                 style={{ cursor: tool === 'pan' ? 'grab' : tool === 'sel' ? 'default' : 'crosshair',
-                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,.10) 1px, transparent 1px)',
-                    backgroundSize: (26 * view.k) + 'px ' + (26 * view.k) + 'px',
+                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,.09) 1px, transparent 1px)',
+                    backgroundSize: (26 * K) + 'px ' + (26 * K) + 'px',
                     backgroundPosition: view.x + 'px ' + view.y + 'px' }}
-                onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onWheel={wheel}>
+                onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+                onWheel={wheel} onContextMenu={context}>
 
                 <div className="absolute top-0 left-0 origin-top-left"
-                    style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
+                    style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${K})` }}>
+
                     <svg className="absolute pointer-events-none"
                         style={{ left: -SVG_HALF, top: -SVG_HALF, width: SVG_HALF * 2, height: SVG_HALF * 2 }}
                         viewBox={`${-SVG_HALF} ${-SVG_HALF} ${SVG_HALF * 2} ${SVG_HALF * 2}`}>
-                        <defs>
-                            {COLORS.map(c => (
-                                <marker key={c} id={'mk-' + c.replace('#', '')} viewBox="0 0 10 10" refX="9" refY="5"
-                                    markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                                    <path d="M0,0 L10,5 L0,10 z" fill={c} />
-                                </marker>
-                            ))}
-                        </defs>
-                        {vector.map(it => shape(it))}
-                        {draft && draft.kind !== 'note' && draft.kind !== 'text' ? shape(draft, true) : null}
-                        {selB ? <rect x={selB.x - 6} y={selB.y - 6} width={selB.w + 12} height={selB.h + 12}
-                            fill="none" stroke="#f6c343" strokeWidth={1.5 / view.k} strokeDasharray={6 / view.k} /> : null}
+                        {list.map(it => <g key={it.id}><Shape it={it} byId={items} /></g>)}
+                        {draft ? <Shape it={draft} byId={items} ghost /> : null}
+
+                        {/* أدلّة المحاذاة */}
+                        {guides.map((gd, i) => (gd.v != null
+                            ? <line key={i} x1={gd.v} y1={-SVG_HALF} x2={gd.v} y2={SVG_HALF} stroke="#f6c343" strokeWidth={1 / K} strokeDasharray={`${4 / K} ${4 / K}`} />
+                            : <line key={i} x1={-SVG_HALF} y1={gd.h} x2={SVG_HALF} y2={gd.h} stroke="#f6c343" strokeWidth={1 / K} strokeDasharray={`${4 / K} ${4 / K}`} />))}
+
+                        {/* مستطيل التحديد */}
+                        {marquee ? <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h}
+                            fill="rgba(246,195,67,.10)" stroke="#f6c343" strokeWidth={1 / K} /> : null}
+
+                        {/* إطار التحديد ومقابضه */}
+                        {selBox && !edit ? (
+                            <g>
+                                {selItems.length > 1 ? selItems.map(it => {
+                                    const b = aabb(it);
+                                    return b ? <rect key={it.id} x={b.x} y={b.y} width={b.w} height={b.h} fill="none"
+                                        stroke="#f6c343" strokeWidth={0.8 / K} opacity="0.5" /> : null;
+                                }) : null}
+                                {(() => {
+                                    const base = single && isBoxy(single.kind) ? rawBounds(single) : selBox;
+                                    const deg = single && isBoxy(single.kind) ? (single.data.rot || 0) : 0;
+                                    const cx = base.x + base.w / 2, cy = base.y + base.h / 2;
+                                    return (
+                                        <g transform={deg ? `rotate(${deg} ${cx} ${cy})` : undefined}>
+                                            <rect x={base.x} y={base.y} width={base.w} height={base.h}
+                                                fill="none" stroke="#f6c343" strokeWidth={1.4 / K} />
+                                            <line x1={cx} y1={base.y} x2={cx} y2={base.y - 28 / K} stroke="#f6c343" strokeWidth={1.2 / K} />
+                                        </g>
+                                    );
+                                })()}
+                                {Object.keys(hp).map(k => (
+                                    <circle key={k} cx={hp[k].x} cy={hp[k].y} r={(k === 'rotate' ? 6 : 5) / K}
+                                        fill={k === 'rotate' ? '#0f172a' : '#f6c343'} stroke="#f6c343" strokeWidth={1.6 / K} />
+                                ))}
+                            </g>
+                        ) : null}
+
+                        {/* مؤشّرات الحاضرين */}
+                        {B.peers.map(p => (
+                            <g key={p.uid} transform={`translate(${p.x} ${p.y}) scale(${1 / K})`} opacity="0.95">
+                                <path d="M0 0 L0 17 L4.5 12.5 L7.5 19 L10 18 L7 11.5 L13 11 Z" fill={p.color} stroke="#0f172a" strokeWidth="1" />
+                                <rect x="12" y="14" rx="4" width={Math.max(34, (p.name || '').length * 7 + 12)} height="17" fill={p.color} />
+                                <text x="18" y="26" fontSize="11" fontWeight="800" fill="#0f172a"
+                                    style={{ fontFamily: 'Cairo, sans-serif' }}>{p.name || 'زميل'}</text>
+                            </g>
+                        ))}
                     </svg>
 
-                    {html.map(it => {
-                        const d = it.data || {};
-                        const on = sel === it.id;
-                        if (it.kind === 'note') return (
-                            <div key={it.id}
-                                onPointerDown={e => { if (tool !== 'sel') return; e.stopPropagation();
-                                    setSel(it.id);
-                                    const p = toWorld(e.clientX, e.clientY);
-                                    gesture.current = { mode: 'move', id: it.id, p, orig: it, before: it };
-                                    wrap.current.setPointerCapture(e.pointerId); }}
-                                onDoubleClick={() => { setSel(it.id); setEdit(it.id); }}
-                                className="absolute rounded-lg shadow-xl"
-                                style={{ left: d.x, top: d.y, width: d.w, height: d.h, background: NOTE_BG[d.color] || '#f6c343',
-                                    outline: on ? '2px solid #f6c343' : 'none', outlineOffset: 4 }}>
+                    {/* طبقة النصوص والتعليقات */}
+                    {list.map(it => (
+                        it.kind === 'comment' ? (
+                            <div key={it.id} className="absolute" style={{ left: it.data.x, top: it.data.y }}>
+                                <div className="rounded-full rounded-bl-none bg-gold-500 text-slate-900 text-[11px] font-black px-2 py-1 shadow-lg whitespace-nowrap"
+                                    style={{ pointerEvents: 'none' }}>
+                                    {edit === it.id ? '' : (it.data.text || 'تعليق') + ' · ' + (it.data.by || '')}
+                                </div>
                                 {edit === it.id ? (
-                                    <textarea autoFocus defaultValue={d.text} dir="auto"
-                                        onBlur={e => { setEdit(null); act({ ...it, data: { ...d, text: e.target.value } }, false, it); }}
-                                        className="w-full h-full bg-transparent p-2.5 text-[15px] font-bold leading-6 text-slate-900 outline-none resize-none text-right" />
-                                ) : (
-                                    <div dir="auto" className="w-full h-full p-2.5 text-[15px] font-bold leading-6 text-slate-900 overflow-hidden whitespace-pre-wrap text-right">
-                                        {d.text || <span className="opacity-40">انقر مرّتين للكتابة</span>}
-                                    </div>
-                                )}
+                                    <textarea autoFocus defaultValue={it.data.text || ''} dir="auto"
+                                        onBlur={e => { B.commit({ ...it, data: { ...it.data, text: e.target.value } }); setEdit(null); }}
+                                        className="absolute top-0 left-0 w-56 h-20 rounded-xl bg-slate-900 text-white text-[12px] p-2 outline outline-2 outline-gold-500 resize-none" />
+                                ) : null}
                             </div>
-                        );
-                        return (
-                            <div key={it.id}
-                                onPointerDown={e => { if (tool !== 'sel') return; e.stopPropagation();
-                                    setSel(it.id);
-                                    const p = toWorld(e.clientX, e.clientY);
-                                    gesture.current = { mode: 'move', id: it.id, p, orig: it, before: it };
-                                    wrap.current.setPointerCapture(e.pointerId); }}
-                                onDoubleClick={() => { setSel(it.id); setEdit(it.id); }}
-                                className="absolute" style={{ left: d.x, top: d.y, width: d.w || 240,
-                                    outline: on ? '2px dashed #f6c343' : 'none', outlineOffset: 6 }}>
-                                {edit === it.id ? (
-                                    <textarea autoFocus defaultValue={d.text} dir="auto" rows={2}
-                                        onBlur={e => { setEdit(null); act({ ...it, data: { ...d, text: e.target.value } }, false, it); }}
-                                        style={{ color: d.color, fontSize: (d.size || 22) + 'px' }}
-                                        className="w-full bg-black/30 rounded-lg px-1 font-black leading-tight outline-none resize-none text-right" />
-                                ) : (
-                                    <div dir="auto" style={{ color: d.color, fontSize: (d.size || 22) + 'px' }}
-                                        className="font-black leading-tight whitespace-pre-wrap text-right">
-                                        {d.text || <span className="opacity-40">نص</span>}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* شريط الأدوات */}
-            <div dir="rtl" className={'absolute z-20 flex gap-1.5 bg-slate-900/90 backdrop-blur border border-white/10 rounded-2xl p-1.5 shadow-2xl ' +
-                (dense ? 'bottom-3 inset-x-3 overflow-x-auto' : 'top-1/2 -translate-y-1/2 right-3 flex-col')}>
-                {TOOLS.map(t => {
-                    const I = t.icon;
-                    return <button key={t.k} title={t.t} onClick={() => { setTool(t.k); setEdit(null); }} className={btn(tool === t.k)}><I size={17} /></button>;
-                })}
-                <div className={dense ? 'w-px bg-white/15 mx-0.5 shrink-0' : 'h-px bg-white/15 my-0.5'} />
-                <button title="اللون" onClick={() => setPal(v => !v)} className={btn(false)}>
-                    <span className="w-4 h-4 rounded-full border border-white/40" style={{ background: color }} />
-                </button>
-                <button title="تراجع" onClick={undo} className={btn(false)}><Undo2 size={17} /></button>
-                <button title="إعادة" onClick={redo} className={btn(false)}><Redo2 size={17} /></button>
-            </div>
-
-            {pal && (
-                <div dir="rtl" className={'absolute z-30 bg-slate-900/95 border border-white/10 rounded-2xl p-2 grid grid-cols-4 gap-1.5 shadow-2xl ' +
-                    (dense ? 'bottom-16 right-3' : 'top-1/2 -translate-y-1/2 right-16')}>
-                    {COLORS.map(c => (
-                        <button key={c} onClick={() => { setColor(c); setPal(false);
-                            if (sel && items[sel]) { const it = items[sel]; act({ ...it, data: { ...it.data, color: c } }, false, it); } }}
-                            className={'w-7 h-7 rounded-full border-2 ' + (color === c ? 'border-white' : 'border-white/20')}
-                            style={{ background: c }} />
+                        ) : (
+                            <TextBox key={it.id} it={it} editing={edit === it.id}
+                                onCancel={() => setEdit(null)}
+                                onCommit={v => {
+                                    setEdit(null);
+                                    const key = it.kind === 'frame' ? 'title' : 'text';
+                                    if (v !== (it.data[key] || '')) B.commit({ ...it, data: { ...it.data, [key]: v } });
+                                }} />
+                        )
                     ))}
                 </div>
-            )}
+            </div>
 
-            {/* الشريط العلوي: التكبير والتصدير والحالة */}
-            <div dir="rtl" className="absolute top-3 right-3 left-3 z-20 flex items-center gap-1.5 pointer-events-none">
-                <div className="flex gap-1.5 bg-slate-900/90 backdrop-blur border border-white/10 rounded-2xl p-1.5 pointer-events-auto">
-                    <button title="تصغير" onClick={() => { const b = wrap.current.getBoundingClientRect(); zoomAt(b.left + b.width / 2, b.top + b.height / 2, 0.83); }} className={btn(false)}><ZoomOut size={17} /></button>
-                    <span className="px-1.5 self-center text-[11px] font-black text-slate-300 tabular-nums">{Math.round(view.k * 100)}%</span>
-                    <button title="تكبير" onClick={() => { const b = wrap.current.getBoundingClientRect(); zoomAt(b.left + b.width / 2, b.top + b.height / 2, 1.2); }} className={btn(false)}><ZoomIn size={17} /></button>
-                    <button title="اضبط على المحتوى" onClick={fit} className={btn(false)}><Crosshair size={17} /></button>
-                </div>
-                <div className="flex gap-1.5 bg-slate-900/90 backdrop-blur border border-white/10 rounded-2xl p-1.5 pointer-events-auto">
-                    <button title="تنزيل صورة" onClick={exportPng} className={btn(false)}><Download size={17} /></button>
-                    <button title="مسح السبورة" onClick={clearAll} className={btn(false)}><Trash2 size={17} /></button>
-                </div>
-                <div className="ms-auto flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-white/10 rounded-2xl px-2.5 py-2 pointer-events-auto">
-                    {sync === 'busy' ? <Loader2 size={13} className="animate-spin text-gold-500" />
-                        : <span className={'w-2 h-2 rounded-full ' + (sync === 'err' ? 'bg-red-500' : 'bg-emerald-500')} />}
-                    <span className="text-[11px] font-bold text-slate-300">
-                        {sync === 'err' ? 'انقطع الاتصال' : Object.keys(items).length + ' عنصر'}
-                    </span>
-                    {peers.length ? (
-                        <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400 border-s border-white/10 ps-2">
-                            <Users size={12} />{peers.length + 1}
-                        </span>
+            {/* ── شريط الأدوات ── */}
+            <div dir="rtl" className={'absolute z-20 flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 shadow-2xl ' +
+                (dense ? 'bottom-3 inset-x-3 overflow-x-auto no-scrollbar' : 'top-1/2 -translate-y-1/2 right-3 flex-col max-h-[86vh] overflow-y-auto no-scrollbar')}>
+                {TOOLS.map(t => {
+                    const I = t.k === 'shape' ? ShapeIcon : t.icon;
+                    return (
+                        <button key={t.k} title={t.t}
+                            onClick={() => { if (t.k === 'shape' && tool === 'shape') { const i = SHAPE_KINDS.indexOf(shape); setShape(SHAPE_KINDS[(i + 1) % SHAPE_KINDS.length]); } setTool(t.k); setEdit(null); }}
+                            className={btn(tool === t.k)}><I size={17} /></button>
+                    );
+                })}
+                <button title="صورة" onClick={() => file.current.click()} className={btn(false)}><ImageIcon size={17} /></button>
+                <div className={dense ? 'w-px bg-white/15 mx-0.5 shrink-0' : 'h-px bg-white/15 my-0.5'} />
+                <button title="تراجع (Ctrl+Z)" onClick={B.undo} disabled={!B.canUndo} className={btn(false) + ' disabled:opacity-30'}><Undo2 size={17} /></button>
+                <button title="إعادة (Ctrl+Y)" onClick={B.redo} disabled={!B.canRedo} className={btn(false) + ' disabled:opacity-30'}><Redo2 size={17} /></button>
+            </div>
+            <input ref={file} type="file" accept="image/*" className="hidden"
+                onChange={e => { const f = e.target.files[0]; if (f) { const r = wrap.current.getBoundingClientRect(); placeImage(f, toWorld(r.left + r.width / 2, r.top + r.height / 2)); } e.target.value = ''; }} />
+
+            {/* ── شريط الخصائص ── */}
+            {showStyle ? (
+                <div dir="rtl" className={'absolute z-20 flex items-center gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 shadow-2xl overflow-x-auto no-scrollbar max-w-[92vw] ' +
+                    (dense ? 'top-16 inset-x-3' : 'bottom-4 left-1/2 -translate-x-1/2')}>
+                    {COLORS.slice(0, 8).map(c => (
+                        <button key={c} onClick={() => { setStyle(s => ({ ...s, color: c })); patchSel({ color: c }); }}
+                            className={'w-6 h-6 rounded-full border-2 shrink-0 ' + (style.color === c ? 'border-white' : 'border-white/20')}
+                            style={{ background: c }} />
+                    ))}
+                    <span className="w-px h-6 bg-white/15 shrink-0" />
+                    {[2, 4, 8].map(w => (
+                        <button key={w} onClick={() => { setStyle(s => ({ ...s, sw: w })); patchSel({ sw: w, w }); }}
+                            className={'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ' + (style.sw === w ? 'bg-gold-500' : 'bg-white/10')}>
+                            <span className="rounded-full" style={{ width: w + 3, height: w + 3, background: style.sw === w ? '#0f172a' : '#e2e8f0' }} />
+                        </button>
+                    ))}
+                    <button onClick={() => { const d = style.dash ? '' : 'dash'; setStyle(s => ({ ...s, dash: d })); patchSel({ dash: d }); }}
+                        className={'px-2 h-7 rounded-lg text-[11px] font-bold shrink-0 ' + (style.dash ? 'bg-gold-500 text-slate-900' : 'bg-white/10')}>متقطّع</button>
+                    <button onClick={() => { const f = style.fill === 'none' ? style.color + '33' : 'none'; setStyle(s => ({ ...s, fill: f })); patchSel({ fill: f }); }}
+                        className={'px-2 h-7 rounded-lg text-[11px] font-bold shrink-0 ' + (style.fill !== 'none' ? 'bg-gold-500 text-slate-900' : 'bg-white/10')}>تعبئة</button>
+
+                    {selItems.length ? (
+                        <>
+                            <span className="w-px h-6 bg-white/15 shrink-0" />
+                            <button title="للأمام (])" onClick={() => zOrder('front')} className={sbtn}><ChevronUp size={13} /></button>
+                            <button title="للخلف ([)" onClick={() => zOrder('back')} className={sbtn}><ChevronDown size={13} /></button>
+                            <button title="تكرار (Ctrl+D)" onClick={duplicate} className={sbtn}><Copy size={13} /></button>
+                            <button title="قفل (Ctrl+L)" onClick={toggleLock} className={sbtn}>
+                                {selItems.every(i => i.data && i.data.locked) ? <Lock size={13} /> : <Unlock size={13} />}
+                            </button>
+                            {selItems.length > 1 ? (
+                                <>
+                                    <button title="محاذاة لليسار" onClick={() => align('left')} className={sbtn}><AlignHorizontalJustifyStart size={13} /></button>
+                                    <button title="محاذاة للأعلى" onClick={() => align('top')} className={sbtn}><AlignVerticalJustifyStart size={13} /></button>
+                                </>
+                            ) : null}
+                            <button title="حذف" onClick={delSel} className="px-2.5 h-8 rounded-lg bg-red-600/80 hover:bg-red-600 text-[11px] font-bold shrink-0"><Trash2 size={13} /></button>
+                        </>
                     ) : null}
                 </div>
+            ) : null}
+
+            {/* ── الشريط العلوي ── */}
+            <div dir="rtl" className="absolute top-3 right-3 left-3 z-20 flex items-start gap-1.5 pointer-events-none">
+                <div className="flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 pointer-events-auto">
+                    <button title="تصغير" onClick={() => { const r = wrap.current.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, 0.83); }} className={btn(false)}><ZoomOut size={16} /></button>
+                    <button onClick={() => setView(v => ({ ...v, k: 1 }))} className="px-1.5 self-center text-[11px] font-black text-slate-300 tabular-nums">{Math.round(K * 100)}%</button>
+                    <button title="تكبير" onClick={() => { const r = wrap.current.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.2); }} className={btn(false)}><ZoomIn size={16} /></button>
+                    <button title="ملء الشاشة بالمحتوى" onClick={fit} className={btn(false)}><Maximize size={16} /></button>
+                </div>
+                <div className="flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 pointer-events-auto">
+                    <button title="قوالب" onClick={() => setPanel(p => (p === 'templates' ? null : 'templates'))} className={btn(panel === 'templates')}><LayoutTemplate size={16} /></button>
+                    <button title="بحث" onClick={() => setPanel(p => (p === 'search' ? null : 'search'))} className={btn(panel === 'search')}><Search size={16} /></button>
+                    <button title="تصدير" onClick={() => setPanel(p => (p === 'export' ? null : 'export'))} className={btn(panel === 'export')}><Download size={16} /></button>
+                    <button title="التقاط ومحاذاة" onClick={() => setSnapOn(v => !v)} className={btn(snapOn)}><Magnet size={16} /></button>
+                    <button title="شبكة" onClick={() => setGridOn(v => !v)} className={btn(gridOn)}><Grid3x3 size={16} /></button>
+                    <button title="خريطة مصغّرة" onClick={() => setShowMap(v => !v)} className={btn(showMap)}><MapIcon size={16} /></button>
+                    <button title="مسح السبورة" onClick={async () => {
+                        if (!window.confirm('مسح السبورة كاملة؟ تُعلَّم العناصر محذوفة ولا تُزال من سجل الخادم.')) return;
+                        if (await B.clear()) { setSel([]); flash('مُسحت السبورة'); }
+                    }} className={btn(false)}><Trash2 size={16} /></button>
+                </div>
+                <div className="ms-auto flex items-center gap-2 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl px-2.5 py-2 pointer-events-auto">
+                    {B.sync === 'busy' ? <Loader2 size={13} className="animate-spin text-gold-500" />
+                        : <span className={'w-2 h-2 rounded-full ' + (B.sync === 'err' ? 'bg-red-500' : 'bg-emerald-500')} />}
+                    <span className="text-[11px] font-bold text-slate-300">{list.length} عنصر</span>
+                    {B.peers.length ? (
+                        <span className="flex items-center gap-1 border-s border-white/10 ps-2">
+                            {B.peers.slice(0, 4).map(p => (
+                                <span key={p.uid} title={p.name}
+                                    className="w-6 h-6 rounded-full text-[10px] font-black text-slate-900 flex items-center justify-center"
+                                    style={{ background: p.color }}>{(p.name || '؟').slice(0, 1)}</span>
+                            ))}
+                        </span>
+                    ) : <Users size={13} className="text-slate-500" />}
+                </div>
             </div>
+
+            {/* ── اللوحات المنبثقة ── */}
+            {panel === 'templates' ? (
+                <div dir="rtl" className="absolute top-16 right-3 z-30 w-64 bg-slate-900/96 backdrop-blur border border-white/10 rounded-2xl p-2 shadow-2xl space-y-1">
+                    {TEMPLATES.map(t => (
+                        <button key={t.key} onClick={() => dropTemplate(t)}
+                            className="w-full text-right px-3 py-2 rounded-xl bg-white/[0.05] hover:bg-white/10">
+                            <div className="text-[13px] font-black text-white">{t.name}</div>
+                            <div className="text-[11px] text-slate-400">{t.hint}</div>
+                        </button>
+                    ))}
+                </div>
+            ) : null}
+
+            {panel === 'search' ? (
+                <div dir="rtl" className="absolute top-16 right-3 z-30 w-64 bg-slate-900/96 backdrop-blur border border-white/10 rounded-2xl p-2 shadow-2xl">
+                    <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="ابحث في نصوص اللوح"
+                        className="w-full h-9 px-3 rounded-xl bg-white/[0.06] border border-white/10 text-[13px] outline-none text-white placeholder-slate-500" />
+                    <div className="mt-1.5 max-h-56 overflow-y-auto space-y-1">
+                        {hits.map(h => (
+                            <button key={h.id} onClick={() => { setSel([h.id]); focusBox(aabb(h), 260); }}
+                                className="w-full text-right px-2.5 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/10 text-[12px] text-slate-200 truncate">
+                                {(h.data.text || h.data.title || '').slice(0, 40)}
+                            </button>
+                        ))}
+                        {query && !hits.length ? <p className="text-[12px] text-slate-500 text-center py-3">لا نتائج</p> : null}
+                    </div>
+                </div>
+            ) : null}
+
+            {panel === 'export' ? (
+                <div dir="rtl" className="absolute top-16 right-3 z-30 w-52 bg-slate-900/96 backdrop-blur border border-white/10 rounded-2xl p-2 shadow-2xl space-y-1">
+                    {[['all', 'السبورة كاملة'], ['sel', 'التحديد فقط'], ['frame', 'الإطار المحدَّد']].map(([k, t]) => (
+                        <button key={k} onClick={() => doExport(k)}
+                            className="w-full text-right px-3 py-2 rounded-xl bg-white/[0.05] hover:bg-white/10 text-[13px] font-bold text-white">{t}</button>
+                    ))}
+                </div>
+            ) : null}
+
+            {/* ── قائمة السياق ── */}
+            {menu ? (
+                <div dir="rtl" className="absolute z-40 w-44 bg-slate-900/97 border border-white/10 rounded-xl p-1 shadow-2xl"
+                    style={{ top: menu.y, left: Math.max(4, menu.x - 176) }} onMouseLeave={() => setMenu(null)}>
+                    {menu.on ? (
+                        <>
+                            <MenuItem onClick={() => { setEdit(sel[0]); setMenu(null); }}>تحرير النص</MenuItem>
+                            <MenuItem onClick={() => { duplicate(); setMenu(null); }}>تكرار</MenuItem>
+                            <MenuItem onClick={() => { copySel(); setMenu(null); }}>نسخ</MenuItem>
+                            <MenuItem onClick={() => { zOrder('front'); setMenu(null); }}>إلى الأمام</MenuItem>
+                            <MenuItem onClick={() => { zOrder('back'); setMenu(null); }}>إلى الخلف</MenuItem>
+                            <MenuItem onClick={() => { toggleLock(); setMenu(null); }}>قفل / فتح</MenuItem>
+                            <MenuItem danger onClick={() => { delSel(); setMenu(null); }}>حذف</MenuItem>
+                        </>
+                    ) : (
+                        <>
+                            <MenuItem onClick={() => { pasteClip(); setMenu(null); }}>لصق</MenuItem>
+                            <MenuItem onClick={() => { setSel(list.map(i => i.id)); setMenu(null); }}>تحديد الكل</MenuItem>
+                            <MenuItem onClick={() => { fit(); setMenu(null); }}>ملء الشاشة بالمحتوى</MenuItem>
+                        </>
+                    )}
+                </div>
+            ) : null}
+
+            {/* ── الخريطة المصغّرة ── */}
+            {showMap && mapBox ? (
+                <div dir="ltr" className="absolute bottom-3 left-3 z-20 rounded-xl border border-white/10 bg-slate-900/92 backdrop-blur p-1.5 shadow-2xl"
+                    style={{ width: MAP_W + 12 }}>
+                    <svg width={MAP_W} height={MAP_H} className="rounded-lg bg-slate-950/60 cursor-pointer"
+                        onClick={e => {
+                            const r = e.currentTarget.getBoundingClientRect();
+                            const wx = mapBox.x + (e.clientX - r.left) / mapK, wy = mapBox.y + (e.clientY - r.top) / mapK;
+                            const b = wrap.current.getBoundingClientRect();
+                            setView(v => ({ ...v, x: b.width / 2 - wx * v.k, y: b.height / 2 - wy * v.k }));
+                        }}>
+                        <g transform={`scale(${mapK}) translate(${-mapBox.x} ${-mapBox.y})`}>
+                            {list.map(it => {
+                                const b = aabb(it);
+                                if (!b) return null;
+                                return <rect key={it.id} x={b.x} y={b.y} width={Math.max(2 / mapK, b.w)} height={Math.max(2 / mapK, b.h)}
+                                    fill={it.kind === 'note' ? '#f6c343' : (it.data && it.data.color) || '#64748b'} opacity="0.7" />;
+                            })}
+                            {(() => { const v = viewport(); return v ? <rect x={v.x} y={v.y} width={v.w} height={v.h}
+                                fill="rgba(246,195,67,.10)" stroke="#f6c343" strokeWidth={1.5 / mapK} /> : null; })()}
+                        </g>
+                    </svg>
+                </div>
+            ) : null}
+
+            {note ? (
+                <div dir="rtl" className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-3 py-1.5 rounded-xl bg-slate-900/95 border border-white/10 text-[12px] font-bold text-slate-200 shadow-xl">
+                    {note}
+                </div>
+            ) : null}
         </div>
+    );
+}
+
+function MenuItem({ children, onClick, danger }) {
+    return (
+        <button onClick={onClick}
+            className={'w-full text-right px-3 py-1.5 rounded-lg text-[12px] font-bold ' +
+                (danger ? 'text-red-300 hover:bg-red-500/15' : 'text-slate-200 hover:bg-white/10')}>
+            {children}
+        </button>
     );
 }

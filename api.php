@@ -1627,6 +1627,25 @@ ensure_column($conn, 'meetings', 'room_key', "ADD COLUMN room_key VARCHAR(48) DE
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (57)");
 } // end DDL v57
 
+// ─── DDL v58: مؤشّرات الحاضرين على السبورة ──────────────────────────────
+// صفٌّ واحد لكل مستخدم في كل لوح، يُحدَّث بالنبضة. لا سجلّ تاريخياً هنا:
+// الحضور حالةٌ آنيّة، فمن انقطعت نبضته خمس عشرة ثانية اعتُبر خارجاً.
+if ($__sv < 58) {
+$conn->query("CREATE TABLE IF NOT EXISTS meeting_board_presence (
+    board_id VARCHAR(60) NOT NULL,
+    uid      INT NOT NULL,
+    name     VARCHAR(120) DEFAULT NULL,
+    color    VARCHAR(12)  DEFAULT NULL,
+    x        DOUBLE NOT NULL DEFAULT 0,
+    y        DOUBLE NOT NULL DEFAULT 0,
+    tool     VARCHAR(16) DEFAULT NULL,
+    sel_n    INT NOT NULL DEFAULT 0,
+    seen_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (board_id, uid), INDEX (board_id, seen_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (58)");
+} // end DDL v58
+
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
 // acc_invoices ببنودها وسنداتها، وتدخل «مسودّة» عمداً: الوثيقة تُحفظ، وترحيلها
@@ -13239,6 +13258,70 @@ switch ($action) {
                            FROM meetings m ORDER BY m.meet_date DESC, m.id DESC LIMIT 100");
         $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // نبضة الحضور: أرسل موضع مؤشّرك، وخذ مواضع البقيّة. صفٌّ واحد لكل مستخدم.
+    case 'board_presence': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $bid = $E(substr((string)($b['board'] ?? ''), 0, 60));
+        if ($bid === '') { echo json_encode(['success'=>false,'message'=>'board مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub'];
+        $nm = '';
+        if ($r = $conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $nm = (string)$x['name'];
+        // لون ثابت لكل مستخدم — مشتقّ من رقمه فلا يتبدّل بين الجلسات
+        $palette = ['#f6c343','#60a5fa','#34d399','#f87171','#c084fc','#fb923c','#22d3ee','#a3e635'];
+        $col = $palette[$uid % count($palette)];
+        $x = (float)($b['x'] ?? 0); $y = (float)($b['y'] ?? 0);
+        $tool = $E(substr((string)($b['tool'] ?? ''), 0, 16));
+        $seln = (int)($b['sel_n'] ?? 0);
+        $conn->query("INSERT INTO meeting_board_presence (board_id, uid, name, color, x, y, tool, sel_n, seen_at)
+            VALUES ('$bid', $uid, '" . $E($nm) . "', '$col', $x, $y, '$tool', $seln, NOW())
+            ON DUPLICATE KEY UPDATE name=VALUES(name), color=VALUES(color), x=VALUES(x), y=VALUES(y),
+                tool=VALUES(tool), sel_n=VALUES(sel_n), seen_at=NOW()");
+        $others = [];
+        if ($r = $conn->query("SELECT uid, name, color, x, y, tool, sel_n FROM meeting_board_presence
+                               WHERE board_id='$bid' AND uid <> $uid AND seen_at > (NOW() - INTERVAL 15 SECOND)"))
+            while ($o = $r->fetch_assoc()) {
+                $o['uid'] = (int)$o['uid']; $o['x'] = (float)$o['x']; $o['y'] = (float)$o['y'];
+                $o['sel_n'] = (int)$o['sel_n'];
+                $others[] = $o;
+            }
+        // كنس المنقطعين بعد ساعة — الجدول حالة لا أرشيف
+        if (mt_rand(1, 50) === 1)
+            $conn->query("DELETE FROM meeting_board_presence WHERE seen_at < (NOW() - INTERVAL 1 HOUR)");
+        echo json_encode(['success'=>true, 'me'=>['uid'=>$uid,'name'=>$nm,'color'=>$col], 'peers'=>$others], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // رفع صورة إلى السبورة — ملف على القرص لا نصّاً في القاعدة، فلا تنتفخ المزامنة
+    case 'board_upload': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $bid = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($_GET['board'] ?? ''));
+        if ($bid === '') { echo json_encode(['success'=>false,'message'=>'board مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['success'=>false,'message'=>'لم يصل الملف'], JSON_UNESCAPED_UNICODE); break; }
+        $file = $_FILES['file'];
+        if ($file['size'] > 8 * 1024 * 1024) {
+            echo json_encode(['success'=>false,'message'=>'الحد ثمانية ميجابايت'], JSON_UNESCAPED_UNICODE); break; }
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime  = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+        $extMap = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif','image/svg+xml'=>'svg'];
+        if (!isset($extMap[$mime])) {
+            echo json_encode(['success'=>false,'message'=>'صور فقط: JPG/PNG/WebP/GIF/SVG'], JSON_UNESCAPED_UNICODE); break; }
+        $dir = __DIR__ . '/uploads/board/' . $bid . '/';
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            echo json_encode(['success'=>false,'message'=>'تعذّر إنشاء مجلد الرفع'], JSON_UNESCAPED_UNICODE); break; }
+        $name = bin2hex(random_bytes(8)) . '.' . $extMap[$mime];
+        if (!move_uploaded_file($file['tmp_name'], $dir . $name)) {
+            echo json_encode(['success'=>false,'message'=>'فشل الحفظ'], JSON_UNESCAPED_UNICODE); break; }
+        echo json_encode(['success'=>true, 'url'=>'/uploads/board/' . $bid . '/' . $name], JSON_UNESCAPED_UNICODE);
         break;
     }
 
