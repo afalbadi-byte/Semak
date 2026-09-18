@@ -2556,6 +2556,47 @@ function send_email($to, $subject, $html, $alt = '') {
 
 // ─── بريد غرفة الاجتماعات: المحضر عند الإنهاء، والأجندة قبل الموعد بنصف ساعة ────
 // المستقبِلون = موظفون مختارون في صفحة المقدمة (attendee_ids) ولهم بريد مفعّل
+
+// ─── مفتاح دخول مكالمات الاجتماع (Jitsi as a Service من 8x8) ─────────────
+// خدمة 8x8 تسمح بتضمين المكالمة داخل التطبيق بلا انقطاع، لكنها لا تُدخل أحداً
+// إلا بمفتاحٍ موقَّع بمفتاحنا الخاص. نوقّعه هنا على الخادم فلا يغادر المفتاح
+// الخاص خادمنا أبداً، ويصلح المفتاح المُصدَر ثلاث ساعات لغرفةٍ واحدة.
+// الأسرار تُحقن عند النشر؛ إن غابت رجعنا null فتُفتح المكالمة في نافذتها.
+function jaas_config() {
+    $app = '__JAAS_APP_ID__';
+    $kid = '__JAAS_KID__';
+    $pk  = '__JAAS_PRIVATE_KEY_B64__';
+    if ($app === '' || strpos($app, '__') === 0 || $kid === '' || strpos($kid, '__') === 0
+        || $pk === '' || strpos($pk, '__') === 0) return null;
+    // المفتاح يُحفظ سطراً واحداً بترميز base64 لأن الحقن بـsed لا يحتمل أسطراً متعدّدة
+    $pem = base64_decode($pk, true);
+    if (!$pem) return null;
+    if (strpos($kid, '/') === false) $kid = $app . '/' . $kid;
+    return ['app' => $app, 'kid' => $kid, 'pem' => $pem];
+}
+
+function jaas_jwt($cfg, $room, $uid, $name, $email, $moderator) {
+    $b64 = function($s) { return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); };
+    $now = time();
+    $head = ['alg' => 'RS256', 'kid' => $cfg['kid'], 'typ' => 'JWT'];
+    $body = [
+        // النطاق كل غرف منشأتنا: Jitsi يصغّر أسماء الغرف، واسمٌ مطابقٌ حرفياً قد يُرفض لفرق حالة
+        'aud' => 'jitsi', 'iss' => 'chat', 'sub' => $cfg['app'], 'room' => '*',
+        'iat' => $now, 'nbf' => $now - 10, 'exp' => $now + 3 * 3600,
+        'context' => [
+            'user' => ['id' => (string)$uid, 'name' => $name, 'email' => $email,
+                       'moderator' => $moderator ? 'true' : 'false'],
+            'features' => ['livestreaming' => 'false', 'recording' => 'false',
+                           'transcription' => 'false', 'outbound-call' => 'false'],
+        ],
+    ];
+    $signing = $b64(json_encode($head)) . '.' . $b64(json_encode($body, JSON_UNESCAPED_UNICODE));
+    $key = openssl_pkey_get_private($cfg['pem']);
+    if (!$key) return null;
+    if (!openssl_sign($signing, $sig, $key, OPENSSL_ALGO_SHA256)) return null;
+    return $signing . '.' . $b64($sig);
+}
+
 function mtg_recipients($conn, $m) {
     $ids = array_values(array_filter(array_map('intval', explode(',', (string)($m['attendee_ids'] ?? '')))));
     if (!$ids) return [];
@@ -13431,7 +13472,20 @@ switch ($action) {
             $key = 'semak-' . $id . '-' . bin2hex(random_bytes(8));
             $conn->query("UPDATE meetings SET room_key='" . $conn->real_escape_string($key) . "' WHERE id=$id");
         }
-        echo json_encode(['success'=>true, 'meeting_id'=>$id, 'room'=>$key, 'board'=>('mtg-' . $id)], JSON_UNESCAPED_UNICODE);
+        // المكالمة داخل التطبيق عبر 8x8 إن توفّرت أسرارها، وإلا تُفتح في نافذتها
+        $jaas = null;
+        if ($cfg = jaas_config()) {
+            $uid = (int)$_jwt_claims['sub']; $nm = ''; $em = '';
+            if ($ur = $conn->query("SELECT name, email FROM users WHERE id=$uid LIMIT 1"))
+                if ($ux = $ur->fetch_assoc()) { $nm = (string)$ux['name']; $em = (string)$ux['email']; }
+            // المدير يدير الغرفة (كتم الآخرين وإخراجهم)، والبقيّة حضورٌ عاديّ
+            $isMod = (($_jwt_claims['role'] ?? '') === 'admin');
+            $jwt = jaas_jwt($cfg, $key, $uid, $nm, $em, $isMod);
+            if ($jwt) $jaas = ['domain' => '8x8.vc', 'app' => $cfg['app'],
+                               'room' => $cfg['app'] . '/' . $key, 'jwt' => $jwt];
+        }
+        echo json_encode(['success'=>true, 'meeting_id'=>$id, 'room'=>$key, 'board'=>('mtg-' . $id),
+                          'jaas'=>$jaas], JSON_UNESCAPED_UNICODE);
         break;
     }
 

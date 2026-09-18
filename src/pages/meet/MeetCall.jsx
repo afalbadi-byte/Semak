@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-    Video, Mic, MicOff, VideoOff, PhoneOff, MonitorUp, Hand, MessageSquare,
-    Users, Link2, Copy, Check, ShieldCheck, Loader2, Maximize2,
+    Video, MonitorUp, Hand, MessageSquare, Link2, Copy, Check, ShieldCheck, Loader2,
 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 
@@ -16,9 +15,8 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 // ════════════════════════════════════════════════════════════════════════════
 
 const JITSI_HOST   = 'meet.jit.si';
-// التضمين داخل التطبيق: مقطوعٌ بعد خمس دقائق على meet.jit.si، فهو مطفأ حتى
-// ننتقل إلى خادمٍ يسمح به. المكالمة تُفتح في نافذتها فتدوم بلا حدّ.
-const EMBED = false;
+// مساران: إن صرف الخادم مفتاح 8x8 (JaaS) ضُمِّنت المكالمة داخل التطبيق بلا حدّ.
+// وإلا فُتحت على meet.jit.si في نافذتها — فتضمينها هناك يُقطع بعد خمس دقائق.
 
 // إعدادات تُمرَّر في ذيل الرابط، فتدخل الغرفة مباشرةً باسمك بلا صفحة انتظار
 const roomUrl = (room, name) => 'https://' + JITSI_HOST + '/' + room + '#' + [
@@ -28,17 +26,15 @@ const roomUrl = (room, name) => 'https://' + JITSI_HOST + '/' + room + '#' + [
     'config.defaultLanguage=%22ar%22',
     'userInfo.displayName=' + encodeURIComponent(JSON.stringify(name || 'عضو سماك')),
 ].join('&');
-const JITSI_SCRIPT = 'https://meet.jit.si/external_api.js';
-
 let scriptP = null;
-const loadApi = () => {
+const loadApi = src => {
     if (window.JitsiMeetExternalAPI) return Promise.resolve();
     if (scriptP) return scriptP;
     scriptP = new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = JITSI_SCRIPT; s.async = true;
-        s.onload = res; s.onerror = () => { scriptP = null; rej(new Error('تعذّر تحميل وحدة المكالمة')); };
-        document.head.appendChild(s);
+        const el = document.createElement('script');
+        el.src = src; el.async = true;
+        el.onload = res; el.onerror = () => { scriptP = null; rej(new Error('تعذّر تحميل وحدة المكالمة')); };
+        document.head.appendChild(el);
     });
     return scriptP;
 };
@@ -47,11 +43,8 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
     const [room, setRoom]   = useState(null);
     const [state, setState] = useState('idle');   // idle | loading | live | error
     const [err, setErr]     = useState('');
-    const [mic, setMic]     = useState(true);
-    const [cam, setCam]     = useState(true);
-    const [hand, setHand]   = useState(false);
-    const [n, setN]         = useState(1);
     const [copied, setCopied] = useState(false);
+    const [jaas, setJaas]   = useState(null);     // إعداد التضمين عبر 8x8 إن توفّر
     const host = useRef(null);
     const apiRef = useRef(null);
 
@@ -61,21 +54,26 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
             const r = await fetch(`${API_URL}?action=mtg_room`, {
                 headers: { Authorization: 'Bearer ' + getAdminToken() },
             }).then(x => x.json());
-            if (r && r.success) setRoom(r.room);
-            else setErr((r && r.message) || 'تعذّر تجهيز الغرفة');
+            if (r && r.success) { setRoom(r.room); setJaas(r.jaas || null); return r; }
+            setErr((r && r.message) || 'تعذّر تجهيز الغرفة');
         } catch (e) { setErr('تعذّر الوصول إلى الخادم'); }
+        return null;
     }, []);
 
     useEffect(() => { fetchRoom(); }, [fetchRoom]);
 
     const join = async () => {
         if (!room) return;
-        if (!EMBED) { window.open(roomUrl(room, userName), '_blank', 'noopener'); return; }
+        if (!jaas) { window.open(roomUrl(room, userName), '_blank', 'noopener'); return; }
         setState('loading'); setErr('');
         try {
-            await loadApi();
-            const api = new window.JitsiMeetExternalAPI(JITSI_HOST, {
-                roomName: room,
+            const fresh = (await fetchRoom()) || {};
+            const J = fresh.jaas || jaas;
+            if (!J) { setState('idle'); window.open(roomUrl(room, userName), '_blank', 'noopener'); return; }
+            await loadApi('https://' + J.domain + '/' + J.app + '/external_api.js');
+            const api = new window.JitsiMeetExternalAPI(J.domain, {
+                roomName: J.room,
+                jwt: J.jwt,
                 parentNode: host.current,
                 width: '100%', height: '100%',
                 userInfo: { displayName: userName || 'عضو سماك', email: userEmail || undefined },
@@ -108,34 +106,23 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
             api.addListener('participantJoined', live);
             api.addListener('browserSupport', live);
             api.addListener('errorOccurred', e => { live(); if (e && e.error) setErr(String(e.error.message || e.error.name || '')); });
-            api.addListener('audioMuteStatusChanged',  e => setMic(!e.muted));
-            api.addListener('videoMuteStatusChanged',  e => setCam(!e.muted));
-            api.addListener('raiseHandUpdated',        e => { if (e.id === api.getParticipantsInfo()[0]?.participantId) setHand(!!e.handRaised); });
-            const count = () => { try { setN(api.getNumberOfParticipants() || 1); } catch (e) {} };
-            api.addListener('participantJoined', count);
-            api.addListener('participantLeft', count);
             api.addListener('readyToClose', () => leave());
         } catch (e) { setState('error'); setErr(e.message || 'تعذّر بدء المكالمة'); }
     };
 
-    const openTab = () => window.open(roomUrl(room, userName), '_blank', 'noopener');
-
     const leave = () => {
         try { apiRef.current && apiRef.current.dispose(); } catch (e) {}
         apiRef.current = null;
-        setState('idle'); setHand(false);
+        setState('idle');
     };
     useEffect(() => () => { try { apiRef.current && apiRef.current.dispose(); } catch (e) {} }, []);
 
-    const cmd = (c, v) => { try { apiRef.current && apiRef.current.executeCommand(c, v); } catch (e) {} };
     const copyLink = async () => {
         const url = 'https://' + JITSI_HOST + '/' + room;
         try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1800); }
         catch (e) { window.prompt('انسخ الرابط', url); }
     };
 
-    const ctl = on => 'w-12 h-12 rounded-2xl flex items-center justify-center transition ' +
-        (on ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-600 text-white');
 
     // ─── قبل الانضمام ───────────────────────────────────────────────────────
     if (state !== 'live' && state !== 'loading') return (
@@ -161,11 +148,12 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
                     <ShieldCheck size={16} /><span className="text-[13px] font-black">الغرفة مقصورة على الفريق</span>
                 </div>
                 <p className="text-[12px] leading-6 text-slate-400">
-                    اسم الغرفة سرٌّ عشوائي يصرفه خادم سماك لمن يملك حساباً هنا، ولا يُنشر في أي رابط عام.
-                    المكالمة تُفتح في نافذتها بلا حدٍّ زمني، وتبقى الأجندة والسبورة هنا — ارجع إليها
-                    من التطبيقات المفتوحة دون أن تنقطع المكالمة.
+                    {jaas
+                        ? 'لا يدخل الغرفة إلا من يحمل مفتاحاً موقَّعاً يصرفه خادم سماك لمن له حساب هنا — فلا رابط يُسرَّب ولا ضيف بلا دعوة. والمكالمة داخل التطبيق بلا حدٍّ زمني.'
+                        : 'اسم الغرفة سرٌّ عشوائي يصرفه خادم سماك لمن يملك حساباً هنا. المكالمة تُفتح في نافذتها بلا حدٍّ زمني، وتبقى الأجندة والسبورة هنا — ارجع إليها من التطبيقات المفتوحة دون أن تنقطع المكالمة.'}
                 </p>
-                <div className="flex items-center gap-2">
+                {/* رابط الدعوة لا معنى له مع 8x8: الغرفة لا تُفتح بلا مفتاح موقَّع */}
+                {!jaas ? <div className="flex items-center gap-2">
                     <button onClick={copyLink} disabled={!room}
                         className="flex-1 h-11 rounded-2xl bg-white/10 font-bold text-[13px] flex items-center justify-center gap-2 disabled:opacity-40">
                         {copied ? <><Check size={15} className="text-emerald-400" />نُسخ الرابط</> : <><Copy size={15} />انسخ رابط الدعوة</>}
@@ -174,7 +162,7 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
                         <a href={'https://' + JITSI_HOST + '/' + room} target="_blank" rel="noreferrer"
                             className="w-11 h-11 rounded-2xl bg-white/10 flex items-center justify-center"><Link2 size={16} /></a>
                     ) : null}
-                </div>
+                </div> : null}
             </div>
 
             <ul className="grid grid-cols-2 gap-2">
@@ -199,33 +187,6 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
                 </div>
             ) : null}
 
-            <div className="absolute top-3 inset-x-3 flex items-center gap-2 pointer-events-none">
-                <span className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur text-[11px] font-black text-slate-200 flex items-center gap-1.5">
-                    <Users size={12} />{n}
-                </span>
-                <span className="px-2.5 py-1.5 rounded-xl bg-red-600/90 text-[11px] font-black flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />مباشر
-                </span>
-            </div>
-
-            <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-2">
-                <button onClick={() => cmd('toggleAudio')} className={ctl(mic)} title={mic ? 'كتم' : 'إلغاء الكتم'}>
-                    {mic ? <Mic size={19} /> : <MicOff size={19} />}
-                </button>
-                <button onClick={() => cmd('toggleVideo')} className={ctl(cam)} title={cam ? 'إطفاء الكاميرا' : 'تشغيل الكاميرا'}>
-                    {cam ? <Video size={19} /> : <VideoOff size={19} />}
-                </button>
-                <button onClick={() => cmd('toggleShareScreen')} className={ctl(true)} title="مشاركة الشاشة"><MonitorUp size={19} /></button>
-                <button onClick={() => { cmd('toggleRaiseHand'); setHand(v => !v); }}
-                    className={'w-12 h-12 rounded-2xl flex items-center justify-center transition ' +
-                        (hand ? 'bg-gold-500 text-slate-900' : 'bg-white/10 text-white')} title="رفع اليد"><Hand size={19} /></button>
-                <button onClick={() => cmd('toggleChat')} className={ctl(true)} title="المحادثة"><MessageSquare size={19} /></button>
-                <button onClick={() => cmd('toggleTileView')} className={ctl(true)} title="عرض الشبكة"><Maximize2 size={19} /></button>
-                <button onClick={openTab} className={ctl(true)} title="افتح في نافذة مستقلّة"><Link2 size={19} /></button>
-                <button onClick={leave} className="w-14 h-12 rounded-2xl bg-red-600 flex items-center justify-center" title="إنهاء">
-                    <PhoneOff size={19} />
-                </button>
-            </div>
         </div>
     );
 }

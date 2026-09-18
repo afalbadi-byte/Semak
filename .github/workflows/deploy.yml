@@ -82,6 +82,12 @@ jobs:
           sed -i "s|__SMTP_FROM_NAME__|${{ secrets.SMTP_FROM_NAME }}|g" dist/api.php
           sed -i "s|__SMTP_SECURE__|${{ secrets.SMTP_SECURE }}|g" dist/api.php
 
+      - name: Inject JaaS (8x8) meeting keys
+        run: |
+          sed -i "s|__JAAS_APP_ID__|${{ secrets.JAAS_APP_ID }}|g" dist/api.php
+          sed -i "s|__JAAS_KID__|${{ secrets.JAAS_KID }}|g" dist/api.php
+          sed -i "s|__JAAS_PRIVATE_KEY_B64__|${{ secrets.JAAS_PRIVATE_KEY_B64 }}|g" dist/api.php
+
       - name: Inject SaaS JWT & platform admin secrets
         run: |
           sed -i "s|__TOKEN_SECRET__|${{ secrets.TOKEN_SECRET }}|g"       dist/api.php
