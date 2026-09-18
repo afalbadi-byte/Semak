@@ -4,6 +4,8 @@ import { Printer, RefreshCw, Loader2, FolderKanban, Building2, CalendarRange } f
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { openPrintReport } from '../../lib/printReport';
 import { entityPath } from '../../lib/entity';
+import StatementExport from '../../components/StatementExport';
+import { supplierDoc, projectDoc } from '../../lib/statementDocs';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const auth  = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
@@ -133,10 +135,9 @@ export default function ProjectStatements() {
                         className="h-11 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold flex items-center gap-2">
                         <RefreshCw size={15} className={busy ? 'animate-spin' : ''} /> تحديث
                     </button>
-                    <button onClick={() => openPrintReport('project_statement', { project_id: pid, from, to })} disabled={!pid}
-                        className="h-11 px-4 rounded-xl bg-brand-900 text-white text-sm font-bold flex items-center gap-2 disabled:opacity-40">
-                        <Printer size={15} /> طباعة بهوية سماك
-                    </button>
+                    <StatementExport disabled={!pid || !d} className="[&>button]:h-11"
+                        build={() => projectDoc((projects.find(p => String(p.project_id) === String(pid)) || {}).name || '', d, lines, from, to)}
+                        pdf={() => openPrintReport('project_statement', { project_id: pid, from, to })} />
                 </div>
             </div>
 

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { FileDown, ExternalLink } from 'lucide-react';
+import { FileDown, ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { call } from '../lib/api';
 import { go } from '../lib/router';
 import { t } from '../lib/i18n';
 import { fullDate, period, money, METHODS, KINDS } from '../lib/fmt';
 import { Btn, Money, Spinner, inputCls } from '../ui';
 import { useData } from '../App';
+import { statementExcel } from '../lib/excel';
 import { DocHeader, Beneficiary, Signatures, DocFooter } from './DocParts';
 
 const PRESETS = [
@@ -70,6 +71,7 @@ export default function Statement({ q }) {
                 </div>
                 <div className="flex items-center gap-2">
                     <p className="text-[12px] text-ink-3 flex-1 leading-5">{t('في نافذة الطباعة اختر «حفظ PDF» — على الآيفون: مشاركة ثم «حفظ في الملفات». روابط المستندات تبقى قابلة للنقر داخل الملف.')}</p>
+                    <Btn kind="line" onClick={() => statementExcel(d, { fundName, from, to })} disabled={!d || !d.rows}><FileSpreadsheet size={17} />Excel</Btn>
                     <Btn onClick={pdf} disabled={!d || !d.rows}><FileDown size={17} />{t('تنزيل PDF')}</Btn>
                 </div>
                 {d && d.rows && !d.profile.org_name ? (

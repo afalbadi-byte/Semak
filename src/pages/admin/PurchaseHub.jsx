@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import ExportButton from '../../components/ExportButton';
+import StatementExport from '../../components/StatementExport';
+import { supplierDoc, projectDoc } from '../../lib/statementDocs';
+import { openPrintReport } from '../../lib/printReport';
 import { EntityProvider } from '../buy/entityStack';
 import { useEntity } from '../buy/entityCtx';
 
@@ -262,10 +265,8 @@ function Statement({ supplier, onBack, onOpen }) {
                     <button key={k || 'all'} onClick={() => setKind(k)}
                         className={`px-3 py-2 rounded-xl text-xs font-bold border ${kind === k ? 'bg-[#1a365d] text-white border-[#1a365d]' : 'border-slate-200 dark:border-brand-700'}`}>{k || 'الكل'}</button>
                 ))}
-                <ExportButton rows={shown} filename={`كشف-${supplier}`}
-                    columns={[{ key: 'date', label: 'التاريخ' }, { key: 'kind', label: 'الحركة' }, { key: 'ref', label: 'المرجع' },
-                              { key: 'debit', label: 'عليه' }, { key: 'credit', label: 'له' }, { key: 'balance', label: 'الرصيد' }]} />
-                <button onClick={() => window.print()} className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-brand-700">طباعة</button>
+                <StatementExport disabled={!d} className="mr-auto" build={() => supplierDoc(supplier, d, shown, from, to)}
+                    pdf={() => openPrintReport('supplier_statement', { supplier, from, to })} />
             </div>
             <Table cols={cols} rows={shown.map((r, i) => ({ ...r, __key: `${r.kind}-${r.id}-${i}` }))}
                 onRow={r => r.open && onOpen(r.open.type, r.open.value)} empty="لا حركات" />

@@ -10396,6 +10396,58 @@ switch ($action) {
     }
 
     // نموذج طباعة بهوية سماك لأي تقرير — يُفتح في تبويب ويُحفظ PDF
+    // ─── كشفٌ عامّ بترويسة سماك ─────────────────────────────────────────────
+    // الشاشة ترسل وصف الكشف كما تعرضه (العنوان، الفترة، الأعمدة، الصفوف، الإجماليات)،
+    // والخادم يطبعه بالترويسة المعتمدة نفسها — فيتطابق ملفّ PDF مع ملفّ Excel ومع الشاشة،
+    // ويُعتمد نموذجٌ واحد لكل كشوف الحساب في الموقع والتطبيقات.
+    case 'print_doc': {
+        ob_end_clean();
+        header('Content-Type: text/html; charset=UTF-8');
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) { echo '<p dir="rtl">انتهت الجلسة</p>'; exit; }
+        $d = json_decode(file_get_contents('php://input'), true) ?: [];
+        $str = function ($v, $n = 300) { return mb_substr(trim((string)$v), 0, $n); };
+        $meta = [];
+        foreach ((array)($d['meta'] ?? []) as $m) if (is_array($m) && count($m) >= 2) $meta[$str($m[0], 60)] = $str($m[1], 120);
+        $cols = array_slice((array)($d['columns'] ?? []), 0, 16);
+        $h = semak_print_open($str($d['title'] ?? 'كشف حساب', 120), $str($d['label'] ?? ($d['title'] ?? 'كشف حساب'), 120), $meta);
+        if (!empty($d['subtitle'])) $h .= '<h2 style="margin:0 0 10px;font-size:15px;color:#1a365d">' . htmlspecialchars($str($d['subtitle'], 200)) . '</h2>';
+        if (!empty($d['cards'])) {
+            $cards = [];
+            foreach ((array)$d['cards'] as $c) if (is_array($c) && count($c) >= 2)
+                $cards[$str($c[0], 60)] = !empty($c[2]) ? [$str($c[1], 60), 'gold'] : $str($c[1], 60);
+            $h .= pr_cards($cards);
+        }
+        // الخلية: نصٌّ، أو {v, money, href} — المال يُنسَّق، والرابط يبقى قابلاً للنقر في PDF
+        $cell = function ($c, $col) use ($str) {
+            $money = ($col['type'] ?? '') === 'money';
+            $v = is_array($c) ? ($c['v'] ?? '') : $c;
+            if ($money && $v !== '' && $v !== null && is_numeric($v)) $v = pr_money($v);
+            $txt = htmlspecialchars($str($v, 400));
+            if (is_array($c) && !empty($c['href']) && preg_match('#^https?://#', (string)$c['href']))
+                $txt = '<a href="' . htmlspecialchars((string)$c['href']) . '" target="_blank">' . ($txt !== '' ? $txt : 'عرض') . '</a>';
+            return '<td class="' . ($money ? 'num' : '') . (is_array($c) && !empty($c['b']) ? ' b' : '') . '">' . $txt . '</td>';
+        };
+        $h .= '<table><thead><tr>';
+        foreach ($cols as $c) $h .= '<th>' . htmlspecialchars($str($c['label'] ?? '', 60)) . '</th>';
+        $h .= '</tr></thead><tbody>';
+        foreach (array_slice((array)($d['rows'] ?? []), 0, 5000) as $r) {
+            $h .= '<tr>';
+            foreach ($cols as $i => $c) $h .= $cell(is_array($r) ? ($r[$i] ?? '') : '', $c);
+            $h .= '</tr>';
+        }
+        $h .= '</tbody>';
+        if (!empty($d['foot']) && is_array($d['foot'])) {
+            $h .= '<tfoot><tr>';
+            foreach ($cols as $i => $c) $h .= $cell($d['foot'][$i] ?? '', $c);
+            $h .= '</tr></tfoot>';
+        }
+        $h .= '</table>';
+        if (!empty($d['note'])) $h .= '<p style="font-size:11px;color:#555;margin-top:10px">' . htmlspecialchars($str($d['note'], 600)) . '</p>';
+        echo $h . '<style>td.num{text-align:left;direction:ltr;font-variant-numeric:tabular-nums}td.b{font-weight:800}td a{color:#1d4ed8}</style>'
+            . semak_print_close(!empty($d['signature']));
+        exit;
+    }
+
     case 'print_report': {
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
             header('Content-Type: text/html; charset=utf-8');

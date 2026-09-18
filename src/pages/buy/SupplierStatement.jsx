@@ -3,6 +3,8 @@ import { X, Printer, Loader2 } from 'lucide-react';
 import { API_URL, getAdminToken } from '../../lib/api/client';
 import { openPrintReport } from '../../lib/printReport';
 import { useEntity } from './entityCtx';
+import StatementExport from '../../components/StatementExport';
+import { supplierDoc, projectDoc } from '../../lib/statementDocs';
 
 const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const auth  = () => { const t = getAdminToken(); return t ? { Authorization: `Bearer ${t}` } : {}; };
@@ -56,10 +58,7 @@ export default function SupplierStatement({ supplier, onClose }) {
                     <X size={17} />
                 </button>
                 <h2 className="font-black text-[14px] truncate flex-1">كشف حساب — {supplier}</h2>
-                <button onClick={print} disabled={!d}
-                    className="h-10 px-3 rounded-xl bg-[#c5a059] text-[#0b1220] text-[12px] font-black flex items-center gap-1.5 disabled:opacity-40">
-                    <Printer size={15} /> طباعة
-                </button>
+                <StatementExport variant="mobile" disabled={!d} build={() => supplierDoc(supplier, d, shown, from, to)} pdf={print} />
             </div>
 
             <div className="p-4 space-y-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>

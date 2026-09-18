@@ -237,4 +237,8 @@ export default {
     "{n} صفحات تُقرأ معاً كمستندٍ واحد": "{n} pages read together as one document",
     "أعد القراءة": "Read again",
     "يقرأ {n} صفحات…": "Reading {n} pages…",
+    "تاريخ الإصدار": "Issued on",
+    "الإجماليات": "Totals",
+    "فتح المستند": "Open document",
+    "كشف الحساب": "Statement",
 };

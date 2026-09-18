@@ -4,6 +4,22 @@ import {
 } from 'lucide-react';
 import { apiGet } from '../../lib/api/client';
 import { Money, EntityLink, Breadcrumbs } from '../../components/ui';
+import StatementExport from '../../components/StatementExport';
+
+// وصف الكشف كما يُعرض: يولّد منه ملفّ Excel وملفّ PDF بترويسة سماك
+const ledgerDoc = ({ title, name, meta, rows, totals, opening, from, to, closingLabel }) => ({
+    title, subtitle: name,
+    filename: title + ' — ' + name + ((from || to) ? ' ' + (from || '…') + ' إلى ' + (to || '…') : ''),
+    meta: [...meta, ['الفترة', (from || to) ? (from || 'البداية') + ' — ' + (to || 'اليوم') : 'كل الفترات']],
+    cards: [['الرصيد الافتتاحي', opening], ['مدين', totals.debit], ['دائن', totals.credit], [closingLabel || 'الرصيد الختامي', totals.closing, true]],
+    columns: [{ label: 'التاريخ', type: 'date' }, { label: 'القيد', width: 12 }, { label: 'البيان', width: 40 },
+        { label: 'مدين', type: 'money' }, { label: 'دائن', type: 'money' }, { label: 'الرصيد', type: 'money' }],
+    rows: [['', '', { v: 'رصيد افتتاحي', b: 1 }, '', '', opening],
+        ...rows.map(r => [r.date, r.entry_no, r.line_desc || r.ent_desc || '', Number(r.debit) || 0, Number(r.credit) || 0, Number(r.balance) || 0])],
+    foot: ['', '', { v: 'الإجماليات', b: 1 }, totals.debit, totals.credit, totals.closing],
+    signature: true,
+});
+
 
 // ════════════════════════════════════════════════════════════════════════════
 //  صفحة دفتر أستاذ حساب (المحرّك المستقل gl_ledger):
@@ -39,25 +55,6 @@ export default function AccountDetail({ accountId, setActiveTab, tenant = 1 }) {
     const totals  = data?.totals || { debit: 0, credit: 0, closing: 0 };
     const opening = data?.opening ?? 0;
 
-    const exportCSV = () => {
-        if (!account) return;
-        const esc  = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-        const num  = v => (Number(v) || 0).toFixed(2);
-        const header = ['التاريخ', 'القيد', 'البيان', 'مدين', 'دائن', 'الرصيد'].map(esc).join(',');
-        const obRow  = [esc(''), esc(''), esc('رصيد افتتاحي'), '', '', esc(num(opening))].join(',');
-        const dataRows = rows.map(r =>
-            [esc(r.date), esc(r.entry_no), esc(r.line_desc || r.ent_desc || ''), esc(num(r.debit)), esc(num(r.credit)), esc(num(r.balance))].join(',')
-        );
-        const totalRow = [esc(''), esc(''), esc('الإجماليات'), esc(num(totals.debit)), esc(num(totals.credit)), esc(num(totals.closing))].join(',');
-        const csv  = '﻿' + [header, obRow, ...dataRows, totalRow].join('\r\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href = url; a.download = `ledger_${account.code}_${account.name}.csv`;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
-    };
-
     return (
         <div className="animate-fadeIn p-4 md:p-8 max-w-5xl mx-auto" dir="rtl">
             <div className="flex items-center justify-between gap-3 mb-4 no-print">
@@ -70,14 +67,10 @@ export default function AccountDetail({ accountId, setActiveTab, tenant = 1 }) {
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059] transition">
                         <ArrowLeft size={15} /> الدفتر
                     </button>
-                    <button onClick={exportCSV}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
-                        <Download size={15} /> CSV
-                    </button>
-                    <button onClick={() => window.print()}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold bg-brand-800 text-white hover:bg-brand-900 transition">
-                        <Printer size={15} /> طباعة
-                    </button>
+                    <StatementExport disabled={!account} build={() => ledgerDoc({
+                        title: 'كشف حساب أستاذ', name: account.code + ' · ' + account.name, rows, totals, opening, from, to,
+                        meta: [['رمز الحساب', account.code], ['النوع', TYPE_LABELS[account.type] || account.type || '']],
+                    })} />
                 </div>
             </div>
 

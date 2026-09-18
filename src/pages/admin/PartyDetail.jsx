@@ -5,24 +5,23 @@ import {
 } from 'lucide-react';
 import { apiGet, API_URL } from '../../lib/api/client';
 import { Money, StatusPill, EntityLink, Breadcrumbs } from '../../components/ui';
+import StatementExport from '../../components/StatementExport';
 
-// ─── تصدير CSV ─────────────────────────────────────────────────────────────────
-const exportPartyCSV = (party, rows, totals, opening, from, to) => {
-    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const num = v => (Number(v) || 0).toFixed(2);
-    const header = ['التاريخ','القيد','البيان','مدين','دائن','الرصيد'].map(esc).join(',');
-    const obRow  = [esc(''),esc(''),esc('رصيد افتتاحي'),'','',esc(num(opening))].join(',');
-    const dataRows = rows.map(r => [esc(r.date),esc(r.entry_no),esc(r.line_desc||r.ent_desc||''),esc(num(r.debit)),esc(num(r.credit)),esc(num(r.balance))].join(','));
-    const totRow = [esc(''),esc(''),esc('الإجماليات'),esc(num(totals.debit)),esc(num(totals.credit)),esc(num(totals.closing))].join(',');
-    const csv = '﻿' + [header, obRow, ...dataRows, totRow].join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    const suffix = (from||to) ? `_${from||''}_${to||''}` : '';
-    a.href = url; a.download = `statement_${party.name}${suffix}.csv`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
-};
+// وصف الكشف كما يُعرض: يولّد منه ملفّ Excel وملفّ PDF بترويسة سماك
+const ledgerDoc = ({ title, name, meta, rows, totals, opening, from, to, closingLabel }) => ({
+    title, subtitle: name,
+    filename: title + ' — ' + name + ((from || to) ? ' ' + (from || '…') + ' إلى ' + (to || '…') : ''),
+    meta: [...meta, ['الفترة', (from || to) ? (from || 'البداية') + ' — ' + (to || 'اليوم') : 'كل الفترات']],
+    cards: [['الرصيد الافتتاحي', opening], ['مدين', totals.debit], ['دائن', totals.credit], [closingLabel || 'الرصيد الختامي', totals.closing, true]],
+    columns: [{ label: 'التاريخ', type: 'date' }, { label: 'القيد', width: 12 }, { label: 'البيان', width: 40 },
+        { label: 'مدين', type: 'money' }, { label: 'دائن', type: 'money' }, { label: 'الرصيد', type: 'money' }],
+    rows: [['', '', { v: 'رصيد افتتاحي', b: 1 }, '', '', opening],
+        ...rows.map(r => [r.date, r.entry_no, r.line_desc || r.ent_desc || '', Number(r.debit) || 0, Number(r.credit) || 0, Number(r.balance) || 0])],
+    foot: ['', '', { v: 'الإجماليات', b: 1 }, totals.debit, totals.credit, totals.closing],
+    signature: true,
+});
+
+const PARTY_TYPES = { customer: 'عميل', supplier: 'مورّد', partner: 'شريك' };
 
 // ─── تنسيق أرقام دفترة ────────────────────────────────────────────────────────
 const fmtD = n =>
@@ -227,16 +226,12 @@ function Statement({ partyId, setActiveTab, tenant }) {
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-slate-200 dark:border-brand-700 text-slate-600 dark:text-brand-300 hover:border-[#c5a059] transition">
                         <ArrowLeft size={15} /> القائمة
                     </button>
-                    {party && rows.length > 0 && (
-                        <button onClick={() => exportPartyCSV(party, rows, totals, opening, from, to)}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
-                            <Download size={15} /> CSV
-                        </button>
-                    )}
-                    <button onClick={() => window.print()}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold bg-brand-800 text-white hover:bg-brand-900 transition">
-                        <Printer size={15} /> طباعة
-                    </button>
+                    <StatementExport disabled={!party} build={() => ledgerDoc({
+                        title: 'كشف حساب', name: party.name, rows, totals, opening, from, to, closingLabel: balLabel,
+                        meta: [['النوع', PARTY_TYPES[party.type] || party.type || ''],
+                            ...(party.vat_number ? [['الرقم الضريبي', party.vat_number]] : []),
+                            ...(party.phone ? [['الجوال', party.phone]] : [])],
+                    })} />
                 </div>
             </div>
 
