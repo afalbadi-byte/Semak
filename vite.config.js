@@ -45,7 +45,7 @@ export default defineConfig({
         runtimeCaching: [
           {
             // بعد استثنائها من إعادة التوجيه تحتاج كاشها الخاص لتفتح دون شبكة
-            urlPattern: /^https:\/\/semak\.sa\/(buy|proj|qc)(\/|$)/,
+            urlPattern: /^https:\/\/semak\.sa\/(buy|proj|qc|meet)(\/|$)/,
             handler: 'NetworkFirst',
             options: { cacheName: 'app-shell', networkTimeoutSeconds: 5 },
           },
