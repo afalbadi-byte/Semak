@@ -559,7 +559,7 @@ export default function MeetBoard({ boardId, userName, dense }) {
     const showStyle = selItems.length > 0 || ['pen', 'marker', 'shape', 'arrow', 'line', 'connector', 'note', 'text'].indexOf(tool) >= 0;
 
     return (
-        <div className="relative w-full h-full overflow-hidden bg-[#0f172a] select-none" dir="ltr"
+        <div className="absolute inset-0 overflow-hidden bg-[#0f172a] select-none" dir="ltr"
             onDrop={onDrop} onDragOver={e => e.preventDefault()}>
 
             <div ref={wrap} className="absolute inset-0 touch-none"
@@ -655,7 +655,8 @@ export default function MeetBoard({ boardId, userName, dense }) {
 
             {/* ── شريط الأدوات ── */}
             <div dir="rtl" className={'absolute z-20 flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 shadow-2xl ' +
-                (dense ? 'bottom-3 inset-x-3 overflow-x-auto no-scrollbar' : 'top-1/2 -translate-y-1/2 right-3 flex-col max-h-[86vh] overflow-y-auto no-scrollbar')}>
+                (dense ? 'inset-x-2 overflow-x-auto no-scrollbar' : 'top-1/2 -translate-y-1/2 right-3 flex-col max-h-[86vh] overflow-y-auto no-scrollbar')}
+                style={dense ? { bottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}>
                 {TOOLS.map(t => {
                     const I = t.k === 'shape' ? ShapeIcon : t.icon;
                     return (
@@ -715,20 +716,21 @@ export default function MeetBoard({ boardId, userName, dense }) {
             ) : null}
 
             {/* ── الشريط العلوي ── */}
-            <div dir="rtl" className="absolute top-3 right-3 left-3 z-20 flex items-start gap-1.5 pointer-events-none">
+            <div dir="rtl" className="absolute top-3 right-3 left-3 z-20 flex items-start gap-1.5 flex-wrap pointer-events-none">
+                {/* على الجوّال يكفي التكبير بالإصبعين، فنُبقي ما لا بديل عنه فقط */}
                 <div className="flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 pointer-events-auto">
-                    <button title="تصغير" onClick={() => { const r = wrap.current.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, 0.83); }} className={btn(false)}><ZoomOut size={16} /></button>
+                    {!dense ? <button title="تصغير" onClick={() => { const r = wrap.current.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, 0.83); }} className={btn(false)}><ZoomOut size={16} /></button> : null}
                     <button onClick={() => setView(v => ({ ...v, k: 1 }))} className="px-1.5 self-center text-[11px] font-black text-slate-300 tabular-nums">{Math.round(K * 100)}%</button>
-                    <button title="تكبير" onClick={() => { const r = wrap.current.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.2); }} className={btn(false)}><ZoomIn size={16} /></button>
+                    {!dense ? <button title="تكبير" onClick={() => { const r = wrap.current.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.2); }} className={btn(false)}><ZoomIn size={16} /></button> : null}
                     <button title="ملء الشاشة بالمحتوى" onClick={fit} className={btn(false)}><Maximize size={16} /></button>
                 </div>
                 <div className="flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 pointer-events-auto">
                     <button title="قوالب" onClick={() => setPanel(p => (p === 'templates' ? null : 'templates'))} className={btn(panel === 'templates')}><LayoutTemplate size={16} /></button>
                     <button title="بحث" onClick={() => setPanel(p => (p === 'search' ? null : 'search'))} className={btn(panel === 'search')}><Search size={16} /></button>
                     <button title="تصدير" onClick={() => setPanel(p => (p === 'export' ? null : 'export'))} className={btn(panel === 'export')}><Download size={16} /></button>
-                    <button title="التقاط ومحاذاة" onClick={() => setSnapOn(v => !v)} className={btn(snapOn)}><Magnet size={16} /></button>
-                    <button title="شبكة" onClick={() => setGridOn(v => !v)} className={btn(gridOn)}><Grid3x3 size={16} /></button>
-                    <button title="خريطة مصغّرة" onClick={() => setShowMap(v => !v)} className={btn(showMap)}><MapIcon size={16} /></button>
+                    {!dense ? <button title="التقاط ومحاذاة" onClick={() => setSnapOn(v => !v)} className={btn(snapOn)}><Magnet size={16} /></button> : null}
+                    {!dense ? <button title="شبكة" onClick={() => setGridOn(v => !v)} className={btn(gridOn)}><Grid3x3 size={16} /></button> : null}
+                    {!dense ? <button title="خريطة مصغّرة" onClick={() => setShowMap(v => !v)} className={btn(showMap)}><MapIcon size={16} /></button> : null}
                     <button title="مسح السبورة" onClick={async () => {
                         if (!window.confirm('مسح السبورة كاملة؟ تُعلَّم العناصر محذوفة ولا تُزال من سجل الخادم.')) return;
                         if (await B.clear()) { setSel([]); flash('مُسحت السبورة'); }
@@ -737,7 +739,7 @@ export default function MeetBoard({ boardId, userName, dense }) {
                 <div className="ms-auto flex items-center gap-2 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl px-2.5 py-2 pointer-events-auto">
                     {B.sync === 'busy' ? <Loader2 size={13} className="animate-spin text-gold-500" />
                         : <span className={'w-2 h-2 rounded-full ' + (B.sync === 'err' ? 'bg-red-500' : 'bg-emerald-500')} />}
-                    <span className="text-[11px] font-bold text-slate-300">{list.length} عنصر</span>
+                    <span className="text-[11px] font-bold text-slate-300">{list.length}{dense ? '' : ' عنصر'}</span>
                     {B.peers.length ? (
                         <span className="flex items-center gap-1 border-s border-white/10 ps-2">
                             {B.peers.slice(0, 4).map(p => (

@@ -107,12 +107,16 @@ export default function MeetApp() {
                 </div>
             </header>
 
-            <main className={'flex-1 ' + (tab === 'board' ? 'overflow-hidden' : 'overflow-y-auto pb-24')}
-                style={tab === 'board' ? { height: 'calc(100vh - 150px)' } : undefined}>
+            <main className={'flex-1 min-h-0 relative ' + (tab === 'board' ? 'overflow-hidden' : 'overflow-y-auto pb-24')}>
                 {tab === 'agenda'  && <MeetAgenda userName={user?.name || ''} onMeeting={setMeeting} />}
                 {tab === 'call'    && <MeetCall userName={user?.name || ''} userEmail={user?.email || ''}
                                           meetingTitle={meeting ? meeting.title : ''} dense />}
-                {tab === 'board'   && <MeetBoard boardId={boardId} userName={user?.name || ''} dense />}
+                {/* صندوقٌ مموضَع ينتهي فوق شريط التبويبات، فتملؤه السبورة ولا تختفي أدواتها تحته */}
+                {tab === 'board'   && (
+                    <div className="absolute inset-x-0 top-0" style={{ bottom: 'calc(58px + env(safe-area-inset-bottom))' }}>
+                        <MeetBoard boardId={boardId} userName={user?.name || ''} dense />
+                    </div>
+                )}
                 {tab === 'minutes' && <MeetMinutes />}
             </main>
 

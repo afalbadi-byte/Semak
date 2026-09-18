@@ -70,6 +70,9 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
                     startWithAudioMuted: false,
                     startWithVideoMuted: false,
                     prejoinPageEnabled: false,
+                    prejoinConfig: { enabled: false },
+                    disableModeratorIndicator: true,
+                    disableProfile: true,
                     disableDeepLinking: true,
                     defaultLanguage: 'ar',
                     subject: meetingTitle || 'اجتماع سماك',
@@ -84,7 +87,14 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
                 },
             });
             apiRef.current = api;
-            api.addListener('videoConferenceJoined', () => setState('live'));
+            // طبقة الانتظار تُغطّي الإطار، ولو بقيت حبست المستخدم خلفها. فنرفعها
+            // بأول إشارة حياة من الغرفة، وبمهلةٍ قصيرة على أي حال.
+            const live = () => { clearTimeout(t0); setState('live'); };
+            const t0 = setTimeout(live, 4000);
+            api.addListener('videoConferenceJoined', live);
+            api.addListener('participantJoined', live);
+            api.addListener('browserSupport', live);
+            api.addListener('errorOccurred', e => { live(); if (e && e.error) setErr(String(e.error.message || e.error.name || '')); });
             api.addListener('audioMuteStatusChanged',  e => setMic(!e.muted));
             api.addListener('videoMuteStatusChanged',  e => setCam(!e.muted));
             api.addListener('raiseHandUpdated',        e => { if (e.id === api.getParticipantsInfo()[0]?.participantId) setHand(!!e.handRaised); });
@@ -94,6 +104,8 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
             api.addListener('readyToClose', () => leave());
         } catch (e) { setState('error'); setErr(e.message || 'تعذّر بدء المكالمة'); }
     };
+
+    const openTab = () => window.open('https://' + JITSI_HOST + '/' + room, '_blank', 'noopener');
 
     const leave = () => {
         try { apiRef.current && apiRef.current.dispose(); } catch (e) {}
@@ -167,9 +179,10 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
         <div dir="rtl" className="relative w-full" style={{ height: dense ? 'calc(100vh - 190px)' : '72vh' }}>
             <div ref={host} className="absolute inset-0 rounded-2xl overflow-hidden bg-black" />
             {state === 'loading' ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0b1220]/90 rounded-2xl">
-                    <Loader2 size={26} className="animate-spin text-gold-500" />
-                    <span className="text-[12px] font-bold text-slate-400">جارٍ الدخول إلى الغرفة…</span>
+                <div className="absolute inset-x-0 top-3 flex flex-col items-center gap-2 pointer-events-none">
+                    <span className="px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur text-[12px] font-bold text-slate-300 flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin text-gold-500" />جارٍ الدخول إلى الغرفة…
+                    </span>
                 </div>
             ) : null}
 
@@ -195,6 +208,7 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
                         (hand ? 'bg-gold-500 text-slate-900' : 'bg-white/10 text-white')} title="رفع اليد"><Hand size={19} /></button>
                 <button onClick={() => cmd('toggleChat')} className={ctl(true)} title="المحادثة"><MessageSquare size={19} /></button>
                 <button onClick={() => cmd('toggleTileView')} className={ctl(true)} title="عرض الشبكة"><Maximize2 size={19} /></button>
+                <button onClick={openTab} className={ctl(true)} title="افتح في نافذة مستقلّة"><Link2 size={19} /></button>
                 <button onClick={leave} className="w-14 h-12 rounded-2xl bg-red-600 flex items-center justify-center" title="إنهاء">
                     <PhoneOff size={19} />
                 </button>

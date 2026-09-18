@@ -472,7 +472,7 @@ export default function MeetingRoom() {
                     </button>
                     <button onClick={() => setStage(null)} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center"><X size={15} /></button>
                 </div>
-                <div className="flex-1 min-h-0 font-cairo text-white">
+                <div className="flex-1 min-h-0 relative font-cairo text-white">
                     {stage === 'board'
                         ? <MeetBoard boardId={'mtg-' + meeting.id} userName={me?.name || ''} />
                         : <div className="h-full p-4 overflow-y-auto max-w-5xl mx-auto">
