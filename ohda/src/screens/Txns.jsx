@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Search, X, Download, SlidersHorizontal, Paperclip, Trash2, RotateCcw, ReceiptText, Plus, FileDown } from 'lucide-react';
 import { call } from '../lib/api';
 import { href, go } from '../lib/router';
+import { t } from '../lib/i18n';
 import { dayLabel, shortDate, METHODS, fullDate } from '../lib/fmt';
 import { Money, Card, Spinner, Empty, Btn, Sheet, Field, inputCls, CatIcon, useToast } from '../ui';
 import { useData } from '../App';
@@ -28,47 +29,47 @@ export default function Txns({ q }) {
 
     const sums = useMemo(() => {
         const s = { out: 0, in: 0, vat: 0, n: 0 };
-        (rows || []).forEach(t => { s[t.type] += t.amount; if (t.type === 'out') s.vat += t.vat; s.n++; });
+        (rows || []).forEach(x => { s[x.type] += x.amount; if (x.type === 'out') s.vat += x.vat; s.n++; });
         return s;
     }, [rows]);
 
     const groups = useMemo(() => {
         const g = [];
-        (rows || []).forEach(t => {
+        (rows || []).forEach(x => {
             const last = g[g.length - 1];
-            if (last && last.d === t.d) { last.items.push(t); if (t.type === 'out') last.total += t.amount; }
-            else g.push({ d: t.d, items: [t], total: t.type === 'out' ? t.amount : 0 });
+            if (last && last.d === x.d) { last.items.push(x); if (x.type === 'out') last.total += x.amount; }
+            else g.push({ d: x.d, items: [x], total: x.type === 'out' ? x.amount : 0 });
         });
         return g;
     }, [rows]);
 
     // الشارات تشرح ما يُعرض الآن، وكلٌّ منها يُزال بلمسة
     const chips = [];
-    if (q.type) chips.push(['type', q.type === 'in' ? 'المستلم' : 'المصروف']);
-    if (q.fund) chips.push(['fund', (funds.find(f => String(f.id) === q.fund) || {}).name || 'عهدة']);
-    if (q.cat) chips.push(['cat', q.cat === '-1' ? 'بلا تصنيف' : (cats.find(c => String(c.id) === q.cat) || {}).name || 'تصنيف']);
-    if (q.from || q.to) chips.push(['from', q.from === q.to ? fullDate(q.from) : (shortDate(q.from) || '…') + ' ← ' + (shortDate(q.to) || '…')]);
+    if (q.type) chips.push(['type', t(q.type === 'in' ? 'المستلم' : 'المصروف')]);
+    if (q.fund) chips.push(['fund', (funds.find(f => String(f.id) === q.fund) || {}).name || t('عهدة')]);
+    if (q.cat) chips.push(['cat', q.cat === '-1' ? t('بلا تصنيف') : (cats.find(c => String(c.id) === q.cat) || {}).name || t('تصنيف')]);
+    if (q.from || q.to) chips.push(['from', q.from === q.to ? fullDate(q.from) : (shortDate(q.from) || '…') + ' — ' + (shortDate(q.to) || '…')]);
     if (q.vendor) chips.push(['vendor', q.vendor]);
-    if (q.method) chips.push(['method', METHODS[q.method] || q.method]);
-    if (q.noreceipt) chips.push(['noreceipt', 'بلا إيصال']);
+    if (q.method) chips.push(['method', t(METHODS[q.method] || q.method)]);
+    if (q.noreceipt) chips.push(['noreceipt', t('بلا إيصال')]);
     if (q.q) chips.push(['q', '«' + q.q + '»']);
 
     const exportCsv = () => {
-        const head = ['التاريخ', 'النوع', 'الجهة', 'التصنيف', 'العهدة', 'طريقة الدفع', 'المبلغ', 'الضريبة', 'المرجع', 'ملاحظة', 'إيصال'];
-        const lines = (rows || []).map(t => [t.d, t.type === 'in' ? 'استلام' : 'مصروف', t.vendor, t.cat_name || '', t.fund_name || '',
-            METHODS[t.method] || '', t.amount, t.vat, t.ref || '', (t.note || '').replace(/\n/g, ' '), t.file_id ? 'نعم' : 'لا']);
+        const head = ['التاريخ', 'النوع', 'الجهة', 'التصنيف', 'العهدة', 'طريقة الدفع', 'المبلغ', 'الضريبة', 'المرجع', 'ملاحظة', 'إيصال'].map(x => t(x));
+        const lines = (rows || []).map(x => [x.d, t(x.type === 'in' ? 'استلام' : 'مصروف'), x.vendor, x.cat_name || '', x.fund_name || '',
+            t(METHODS[x.method] || ''), x.amount, x.vat, x.ref || '', (x.note || '').replace(/\n/g, ' '), t(x.file_id ? 'نعم' : 'لا')]);
         const csv = [head, ...lines].map(r => r.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
         // علامة BOM ليقرأ إكسل العربية سليمة
         const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'عهدة-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.download = t('عهدة') + '-' + new Date().toISOString().slice(0, 10) + '.csv';
         a.click();
     };
 
-    const restore = async t => {
-        const r = await call('txn_delete', { body: { id: t.id, restore: 1 } });
-        if (r.success) { toast('استُعيدت الحركة'); setRows(rows.filter(x => x.id !== t.id)); }
+    const restore = async x => {
+        const r = await call('txn_delete', { body: { id: x.id, restore: 1 } });
+        if (r.success) { toast(t('استُعيدت الحركة')); setRows(rows.filter(y => y.id !== x.id)); }
     };
 
     return (
@@ -76,29 +77,29 @@ export default function Txns({ q }) {
             {/* البحث والمرشِّحات */}
             <div className="flex gap-2">
                 <form className="flex-1 relative" onSubmit={e => { e.preventDefault(); set({ q: text.trim() }); }}>
-                    <Search size={17} className="absolute top-1/2 -translate-y-1/2 right-3 text-ink-3" />
-                    <input value={text} onChange={e => setText(e.target.value)} placeholder="ابحث بالجهة أو الملاحظة أو المرجع"
-                        className={inputCls + ' pr-10'} />
+                    <Search size={17} className="absolute top-1/2 -translate-y-1/2 start-3 text-ink-3" />
+                    <input value={text} onChange={e => setText(e.target.value)} placeholder={t('ابحث بالجهة أو الملاحظة أو المرجع')}
+                        className={inputCls + ' ps-10'} />
                 </form>
-                <Btn kind="line" onClick={() => setOpen(true)} className="!px-3" aria-label="تصفية"><SlidersHorizontal size={18} /></Btn>
-                <a href={href('/statement', { fund: q.fund, from: q.from, to: q.to })} aria-label="كشف حساب PDF">
-                    <Btn kind="line" className="!px-3"><FileDown size={17} /><span className="hidden lg:inline">كشف PDF</span></Btn>
+                <Btn kind="line" onClick={() => setOpen(true)} className="!px-3" aria-label={t('تصفية')}><SlidersHorizontal size={18} /></Btn>
+                <a href={href('/statement', { fund: q.fund, from: q.from, to: q.to })} aria-label={t('كشف حساب PDF')}>
+                    <Btn kind="line" className="!px-3"><FileDown size={17} /><span className="hidden lg:inline">{t('كشف PDF')}</span></Btn>
                 </a>
                 <Btn kind="line" onClick={exportCsv} className="!px-3 hidden sm:inline-flex" disabled={!rows || !rows.length}>
-                    <Download size={17} /><span className="hidden lg:inline">تصدير Excel</span>
+                    <Download size={17} /><span className="hidden lg:inline">{t('تصدير Excel')}</span>
                 </Btn>
             </div>
 
             {chips.length || trash ? (
                 <div className="flex flex-wrap gap-1.5">
-                    {trash ? <span className="h-8 px-3 rounded-full bg-red-50 text-red-700 text-[12px] font-semibold flex items-center">السلّة</span> : null}
-                    {chips.map(([k, t]) => (
+                    {trash ? <span className="h-8 px-3 rounded-full bg-red-50 text-red-700 text-[12px] font-semibold flex items-center">{t('السلّة')}</span> : null}
+                    {chips.map(([k, x]) => (
                         <button key={k} onClick={() => (k === 'from' ? go('/txns', { ...q, from: '', to: '' }) : clear(k))}
                             className="h-8 ps-3 pe-2 rounded-full bg-brand-50 text-brand-700 text-[12px] font-semibold flex items-center gap-1">
-                            {t}<X size={13} />
+                            {x}<X size={13} />
                         </button>
                     ))}
-                    {chips.length > 1 ? <a href="#/txns" className="h-8 px-3 rounded-full text-[12px] font-semibold text-ink-3 flex items-center">مسح الكل</a> : null}
+                    {chips.length > 1 ? <a href="#/txns" className="h-8 px-3 rounded-full text-[12px] font-semibold text-ink-3 flex items-center">{t('مسح الكل')}</a> : null}
                 </div>
             ) : null}
 
@@ -106,15 +107,15 @@ export default function Txns({ q }) {
             {rows && rows.length ? (
                 <div className="grid grid-cols-3 gap-2">
                     <a href={href('/txns', { ...q, type: 'out' })} className="bg-paper-card rounded-2xl border border-paper-2 p-3">
-                        <div className="text-[11px] text-ink-3 font-semibold">المصروف</div>
+                        <div className="text-[11px] text-ink-3 font-semibold">{t('المصروف')}</div>
                         <Money v={sums.out} className="block font-bold text-[16px] mt-0.5" />
                     </a>
                     <a href={href('/txns', { ...q, type: 'in' })} className="bg-paper-card rounded-2xl border border-paper-2 p-3">
-                        <div className="text-[11px] text-ink-3 font-semibold">المستلم</div>
+                        <div className="text-[11px] text-ink-3 font-semibold">{t('المستلم')}</div>
                         <Money v={sums.in} className="block font-bold text-[16px] mt-0.5 text-brand-700" />
                     </a>
                     <div className="bg-paper-card rounded-2xl border border-paper-2 p-3">
-                        <div className="text-[11px] text-ink-3 font-semibold">الحركات</div>
+                        <div className="text-[11px] text-ink-3 font-semibold">{t('الحركات')}</div>
                         <div className="font-bold text-[16px] mt-0.5">{sums.n}</div>
                     </div>
                 </div>
@@ -122,9 +123,9 @@ export default function Txns({ q }) {
 
             {!rows ? <Spinner /> : !rows.length ? (
                 <Card>
-                    <Empty icon={ReceiptText} title={trash ? 'السلّة فارغة' : 'لا حركات تطابق'}
-                        text={trash ? 'ما تحذفه يبقى هنا ويُستعاد متى شئت.' : chips.length ? 'جرّب إزالة بعض المرشِّحات.' : 'سجّل أول مصروف وسيظهر هنا.'}
-                        action={!trash && !chips.length ? <a href={href('/txn/new', { type: 'out' })}><Btn><Plus size={17} />مصروف جديد</Btn></a> : null} />
+                    <Empty icon={ReceiptText} title={t(trash ? 'السلّة فارغة' : 'لا حركات تطابق')}
+                        text={t(trash ? 'ما تحذفه يبقى هنا ويُستعاد متى شئت.' : chips.length ? 'جرّب إزالة بعض المرشِّحات.' : 'سجّل أول مصروف وسيظهر هنا.')}
+                        action={!trash && !chips.length ? <a href={href('/txn/new', { type: 'out' })}><Btn><Plus size={17} />{t('مصروف جديد')}</Btn></a> : null} />
                 </Card>
             ) : (
                 <>
@@ -137,12 +138,12 @@ export default function Txns({ q }) {
                                     {g.total ? <Money v={g.total} className="text-[12px] text-ink-3" /> : null}
                                 </a>
                                 <Card className="divide-y divide-paper-2">
-                                    {g.items.map(t => trash ? (
-                                        <div key={t.id} className="flex items-center gap-2 pe-3">
-                                            <div className="flex-1 min-w-0 opacity-60"><TxnRow t={t} showDate={false} /></div>
-                                            <Btn kind="soft" className="!h-9 !px-3 text-[12px]" onClick={() => restore(t)}><RotateCcw size={14} />استعادة</Btn>
+                                    {g.items.map(x => trash ? (
+                                        <div key={x.id} className="flex items-center gap-2 pe-3">
+                                            <div className="flex-1 min-w-0 opacity-60"><TxnRow t={x} showDate={false} /></div>
+                                            <Btn kind="soft" className="!h-9 !px-3 text-[12px]" onClick={() => restore(x)}><RotateCcw size={14} />{t('استعادة')}</Btn>
                                         </div>
-                                    ) : <TxnRow key={t.id} t={t} showDate={false} />)}
+                                    ) : <TxnRow key={x.id} t={x} showDate={false} />)}
                                 </Card>
                             </section>
                         ))}
@@ -152,49 +153,49 @@ export default function Txns({ q }) {
                     <Card className="hidden lg:block overflow-hidden">
                         <table className="w-full text-[13px]">
                             <thead className="bg-paper text-ink-3 text-[12px]">
-                                <tr className="text-right">
-                                    <th className="px-4 py-2.5 font-semibold">التاريخ</th>
-                                    <th className="px-3 py-2.5 font-semibold">الجهة</th>
-                                    <th className="px-3 py-2.5 font-semibold">التصنيف</th>
-                                    <th className="px-3 py-2.5 font-semibold">العهدة</th>
-                                    <th className="px-3 py-2.5 font-semibold">الدفع</th>
-                                    <th className="px-3 py-2.5 font-semibold text-left">الضريبة</th>
-                                    <th className="px-3 py-2.5 font-semibold text-left">المبلغ</th>
+                                <tr className="text-start">
+                                    <th className="px-4 py-2.5 font-semibold text-start">{t('التاريخ')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-start">{t('الجهة')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-start">{t('التصنيف')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-start">{t('العهدة')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-start">{t('الدفع')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-end">{t('الضريبة')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-end">{t('المبلغ')}</th>
                                     <th className="px-3 py-2.5 w-10"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-paper-2">
-                                {rows.map(t => (
-                                    <tr key={t.id} className={'hover:bg-paper cursor-pointer ' + (trash ? 'opacity-70' : '')}
-                                        onClick={() => !trash && go('/txn/' + t.id)}>
+                                {rows.map(x => (
+                                    <tr key={x.id} className={'hover:bg-paper cursor-pointer ' + (trash ? 'opacity-70' : '')}
+                                        onClick={() => !trash && go('/txn/' + x.id)}>
                                         <td className="px-4 py-2.5 whitespace-nowrap">
-                                            <a href={href('/txns', { ...q, from: t.d, to: t.d })} onClick={e => e.stopPropagation()} className="hover:text-brand">{shortDate(t.d)}</a>
+                                            <a href={href('/txns', { ...q, from: x.d, to: x.d })} onClick={e => e.stopPropagation()} className="hover:text-brand">{shortDate(x.d)}</a>
                                         </td>
                                         <td className="px-3 py-2.5 font-semibold max-w-[220px] truncate">
-                                            {t.vendor ? <a href={href('/txns', { vendor: t.vendor })} onClick={e => e.stopPropagation()} className="hover:text-brand">{t.vendor}</a>
-                                                : <span className="text-ink-3">{t.type === 'in' ? 'استلام مبلغ' : '—'}</span>}
+                                            {x.vendor ? <a href={href('/txns', { vendor: x.vendor })} onClick={e => e.stopPropagation()} className="hover:text-brand">{x.vendor}</a>
+                                                : <span className="text-ink-3">{x.type === 'in' ? t('استلام مبلغ') : '—'}</span>}
                                         </td>
                                         <td className="px-3 py-2.5">
-                                            {t.type === 'out' ? (
-                                                <a href={href('/txns', { ...q, cat: t.cat_id || -1 })} onClick={e => e.stopPropagation()}
+                                            {x.type === 'out' ? (
+                                                <a href={href('/txns', { ...q, cat: x.cat_id || -1 })} onClick={e => e.stopPropagation()}
                                                     className="inline-flex items-center gap-1.5 hover:text-brand">
-                                                    <span style={{ color: t.cat_color || '#94a3b8' }}><CatIcon name={t.cat_icon} size={14} /></span>
-                                                    {t.cat_name || 'بلا تصنيف'}
+                                                    <span style={{ color: x.cat_color || '#94a3b8' }}><CatIcon name={x.cat_icon} size={14} /></span>
+                                                    {x.cat_name || t('بلا تصنيف')}
                                                 </a>
                                             ) : null}
                                         </td>
                                         <td className="px-3 py-2.5 text-ink-2">
-                                            {t.fund_id ? <a href={'#/fund/' + t.fund_id} onClick={e => e.stopPropagation()} className="hover:text-brand">{t.fund_name}</a> : '—'}
+                                            {x.fund_id ? <a href={'#/fund/' + x.fund_id} onClick={e => e.stopPropagation()} className="hover:text-brand">{x.fund_name}</a> : '—'}
                                         </td>
-                                        <td className="px-3 py-2.5 text-ink-2">{METHODS[t.method] || ''}</td>
-                                        <td className="px-3 py-2.5 text-left"><Money v={t.vat} cur={false} className="text-ink-3" /></td>
-                                        <td className="px-3 py-2.5 text-left">
-                                            <Money v={t.type === 'out' ? -t.amount : t.amount} sign className={'font-bold ' + (t.type === 'in' ? 'text-brand-700' : '')} />
+                                        <td className="px-3 py-2.5 text-ink-2">{t(METHODS[x.method] || '')}</td>
+                                        <td className="px-3 py-2.5 text-end"><Money v={x.vat} cur={false} className="text-ink-3" /></td>
+                                        <td className="px-3 py-2.5 text-end">
+                                            <Money v={x.type === 'out' ? -x.amount : x.amount} sign className={'font-bold ' + (x.type === 'in' ? 'text-brand-700' : '')} />
                                         </td>
                                         <td className="px-3 py-2.5 text-center">
                                             {trash ? (
-                                                <button onClick={e => { e.stopPropagation(); restore(t); }} title="استعادة" className="text-brand"><RotateCcw size={15} /></button>
-                                            ) : t.file_id ? <Paperclip size={15} className="text-ink-3 inline" /> : t.type === 'out' ? <span className="text-amber text-[11px]">بلا</span> : null}
+                                                <button onClick={e => { e.stopPropagation(); restore(x); }} title={t('استعادة')} className="text-brand"><RotateCcw size={15} /></button>
+                                            ) : x.file_id ? <Paperclip size={15} className="text-ink-3 inline" /> : x.type === 'out' ? <span className="text-amber text-[11px]">{t('بلا')}</span> : null}
                                         </td>
                                     </tr>
                                 ))}
@@ -203,8 +204,8 @@ export default function Txns({ q }) {
                     </Card>
 
                     <div className="flex justify-between items-center pt-1">
-                        {!trash ? <a href="#/txns?trash=1" className="text-[12px] text-ink-3 flex items-center gap-1"><Trash2 size={13} />السلّة</a> : <span />}
-                        <button onClick={exportCsv} className="sm:hidden text-[12px] font-semibold text-brand flex items-center gap-1"><Download size={14} />تصدير Excel</button>
+                        {!trash ? <a href="#/txns?trash=1" className="text-[12px] text-ink-3 flex items-center gap-1"><Trash2 size={13} />{t('السلّة')}</a> : <span />}
+                        <button onClick={exportCsv} className="sm:hidden text-[12px] font-semibold text-brand flex items-center gap-1"><Download size={14} />{t('تصدير Excel')}</button>
                     </div>
                 </>
             )}
@@ -220,44 +221,44 @@ function FilterSheet({ open, onClose, q, onApply }) {
     useEffect(() => { if (open) setF(q); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
     const s = k => e => setF({ ...f, [k]: e.target.value });
     return (
-        <Sheet open={open} onClose={onClose} title="تصفية الحركات">
+        <Sheet open={open} onClose={onClose} title={t('تصفية الحركات')}>
             <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                    <Field label="من"><input type="date" className={inputCls} value={f.from || ''} onChange={s('from')} /></Field>
-                    <Field label="إلى"><input type="date" className={inputCls} value={f.to || ''} onChange={s('to')} /></Field>
+                    <Field label={t('من')}><input type="date" className={inputCls} value={f.from || ''} onChange={s('from')} /></Field>
+                    <Field label={t('إلى')}><input type="date" className={inputCls} value={f.to || ''} onChange={s('to')} /></Field>
                 </div>
-                <Field label="النوع">
+                <Field label={t('النوع')}>
                     <select className={inputCls} value={f.type || ''} onChange={s('type')}>
-                        <option value="">الكل</option><option value="out">المصروف</option><option value="in">المستلم</option>
+                        <option value="">{t('الكل')}</option><option value="out">{t('المصروف')}</option><option value="in">{t('المستلم')}</option>
                     </select>
                 </Field>
-                <Field label="العهدة">
+                <Field label={t('العهدة')}>
                     <select className={inputCls} value={f.fund || ''} onChange={s('fund')}>
-                        <option value="">كل العُهد</option>
+                        <option value="">{t('كل العُهد')}</option>
                         {funds.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
                     </select>
                 </Field>
-                <Field label="التصنيف">
+                <Field label={t('التصنيف')}>
                     <select className={inputCls} value={f.cat || ''} onChange={s('cat')}>
-                        <option value="">كل التصنيفات</option>
+                        <option value="">{t('كل التصنيفات')}</option>
                         {cats.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-                        <option value="-1">بلا تصنيف</option>
+                        <option value="-1">{t('بلا تصنيف')}</option>
                     </select>
                 </Field>
-                <Field label="طريقة الدفع">
+                <Field label={t('طريقة الدفع')}>
                     <select className={inputCls} value={f.method || ''} onChange={s('method')}>
-                        <option value="">الكل</option>
-                        {Object.entries(METHODS).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+                        <option value="">{t('الكل')}</option>
+                        {Object.entries(METHODS).map(([k, x]) => <option key={k} value={k}>{t(x)}</option>)}
                     </select>
                 </Field>
                 <label className="flex items-center gap-2 text-[14px]">
                     <input type="checkbox" checked={!!f.noreceipt} onChange={e => setF({ ...f, noreceipt: e.target.checked ? '1' : '' })}
                         className="w-5 h-5 accent-brand" />
-                    المصاريف التي بلا إيصال فقط
+                    {t('المصاريف التي بلا إيصال فقط')}
                 </label>
                 <div className="flex gap-2 pt-2">
-                    <Btn className="flex-1" onClick={() => onApply(f)}>عرض النتائج</Btn>
-                    <Btn kind="line" onClick={() => onApply({})}>مسح</Btn>
+                    <Btn className="flex-1" onClick={() => onApply(f)}>{t('عرض النتائج')}</Btn>
+                    <Btn kind="line" onClick={() => onApply({})}>{t('مسح')}</Btn>
                 </div>
             </div>
         </Sheet>

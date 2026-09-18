@@ -128,6 +128,21 @@ if ($__v < 1) {
     $conn->query("REPLACE INTO oh_meta (k, v) VALUES ('schema', '1')");
 }
 
+function oh_col($table, $col, $ddl) {
+    global $conn;
+    $r = $conn->query("SHOW COLUMNS FROM `$table` LIKE '" . E($col) . "'");
+    if ($r && $r->num_rows) return;
+    $conn->query("ALTER TABLE `$table` $ddl");
+}
+if ($__v < 2) {
+    oh_col('oh_users', 'lang',    "ADD COLUMN lang VARCHAR(2) NOT NULL DEFAULT 'ar'");
+    oh_col('oh_users', 'phone',   "ADD COLUMN phone VARCHAR(20) DEFAULT NULL");
+    oh_col('oh_users', 'email',   "ADD COLUMN email VARCHAR(160) DEFAULT NULL");
+    oh_col('oh_users', 'profile', "ADD COLUMN profile MEDIUMTEXT");
+    oh_col('oh_users', 'logo',    "ADD COLUMN logo VARCHAR(200) DEFAULT NULL");
+    $conn->query("REPLACE INTO oh_meta (k, v) VALUES ('schema', '2')");
+}
+
 function oh_log($uid, $action, $entity = null, $id = null, $data = null) {
     global $conn;
     $ip = E(trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '')[0]));
@@ -139,8 +154,21 @@ function meta_get($k) { global $conn; if ($r = $conn->query("SELECT v FROM oh_me
 function meta_set($k, $v) { global $conn; $conn->query("REPLACE INTO oh_meta (k, v) VALUES ('" . E($k) . "', " . ($v === null ? 'NULL' : "'" . E($v) . "'") . ")"); }
 
 // ─── التصنيفات الافتراضية لكل مستخدم جديد ───────────────────────────────────
-function seed_cats($uid) {
+function seed_cats($uid, $lang = 'ar') {
     global $conn;
+    if ($lang === 'en') {
+        $cats = [
+            ['Transport & Fuel', 'car', '#0ea5e9'], ['Meals & Hospitality', 'coffee', '#f97316'],
+            ['Supplies & Office', 'package', '#8b5cf6'], ['Maintenance', 'wrench', '#64748b'],
+            ['Telecom & Internet', 'wifi', '#06b6d4'], ['Government Fees', 'landmark', '#0f766e'],
+            ['Education & Schools', 'graduation', '#2563eb'], ['Household', 'home', '#db2777'],
+            ['Health', 'heart', '#dc2626'], ['Other', 'tag', '#94a3b8'],
+        ];
+        foreach ($cats as $i => $c)
+            $conn->query("INSERT INTO oh_cats (user_id, name, icon, color, sort) VALUES ($uid, '" . E($c[0]) . "', '{$c[1]}', '{$c[2]}', $i)");
+        $conn->query("INSERT INTO oh_funds (user_id, name, kind, color) VALUES ($uid, 'Main fund', 'custody', '#0f766e')");
+        return;
+    }
     $cats = [
         ['مواصلات ووقود', 'car', '#0ea5e9'], ['مطاعم وضيافة', 'coffee', '#f97316'],
         ['مستلزمات ومكتبية', 'package', '#8b5cf6'], ['صيانة وإصلاح', 'wrench', '#64748b'],
@@ -151,6 +179,18 @@ function seed_cats($uid) {
     foreach ($cats as $i => $c)
         $conn->query("INSERT INTO oh_cats (user_id, name, icon, color, sort) VALUES ($uid, '" . E($c[0]) . "', '{$c[1]}', '{$c[2]}', $i)");
     $conn->query("INSERT INTO oh_funds (user_id, name, kind, color) VALUES ($uid, 'الصندوق الرئيسي', 'custody', '#0f766e')");
+}
+
+// ─── ملفّ الحساب ────────────────────────────────────────────────────────────
+// بيانات المنشأة وصاحب العهدة والمعتمِد: تظهر في كشوف الحساب وتقارير التصفية
+const PROFILE_KEYS = ['org_name', 'org_name_en', 'vat_no', 'cr_no', 'org_address', 'org_phone', 'org_email',
+    'beneficiary', 'employee_no', 'job_title', 'department', 'iban', 'bank',
+    'approver_name', 'approver_title', 'report_note'];
+function profile_of($row) {
+    $p = json_decode((string)($row['profile'] ?? ''), true);
+    $out = [];
+    foreach (PROFILE_KEYS as $k) $out[$k] = is_array($p) && isset($p[$k]) ? (string)$p[$k] : '';
+    return $out;
 }
 
 // ─── الدخول ─────────────────────────────────────────────────────────────────
@@ -175,7 +215,7 @@ function me() {
     global $conn;
     $u = null;
     $id = read_token();
-    if ($id && ($r = $conn->query("SELECT id, username, name, role, active FROM oh_users WHERE id=$id LIMIT 1")))
+    if ($id && ($r = $conn->query("SELECT id, username, name, role, active, lang, phone, email FROM oh_users WHERE id=$id LIMIT 1")))
         if (($x = $r->fetch_assoc()) && (int)$x['active'] === 1) $u = $x;
     return $u;
 }
@@ -192,6 +232,19 @@ function doc_link($id, $driveId) {
     if ($driveId) return 'https://drive.google.com/file/d/' . rawurlencode($driveId) . '/view';
     $exp = time() + 365 * 86400;
     return base_url() . 'api.php?action=file&id=' . (int)$id . '&exp=' . $exp . '&sig=' . file_sig($id, $exp);
+}
+function logo_url($uid) {
+    $exp = time() + 7200;
+    return 'api.php?action=logo&u=' . (int)$uid . '&exp=' . $exp . '&sig=' . b64u(hash_hmac('sha256', "l:$uid:$exp", OH_KEY, true));
+}
+// الجوّال السعودي بصيغةٍ دولية واحدة (9665xxxxxxxx) فيصلح لرابط واتساب مباشرة
+function norm_phone($v) {
+    $d = preg_replace('/\D+/', '', strtr((string)$v, ['٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9']));
+    if ($d === '') return '';
+    if (strpos($d, '00') === 0) $d = substr($d, 2);
+    if (preg_match('/^05\d{8}$/', $d)) $d = '966' . substr($d, 1);
+    if (preg_match('/^5\d{8}$/', $d)) $d = '966' . $d;
+    return preg_match('/^\d{8,15}$/', $d) ? $d : '';
 }
 function file_url($id) { $exp = time() + 7200; return 'api.php?action=file&id=' . (int)$id . '&exp=' . $exp . '&sig=' . file_sig($id, $exp); }
 
@@ -288,7 +341,7 @@ register_shutdown_function(function () {
 });
 
 // ─── قراءة الإيصال ──────────────────────────────────────────────────────────
-function scan_file($f, $cats) {
+function scan_file($f, $cats, $lang = 'ar') {
     if (!secret_set(OH_AI_KEY)) return ['error' => 'قراءة الإيصالات غير مفعّلة على الخادم'];
     $full = OH_FILES . '/' . $f['path'];
     if (!is_file($full)) return ['error' => 'الملف غير موجود'];
@@ -325,7 +378,7 @@ function scan_file($f, $cats) {
         . "- vendor: the merchant's name as a person would say it (Arabic if the document is Arabic).\n"
         . "- category: the closest of the allowed values for what was bought.\n"
         . "- If a value is not on the document, use empty string or 0 and say so in note. Never invent numbers.\n"
-        . "- note: one short Arabic sentence of anything the user should double-check; empty if all is clear.";
+        . "- note: one short " . ($lang === 'en' ? 'English' : 'Arabic') . " sentence of anything the user should double-check; empty if all is clear.";
     $payload = [
         'model' => 'claude-opus-5',
         'max_tokens' => 16000,
@@ -372,10 +425,11 @@ case 'setup': {
     if (!preg_match('/^[a-z0-9_.-]{3,40}$/', $un)) fail('اسم الدخول: حروف إنجليزية وأرقام، ٣ أحرف فأكثر');
     if (mb_strlen($nm) < 2) fail('الاسم مطلوب');
     if (strlen($pw) < 8) fail('كلمة المرور ثمانية أحرف فأكثر');
-    $conn->query("INSERT INTO oh_users (username, name, pass_hash, role) VALUES ('" . E($un) . "', '" . E($nm) . "', '"
-        . E(password_hash($pw, PASSWORD_DEFAULT)) . "', 'admin')");
+    $lang = ($b['lang'] ?? 'ar') === 'en' ? 'en' : 'ar';
+    $conn->query("INSERT INTO oh_users (username, name, pass_hash, role, lang) VALUES ('" . E($un) . "', '" . E($nm) . "', '"
+        . E(password_hash($pw, PASSWORD_DEFAULT)) . "', 'admin', '$lang')");
     $uid = (int)$conn->insert_id;
-    seed_cats($uid);
+    seed_cats($uid, $lang);
     oh_log($uid, 'setup');
     out(['success' => true, 'token' => make_token($uid)]);
 }
@@ -399,7 +453,9 @@ case 'login': {
 
 case 'me': {
     $u = need();
-    out(['success' => true, 'user' => $u, 'ai' => secret_set(OH_AI_KEY),
+    $row = $conn->query("SELECT profile, logo FROM oh_users WHERE id=" . (int)$u['id'])->fetch_assoc();
+    out(['success' => true, 'user' => $u, 'profile' => profile_of($row),
+         'logo_url' => $row['logo'] ? logo_url((int)$u['id']) : null, 'ai' => secret_set(OH_AI_KEY),
          'drive_linked' => (bool)meta_get('drive_refresh'), 'drive_configured' => secret_set(OH_G_ID) && secret_set(OH_G_SECRET)]);
 }
 
@@ -414,11 +470,78 @@ case 'password': {
     out(['success' => true]);
 }
 
+// ─── ملفّ الحساب ────────────────────────────────────────────────────────────
+case 'profile_save': {
+    $u = need(); $uid = (int)$u['id']; $b = body();
+    $row = $conn->query("SELECT profile FROM oh_users WHERE id=$uid")->fetch_assoc();
+    $p = profile_of($row);
+    foreach (PROFILE_KEYS as $k) if (array_key_exists($k, $b)) $p[$k] = mb_substr(trim((string)$b[$k]), 0, $k === 'report_note' ? 600 : 200);
+    if ($p['vat_no'] !== '' && !preg_match('/^\d{15}$/', $p['vat_no'])) fail('الرقم الضريبي ١٥ رقماً');
+    if ($p['iban'] !== '') {
+        $p['iban'] = strtoupper(preg_replace('/\s+/', '', $p['iban']));
+        if (!preg_match('/^SA\d{22}$/', $p['iban'])) fail('الآيبان السعودي يبدأ بـ SA ثم ٢٢ رقماً');
+    }
+    $set = "profile='" . E(json_encode($p, JSON_UNESCAPED_UNICODE)) . "'";
+    if (array_key_exists('name', $b) && mb_strlen(trim((string)$b['name'])) >= 2) $set .= ", name='" . E(trim($b['name'])) . "'";
+    if (array_key_exists('email', $b)) {
+        $em = trim((string)$b['email']);
+        if ($em !== '' && !filter_var($em, FILTER_VALIDATE_EMAIL)) fail('البريد الإلكتروني غير صحيح');
+        $set .= ", email=" . ($em === '' ? 'NULL' : "'" . E($em) . "'");
+    }
+    if (array_key_exists('phone', $b)) {
+        $ph = norm_phone($b['phone']);
+        if ($b['phone'] !== '' && $ph === '') fail('رقم الجوال غير صحيح');
+        $set .= ", phone=" . ($ph === '' ? 'NULL' : "'" . E($ph) . "'");
+    }
+    if (in_array($b['lang'] ?? '', ['ar', 'en'], true)) $set .= ", lang='" . $b['lang'] . "'";
+    $conn->query("UPDATE oh_users SET $set WHERE id=$uid");
+    oh_log($uid, 'profile_save', 'user', $uid, $b);
+    out(['success' => true, 'profile' => $p]);
+}
+
+case 'logo_upload': {
+    $u = need(); $uid = (int)$u['id'];
+    if (!empty(body()['remove'])) {
+        $conn->query("UPDATE oh_users SET logo=NULL WHERE id=$uid");
+        oh_log($uid, 'logo_remove');
+        out(['success' => true, 'logo_url' => null]);
+    }
+    if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) fail('لم يصل الملف');
+    $f = $_FILES['file'];
+    if ($f['size'] > 3 * 1024 * 1024) fail('الشعار ثلاثة ميجابايت كحدٍّ أقصى');
+    $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = finfo_file($fi, $f['tmp_name']); finfo_close($fi);
+    $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'][$mime] ?? null;
+    if (!$ext) fail('الشعار صورة PNG أو JPG');
+    $dir = OH_FILES . '/' . $uid;
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) fail('تعذّر إنشاء مجلد الملفات');
+    if (!is_file(OH_FILES . '/.htaccess')) @file_put_contents(OH_FILES . '/.htaccess', "Require all denied\nDeny from all\n");
+    $rel = $uid . '/logo-' . bin2hex(random_bytes(5)) . '.' . $ext;
+    if (!move_uploaded_file($f['tmp_name'], OH_FILES . '/' . $rel)) fail('فشل الحفظ');
+    $conn->query("UPDATE oh_users SET logo='" . E($rel) . "' WHERE id=$uid");
+    oh_log($uid, 'logo_upload');
+    out(['success' => true, 'logo_url' => logo_url($uid)]);
+}
+
+// الشعار برابطٍ موقَّع كالمستندات: يصلح لوسم الصورة وللطباعة
+case 'logo': {
+    $uid = (int)($_GET['u'] ?? 0); $exp = (int)($_GET['exp'] ?? 0);
+    if ($exp < time() || !hash_equals(b64u(hash_hmac('sha256', "l:$uid:$exp", OH_KEY, true)), (string)($_GET['sig'] ?? ''))) fail('الرابط منتهٍ', 403);
+    $row = $conn->query("SELECT logo FROM oh_users WHERE id=$uid")->fetch_assoc();
+    if (!$row || !$row['logo'] || !is_file(OH_FILES . '/' . $row['logo'])) fail('غير موجود', 404);
+    $full = OH_FILES . '/' . $row['logo'];
+    $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = finfo_file($fi, $full); finfo_close($fi);
+    ob_end_clean();
+    header('Content-Type: ' . $mime);
+    header('Cache-Control: private, max-age=3600');
+    readfile($full);
+    exit;
+}
+
 // ─── المستخدمون (المدير) ────────────────────────────────────────────────────
 case 'users': {
     need_admin();
     $rows = [];
-    $r = $conn->query("SELECT u.id, u.username, u.name, u.role, u.active, u.created_at, u.last_login, u.drive_folder,
+    $r = $conn->query("SELECT u.id, u.username, u.name, u.role, u.active, u.created_at, u.last_login, u.drive_folder, u.phone, u.lang,
         (SELECT COUNT(*) FROM oh_txns t WHERE t.user_id=u.id AND t.deleted=0) txns
         FROM oh_users u ORDER BY u.id");
     while ($r && ($x = $r->fetch_assoc())) $rows[] = $x;
@@ -431,9 +554,13 @@ case 'user_save': {
     $id = (int)($b['id'] ?? 0);
     $nm = trim((string)($b['name'] ?? ''));
     if (mb_strlen($nm) < 2) fail('الاسم مطلوب');
+    $ph = norm_phone($b['phone'] ?? '');
+    if (!empty($b['phone']) && $ph === '') fail('رقم الجوال غير صحيح');
+    $lang = ($b['lang'] ?? 'ar') === 'en' ? 'en' : 'ar';
     if ($id) {
         $set = "name='" . E($nm) . "', active=" . (!empty($b['active']) ? 1 : 0);
         if ($id === (int)$a['id']) $set = "name='" . E($nm) . "'";          // لا يوقف المدير نفسه
+        $set .= ", phone=" . ($ph === '' ? 'NULL' : "'$ph'") . ", lang='$lang'";
         if (!empty($b['password'])) {
             if (strlen($b['password']) < 8) fail('كلمة المرور ثمانية أحرف فأكثر');
             $set .= ", pass_hash='" . E(password_hash($b['password'], PASSWORD_DEFAULT)) . "'";
@@ -446,10 +573,10 @@ case 'user_save': {
     if (!preg_match('/^[a-z0-9_.-]{3,40}$/', $un)) fail('اسم الدخول: حروف إنجليزية وأرقام، ٣ أحرف فأكثر');
     if (strlen((string)($b['password'] ?? '')) < 8) fail('كلمة المرور ثمانية أحرف فأكثر');
     if ($conn->query("SELECT id FROM oh_users WHERE username='" . E($un) . "'")->num_rows) fail('اسم الدخول مستعمل');
-    $conn->query("INSERT INTO oh_users (username, name, pass_hash, role) VALUES ('" . E($un) . "', '" . E($nm) . "', '"
-        . E(password_hash($b['password'], PASSWORD_DEFAULT)) . "', 'user')");
+    $conn->query("INSERT INTO oh_users (username, name, pass_hash, role, lang, phone) VALUES ('" . E($un) . "', '" . E($nm) . "', '"
+        . E(password_hash($b['password'], PASSWORD_DEFAULT)) . "', 'user', '$lang', " . ($ph === '' ? 'NULL' : "'$ph'") . ")");
     $nid = (int)$conn->insert_id;
-    seed_cats($nid);
+    seed_cats($nid, $lang);
     oh_log($a['id'], 'user_create', 'user', $nid, $un);
     out(['success' => true, 'id' => $nid]);
 }
@@ -654,7 +781,7 @@ case 'scan': {
     $cats = [];
     $r = $conn->query("SELECT id, name FROM oh_cats WHERE user_id=$uid AND deleted=0");
     while ($r && ($x = $r->fetch_assoc())) $cats[] = $x;
-    $res = scan_file($f, $cats);
+    $res = scan_file($f, $cats, $u['lang'] ?? 'ar');
     if (!empty($res['error'])) fail($res['error']);
     $conn->query("UPDATE oh_files SET extracted='" . E(json_encode($res, JSON_UNESCAPED_UNICODE)) . "' WHERE id=$fid");
     foreach ($cats as $c) if ($c['name'] === ($res['category'] ?? '')) $res['cat_id'] = (int)$c['id'];
@@ -713,7 +840,10 @@ case 'statement': {
         $rows[] = $x;
     }
     oh_log($uid, 'statement', 'fund', $fund ?: null, ['from' => $from, 'to' => $to, 'n' => count($rows)]);
-    out(['success' => true, 'fund' => $f, 'from' => $from, 'to' => $to, 'opening' => round($opening, 2),
+    $prow = $conn->query("SELECT profile, logo, email, phone FROM oh_users WHERE id=$uid")->fetch_assoc();
+    out(['success' => true, 'profile' => profile_of($prow), 'logo_url' => $prow['logo'] ? logo_url($uid) : null,
+        'email' => $prow['email'], 'phone' => $prow['phone'],
+        'fund' => $f, 'from' => $from, 'to' => $to, 'opening' => round($opening, 2),
         'closing' => round($bal, 2), 'rows' => $rows, 'user' => $u['name']]);
 }
 

@@ -1,3 +1,5 @@
+import { t, isEn } from './i18n';
+
 // ─── تنسيق الأرقام والتواريخ ────────────────────────────────────────────────
 
 export const money = (v, frac) => {
@@ -6,14 +8,10 @@ export const money = (v, frac) => {
     return n.toLocaleString('en-US', { minimumFractionDigits: f, maximumFractionDigits: f });
 };
 
-export const today = () => {
-    const d = new Date();
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-};
-
 const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+export const today = () => iso(new Date());
 
-// الفترات الجاهزة في لوحة المعلومات
+// الفترات الجاهزة
 export function period(key) {
     const n = new Date();
     const y = n.getFullYear(), m = n.getMonth();
@@ -26,18 +24,20 @@ export function period(key) {
     }
 }
 
-const AR = 'ar-SA-u-ca-gregory-nu-latn';
+// التقويم ميلادي والأرقام لاتينية في اللغتين
+const loc = () => (isEn() ? 'en-GB' : 'ar-SA-u-ca-gregory-nu-latn');
+const at = s => new Date(s + 'T12:00:00');
+
 export const dayLabel = s => {
     if (!s) return '';
-    const t = today();
-    const y = iso(new Date(Date.now() - 86400000));
-    if (s === t) return 'اليوم';
-    if (s === y) return 'أمس';
-    return new Date(s + 'T12:00:00').toLocaleDateString(AR, { weekday: 'long', day: 'numeric', month: 'long' });
+    if (s === today()) return t('اليوم');
+    if (s === iso(new Date(Date.now() - 86400000))) return t('أمس');
+    return at(s).toLocaleDateString(loc(), { weekday: 'long', day: 'numeric', month: 'long' });
 };
-export const shortDate = s => (s ? new Date(s + 'T12:00:00').toLocaleDateString(AR, { day: 'numeric', month: 'short' }) : '');
-export const fullDate = s => (s ? new Date(s + 'T12:00:00').toLocaleDateString(AR, { day: 'numeric', month: 'long', year: 'numeric' }) : '');
-export const monthLabel = ym => new Date(ym + '-15T12:00:00').toLocaleDateString(AR, { month: 'short' });
+export const shortDate = s => (s ? at(s).toLocaleDateString(loc(), { day: 'numeric', month: 'short' }) : '');
+export const fullDate = s => (s ? at(s).toLocaleDateString(loc(), { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+export const monthLabel = ym => new Date(ym + '-15T12:00:00').toLocaleDateString(loc(), { month: 'short' });
 
+// القيم عربية وتُترجَم عند العرض: t(METHODS[k])
 export const METHODS = { cash: 'نقداً', card: 'بطاقة', transfer: 'تحويل' };
 export const KINDS = { custody: 'عهدة عمل', budget: 'ميزانية', personal: 'مصاريف شخصية' };

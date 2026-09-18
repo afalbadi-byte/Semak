@@ -4,6 +4,7 @@ import {
     Fuel, Plane, Gift, Baby, Shirt, BookOpen, Zap, Building2, Utensils, Loader2, X,
 } from 'lucide-react';
 import { money } from './lib/fmt';
+import { t, isEn } from './lib/i18n';
 
 // ─── الأيقونات المتاحة للتصنيفات ────────────────────────────────────────────
 export const ICONS = {
@@ -22,8 +23,9 @@ export function Money({ v, className = '', cur = true, frac, sign }) {
     const n = Number(v || 0);
     return (
         <span className={'tabular-nums whitespace-nowrap ' + className} dir="ltr">
-            {cur ? <span className="text-[0.62em] font-medium opacity-60 me-1">ر.س</span> : null}
+            {cur && !isEn() ? <span className="text-[0.62em] font-medium opacity-60 me-1">ر.س</span> : null}
             {sign && n > 0 ? '+' : ''}{money(n, frac)}
+            {cur && isEn() ? <span className="text-[0.62em] font-medium opacity-60 ms-1">SAR</span> : null}
         </span>
     );
 }
@@ -138,7 +140,7 @@ export function Sheet({ open, onClose, title, children, wide }) {
                 style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
                 <div className="sticky top-0 bg-paper/95 backdrop-blur px-5 pt-4 pb-3 flex items-center gap-2 border-b border-paper-2 z-10">
                     <h3 className="font-bold text-ink flex-1">{title}</h3>
-                    <button onClick={onClose} className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-2"><X size={18} /></button>
+                    <button onClick={onClose} aria-label={t('إغلاق')} className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-2"><X size={18} /></button>
                 </div>
                 <div className="p-5">{children}</div>
             </div>

@@ -5,6 +5,7 @@ import { href, go } from '../lib/router';
 import { shortDate, dayLabel, KINDS, fullDate } from '../lib/fmt';
 import { Money, Card, Btn, Spinner, Empty, CatIcon, useToast } from '../ui';
 import { useData } from '../App';
+import { t as tr } from '../lib/i18n';
 import { FundSheet } from './Funds';
 
 // كشف العهدة: كل حركة ومعها الرصيد بعدها — كما يُقرأ كشف الحساب
@@ -31,7 +32,7 @@ export default function FundView({ id }) {
         const m = {};
         (rows || []).filter(t => t.type === 'out').forEach(t => {
             const k = t.cat_id || 0;
-            m[k] = m[k] || { id: k, name: t.cat_name || 'بلا تصنيف', color: t.cat_color || '#94a3b8', icon: t.cat_icon, total: 0 };
+            m[k] = m[k] || { id: k, name: t.cat_name || tr('بلا تصنيف'), color: t.cat_color || '#94a3b8', icon: t.cat_icon, total: 0 };
             m[k].total += t.amount;
         });
         return Object.values(m).sort((a, b) => b.total - a.total);
@@ -41,9 +42,9 @@ export default function FundView({ id }) {
     const settled = f.status === 'settled';
 
     const toggle = async () => {
-        if (!settled && !window.confirm('تصفية العهدة؟ تُقفل فلا تظهر في الإدخال، ولا يُحذف منها شيء — وتُعاد فتحها متى شئت.')) return;
+        if (!settled && !window.confirm(tr('تصفية العهدة؟ تُقفل فلا تظهر في الإدخال، ولا يُحذف منها شيء — وتُعاد فتحها متى شئت.'))) return;
         const r = await call('fund_settle', { body: { id, reopen: settled ? 1 : 0 } });
-        if (r.success) { await reloadFunds(); toast(settled ? 'أُعيد فتح العهدة' : 'صُفّيت العهدة'); }
+        if (r.success) { await reloadFunds(); toast(tr(settled ? 'أُعيد فتح العهدة' : 'صُفّيت العهدة')); }
     };
 
     return (
@@ -51,33 +52,33 @@ export default function FundView({ id }) {
             <Card className="overflow-hidden">
                 <div className="p-5 text-white" style={{ background: `linear-gradient(135deg, ${f.color}, #083f39)` }}>
                     <div className="flex items-center gap-2 text-[13px] opacity-90">
-                        <Wallet size={15} />{f.name}<span className="opacity-70">· {KINDS[f.kind]}</span>
-                        {settled ? <span className="ms-auto px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-semibold">مُصفّاة {f.settled_at ? fullDate(f.settled_at.slice(0, 10)) : ''}</span> : null}
+                        <Wallet size={15} />{f.name}<span className="opacity-70">· {tr(KINDS[f.kind])}</span>
+                        {settled ? <span className="ms-auto px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-semibold">{tr('مُصفّاة')} {f.settled_at ? fullDate(f.settled_at.slice(0, 10)) : ''}</span> : null}
                     </div>
-                    <div className="text-[12px] opacity-80 mt-4">الرصيد المتبقّي</div>
+                    <div className="text-[12px] opacity-80 mt-4">{tr('الرصيد المتبقّي')}</div>
                     <Money v={f.balance} className="block text-[36px] font-bold leading-tight" />
                 </div>
-                <div className="grid grid-cols-3 divide-x divide-x-reverse divide-paper-2 text-center">
+                <div className="grid grid-cols-3 divide-x rtl:divide-x-reverse divide-paper-2 text-center">
                     <a href={href('/txns', { fund: id, type: 'in' })} className="py-3 hover:bg-paper">
-                        <div className="text-[11px] text-ink-3">المستلم</div><Money v={f.received} className="font-bold text-brand-700" />
+                        <div className="text-[11px] text-ink-3">{tr('المستلم')}</div><Money v={f.received} className="font-bold text-brand-700" />
                     </a>
                     <a href={href('/txns', { fund: id, type: 'out' })} className="py-3 hover:bg-paper">
-                        <div className="text-[11px] text-ink-3">المصروف</div><Money v={f.spent} className="font-bold" />
+                        <div className="text-[11px] text-ink-3">{tr('المصروف')}</div><Money v={f.spent} className="font-bold" />
                     </a>
                     <a href={href('/txns', { fund: id, noreceipt: 1 })} className="py-3 hover:bg-paper">
-                        <div className="text-[11px] text-ink-3">بلا إيصال</div>
+                        <div className="text-[11px] text-ink-3">{tr('بلا إيصال')}</div>
                         <div className={'font-bold ' + (Number(f.no_receipt) ? 'text-amber' : '')}>{f.no_receipt}</div>
                     </a>
                 </div>
             </Card>
 
             <div className="flex flex-wrap gap-2">
-                {!settled ? <a href={href('/txn/new', { type: 'out', fund: id })}><Btn><Plus size={17} />مصروف</Btn></a> : null}
-                {!settled ? <a href={href('/txn/new', { type: 'in', fund: id })}><Btn kind="soft"><Plus size={17} />استلام مبلغ</Btn></a> : null}
-                <a href={href('/statement', { fund: id })}><Btn kind="line"><FileDown size={17} />كشف حساب PDF</Btn></a>
-                <a href={'#/fund/' + id + '/report'}><Btn kind="line"><FileCheck2 size={17} />تقرير التصفية</Btn></a>
-                <Btn kind="ghost" onClick={() => setEdit(f)}><Pencil size={16} />تعديل</Btn>
-                <Btn kind="ghost" onClick={toggle}>{settled ? <><Unlock size={16} />إعادة فتح</> : <><Lock size={16} />تصفية العهدة</>}</Btn>
+                {!settled ? <a href={href('/txn/new', { type: 'out', fund: id })}><Btn><Plus size={17} />{tr('مصروف')}</Btn></a> : null}
+                {!settled ? <a href={href('/txn/new', { type: 'in', fund: id })}><Btn kind="soft"><Plus size={17} />{tr('استلام مبلغ')}</Btn></a> : null}
+                <a href={href('/statement', { fund: id })}><Btn kind="line"><FileDown size={17} />{tr('كشف حساب PDF')}</Btn></a>
+                <a href={'#/fund/' + id + '/report'}><Btn kind="line"><FileCheck2 size={17} />{tr('تقرير التصفية')}</Btn></a>
+                <Btn kind="ghost" onClick={() => setEdit(f)}><Pencil size={16} />{tr('تعديل')}</Btn>
+                <Btn kind="ghost" onClick={toggle}>{settled ? <><Unlock size={16} />{tr('إعادة فتح')}</> : <><Lock size={16} />{tr('تصفية العهدة')}</>}</Btn>
             </div>
 
             {byCat.length ? (
@@ -94,19 +95,19 @@ export default function FundView({ id }) {
             ) : null}
 
             {!rows ? <Spinner /> : !rows.length ? (
-                <Card><Empty icon={Wallet} title="العهدة فارغة" text="ابدأ باستلام المبلغ المسلَّم لك، ثم سجّل المصاريف منه." /></Card>
+                <Card><Empty icon={Wallet} title={tr('العهدة فارغة')} text={tr('ابدأ باستلام المبلغ المسلَّم لك، ثم سجّل المصاريف منه.')} /></Card>
             ) : (
                 <>
                     <Card className="lg:hidden divide-y divide-paper-2">
                         {lines.map(t => (
                             <a key={t.id} href={'#/txn/' + t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-paper">
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-[14px] font-semibold truncate">{t.vendor || (t.type === 'in' ? 'استلام مبلغ' : t.cat_name || 'مصروف')}</div>
-                                    <div className="text-[11.5px] text-ink-3">{dayLabel(t.d)}{t.type === 'out' && !t.file_id ? <span className="text-amber"> · بلا إيصال</span> : null}</div>
+                                    <div className="text-[14px] font-semibold truncate">{t.vendor || (t.type === 'in' ? tr('استلام مبلغ') : t.cat_name || tr('مصروف'))}</div>
+                                    <div className="text-[11.5px] text-ink-3">{dayLabel(t.d)}{t.type === 'out' && !t.file_id ? <span className="text-amber"> · {tr('بلا إيصال')}</span> : null}</div>
                                 </div>
-                                <div className="text-left">
+                                <div className="text-end">
                                     <Money v={t.type === 'out' ? -t.amount : t.amount} sign className={'block text-[14px] font-bold ' + (t.type === 'in' ? 'text-brand-700' : '')} />
-                                    <span className="block text-[11px] text-ink-3">الرصيد <Money v={t.bal} cur={false} /></span>
+                                    <span className="block text-[11px] text-ink-3">{tr('الرصيد')} <Money v={t.bal} cur={false} /></span>
                                 </div>
                             </a>
                         ))}
@@ -115,13 +116,13 @@ export default function FundView({ id }) {
                     <Card className="hidden lg:block overflow-hidden">
                         <table className="w-full text-[13px]">
                             <thead className="bg-paper text-ink-3 text-[12px]">
-                                <tr className="text-right">
-                                    <th className="px-4 py-2.5 font-semibold">التاريخ</th>
-                                    <th className="px-3 py-2.5 font-semibold">البيان</th>
-                                    <th className="px-3 py-2.5 font-semibold">التصنيف</th>
-                                    <th className="px-3 py-2.5 font-semibold text-left">وارد</th>
-                                    <th className="px-3 py-2.5 font-semibold text-left">صادر</th>
-                                    <th className="px-3 py-2.5 font-semibold text-left">الرصيد</th>
+                                <tr className="text-start">
+                                    <th className="px-4 py-2.5 font-semibold text-start">{tr('التاريخ')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-start">{tr('البيان')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-start">{tr('التصنيف')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-end">{tr('وارد')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-end">{tr('صادر')}</th>
+                                    <th className="px-3 py-2.5 font-semibold text-end">{tr('الرصيد')}</th>
                                     <th className="px-3 py-2.5 w-10"></th>
                                 </tr>
                             </thead>
@@ -129,13 +130,13 @@ export default function FundView({ id }) {
                                 {lines.map(t => (
                                     <tr key={t.id} className="hover:bg-paper cursor-pointer" onClick={() => go('/txn/' + t.id)}>
                                         <td className="px-4 py-2.5 whitespace-nowrap">{shortDate(t.d)}</td>
-                                        <td className="px-3 py-2.5 font-semibold">{t.vendor || (t.type === 'in' ? 'استلام مبلغ' : '—')}
+                                        <td className="px-3 py-2.5 font-semibold">{t.vendor || (t.type === 'in' ? tr('استلام مبلغ') : '—')}
                                             {t.note ? <span className="block text-[11px] font-normal text-ink-3 truncate max-w-[260px]">{t.note}</span> : null}</td>
-                                        <td className="px-3 py-2.5 text-ink-2">{t.type === 'out' ? (t.cat_name || 'بلا تصنيف') : ''}</td>
-                                        <td className="px-3 py-2.5 text-left">{t.type === 'in' ? <Money v={t.amount} cur={false} className="font-semibold text-brand-700" /> : ''}</td>
-                                        <td className="px-3 py-2.5 text-left">{t.type === 'out' ? <Money v={t.amount} cur={false} className="font-semibold" /> : ''}</td>
-                                        <td className={'px-3 py-2.5 text-left font-bold ' + (t.bal < 0 ? 'text-red-700' : '')}><Money v={t.bal} cur={false} /></td>
-                                        <td className="px-3 py-2.5 text-center">{t.file_id ? <Paperclip size={14} className="inline text-ink-3" /> : t.type === 'out' ? <span className="text-amber text-[11px]">بلا</span> : null}</td>
+                                        <td className="px-3 py-2.5 text-ink-2">{t.type === 'out' ? (t.cat_name || tr('بلا تصنيف')) : ''}</td>
+                                        <td className="px-3 py-2.5 text-end">{t.type === 'in' ? <Money v={t.amount} cur={false} className="font-semibold text-brand-700" /> : ''}</td>
+                                        <td className="px-3 py-2.5 text-end">{t.type === 'out' ? <Money v={t.amount} cur={false} className="font-semibold" /> : ''}</td>
+                                        <td className={'px-3 py-2.5 text-end font-bold ' + (t.bal < 0 ? 'text-red-700' : '')}><Money v={t.bal} cur={false} /></td>
+                                        <td className="px-3 py-2.5 text-center">{t.file_id ? <Paperclip size={14} className="inline text-ink-3" /> : t.type === 'out' ? <span className="text-amber text-[11px]">{tr('بلا')}</span> : null}</td>
                                     </tr>
                                 ))}
                             </tbody>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, FileWarning, TrendingDown, TrendingUp, ArrowLeft, Plus, Wallet, ReceiptText } from 'lucide-react';
 import { call } from '../lib/api';
 import { href } from '../lib/router';
+import { t } from '../lib/i18n';
 import { money, period, dayLabel, shortDate, monthLabel, METHODS } from '../lib/fmt';
 import { Money, Card, LinkCard, Section, Donut, Bars, Progress, CatIcon, Spinner, Empty, Btn } from '../ui';
 import { useData } from '../App';
@@ -63,7 +64,7 @@ export default function Dashboard({ q }) {
                         <a key={p.k} href={setQ({ p: p.k })}
                             className={'shrink-0 h-9 px-3.5 rounded-full text-[13px] font-semibold flex items-center transition ' +
                                 (pk === p.k ? 'bg-ink text-white' : 'bg-paper-card border border-paper-2 text-ink-2')}>
-                            {p.t}
+                            {t(p.t)}
                         </a>
                     ))}
                 </div>
@@ -71,7 +72,7 @@ export default function Dashboard({ q }) {
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4 lg:mx-0 lg:px-0">
                         <a href={setQ({ fund: '' })}
                             className={'shrink-0 h-8 px-3 rounded-full text-[12px] font-semibold flex items-center ' +
-                                (!fund ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>كل العُهد</a>
+                                (!fund ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>{t('كل العُهد')}</a>
                         {funds.map(f => (
                             <a key={f.id} href={setQ({ fund: f.id })}
                                 className={'shrink-0 h-8 px-3 rounded-full text-[12px] font-semibold flex items-center gap-1.5 ' +
@@ -88,33 +89,33 @@ export default function Dashboard({ q }) {
                     {/* الرقم الأهمّ */}
                     <div className="grid lg:grid-cols-3 gap-3">
                         <LinkCard href={href('/txns', q2({ type: 'out' }))} className="p-5 lg:col-span-1 bg-gradient-to-bl from-brand to-brand-800 !border-0 text-white">
-                            <div className="text-[12px] font-semibold opacity-80">المصروف</div>
+                            <div className="text-[12px] font-semibold opacity-80">{t('المصروف')}</div>
                             <Money v={d.spent} className="block text-[34px] font-bold mt-1 leading-tight" />
                             <div className="flex items-center gap-3 mt-3 text-[12px]">
-                                <span className="opacity-80">{d.n_out} حركة</span>
+                                <span className="opacity-80">{t('{n} حركة', { n: d.n_out })}</span>
                                 {change !== null ? (
-                                    <span className={'flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15'}>
+                                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15">
                                         {change >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
-                                        {Math.abs(change).toFixed(0)}٪ عن الفترة السابقة
+                                        {t('{p}٪ عن الفترة السابقة', { p: Math.abs(change).toFixed(0) })}
                                     </span>
                                 ) : null}
                             </div>
                         </LinkCard>
-                        <div className="grid grid-cols-2 lg:grid-cols-2 gap-3 lg:col-span-2">
+                        <div className="grid grid-cols-2 gap-3 lg:col-span-2">
                             <LinkCard href={href('/txns', q2({ type: 'in' }))} className="p-4">
-                                <div className="text-[12px] text-ink-3 font-semibold">المستلم</div>
+                                <div className="text-[12px] text-ink-3 font-semibold">{t('المستلم')}</div>
                                 <Money v={d.received} className="block text-[22px] font-bold mt-1 text-brand-700" />
                             </LinkCard>
                             <LinkCard href={href('/txns', q2({ type: 'out' }))} className="p-4">
-                                <div className="text-[12px] text-ink-3 font-semibold">ضريبة القيمة المضافة</div>
+                                <div className="text-[12px] text-ink-3 font-semibold">{t('ضريبة القيمة المضافة')}</div>
                                 <Money v={d.vat} className="block text-[22px] font-bold mt-1" />
                             </LinkCard>
                             <LinkCard href={href('/txns', q2({ noreceipt: 1 }))} className="p-4">
-                                <div className="text-[12px] text-ink-3 font-semibold flex items-center gap-1">بلا إيصال</div>
+                                <div className="text-[12px] text-ink-3 font-semibold">{t('بلا إيصال')}</div>
                                 <div className={'text-[22px] font-bold mt-1 ' + (d.no_receipt ? 'text-amber' : 'text-ink')}>{d.no_receipt}</div>
                             </LinkCard>
                             <LinkCard href={href('/txns', q2({}))} className="p-4">
-                                <div className="text-[12px] text-ink-3 font-semibold">متوسط اليوم</div>
+                                <div className="text-[12px] text-ink-3 font-semibold">{t('متوسط اليوم')}</div>
                                 <Money v={daily ? d.spent / Math.max(1, daily.length) : d.spent / 30} frac={0} className="block text-[22px] font-bold mt-1" />
                             </LinkCard>
                         </div>
@@ -129,18 +130,18 @@ export default function Dashboard({ q }) {
                                         (b.used > b.budget ? 'bg-red-50 border-red-100 text-red-800' : 'bg-amber-50 border-amber-100 text-amber-900')}>
                                     <AlertTriangle size={17} className="shrink-0" />
                                     <span className="flex-1">
-                                        {b.used > b.budget ? 'تجاوزتَ' : 'اقتربتَ من'} ميزانية <b>{b.name}</b> هذا الشهر:
-                                        {' '}<Money v={b.used} cur={false} /> من <Money v={b.budget} cur={false} />
+                                        {t(b.used > b.budget ? 'تجاوزتَ ميزانية {c} هذا الشهر:' : 'اقتربتَ من ميزانية {c} هذا الشهر:', { c: b.name })}
+                                        {' '}<Money v={b.used} cur={false} /> / <Money v={b.budget} cur={false} />
                                     </span>
-                                    <ArrowLeft size={15} />
+                                    <ArrowLeft size={15} className="ltr:rotate-180" />
                                 </a>
                             ))}
                             {d.no_receipt > 0 ? (
                                 <a href={href('/txns', q2({ noreceipt: 1 }))}
                                     className="flex items-center gap-3 p-3 rounded-2xl border bg-paper-card border-paper-2 text-[13px] text-ink-2">
                                     <FileWarning size={17} className="shrink-0 text-amber" />
-                                    <span className="flex-1">{d.no_receipt} مصروفٍ بلا إيصال — أرفقها قبل التصفية</span>
-                                    <ArrowLeft size={15} />
+                                    <span className="flex-1">{t('{n} مصروفٍ بلا إيصال — أرفقها قبل التصفية', { n: d.no_receipt })}</span>
+                                    <ArrowLeft size={15} className="ltr:rotate-180" />
                                 </a>
                             ) : null}
                         </div>
@@ -148,7 +149,7 @@ export default function Dashboard({ q }) {
 
                     {/* أرصدة العُهد */}
                     {openFunds.length ? (
-                        <Section title="أرصدة العُهد" action={<a href="#/funds" className="text-[12px] font-semibold text-brand">الكل</a>}>
+                        <Section title={t('أرصدة العُهد')} action={<a href="#/funds" className="text-[12px] font-semibold text-brand">{t('الكل')}</a>}>
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                 {openFunds.slice(0, 4).map(f => (
                                     <LinkCard key={f.id} href={'#/fund/' + f.id} className="p-4">
@@ -156,7 +157,7 @@ export default function Dashboard({ q }) {
                                             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: f.color }} />{f.name}
                                         </div>
                                         <Money v={f.balance} className={'block text-[20px] font-bold mt-1 ' + (f.balance < 0 ? 'text-red-700' : '')} />
-                                        <div className="text-[11px] text-ink-3 mt-0.5">مستلم <Money v={f.received} cur={false} /> · مصروف <Money v={f.spent} cur={false} /></div>
+                                        <div className="text-[11px] text-ink-3 mt-0.5">{t('مستلم')} <Money v={f.received} cur={false} /> · {t('مصروف')} <Money v={f.spent} cur={false} /></div>
                                     </LinkCard>
                                 ))}
                             </div>
@@ -165,26 +166,25 @@ export default function Dashboard({ q }) {
 
                     {d.n_out === 0 && d.received === 0 ? (
                         <Card>
-                            <Empty icon={ReceiptText} title="لا حركات في هذه الفترة"
-                                text="صوّر أول إيصال ويقرأه التطبيق لك: الجهة والتاريخ والمبلغ والضريبة."
-                                action={<a href={href('/txn/new', { type: 'out' })}><Btn><Plus size={17} />مصروف جديد</Btn></a>} />
+                            <Empty icon={ReceiptText} title={t('لا حركات في هذه الفترة')}
+                                text={t('صوّر أول إيصال ويقرأه التطبيق لك: الجهة والتاريخ والمبلغ والضريبة.')}
+                                action={<a href={href('/txn/new', { type: 'out' })}><Btn><Plus size={17} />{t('مصروف جديد')}</Btn></a>} />
                         </Card>
                     ) : (
                         <div className="grid lg:grid-cols-5 gap-5">
-                            {/* التصنيفات */}
-                            <Section title="أين ذهب المال" className="lg:col-span-2">
+                            <Section title={t('أين ذهب المال')} className="lg:col-span-2">
                                 <Card className="p-4">
                                     <div className="flex items-center gap-4">
                                         <Donut data={d.by_cat.map(c => ({ ...c, value: c.total }))} size={150} stroke={24}
                                             hrefFor={c => href('/txns', q2({ cat: c.id || -1 }))}
                                             center={<text x="75" y="80" textAnchor="middle" className="fill-ink" style={{ fontSize: 12, fontWeight: 700 }}>
-                                                {d.by_cat.length} تصنيف</text>} />
+                                                {t('{n} تصنيف', { n: d.by_cat.length })}</text>} />
                                         <div className="flex-1 min-w-0 space-y-1">
                                             {d.by_cat.slice(0, 6).map(c => (
                                                 <a key={c.id || 0} href={href('/txns', q2({ cat: c.id || -1 }))}
                                                     className="flex items-center gap-2 text-[12.5px] py-1 rounded-lg hover:bg-paper px-1 -mx-1">
                                                     <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: c.color }} />
-                                                    <span className="flex-1 truncate text-ink-2">{c.name}</span>
+                                                    <span className="flex-1 truncate text-ink-2">{t(c.name)}</span>
                                                     <Money v={c.total} cur={false} className="font-semibold" />
                                                 </a>
                                             ))}
@@ -193,8 +193,7 @@ export default function Dashboard({ q }) {
                                 </Card>
                             </Section>
 
-                            {/* الإيقاع */}
-                            <Section title={daily ? 'المصروف يوماً بيوم' : 'المصروف شهراً بشهر'} className="lg:col-span-3">
+                            <Section title={t(daily ? 'المصروف يوماً بيوم' : 'المصروف شهراً بشهر')} className="lg:col-span-3">
                                 <Card className="p-4">
                                     {daily ? (
                                         <Bars data={daily} height={150} labelEvery={Math.ceil(daily.length / 8)}
@@ -210,9 +209,8 @@ export default function Dashboard({ q }) {
                         </div>
                     )}
 
-                    {/* الميزانيات */}
                     {d.budgets.length ? (
-                        <Section title="ميزانيات هذا الشهر" action={<a href="#/budgets" className="text-[12px] font-semibold text-brand">تعديل</a>}>
+                        <Section title={t('ميزانيات هذا الشهر')} action={<a href="#/budgets" className="text-[12px] font-semibold text-brand">{t('تعديل')}</a>}>
                             <Card className="p-4 grid lg:grid-cols-2 gap-x-8 gap-y-4">
                                 {d.budgets.map(b => (
                                     <a key={b.id} href={href('/txns', { cat: b.id, ...period('month') })} className="block">
@@ -230,28 +228,28 @@ export default function Dashboard({ q }) {
                         </Section>
                     ) : null}
 
-                    {/* ما يُضاف على الشاشة الكبيرة: الجهات وطرق الدفع والاتجاه */}
+                    {/* ما يُضاف على الشاشة الكبيرة: الجهات وطرق الدفع */}
                     <div className="hidden lg:grid grid-cols-3 gap-5">
-                        <Section title="أكثر الجهات صرفاً" className="col-span-2">
+                        <Section title={t('أكثر الجهات صرفاً')} className="col-span-2">
                             <Card className="divide-y divide-paper-2">
                                 {d.vendors.length ? d.vendors.map((v, i) => (
                                     <a key={v.vendor} href={href('/txns', q2({ vendor: v.vendor }))}
                                         className="flex items-center gap-3 px-4 py-2.5 hover:bg-paper text-[13px]">
                                         <span className="w-6 text-ink-3 tabular-nums">{i + 1}</span>
                                         <span className="flex-1 font-semibold truncate">{v.vendor}</span>
-                                        <span className="text-ink-3 text-[12px]">{v.n} مرّة</span>
+                                        <span className="text-ink-3 text-[12px]">{t('{n} مرّة', { n: v.n })}</span>
                                         <span className="w-40"><Progress used={v.total} total={d.vendors[0].total} /></span>
-                                        <Money v={v.total} className="w-28 text-left font-semibold" />
+                                        <Money v={v.total} className="w-28 text-end font-semibold" />
                                     </a>
-                                )) : <p className="p-6 text-center text-[13px] text-ink-3">لا جهات مسجّلة بعد</p>}
+                                )) : <p className="p-6 text-center text-[13px] text-ink-3">{t('لا جهات مسجّلة بعد')}</p>}
                             </Card>
                         </Section>
-                        <Section title="طرق الدفع">
+                        <Section title={t('طرق الدفع')}>
                             <Card className="p-4 space-y-3">
                                 {d.methods.map(m => (
                                     <a key={m.method} href={href('/txns', q2({ method: m.method }))} className="block">
                                         <div className="flex justify-between text-[13px] mb-1">
-                                            <span className="font-semibold">{METHODS[m.method] || m.method}</span>
+                                            <span className="font-semibold">{t(METHODS[m.method] || m.method)}</span>
                                             <Money v={m.total} />
                                         </div>
                                         <Progress used={m.total} total={d.spent} />
@@ -262,11 +260,10 @@ export default function Dashboard({ q }) {
                         </Section>
                     </div>
 
-                    {/* آخر الحركات */}
-                    <Section title="آخر الحركات" action={<a href={href('/txns', { fund })} className="text-[12px] font-semibold text-brand">عرض الكل</a>}>
+                    <Section title={t('آخر الحركات')} action={<a href={href('/txns', { fund })} className="text-[12px] font-semibold text-brand">{t('عرض الكل')}</a>}>
                         <Card className="divide-y divide-paper-2">
-                            {recent.map(t => <TxnRow key={t.id} t={t} />)}
-                            {!recent.length ? <p className="p-6 text-center text-[13px] text-ink-3">لا حركات بعد</p> : null}
+                            {recent.map(x => <TxnRow key={x.id} t={x} />)}
+                            {!recent.length ? <p className="p-6 text-center text-[13px] text-ink-3">{t('لا حركات بعد')}</p> : null}
                         </Card>
                     </Section>
                 </>
@@ -275,22 +272,22 @@ export default function Dashboard({ q }) {
     );
 }
 
-export function TxnRow({ t, showDate = true }) {
-    const out = t.type === 'out';
+export function TxnRow({ t: x, showDate = true }) {
+    const out = x.type === 'out';
     return (
-        <a href={'#/txn/' + t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-paper transition">
+        <a href={'#/txn/' + x.id} className="flex items-center gap-3 px-4 py-3 hover:bg-paper transition">
             <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                style={out ? { background: (t.cat_color || '#94a3b8') + '1a', color: t.cat_color || '#64748b' } : { background: '#e7f3f1', color: '#0f6b61' }}>
-                {out ? <CatIcon name={t.cat_icon} size={18} /> : <Wallet size={18} />}
+                style={out ? { background: (x.cat_color || '#94a3b8') + '1a', color: x.cat_color || '#64748b' } : { background: '#e7f3f1', color: '#0f6b61' }}>
+                {out ? <CatIcon name={x.cat_icon} size={18} /> : <Wallet size={18} />}
             </span>
             <span className="flex-1 min-w-0">
-                <span className="block text-[14px] font-semibold truncate">{t.vendor || (out ? (t.cat_name || 'مصروف') : 'استلام مبلغ')}</span>
+                <span className="block text-[14px] font-semibold truncate">{x.vendor || (out ? (x.cat_name || t('مصروف')) : t('استلام مبلغ'))}</span>
                 <span className="block text-[12px] text-ink-3 truncate">
-                    {showDate ? dayLabel(t.d) + ' · ' : ''}{out ? (t.cat_name || 'بلا تصنيف') : (t.fund_name || '')}
-                    {out && !t.file_id ? <span className="text-amber"> · بلا إيصال</span> : null}
+                    {showDate ? dayLabel(x.d) + ' · ' : ''}{out ? (x.cat_name || t('بلا تصنيف')) : (x.fund_name || '')}
+                    {out && !x.file_id ? <span className="text-amber"> · {t('بلا إيصال')}</span> : null}
                 </span>
             </span>
-            <Money v={out ? -t.amount : t.amount} sign className={'text-[15px] font-bold ' + (out ? 'text-ink' : 'text-brand-700')} />
+            <Money v={out ? -x.amount : x.amount} sign className={'text-[15px] font-bold ' + (out ? 'text-ink' : 'text-brand-700')} />
         </a>
     );
 }
