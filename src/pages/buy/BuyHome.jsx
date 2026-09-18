@@ -61,82 +61,11 @@ export default function BuyHome({ onNew }) {
     useEffect(() => { load(); }, [load]);
 
     // سحب مرفقات دفترة إلى تخزيننا — دفعة كل ضغطة حتى تنتهي
-    const archive = async () => {
-        setArch(true);
-        try {
-            const t2 = getAdminToken();
-            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
-            let idle = 0;
-            for (let i = 0; i < 30; i++) {
-                const r = await fetch(`${API_URL}?action=daftra_doc_archive&limit=15`,
-                    { headers: h2, cache: 'no-store' }).then(x => x.json());
-                if (!r.success) { setDocs(d => ({ ...(d || {}), err: r.message, diag: r.detail || '' })); break; }
-                setDocs(d => ({ ...(d || {}), archived: (d?.total || 0) - r.remaining, remaining: r.remaining,
-                    stuck: r.stuck || 0, err: '', diag: r.failed ? (r.detail || '') : '' }));
-                if (r.remaining === 0) break;
-                // ملف متعثر ينزل آخر الطابور، فالدفعة التالية تكمل. نتوقف حين يتوقف التقدّم
-                idle = r.archived > 0 ? 0 : idle + 1;
-                if (idle >= 3) {
-                    setDocs(d => ({ ...(d || {}), err: r.message }));
-                    break;
-                }
-            }
-        } finally { setArch(false); }
-    };
 
     // فرز المستندات آلياً: فاتورة أم إيصال، وربط الإيصال بدفعته عند التطابق القاطع
-    const classify = async () => {
-        setClsBusy(true);
-        try {
-            const t2 = getAdminToken();
-            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
-            let tot = { classified: 0, receipts: 0, linked: 0 };
-            for (let i = 0; i < 40; i++) {
-                const r = await fetch(`${API_URL}?action=doc_classify_run&limit=4`,
-                    { headers: h2, cache: 'no-store' }).then(x => x.json());
-                if (!r.success) { setCls({ err: r.message }); break; }
-                tot = { classified: tot.classified + r.classified, receipts: tot.receipts + r.receipts,
-                        linked: tot.linked + r.linked };
-                setCls({ ...tot, remaining: r.remaining });
-                if (r.remaining === 0 || (!r.classified && r.failed)) break;
-            }
-        } finally { setClsBusy(false); }
-    };
 
     // إيصالات الدفعات: نافذة الدفعة في دفترة تحمل رابط الملف، فنقرؤه وننزّله ونربطه
-    const pullReceipts = async () => {
-        setRcpBusy(true);
-        try {
-            const t2 = getAdminToken();
-            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
-            let tot = { pulled: 0, none: 0 };
-            for (let i = 0; i < 60; i++) {
-                const r = await fetch(`${API_URL}?action=pay_receipt_pull&limit=6`,
-                    { headers: h2, cache: 'no-store' }).then(x => x.json());
-                if (!r.success) { setRcp({ err: r.message }); break; }
-                tot = { pulled: tot.pulled + r.pulled, none: tot.none + r.no_receipt };
-                setRcp({ ...tot, remaining: r.remaining, err: '' });
-                if (r.remaining === 0 || (!r.pulled && !r.no_receipt)) break;
-            }
-        } finally { setRcpBusy(false); }
-    };
 
-    const pullInvoices = async () => {
-        setRcpBusy(true);
-        try {
-            const t2 = getAdminToken();
-            const h2 = t2 ? { Authorization: `Bearer ${t2}` } : {};
-            let n = 0;
-            for (let i = 0; i < 70; i++) {
-                const r = await fetch(`${API_URL}?action=inv_pdf_pull&limit=6`,
-                    { headers: h2, cache: 'no-store' }).then(x => x.json());
-                if (!r.success) { setRcp({ err: r.message }); break; }
-                n += r.pulled;
-                setRcp({ pulled: n, none: 0, remaining: r.remaining, err: '' });
-                if (r.remaining === 0 || (!r.pulled && r.missing)) break;
-            }
-        } finally { setRcpBusy(false); }
-    };
 
     const p = k?.purchases || {};
     const cards = [
@@ -192,108 +121,7 @@ export default function BuyHome({ onNew }) {
 
             {askPk && <PasskeySetupCard onDone={() => setAskPk(false)} />}
 
-            {/* أدوات السحب من دفترة: صيانة لمرة واحدة، لا أزرار يومية.
-                تُطوى خلف سطر، وتختفي نهائيا حين يُفصل التطبيق عن دفترة. */}
-            {!k?.detached && (
-                <button onClick={() => setToolsOpen(v => !v)}
-                    className="w-full h-10 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] font-bold text-slate-400">
-                    {toolsOpen ? 'إخفاء أدوات دفترة' : 'أدوات دفترة'}
-                    {docs && docs.remaining > 0 ? ` · ${docs.remaining} مرفقا لم يُنسخ` : ''}
-                </button>
-            )}
-
-            {toolsOpen && !k?.detached && (<>
-
-            {docs && docs.total > 0 && docs.remaining > 0 && (
-                <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                        <Archive size={15} className="text-[#c5a059]" />
-                        <span className="text-[12px] font-black">مرفقات دفترة</span>
-                        <span className="text-[11px] text-slate-400 mr-auto">
-                            {docs.archived} من {docs.total} عندنا
-                        </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                        نسخ المرفقات إلى تخزيننا يجعلها تُفتح فوراً بلا اعتماد على جلسة دفترة.
-                    </p>
-                    {docs.err && <p className="text-[11px] text-amber-300 font-bold">{docs.err}</p>}
-                    {docs.stuck > 0 && (
-                        <p className="text-[11px] text-slate-400">
-                            {docs.stuck} مرفقا تعذّر جلبه بعد ثلاث محاولات — تُعاد المحاولة مع أي ضغطة لاحقة
-                        </p>
-                    )}
-                    {docs.diag && (
-                        <pre dir="ltr" className="text-[9px] text-slate-400 bg-black/30 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">
-                            {docs.diag}
-                        </pre>
-                    )}
-                    <button onClick={archive} disabled={arch}
-                        className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
-                        {arch ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
-                        {arch ? 'يسحب المرفقات...' : `اسحب ${docs.remaining} مرفقا إلى تخزيننا`}
-                    </button>
-                </div>
-            )}
-            {docs && docs.total > 0 && docs.remaining === 0 && (
-                <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold flex items-center gap-2">
-                    <CheckCircle2 size={14} /> كل مرفقات دفترة ({docs.total}) محفوظة عندنا وتُفتح بلا جلسة
-                </div>
-            )}
-
-            {docs && docs.total > 0 && docs.remaining === 0 && (
-                <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                        <ScanLine size={15} className="text-[#c5a059]" />
-                        <span className="text-[12px] font-black">فرز المستندات</span>
-                        {cls && !cls.err && (
-                            <span className="text-[11px] text-slate-400 mr-auto">
-                                {cls.classified} مفروز · {cls.linked} مربوط
-                            </span>
-                        )}
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                        دفترة ترفق كل شيء على الفاتورة، فيصل الإيصال مصنّفاً فاتورةً. المعالج يقرأ كل مستند
-                        ويحدّد نوعه، ويربط الإيصال بدفعته حين يطابق مبلغها تماماً — وما عدا ذلك يُترك لمراجعتك.
-                    </p>
-                    {cls?.err && <p className="text-[11px] text-amber-300 font-bold">{cls.err}</p>}
-                    <button onClick={classify} disabled={clsBusy}
-                        className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
-                        {clsBusy ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
-                        {clsBusy ? 'يفرز المستندات...' : 'افرز المستندات آلياً'}
-                    </button>
-                </div>
-            )}
-
-            <div className="rounded-2xl bg-white/[0.06] border border-white/10 p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                    <Receipt size={15} className="text-[#c5a059]" />
-                    <span className="text-[12px] font-black">إيصالات الدفعات</span>
-                    {rcp && !rcp.err && (
-                        <span className="text-[11px] text-slate-400 mr-auto">
-                            {rcp.pulled} مسحوب · {rcp.none} بلا إيصال
-                        </span>
-                    )}
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                    يفتح كل دفعة في دفترة، ينزّل إيصالها، ويربطه بها بالمعرّف — لا بمطابقة المبلغ.
-                </p>
-                {rcp?.err && <p className="text-[11px] text-amber-300 font-bold">{rcp.err}</p>}
-                <button onClick={() => setRecOpen(true)}
-                    className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2">
-                    <Archive size={14} /> استرجاع المرفقات المفقودة
-                </button>
-                <button onClick={pullInvoices} disabled={rcpBusy}
-                    className="w-full min-h-[44px] rounded-xl bg-white/10 text-slate-200 text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
-                    <Archive size={14} /> اسحب نسخ الفواتير الرسمية
-                </button>
-                <button onClick={pullReceipts} disabled={rcpBusy}
-                    className="w-full min-h-[44px] rounded-xl bg-[#c5a059]/15 text-[#c5a059] text-[12px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
-                    {rcpBusy ? <Loader2 size={14} className="animate-spin" /> : <Receipt size={14} />}
-                    {rcpBusy ? 'يسحب الإيصالات...' : 'اسحب إيصالات الدفعات'}
-                </button>
-            </div>
-
-            </>)}
+            {/* أدوات السحب من دفترة انتقلت إلى «مركز الصيانة» في اللوحة — الشاشة هنا للعمل لا للصيانة */}
 
             {sync && (sync.added > 0 || sync.updated > 0) && (
                 <div className="rounded-xl bg-emerald-500/15 text-emerald-300 p-2.5 text-[11px] font-bold">

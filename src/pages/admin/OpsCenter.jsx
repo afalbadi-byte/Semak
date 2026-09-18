@@ -18,6 +18,7 @@ const post  = (a, body) => fetch(`${API_URL}?action=${a}`, {
 
 const SECTIONS = [
     { k: 'sync',   t: 'المزامنة مع دفترة', i: Database },
+    { k: 'docs',   t: 'المرفقات والإيصالات', i: RefreshCw },
     { k: 'paygap', t: 'الدفعات المفقودة',  i: Wallet },
     { k: 'match',  t: 'مطابقة الإيصالات',  i: Link2 },
     { k: 'health', t: 'فحوص النظام',       i: Mail },
@@ -52,6 +53,7 @@ export default function OpsCenter() {
             {sec === 'sync'   && <SyncPanel armed={armed} />}
             {sec === 'paygap' && <PayGapPanel armed={armed} />}
             {sec === 'match'  && <MatchPanel armed={armed} />}
+            {sec === 'docs'   && <DocsPanel armed={armed} />}
             {sec === 'health' && <HealthPanel />}
         </div>
     );
@@ -131,6 +133,64 @@ function SyncPanel({ armed }) {
                     </tbody>
                 </table>
             </Panel>
+        </div>
+    );
+}
+
+// ─── المرفقات والإيصالات: سحب نسخ دفترة إلى تخزيننا ─────────────────────────
+function DocsPanel({ armed }) {
+    const [st, setSt] = useState(null);
+    const [busy, setBusy] = useState('');
+    const [msg, setMsg] = useState(null);
+    const load = useCallback(() => { get('daftra_link_status').then(setSt).catch(() => {}); }, []);
+    useEffect(() => { load(); }, [load]);
+
+    const run = async (kind) => {
+        setBusy(kind); setMsg(null);
+        const map = {
+            archive:  ['daftra_doc_archive', '&limit=15', 'نسخ مرفقات دفترة إلى تخزيننا'],
+            invoices: ['inv_pdf_pull', '&limit=6', 'سحب نسخ الفواتير الرسمية'],
+            receipts: ['pay_receipt_pull', '&limit=6', 'سحب إيصالات الدفعات'],
+            classify: ['doc_classify_run', '&limit=4', 'فرز المستندات آلياً'],
+        };
+        const [act, q, label] = map[kind];
+        try {
+            const r = await get(act, q);
+            setMsg(r.success === false
+                ? { bad: true, t: (r.message || 'تعذّر التشغيل') }
+                : { t: label + ' — ' + JSON.stringify(r).slice(0, 220) });
+            load();
+        } catch { setMsg({ bad: true, t: 'تعذّر الاتصال' }); }
+        finally { setBusy(''); }
+    };
+
+    const B = ({ k, t: lbl, note }) => (
+        <button onClick={() => run(k)} disabled={!!busy || !armed}
+            className="text-right p-3 rounded-2xl border border-slate-200 bg-white hover:shadow-sm disabled:opacity-50">
+            <div className="font-bold text-sm text-brand-900 flex items-center gap-2">
+                {busy === k ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} className="text-slate-400" />} {lbl}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1 leading-relaxed">{note}</div>
+        </button>
+    );
+
+    return (
+        <div className="space-y-4">
+            <p className="text-xs text-slate-500 leading-relaxed">
+                نسخ ملفات دفترة إلى تخزيننا يجعلها تُفتح فوراً بلا اعتماد على جلسة دفترة. كل عملية تسحب دفعةً محدودة،
+                ولا تحذف شيئاً — الإضافة فقط.
+            </p>
+            <div className="grid md:grid-cols-2 gap-3">
+                <B k="archive" t="انسخ مرفقات دفترة إلى تخزيننا" note="يجلب المرفقات غير المنسوخة (١٥ في التشغيلة)." />
+                <B k="invoices" t="اسحب نسخ الفواتير الرسمية" note="نسخة PDF من دفترة لكل فاتورة بلا نسخة عندنا." />
+                <B k="receipts" t="اسحب إيصالات الدفعات" note="يفتح كل دفعة في دفترة وينزّل إيصالها ويربطه بالمعرّف لا بالمبلغ." />
+                <B k="classify" t="افرز المستندات آلياً" note="يقرأ كل مستند ويحدّد نوعه، ويربط الإيصال بدفعته عند التطابق التام." />
+            </div>
+            {msg && (
+                <div className={'rounded-xl p-3 text-xs font-bold break-all ' + (msg.bad ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700')}>
+                    {msg.t}
+                </div>
+            )}
         </div>
     );
 }
