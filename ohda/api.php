@@ -440,15 +440,20 @@ register_shutdown_function(function () {
 });
 
 // ─── قراءة الإيصال ──────────────────────────────────────────────────────────
-function scan_file($f, $cats, $lang = 'ar') {
+function scan_file($files, $cats, $lang = 'ar') {
     if (!secret_set(OH_AI_KEY)) return ['error' => 'قراءة الإيصالات غير مفعّلة على الخادم'];
-    $full = OH_FILES . '/' . $f['path'];
-    if (!is_file($full)) return ['error' => 'الملف غير موجود'];
-    $data = base64_encode(file_get_contents($full));
-    $mime = $f['mime'];
-    $block = $mime === 'application/pdf'
-        ? ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $data]]
-        : ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mime, 'data' => $data]];
+    // ملفٌّ واحد أو صفحاتٌ متعدّدة لمستندٍ واحد (فاتورةٌ طويلة، أو فاتورةٌ وإيصالها)
+    if (isset($files['path'])) $files = [$files];
+    $blocks = [];
+    foreach (array_slice($files, 0, 8) as $f) {
+        $full = OH_FILES . '/' . $f['path'];
+        if (!is_file($full)) continue;
+        $data = base64_encode(file_get_contents($full));
+        $blocks[] = $f['mime'] === 'application/pdf'
+            ? ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $data]]
+            : ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $f['mime'], 'data' => $data]];
+    }
+    if (!$blocks) return ['error' => 'الملف غير موجود'];
     $catNames = array_values(array_unique(array_merge(array_map(function ($c) { return $c['name']; }, $cats), ['أخرى'])));
     $schema = [
         'type' => 'object',
@@ -484,7 +489,9 @@ function scan_file($f, $cats, $lang = 'ar') {
         'output_config' => ['effort' => 'low', 'format' => ['type' => 'json_schema', 'schema' => $schema]],
         'fallbacks' => 'default',
         'system' => $sys,
-        'messages' => [['role' => 'user', 'content' => [$block, ['type' => 'text', 'text' => 'استخرج بيانات هذا المستند.']]]],
+        'messages' => [['role' => 'user', 'content' => array_merge($blocks, [['type' => 'text', 'text' => count($blocks) > 1
+            ? 'These ' . count($blocks) . ' images are pages of ONE document, in order. Combine all items; take totals from the page that shows them.'
+            : 'استخرج بيانات هذا المستند.']])]],
     ];
     $ch = curl_init('https://api.anthropic.com/v1/messages');
     curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 120,
@@ -865,7 +872,16 @@ case 'txns': {
     while ($r && ($x = $r->fetch_assoc())) {
         $x['amount'] = (float)$x['amount']; $x['vat'] = (float)$x['vat'];
         $x['file_url'] = $x['file_id'] ? file_url($x['file_id']) : null;
+        $x['files'] = [];
         $rows[] = $x;
+    }
+    // كل صفحات المستندات دفعةً واحدة، ثم توزَّع على حركاتها
+    $withFiles = array_values(array_filter(array_map(function ($x) { return $x['file_id'] ? (int)$x['id'] : 0; }, $rows)));
+    if ($withFiles) {
+        $pos = []; foreach ($rows as $i => $x) $pos[(int)$x['id']] = $i;
+        $fr = $conn->query("SELECT id, txn_id, mime, name, drive_id FROM oh_files WHERE deleted=0 AND txn_id IN (" . implode(',', $withFiles) . ") ORDER BY id");
+        while ($fr && ($y = $fr->fetch_assoc()))
+            $rows[$pos[(int)$y['txn_id']]]['files'][] = ['id' => (int)$y['id'], 'mime' => $y['mime'], 'name' => $y['name'], 'url' => file_url($y['id'])];
     }
     out(['success' => true, 'data' => $rows]);
 }
@@ -917,11 +933,14 @@ case 'txn_save': {
         $id = (int)$conn->insert_id;
         oh_log($uid, 'txn_create', 'txn', $id, $b);
     }
-    // ربط المرفق بالحركة — ملفّات المستخدم نفسه فقط
-    if (!empty($b['file_id'])) {
-        $fid = (int)$b['file_id'];
-        $conn->query("UPDATE oh_files SET txn_id=$id WHERE id=$fid AND user_id=$uid");
+    // ربط المرفقات بالحركة — ملفّات المستخدم نفسه فقط. الصفحة المُزالة في التعديل
+    // تُفكّ من الحركة ولا تُحذف: تبقى في الخادم والدرايف
+    $fids = array_values(array_filter(array_map('intval', is_array($b['file_ids'] ?? null) ? $b['file_ids'] : [$b['file_id'] ?? 0])));
+    if (array_key_exists('file_ids', $b)) {
+        $keep = $fids ? implode(',', $fids) : '0';
+        $conn->query("UPDATE oh_files SET txn_id=NULL WHERE txn_id=$id AND user_id=$uid AND id NOT IN ($keep)");
     }
+    if ($fids) $conn->query("UPDATE oh_files SET txn_id=$id WHERE id IN (" . implode(',', $fids) . ") AND user_id=$uid");
     out(['success' => true, 'id' => $id]);
 }
 
@@ -960,15 +979,21 @@ case 'upload': {
 // قراءة الإيصال: تستخرج الجهة والتاريخ والمبلغ والضريبة والتصنيف والبنود
 case 'scan': {
     $u = need(); $uid = (int)$u['id']; $b = body();
-    $fid = (int)($b['file_id'] ?? 0);
-    $f = $conn->query("SELECT * FROM oh_files WHERE id=$fid AND user_id=$uid AND deleted=0")->fetch_assoc();
+    $ids = array_values(array_filter(array_map('intval', is_array($b['file_ids'] ?? null) ? $b['file_ids'] : [$b['file_id'] ?? 0])));
+    if (!$ids) fail('الملف غير موجود');
+    $files = [];
+    $r = $conn->query("SELECT * FROM oh_files WHERE id IN (" . implode(',', $ids) . ") AND user_id=$uid AND deleted=0");
+    while ($r && ($x = $r->fetch_assoc())) $files[(int)$x['id']] = $x;
+    $f = [];
+    foreach ($ids as $i) if (isset($files[$i])) $f[] = $files[$i];     // بترتيب الصفحات كما رُفعت
     if (!$f) fail('الملف غير موجود');
+    $fid = (int)$f[0]['id'];
     $cats = [];
     $r = $conn->query("SELECT id, name FROM oh_cats WHERE user_id=$uid AND deleted=0");
     while ($r && ($x = $r->fetch_assoc())) $cats[] = $x;
     $res = scan_file($f, $cats, $u['lang'] ?? 'ar');
     if (!empty($res['error'])) fail($res['error']);
-    $conn->query("UPDATE oh_files SET extracted='" . E(json_encode($res, JSON_UNESCAPED_UNICODE)) . "' WHERE id=$fid");
+    $conn->query("UPDATE oh_files SET extracted='" . E(json_encode($res, JSON_UNESCAPED_UNICODE)) . "' WHERE id IN (" . implode(',', array_map(function ($x) { return (int)$x['id']; }, $f)) . ")");
     foreach ($cats as $c) if ($c['name'] === ($res['category'] ?? '')) $res['cat_id'] = (int)$c['id'];
     oh_log($uid, 'scan', 'file', $fid);
     out(['success' => true, 'data' => $res]);
@@ -1021,6 +1046,9 @@ case 'statement': {
         $x['balance'] = round($bal, 2);
         $x['doc_url'] = $x['file_id'] ? doc_link($x['file_id'], $x['drive_id']) : null;
         $x['on_drive'] = !empty($x['drive_id']);
+        $x['docs'] = [];
+        if ($x['file_id'] && ($dr = $conn->query("SELECT id, drive_id FROM oh_files WHERE deleted=0 AND txn_id=" . (int)$x['id'] . " ORDER BY id")))
+            while ($dd = $dr->fetch_assoc()) $x['docs'][] = ['url' => doc_link($dd['id'], $dd['drive_id']), 'drive' => !empty($dd['drive_id'])];
         unset($x['drive_id']);
         $rows[] = $x;
     }

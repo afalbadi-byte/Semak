@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, FileUp, Loader2, Sparkles, Trash2, FileText, Check, ChevronDown, Calculator, AlertCircle } from 'lucide-react';
+import { Camera, FileUp, Loader2, Sparkles, Trash2, FileText, Check, ChevronDown, Calculator, AlertCircle, X, RefreshCw } from 'lucide-react';
 import { call, upload } from '../lib/api';
 import { back } from '../lib/router';
 import { today, money, METHODS, fullDate } from '../lib/fmt';
@@ -17,7 +17,9 @@ export default function TxnForm({ id, q }) {
     const { funds, cats, flags, reloadFunds } = useData();
     const toast = useToast();
     const [f, setF] = useState(() => blank(q, funds));
-    const [file, setFile] = useState(null);         // { id, url, mime }
+    const [files, setFiles] = useState([]);         // صفحات المستند: [{ id, url, mime }]
+    const [cur, setCur] = useState(0);              // الصفحة المعروضة كبيرة
+    const touched = useRef(new Set());              // حقولٌ كتبها المستخدم بيده — لا تمسّها القراءة
     const [scan, setScan] = useState(null);         // ما قرأه القارئ
     const [stage, setStage] = useState('');         // uploading | reading
     const [err, setErr] = useState('');
@@ -31,49 +33,71 @@ export default function TxnForm({ id, q }) {
     useEffect(() => { call('vendors').then(r => r.success && setVendors(r.data)); }, []);
 
     useEffect(() => {
-        if (!id) { setF(blank(q, funds)); setFile(null); setScan(null); setLoading(false); return; }
+        if (!id) { setF(blank(q, funds)); setFiles([]); setScan(null); touched.current = new Set(); setLoading(false); return; }
         setLoading(true);
         call('txns', { params: { id } }).then(r => {
             const t = r.success && r.data[0];
             if (t) {
                 setF({ id: t.id, type: t.type, amount: String(t.amount), vat: t.vat ? String(t.vat) : '', d: t.d, vendor: t.vendor || '',
                     cat_id: Number(t.cat_id) || 0, method: t.method || 'cash', ref: t.ref || '', note: t.note || '', fund_id: Number(t.fund_id) || 0 });
-                setFile(t.file_id ? { id: t.file_id, url: t.file_url, mime: t.file_mime } : null);
+                setFiles((t.files && t.files.length) ? t.files : (t.file_id ? [{ id: t.file_id, url: t.file_url, mime: t.file_mime }] : []));
+                setCur(0);
+                touched.current = new Set(['amount', 'vat', 'd', 'vendor', 'cat_id', 'method', 'ref']);   // حركةٌ محفوظة: القراءة لا تغيّر أرقامها
             }
             setLoading(false);
         });
     }, [id, q.type]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-    const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+    const set = (k, v) => { touched.current.add(k); setF(x => ({ ...x, [k]: v })); };
     const out = f.type === 'out';
 
-    // ─── الإيصال: رفعٌ ثم قراءةٌ تملأ النموذج ────────────────────────────────
-    const onFile = async e => {
-        const fl = e.target.files && e.target.files[0];
-        e.target.value = '';
-        if (!fl) return;
-        setErr(''); setStage('uploading');
-        const r = await upload(fl);
-        if (!r.success) { setStage(''); setErr(t(r.message || 'تعذّر رفع الملف')); return; }
-        setFile({ id: r.id, url: r.url, mime: r.mime });
-        if (!flags.ai || !out) { setStage(''); return; }
+    // ─── المستند: صفحةٌ أو صفحات، تُقرأ معاً كمستندٍ واحد ─────────────────────
+    // كل صفحةٍ جديدة تعيد القراءة بكل الصفحات؛ فالإجمالي الذي في الصفحة الأخيرة
+    // يصحّح ما قُرئ من الأولى. وما كتبه المستخدم بيده لا يُمسّ أبداً.
+    const readAll = async list => {
+        if (!flags.ai || !out || !list.length) return;
         setStage('reading');
-        const s = await call('scan', { body: { file_id: r.id } });
+        const s2 = await call('scan', { body: { file_ids: list.map(x => x.id) } });
         setStage('');
-        if (!s.success) { setErr(t(s.message || 'تعذّرت القراءة') + ' — ' + t('أكمل البيانات يدوياً')); return; }
-        const x = s.data;
+        if (!s2.success) { setErr(t(s2.message || 'تعذّرت القراءة') + ' — ' + t('أكمل البيانات يدوياً')); return; }
+        const x = s2.data, tc = touched.current;
         setScan(x);
-        // ما كتبه المستخدم بيده لا يُمسّ؛ القراءة تملأ الفارغ فقط
         setF(p => ({
             ...p,
-            amount: p.amount || (x.total ? String(x.total) : ''),
-            vat: p.vat || (x.vat ? String(x.vat) : ''),
-            d: (p.d === today() && /^\d{4}-\d{2}-\d{2}$/.test(x.date)) ? x.date : p.d,
-            vendor: p.vendor || x.vendor || '',
-            cat_id: p.cat_id || x.cat_id || 0,
-            method: ['cash', 'card', 'transfer'].includes(x.method) ? x.method : p.method,
-            ref: p.ref || x.invoice_no || '',
+            amount: tc.has('amount') ? p.amount : (x.total ? String(x.total) : p.amount),
+            vat: tc.has('vat') ? p.vat : (x.vat ? String(x.vat) : p.vat),
+            d: tc.has('d') ? p.d : (/^\d{4}-\d{2}-\d{2}$/.test(x.date) ? x.date : p.d),
+            vendor: tc.has('vendor') ? p.vendor : (x.vendor || p.vendor),
+            cat_id: tc.has('cat_id') ? p.cat_id : (x.cat_id || p.cat_id),
+            method: tc.has('method') ? p.method : (['cash', 'card', 'transfer'].includes(x.method) ? x.method : p.method),
+            ref: tc.has('ref') ? p.ref : (x.invoice_no || p.ref),
         }));
+    };
+
+    const onFile = async e => {
+        const picked = Array.from((e.target && e.target.files) || []);
+        e.target.value = '';
+        if (!picked.length) return;
+        setErr(''); setStage('uploading');
+        const added = [];
+        for (const fl of picked.slice(0, 8 - files.length)) {
+            const r = await upload(fl);
+            if (r.success) added.push({ id: r.id, url: r.url, mime: r.mime });
+            else setErr(t(r.message || 'تعذّر رفع الملف'));
+        }
+        setStage('');
+        if (!added.length) return;
+        const next = [...files, ...added];
+        setFiles(next);
+        setCur(next.length - 1);
+        await readAll(next);
+    };
+
+    const removePage = i => {
+        const next = files.filter((_, k) => k !== i);
+        setFiles(next);
+        setCur(c => Math.max(0, Math.min(c, next.length - 1)));
+        if (!next.length) setScan(null);
     };
 
     const pickVendor = v => {
@@ -87,13 +111,13 @@ export default function TxnForm({ id, q }) {
         setErr('');
         if (!(Number(f.amount) > 0)) { setErr(t('اكتب المبلغ')); amt.current && amt.current.focus(); return; }
         setBusy(true);
-        const r = await call('txn_save', { body: { ...f, amount: Number(f.amount), vat: Number(f.vat) || 0, file_id: file ? file.id : null, force: force ? 1 : 0 } });
+        const r = await call('txn_save', { body: { ...f, amount: Number(f.amount), vat: Number(f.vat) || 0, file_ids: files.map(x => x.id), force: force ? 1 : 0 } });
         setBusy(false);
         if (r.duplicate) { setDup({ ...r.duplicate, again }); return; }
         if (!r.success) { setErr(t(r.message || 'تعذّر الحفظ')); return; }
         reloadFunds();
         toast(t(f.id ? 'حُفظت التعديلات' : (out ? 'سُجّل المصروف' : 'سُجّل الاستلام')));
-        if (again) { setF({ ...blank({ type: f.type, fund: f.fund_id }, funds), d: f.d }); setFile(null); setScan(null); window.scrollTo(0, 0); return; }
+        if (again) { setF({ ...blank({ type: f.type, fund: f.fund_id }, funds), d: f.d }); setFiles([]); setScan(null); touched.current = new Set(); window.scrollTo(0, 0); return; }
         back('/txns');
     };
 
@@ -116,27 +140,59 @@ export default function TxnForm({ id, q }) {
                 ) : null}
 
                 <input ref={cam} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
-                <input ref={pick} type="file" accept="image/*,application/pdf" className="hidden" onChange={onFile} />
+                <input ref={pick} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={onFile} />
 
-                {file ? (
+                {files.length ? (
                     <div className="relative rounded-2xl overflow-hidden border border-paper-2 bg-paper-card">
-                        {file.mime === 'application/pdf' ? (
-                            <a href={file.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-5 text-brand-700 font-semibold">
-                                <FileText size={28} />{t('مستند PDF — اضغط للعرض')}
-                            </a>
-                        ) : (
-                            <a href={file.url} target="_blank" rel="noreferrer">
-                                <img src={file.url} alt={t('الإيصال')} className="w-full max-h-[220px] lg:max-h-[520px] object-contain bg-paper-2" />
-                            </a>
-                        )}
-                        <div className="flex gap-2 p-2 border-t border-paper-2">
-                            <Btn kind="ghost" className="flex-1 !h-9 text-[13px]" onClick={() => cam.current.click()}><Camera size={15} />{t('إعادة التصوير')}</Btn>
-                            <Btn kind="ghost" className="!h-9 text-[13px]" onClick={() => { setFile(null); setScan(null); }}><Trash2 size={15} />{t('إزالة')}</Btn>
+                        {(() => {
+                            const pg = files[cur] || files[0];
+                            return pg.mime === 'application/pdf' ? (
+                                <a href={pg.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-5 text-brand-700 font-semibold">
+                                    <FileText size={28} />{t('مستند PDF — اضغط للعرض')}
+                                </a>
+                            ) : (
+                                <a href={pg.url} target="_blank" rel="noreferrer">
+                                    <img src={pg.url} alt={t('الإيصال')} className="w-full max-h-[220px] lg:max-h-[480px] object-contain bg-paper-2" />
+                                </a>
+                            );
+                        })()}
+                        <div className="flex gap-1.5 p-2 border-t border-paper-2 overflow-x-auto no-scrollbar">
+                            {files.map((pg, i) => (
+                                <div key={pg.id} className={'relative shrink-0 w-14 h-16 rounded-lg overflow-hidden border-2 ' + (i === cur ? 'border-brand' : 'border-paper-2')}>
+                                    <button type="button" onClick={() => setCur(i)} className="w-full h-full bg-paper-2 flex items-center justify-center">
+                                        {pg.mime === 'application/pdf' ? <FileText size={18} className="text-brand" /> : <img src={pg.url} alt="" className="w-full h-full object-cover" />}
+                                    </button>
+                                    <span className="absolute bottom-0.5 end-0.5 min-w-[16px] h-4 px-1 rounded bg-ink/75 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">{i + 1}</span>
+                                    <button type="button" onClick={() => removePage(i)} aria-label={t('إزالة')}
+                                        className="absolute top-0.5 start-0.5 w-5 h-5 rounded bg-ink/70 text-white flex items-center justify-center"><X size={11} /></button>
+                                </div>
+                            ))}
+                            {files.length < 8 ? (
+                                <>
+                                    <button type="button" onClick={() => cam.current.click()} disabled={!!stage}
+                                        className="shrink-0 w-14 h-16 rounded-lg border-2 border-dashed border-brand-100 bg-brand-50/60 text-brand-700 flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold">
+                                        <Camera size={16} />{t('صفحة')}
+                                    </button>
+                                    <button type="button" onClick={() => pick.current.click()} disabled={!!stage}
+                                        className="shrink-0 w-14 h-16 rounded-lg border-2 border-dashed border-paper-2 text-ink-2 flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold">
+                                        <FileUp size={16} />{t('ملف')}
+                                    </button>
+                                </>
+                            ) : null}
                         </div>
+                        {files.length > 1 && out && flags.ai ? (
+                            <div className="flex items-center gap-2 px-3 pb-2 text-[11.5px] text-ink-3">
+                                <span className="flex-1">{t('{n} صفحات تُقرأ معاً كمستندٍ واحد', { n: files.length })}</span>
+                                <button type="button" onClick={() => readAll(files)} disabled={!!stage} className="flex items-center gap-1 font-semibold text-brand">
+                                    <RefreshCw size={12} />{t('أعد القراءة')}
+                                </button>
+                            </div>
+                        ) : null}
                         {stage ? (
                             <div className="absolute inset-0 bg-paper-card/85 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
                                 <Loader2 size={26} className="animate-spin text-brand" />
-                                <span className="text-[13px] font-semibold text-ink-2">{t(stage === 'uploading' ? 'يُرفع الملف…' : 'يقرأ الإيصال…')}</span>
+                                <span className="text-[13px] font-semibold text-ink-2">{stage === 'uploading' ? t('يُرفع الملف…')
+                                    : files.length > 1 ? t('يقرأ {n} صفحات…', { n: files.length }) : t('يقرأ الإيصال…')}</span>
                             </div>
                         ) : null}
                     </div>
@@ -154,7 +210,7 @@ export default function TxnForm({ id, q }) {
                     </div>
                 )}
 
-                {out && flags.ai && !file ? (
+                {out && flags.ai && !files.length ? (
                     <p className="flex items-center gap-1.5 text-[12px] text-ink-3 px-1">
                         <Sparkles size={13} className="text-amber" />{t('يقرأ التطبيق الجهة والتاريخ والمبلغ والضريبة من الإيصال')}
                     </p>
@@ -209,10 +265,10 @@ export default function TxnForm({ id, q }) {
                     {out ? (
                         <Field label={t('الضريبة (١٥٪)')}>
                             <div className="relative">
-                                <input inputMode="decimal" className={inputCls + ' pe-10'} dir="ltr" value={f.vat} placeholder="0"
+                                <input inputMode="decimal" className={inputCls + ' rtl:pl-11 ltr:pr-11'} dir="ltr" value={f.vat} placeholder="0"
                                     onChange={e => set('vat', e.target.value.replace(/[^\d.]/g, ''))} />
                                 <button type="button" title={t('احسب من المبلغ: {v}', { v: money(vatGuess, 2) })} onClick={() => set('vat', String(vatGuess))}
-                                    className="absolute end-1 top-1 w-9 h-9 rounded-lg text-ink-3 hover:bg-paper-2 flex items-center justify-center">
+                                    className="absolute rtl:left-1 ltr:right-1 top-1 w-9 h-9 rounded-lg text-ink-3 hover:bg-paper-2 flex items-center justify-center">
                                     <Calculator size={16} />
                                 </button>
                             </div>

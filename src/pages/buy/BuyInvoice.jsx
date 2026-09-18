@@ -51,6 +51,60 @@ function Suggest({ kind, value, onChange, placeholder, onPick }) {
     );
 }
 
+// ─── صفحات المستند ─────────────────────────────────────────────────────────
+// الفاتورة الطويلة تُصوَّر على عدّة صفحات، وتُقرأ معاً كمستندٍ واحد. الصورة
+// تُصغَّر على الجهاز قبل الإرسال: أسرع رفعاً وأخفّ على القراءة؛ وPDF كما هو.
+async function readPage(f) {
+    const isPdf = (f.type || '').includes('pdf') || /\.pdf$/i.test(f.name || '');
+    const raw = await new Promise(res => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(f); });
+    if (isPdf) return { name: f.name || 'invoice.pdf', mime: 'application/pdf', isPdf: true, dataUrl: raw };
+    try {
+        const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = raw; });
+        const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        return { name: (f.name || 'page').replace(/\.[^.]+$/, '') + '.jpg', mime: 'image/jpeg', isPdf: false, dataUrl: cv.toDataURL('image/jpeg', 0.86) };
+    } catch { return { name: f.name || 'page.jpg', mime: f.type || 'image/jpeg', isPdf: false, dataUrl: raw }; }
+}
+const readPages = async e => {
+    const list = Array.from((e.target && e.target.files) || []);
+    e.target.value = '';
+    return Promise.all(list.map(readPage));
+};
+
+// شريط الصفحات: صورٌ مصغّرة مرقّمة، وخانةٌ لإضافة صفحة بالكاميرا أو من الملفات
+function Pages({ pages, onAdd, onRemove, big }) {
+    const h = big ? 'h-28' : 'h-20';
+    return (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {pages.map((pg, i) => (
+                <div key={i} className={'relative shrink-0 rounded-xl border border-white/15 overflow-hidden bg-white/5 ' + h + ' ' + (big ? 'w-24' : 'w-16')}>
+                    {pg.isPdf
+                        ? <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-300">
+                            <FileText size={20} className="text-[#c5a059]" /><span className="text-[9px] font-bold">PDF</span></div>
+                        : <img src={pg.dataUrl} alt="" className="w-full h-full object-cover" />}
+                    <span className="absolute bottom-1 right-1 min-w-[18px] h-[18px] px-1 rounded-md bg-black/70 text-[10px] font-black flex items-center justify-center">{i + 1}</span>
+                    <button type="button" onClick={() => onRemove(i)}
+                        className="absolute top-1 left-1 w-6 h-6 rounded-lg bg-black/70 flex items-center justify-center"><X size={12} /></button>
+                </div>
+            ))}
+            {pages.length < 8 ? (
+                <div className={'shrink-0 flex flex-col gap-1.5 ' + h + ' ' + (big ? 'w-24' : 'w-20')}>
+                    <label className="flex-1 rounded-xl border-2 border-dashed border-white/15 flex items-center justify-center gap-1 active:bg-white/5 text-[10px] font-bold text-slate-300">
+                        <Camera size={14} className="text-[#c5a059]" />صفحة
+                        <input type="file" accept="image/*" capture="environment" onChange={onAdd} className="hidden" />
+                    </label>
+                    <label className="flex-1 rounded-xl border-2 border-dashed border-white/15 flex items-center justify-center gap-1 active:bg-white/5 text-[10px] font-bold text-slate-300">
+                        <FolderOpen size={14} className="text-[#c5a059]" />ملف
+                        <input type="file" accept="image/*,application/pdf" multiple onChange={onAdd} className="hidden" />
+                    </label>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
 // ─── إدخال فاتورة شراء من الجوال: صورة + بيانات + بنود ─────────────────────
 export default function BuyInvoice({ onDone }) {
     const [supplier, setSupplier] = useState('');
@@ -62,7 +116,7 @@ export default function BuyInvoice({ onDone }) {
     const [manual, setManual] = useState('');       // مبلغ قبل الضريبة حين لا تُدخل بنود
     const [paid, setPaid]   = useState('');
     const [note, setNote]   = useState('');
-    const [photo, setPhoto] = useState(null);       // { name, dataUrl }
+    const [photos, setPhotos] = useState([]);       // صفحات الفاتورة: [{ name, mime, isPdf, dataUrl }]
     const [scan, setScan]   = useState(null);       // نتيجة المعالج الذكي قبل الاعتماد
     const [scanning, setScanning] = useState(false);
     const [payOn, setPayOn]   = useState(false);
@@ -70,7 +124,7 @@ export default function BuyInvoice({ onDone }) {
     const [payRef, setPayRef] = useState('');
     const [payBank, setPayBank] = useState('');
     const [payDate, setPayDate] = useState(today());
-    const [receipt, setReceipt] = useState(null);   // صورة الإيصال
+    const [receipts, setReceipts] = useState([]);   // صور الإيصال
     const [rScan, setRScan] = useState(null);       // قراءة الإيصال قبل الاعتماد
     const [rScanning, setRScanning] = useState(false);
     const [rDetails, setRDetails] = useState(null);  // تفاصيل الإيصال المعتمدة، تبقى ظاهرة وتُحفظ
@@ -89,39 +143,24 @@ export default function BuyInvoice({ onDone }) {
     const vat = Math.round(net * 0.15 * 100) / 100;
     const total = Math.round((net + vat) * 100) / 100;
 
-    const pickPhoto = e => {
-        const f = e.target.files && e.target.files[0];
-        if (!f) return;
-        const r = new FileReader();
-        r.onload = () => setPhoto({
-            name: f.name || 'invoice.jpg',
-            mime: f.type || 'image/jpeg',
-            isPdf: (f.type || '').includes('pdf') || /.pdf$/i.test(f.name || ''),
-            dataUrl: String(r.result),
-        });
-        r.readAsDataURL(f);
+    // كل التقاطٍ يُضاف صفحةً جديدة؛ وأي تغييرٍ في الصفحات يُسقط القراءة السابقة
+    const pickPhoto = async e => {
+        const pg = await readPages(e);
+        if (pg.length) { setPhotos(a => [...a, ...pg].slice(0, 8)); setScan(null); }
     };
-
-    const pickReceipt = e => {
-        const f2 = e.target.files && e.target.files[0];
-        if (!f2) return;
-        const rd = new FileReader();
-        rd.onload = () => { setRScan(null); setReceipt({
-            name: f2.name || 'receipt.jpg',
-            mime: f2.type || 'image/jpeg',
-            dataUrl: String(rd.result),
-        }); };
-        rd.readAsDataURL(f2);
+    const pickReceipt = async e => {
+        const pg = await readPages(e);
+        if (pg.length) { setReceipts(a => [...a, ...pg].slice(0, 8)); setRScan(null); }
     };
 
     // قراءة الإيصال كما تُقرأ الفاتورة، ثم يراجع المدير ويعتمد
     const runReceiptScan = async () => {
-        if (!receipt) return;
+        if (!receipts.length) return;
         setRScanning(true); setRScan(null);
         try {
             const r = await fetch(`${API_URL}?action=receipt_scan`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
-                body: JSON.stringify({ image: receipt.dataUrl, mime: receipt.mime || 'image/jpeg', invoice_total: total }),
+                body: JSON.stringify({ images: receipts.map(x => ({ image: x.dataUrl, mime: x.mime })), invoice_total: total }),
             }).then(x => x.json());
             if (!r.success) { setMsg({ e: 1, t: (r.message || 'تعذر قراءة الإيصال') + (r.detail ? ' — ' + r.detail : '') }); return; }
             setRScan(r.receipt || {});
@@ -143,12 +182,12 @@ export default function BuyInvoice({ onDone }) {
     };
 
     const runScan = async () => {
-        if (!photo) return setMsg({ e: 1, t: 'صوّر الفاتورة أولاً' });
+        if (!photos.length) return setMsg({ e: 1, t: 'صوّر الفاتورة أولاً' });
         setScanning(true); setMsg(null); setScan(null);
         try {
             const r = await fetch(`${API_URL}?action=invoice_scan`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
-                body: JSON.stringify({ image: photo.dataUrl, mime: photo.mime || 'image/jpeg' }),
+                body: JSON.stringify({ images: photos.map(x => ({ image: x.dataUrl, mime: x.mime })) }),
             }).then(x => x.json());
             if (!r.success) { setMsg({ e: 1, t: (r.message || 'تعذر القراءة') + (r.detail ? ' — ' + r.detail : '') }); return; }
             const inv = r.invoice || {};
@@ -180,24 +219,21 @@ export default function BuyInvoice({ onDone }) {
         if (total <= 0)       return setMsg({ e: 1, t: 'المبلغ مطلوب' });
         setBusy(true);
         try {
-            let docUrl = '';
-            if (photo) {
-                const b64 = photo.dataUrl.split(',')[1] || '';
-                const up = await fetch(`${API_URL}?action=doc_upload`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
-                    body: JSON.stringify({ filename: photo.name, data: b64 }),
-                }).then(r => r.json());
-                if (up.success) docUrl = up.url; else setMsg({ t: 'تعذر رفع الصورة، حُفظت الفاتورة بدونها' });
-            }
-            let rcptUrl = '';
-            if (payOn && receipt) {
-                const rb = receipt.dataUrl.split(',')[1] || '';
-                const ur = await fetch(`${API_URL}?action=doc_upload`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
-                    body: JSON.stringify({ filename: receipt.name, data: rb }),
-                }).then(x => x.json());
-                if (ur.success) rcptUrl = ur.url;
-            }
+            const uploadAll = async list => {
+                const urls = [];
+                for (const pg of list) {
+                    const up = await fetch(`${API_URL}?action=doc_upload`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
+                        body: JSON.stringify({ filename: pg.name, data: pg.dataUrl.split(',')[1] || '' }),
+                    }).then(r => r.json()).catch(() => ({}));
+                    if (up.success) urls.push(up.url);
+                }
+                return urls;
+            };
+            const docUrls = await uploadAll(photos);
+            if (docUrls.length < photos.length) setMsg({ t: 'تعذّر رفع بعض الصفحات، حُفظت الفاتورة بما رُفع' });
+            const rcptUrls = payOn ? await uploadAll(receipts) : [];
+            const docUrl = docUrls[0] || '', rcptUrl = rcptUrls[0] || '';
             const r = await fetch(`${API_URL}?action=purchase_create`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() },
                 body: JSON.stringify({
@@ -206,9 +242,9 @@ export default function BuyInvoice({ onDone }) {
                     items: items.filter(i => i.name && Number(i.qty) > 0)
                         .map(i => ({ name: i.name, qty: Number(i.qty), price: Number(i.price) || 0 })),
                     subtotal: items.length ? undefined : Number(manual) || 0,
-                    paid: payOn ? (Number(paid) || 0) : 0, note, doc_url: docUrl,
+                    paid: payOn ? (Number(paid) || 0) : 0, note, doc_url: docUrl, doc_urls: docUrls,
                     pay_method: payMethod, pay_reference: payRef, pay_bank: payBank,
-                    pay_date: payDate, receipt_url: rcptUrl,
+                    pay_date: payDate, receipt_url: rcptUrl, receipt_urls: rcptUrls,
                     pay_beneficiary: payBenef || (rDetails && rDetails.beneficiary) || '',
                     pay_from_account: (rDetails && rDetails.from_account) || '',
                     receipt_details: rDetails || null,
@@ -216,8 +252,8 @@ export default function BuyInvoice({ onDone }) {
             }).then(x => x.json());
             if (!r.success) { setMsg({ e: 1, t: r.message || 'تعذر الحفظ' }); return; }
             setMsg({ t: `حُفظت الفاتورة ${r.no} بمبلغ ${money(r.total)}` + (r.warning ? ' — ' + r.warning : '') });
-            setSupplier(''); setNo(''); setItems([]); setManual(''); setPaid(''); setNote(''); setPhoto(null);
-            setPayOn(false); setReceipt(null); setPayRef(''); setPayBank('');
+            setSupplier(''); setNo(''); setItems([]); setManual(''); setPaid(''); setNote(''); setPhotos([]);
+            setPayOn(false); setReceipts([]); setPayRef(''); setPayBank('');
             setRDetails(null); setRScan(null); setPayBenef('');
             setTimeout(() => onDone && onDone(), r.warning ? 4000 : 1200);
         } catch (e) {
@@ -229,18 +265,14 @@ export default function BuyInvoice({ onDone }) {
 
     return (
         <div className="p-4 space-y-3">
-            {photo ? (
-                <div className="rounded-2xl border border-white/15 p-3 relative">
-                    {photo.isPdf
-                        ? <div className="flex items-center gap-2 py-4 justify-center text-slate-300">
-                            <FileText size={22} className="text-[#c5a059]" />
-                            <span className="text-xs font-bold truncate max-w-[70%]">{photo.name}</span>
-                          </div>
-                        : <img src={photo.dataUrl} alt="" className="max-h-52 mx-auto rounded-xl" />}
-                    <button type="button" onClick={() => setPhoto(null)}
-                        className="absolute top-2 left-2 w-9 h-9 rounded-xl bg-black/60 flex items-center justify-center">
-                        <X size={16} />
-                    </button>
+            {photos.length ? (
+                <div className="rounded-2xl border border-white/15 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold">
+                        <span>{photos.length > 1 ? 'صفحات الفاتورة (' + photos.length + ')' : 'صورة الفاتورة'}</span>
+                        <span>فاتورة طويلة؟ أضف بقيّة صفحاتها</span>
+                    </div>
+                    <Pages big pages={photos} onAdd={pickPhoto}
+                        onRemove={i => { setPhotos(a => a.filter((_, k) => k !== i)); setScan(null); }} />
                 </div>
             ) : (
                 <div className="grid grid-cols-2 gap-2">
@@ -252,16 +284,17 @@ export default function BuyInvoice({ onDone }) {
                     <label className="min-h-[88px] rounded-2xl border-2 border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:bg-white/5">
                         <FolderOpen size={22} className="text-[#c5a059]" />
                         <span className="text-xs font-bold text-slate-300">من ملفات الجوال</span>
-                        <input type="file" accept="image/*,application/pdf" onChange={pickPhoto} className="hidden" />
+                        <input type="file" accept="image/*,application/pdf" multiple onChange={pickPhoto} className="hidden" />
                     </label>
                 </div>
             )}
 
-            {photo && !scan && (
+            {photos.length > 0 && !scan && (
                 <button onClick={runScan} disabled={scanning}
                     className="w-full min-h-[52px] rounded-2xl bg-[#1a365d] border border-[#c5a059]/50 text-[15px] font-black flex items-center justify-center gap-2 disabled:opacity-60">
                     {scanning ? <Loader2 size={18} className="animate-spin" /> : <ScanLine size={18} className="text-[#c5a059]" />}
-                    {scanning ? 'يقرأ الفاتورة...' : 'اقرأ الفاتورة تلقائياً'}
+                    {scanning ? (photos.length > 1 ? 'يقرأ ' + photos.length + ' صفحات...' : 'يقرأ الفاتورة...')
+                        : (photos.length > 1 ? 'اقرأ الصفحات ' + photos.length + ' معاً' : 'اقرأ الفاتورة تلقائياً')}
                 </button>
             )}
 
@@ -397,14 +430,14 @@ export default function BuyInvoice({ onDone }) {
                                 <p className="text-[10px] text-slate-500 pt-1">تُحفظ مع الدفعة وتظهر في بطاقة الفاتورة</p>
                             </div>
                         )}
-                        {receipt ? (
+                        {receipts.length ? (
                             <div className="space-y-2">
-                                <div className="rounded-xl border border-white/15 p-2.5 flex items-center gap-2">
-                                    <Receipt size={16} className="text-emerald-400 shrink-0" />
-                                    <span className="text-xs font-bold truncate flex-1">{receipt.name}</span>
-                                    <button type="button" onClick={() => { setReceipt(null); setRScan(null); }}
-                                        className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center text-red-400"><X size={14} /></button>
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-bold">
+                                    <Receipt size={14} className="text-emerald-400" />
+                                    {receipts.length > 1 ? 'صور الإيصال (' + receipts.length + ')' : 'صورة الإيصال'}
                                 </div>
+                                <Pages pages={receipts} onAdd={pickReceipt}
+                                    onRemove={i => { setReceipts(a => a.filter((_, k) => k !== i)); setRScan(null); }} />
                                 {!rScan && (
                                     <button onClick={runReceiptScan} disabled={rScanning}
                                         className="w-full min-h-[48px] rounded-xl bg-[#1a365d] border border-[#c5a059]/50 text-sm font-black flex items-center justify-center gap-2 disabled:opacity-60">
@@ -456,7 +489,7 @@ export default function BuyInvoice({ onDone }) {
                                 <label className="min-h-[56px] rounded-xl border border-dashed border-white/15 flex items-center justify-center gap-1.5 active:bg-white/5">
                                     <FolderOpen size={15} className="text-slate-400" />
                                     <span className="text-[11px] text-slate-300 font-bold">من الملفات</span>
-                                    <input type="file" accept="image/*,application/pdf" className="hidden" onChange={pickReceipt} />
+                                    <input type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={pickReceipt} />
                                 </label>
                             </div>
                         )}

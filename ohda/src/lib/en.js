@@ -230,4 +230,11 @@ export default {
     "يُطبَّق على هذا الجهاز، ويحتسب حتى لو أُغلق التطبيق.": "Applies to this device, and counts even while the app is closed.",
     "مصدر الطلب غير موثوق": "Untrusted request origin",
     "انتهت مهلة التحقّق، أعد المحاولة": "Verification timed out — try again",
+
+    // ─ الصفحات المتعدّدة
+    "صفحة": "Page",
+    "ملف": "File",
+    "{n} صفحات تُقرأ معاً كمستندٍ واحد": "{n} pages read together as one document",
+    "أعد القراءة": "Read again",
+    "يقرأ {n} صفحات…": "Reading {n} pages…",
 };

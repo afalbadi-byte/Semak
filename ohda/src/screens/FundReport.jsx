@@ -34,8 +34,10 @@ export default function FundReport({ id }) {
 
     if (!f || !data) return <Spinner />;
     const bal = data.received - data.spent;
-    const imgs = data.outs.filter(x => x.file_id && x.file_mime !== 'application/pdf');
-    const pdfs = data.outs.filter(x => x.file_id && x.file_mime === 'application/pdf');
+    // كل صفحةٍ صورةٌ مستقلّة بعنوانها: رقم البند، ورقم الصفحة إن تعدّدت
+    const pagesOf = x => ((x.files && x.files.length) ? x.files : (x.file_id ? [{ id: x.file_id, url: x.file_url, mime: x.file_mime }] : []));
+    const imgs = data.outs.flatMap(x => { const ps = pagesOf(x); return ps.filter(pg => pg.mime !== 'application/pdf').map(pg => ({ ...x, pg, pn: ps.length > 1 ? ps.indexOf(pg) + 1 : 0 })); });
+    const pdfs = data.outs.filter(x => pagesOf(x).some(pg => pg.mime === 'application/pdf'));
     const th = 'border border-paper-2 px-2 py-1.5';
 
     const print = () => {
@@ -151,10 +153,10 @@ export default function FundReport({ id }) {
                         <h2 className="text-[14px] font-bold mb-3">{t('الإيصالات المرفقة')}</h2>
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                             {imgs.map(x => (
-                                <figure key={x.id} className="print-avoid border border-paper-2 rounded-lg overflow-hidden">
-                                    <img src={x.file_url} alt="" className="w-full h-64 object-contain bg-paper" />
+                                <figure key={x.pg.id} className="print-avoid border border-paper-2 rounded-lg overflow-hidden">
+                                    <img src={x.pg.url} alt="" className="w-full h-64 object-contain bg-paper" />
                                     <figcaption className="text-[11px] px-2 py-1.5 border-t border-paper-2 flex justify-between gap-2">
-                                        <b>#{x.n} · {x.vendor || '—'}</b><span className="tabular-nums" dir="ltr">{money(x.amount, 2)}</span>
+                                        <b>#{x.n}{x.pn ? '/' + x.pn : ''} · {x.vendor || '—'}</b><span className="tabular-nums" dir="ltr">{money(x.amount, 2)}</span>
                                     </figcaption>
                                 </figure>
                             ))}

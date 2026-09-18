@@ -131,7 +131,15 @@ export default function Statement({ q }) {
                                     <td className="border border-paper-2 px-1.5 py-1.5 text-end tabular-nums" dir="ltr">{x.type === 'out' ? money(x.amount, 2) : ''}</td>
                                     <td className={'border border-paper-2 px-1.5 py-1.5 text-end tabular-nums font-semibold ' + (x.balance < 0 ? 'text-red-700' : '')} dir="ltr">{money(x.balance, 2)}</td>
                                     <td className="border border-paper-2 px-1.5 py-1.5 text-center">
-                                        {x.doc_url ? (
+                                        {x.docs && x.docs.length > 1 ? (
+                                            // صفحاتٌ عدّة: رابطٌ مرقَّم لكل صفحة
+                                            <span className="inline-flex flex-wrap justify-center gap-x-1.5">
+                                                {x.docs.map((dc, k) => (
+                                                    <a key={k} href={dc.url} target="_blank" rel="noreferrer" title={t(dc.drive ? 'درايف' : 'عرض')}
+                                                        className="text-blue-700 underline underline-offset-2 font-semibold tabular-nums">{k + 1}</a>
+                                                ))}
+                                            </span>
+                                        ) : x.doc_url ? (
                                             <a href={x.doc_url} target="_blank" rel="noreferrer"
                                                 className="inline-flex items-center gap-0.5 text-blue-700 underline underline-offset-2 font-semibold">
                                                 {t(x.on_drive ? 'درايف' : 'عرض')}<ExternalLink size={10} className="print:hidden" />

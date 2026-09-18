@@ -2827,6 +2827,26 @@ function pr_table($cols, $rows, $foot = null) {
 
 // حذف ما اختفى من دفترة — بشرطين: أن تكون الحمولة سليمة (فيها صفوف فعلاً)، وأن يُسجَّل ما يُحذف.
 // حمولة فارغة قد تعني عطلاً في دفترة لا حذفاً حقيقياً، فلا نلمس بياناتنا عندها.
+// صفحات المستند المرسَلة للقراءة: الحقل القديم image (صفحة واحدة) أو images (عدّة صفحات
+// لمستندٍ واحد — فاتورةٌ طويلة أو فاتورةٌ وإيصالها). ثماني صفحات حدٌّ أعلى.
+function scan_page_blocks($b) {
+    $pages = [];
+    if (is_array($b['images'] ?? null)) foreach ($b['images'] as $pg)
+        if (is_array($pg)) $pages[] = [(string)($pg['image'] ?? ''), (string)($pg['mime'] ?? 'image/jpeg')];
+    if (!$pages && !empty($b['image'])) $pages[] = [(string)$b['image'], (string)($b['mime'] ?? 'image/jpeg')];
+    $blocks = [];
+    foreach (array_slice($pages, 0, 8) as [$data, $mime]) {
+        if (strpos($data, ',') !== false && strncmp($data, 'data:', 5) === 0) $data = substr($data, strpos($data, ',') + 1);
+        if ($data === '') continue;
+        if ($mime === 'application/pdf')
+            $blocks[] = ['type'=>'document', 'source'=>['type'=>'base64', 'media_type'=>'application/pdf', 'data'=>$data]];
+        else
+            $blocks[] = ['type'=>'image', 'source'=>['type'=>'base64',
+                'media_type'=>in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true) ? $mime : 'image/jpeg', 'data'=>$data]];
+    }
+    return $blocks;
+}
+
 function dmirror_prune($conn, $table, $pid, $keepIds, $payloadCount, $entity) {
     if ($payloadCount <= 0) return 0;                       // لا حمولة ⇒ لا حذف
     $keep = array_values(array_unique(array_map('intval', $keepIds)));
@@ -8106,20 +8126,24 @@ switch ($action) {
                 VALUES ($newId, $pid, 'إدخال من تطبيق المشتريات', '" . $E($u['name'] ?? '') . "')
                 ON DUPLICATE KEY UPDATE project_id=VALUES(project_id)");
         }
-        // صورة الفاتورة إن أُرفقت
-        $docUrl = trim((string)($b['doc_url'] ?? ''));
-        if ($docUrl !== '') {
+        // صفحات الفاتورة إن أُرفقت — صفحةٌ واحدة (doc_url) أو عدّة صفحات (doc_urls)
+        $docUrls = array_values(array_filter(array_map(function ($x) { return trim((string)$x); },
+            is_array($b['doc_urls'] ?? null) ? $b['doc_urls'] : [$b['doc_url'] ?? '']), 'strlen'));
+        foreach (array_slice($docUrls, 0, 8) as $pi => $docUrl) {
+            $fname = 'فاتورة ' . $no . ' — ' . $sup . (count($docUrls) > 1 ? ' — ص ' . ($pi + 1) : '');
             $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, doc_type, file_name, drive_url,
                     source, created_by)
-                VALUES ($newId, '" . $E($no) . "', 'invoice', '" . $E('فاتورة ' . $no . ' — ' . $sup) . "', '"
+                VALUES ($newId, '" . $E($no) . "', 'invoice', '" . $E($fname) . "', '"
                 . $E($docUrl) . "', 'mobile', '" . $E($u['name'] ?? '') . "')");
-            $conn->query("UPDATE dmirror_purchases SET attachments=1 WHERE id=$newId");
         }
+        if ($docUrls) $conn->query("UPDATE dmirror_purchases SET attachments=1 WHERE id=$newId");
         // الدفعة إن سُدِّدت مع الفاتورة: سجل مستقل بطريقتها ومرجعها وإيصالها
         if ($paid > 0) {
             $meth = in_array(($b['pay_method'] ?? ''), ['transfer','cash','cheque','card','other'], true) ? $b['pay_method'] : 'transfer';
             $pdt  = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['pay_date'] ?? '')) ? $b['pay_date'] : $date;
-            $rcpt = trim((string)($b['receipt_url'] ?? ''));
+            $rcptUrls = array_values(array_filter(array_map(function ($x) { return trim((string)$x); },
+                is_array($b['receipt_urls'] ?? null) ? $b['receipt_urls'] : [$b['receipt_url'] ?? '']), 'strlen'));
+            $rcpt = $rcptUrls[0] ?? '';
             $det = is_array($b['receipt_details'] ?? null)
                 ? mb_substr(json_encode($b['receipt_details'], JSON_UNESCAPED_UNICODE), 0, 4000) : '';
             $conn->query("INSERT INTO purchase_payments (purchase_id, supplier, amount, method, pay_date, reference,
@@ -8131,11 +8155,11 @@ switch ($action) {
                 . $E(mb_substr((string)($b['pay_from_account'] ?? ''), 0, 110)) . "', '"
                 . $E($det) . "', '" . $E($rcpt) . "', '', '"
                 . $E($u['name'] ?? '') . "')");
-            if ($rcpt !== '') {
+            foreach (array_slice($rcptUrls, 0, 8) as $ri => $rurl) {
                 $conn->query("INSERT INTO purchase_documents (purchase_id, invoice_no, doc_type, file_name, drive_url,
                         source, created_by)
-                    VALUES ($newId, '" . $E($no) . "', 'receipt', '" . $E('إيصال سداد ' . $no) . "', '"
-                    . $E($rcpt) . "', 'mobile', '" . $E($u['name'] ?? '') . "')");
+                    VALUES ($newId, '" . $E($no) . "', 'receipt', '" . $E('إيصال سداد ' . $no . (count($rcptUrls) > 1 ? ' — ' . ($ri + 1) : '')) . "', '"
+                    . $E($rurl) . "', 'mobile', '" . $E($u['name'] ?? '') . "')");
             }
         }
         acc_audit($conn, 1, 'purchase', $newId, 'create',
@@ -8161,12 +8185,8 @@ switch ($action) {
         set_time_limit(120);
 
         $b    = json_decode(file_get_contents('php://input'), true) ?: [];
-        $data = (string)($b['image'] ?? '');
-        if (strpos($data, ',') !== false && strncmp($data, 'data:', 5) === 0) $data = substr($data, strpos($data, ',') + 1);
-        if ($data === '') { echo json_encode(['success'=>false,'message'=>'الصورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
-        $mime = (string)($b['mime'] ?? 'image/jpeg');
-        $isPdf = ($mime === 'application/pdf');
-        if (!$isPdf && !in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true)) $mime = 'image/jpeg';
+        $blocks = scan_page_blocks($b);
+        if (!$blocks) { echo json_encode(['success'=>false,'message'=>'الصورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
 
         $sys = "أنت قارئ فواتير شراء سعودية. استخرج بيانات الفاتورة من الصورة وأعدها JSON فقط بلا أي نص آخر.\n"
              . "الحقول: supplier (اسم المورد كما في الفاتورة), no (رقم الفاتورة), date (YYYY-MM-DD), "
@@ -8175,15 +8195,14 @@ switch ($action) {
              . "قواعد: الأرقام أرقام لا نصوص وبلا فواصل آلاف. إن لم تجد حقلاً فاجعله null. "
              . "التاريخ الهجري حوّله ميلادياً. لا تخترع بنداً غير مكتوب. أعد JSON صالحاً فقط.";
 
-        // الفواتير تصل صورةً من الكاميرا أو ملف PDF من ملفات الجوال
-        $fileBlock = $isPdf
-            ? ['type'=>'document', 'source'=>['type'=>'base64', 'media_type'=>'application/pdf', 'data'=>$data]]
-            : ['type'=>'image',    'source'=>['type'=>'base64', 'media_type'=>$mime, 'data'=>$data]];
-        $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>2000, 'system'=>$sys,
-            'messages'=>[['role'=>'user', 'content'=>[
-                $fileBlock,
-                ['type'=>'text',  'text'=>'استخرج بيانات هذه الفاتورة كما هي.'],
-            ]]]];
+        // الفواتير تصل صوراً من الكاميرا أو ملفات PDF — والطويلة منها على عدّة صفحات
+        $ask = count($blocks) > 1
+            ? 'هذه ' . count($blocks) . ' صفحات لفاتورةٍ واحدة بالترتيب. اجمع بنودها كلّها في قائمةٍ واحدة، وخذ الإجماليات من الصفحة التي تحملها.'
+            : 'استخرج بيانات هذه الفاتورة كما هي.';
+        $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>count($blocks) > 1 ? 4000 : 2000, 'system'=>$sys,
+            'messages'=>[['role'=>'user', 'content'=>array_merge($blocks, [
+                ['type'=>'text',  'text'=>$ask],
+            ])]]];
 
         $call = function($pl) {
             $ch = curl_init('https://api.anthropic.com/v1/messages');
@@ -8362,12 +8381,8 @@ switch ($action) {
         set_time_limit(120);
 
         $b    = json_decode(file_get_contents('php://input'), true) ?: [];
-        $data = (string)($b['image'] ?? '');
-        if (strpos($data, ',') !== false && strncmp($data, 'data:', 5) === 0) $data = substr($data, strpos($data, ',') + 1);
-        if ($data === '') { echo json_encode(['success'=>false,'message'=>'الصورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
-        $mime  = (string)($b['mime'] ?? 'image/jpeg');
-        $isPdf = ($mime === 'application/pdf');
-        if (!$isPdf && !in_array($mime, ['image/jpeg','image/png','image/webp','image/gif'], true)) $mime = 'image/jpeg';
+        $blocks = scan_page_blocks($b);
+        if (!$blocks) { echo json_encode(['success'=>false,'message'=>'الصورة مطلوبة'], JSON_UNESCAPED_UNICODE); break; }
 
         $sys = "أنت قارئ إيصالات سداد سعودية (تحويل بنكي، إيداع، شيك، نقدي، مدى). أعد JSON فقط بلا أي نص آخر.\n"
              . "الحقول: amount (المبلغ رقماً), pay_date (YYYY-MM-DD), method (واحدة من: transfer للتحويل والإيداع، "
@@ -8377,12 +8392,11 @@ switch ($action) {
              . "قواعد: الأرقام بلا فواصل آلاف. ما لا تجده اجعله null. التاريخ الهجري حوّله ميلادياً. "
              . "لا تخترع رقماً غير مكتوب. أعد JSON صالحاً فقط.";
 
-        $fileBlock = $isPdf
-            ? ['type'=>'document', 'source'=>['type'=>'base64', 'media_type'=>'application/pdf', 'data'=>$data]]
-            : ['type'=>'image',    'source'=>['type'=>'base64', 'media_type'=>$mime, 'data'=>$data]];
         $payload = ['model'=>'claude-sonnet-5', 'max_tokens'=>800, 'system'=>$sys,
-            'messages'=>[['role'=>'user', 'content'=>[$fileBlock,
-                ['type'=>'text', 'text'=>'استخرج بيانات هذا الإيصال كما هي.']]]]];
+            'messages'=>[['role'=>'user', 'content'=>array_merge($blocks, [
+                ['type'=>'text', 'text'=>count($blocks) > 1
+                    ? 'هذه ' . count($blocks) . ' صور لإيصال سدادٍ واحد. استخرج بياناته كما هي.'
+                    : 'استخرج بيانات هذا الإيصال كما هي.']])]]];
 
         $call = function($pl) {
             $ch = curl_init('https://api.anthropic.com/v1/messages');
