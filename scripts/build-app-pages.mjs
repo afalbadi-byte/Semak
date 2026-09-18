@@ -1,4 +1,4 @@
-// صفحات دخول ثابتة لتطبيقات PWA (buy / proj / qc).
+// صفحات دخول ثابتة لتطبيقات PWA (buy / proj / qc / meet).
 //
 // العطب الذي تعالجه: iOS يقرأ بطاقة التعريف وقت تحليل الترويسة، وindex.html
 // يعلن البطاقة العامة (start_url:"/") ثم يبدّلها سكربت — بعد فوات الأوان.
@@ -14,6 +14,7 @@ const APPS = [
   { slug: 'buy',  title: 'مشتريات سماك',  short: 'مشتريات' },
   { slug: 'proj', title: 'مشاريع سماك',   short: 'مشاريع'  },
   { slug: 'qc',   title: 'جودة سماك',     short: 'الجودة'  },
+  { slug: 'meet', title: 'غرفة اجتماعات سماك', short: 'اجتماعات' },
 ];
 
 const src = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
