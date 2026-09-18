@@ -13323,6 +13323,17 @@ switch ($action) {
     }
 
     // غرفة الاتصال: مفتاحٌ عشوائي ثابت لكل اجتماع — يُولَّد أول مرّة ثم يُعاد
+    // تشخيص: رقم إصدار القاعدة ووجود جداول السبورة — لا يكشف بيانات
+    case 'schema_status': {
+        $sv = 0;
+        if ($r = $conn->query("SELECT id FROM db_schema_version ORDER BY id DESC LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $sv = (int)$x['id'];
+        $has = function($t) use ($conn) { return (bool)$conn->query("SHOW TABLES LIKE '" . $conn->real_escape_string($t) . "'")->num_rows; };
+        echo json_encode(['success'=>true, 'schema_version'=>$sv,
+            'meeting_board'=>$has('meeting_board'), 'meeting_board_rev'=>$has('meeting_board_rev')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'mtg_room': {
         if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
