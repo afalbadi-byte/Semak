@@ -13454,7 +13454,9 @@ switch ($action) {
             if ($x = $r->fetch_assoc()) $sv = (int)$x['id'];
         $has = function($t) use ($conn) { return (bool)$conn->query("SHOW TABLES LIKE '" . $conn->real_escape_string($t) . "'")->num_rows; };
         echo json_encode(['success'=>true, 'schema_version'=>$sv,
-            'meeting_board'=>$has('meeting_board'), 'meeting_board_rev'=>$has('meeting_board_rev')], JSON_UNESCAPED_UNICODE);
+            'meeting_board'=>$has('meeting_board'), 'meeting_board_rev'=>$has('meeting_board_rev'),
+            // هل أسرار مكالمات 8x8 محقونة؟ نعم أو لا فقط — لا يُكشف منها حرف
+            'jaas_ready'=>jaas_config() !== null], JSON_UNESCAPED_UNICODE);
         break;
     }
 
