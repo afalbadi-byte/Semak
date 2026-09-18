@@ -16,6 +16,18 @@ import { API_URL, getAdminToken } from '../../lib/api/client';
 // ════════════════════════════════════════════════════════════════════════════
 
 const JITSI_HOST   = 'meet.jit.si';
+// التضمين داخل التطبيق: مقطوعٌ بعد خمس دقائق على meet.jit.si، فهو مطفأ حتى
+// ننتقل إلى خادمٍ يسمح به. المكالمة تُفتح في نافذتها فتدوم بلا حدّ.
+const EMBED = false;
+
+// إعدادات تُمرَّر في ذيل الرابط، فتدخل الغرفة مباشرةً باسمك بلا صفحة انتظار
+const roomUrl = (room, name) => 'https://' + JITSI_HOST + '/' + room + '#' + [
+    'config.prejoinConfig.enabled=false',
+    'config.prejoinPageEnabled=false',
+    'config.disableDeepLinking=false',
+    'config.defaultLanguage=%22ar%22',
+    'userInfo.displayName=' + encodeURIComponent(JSON.stringify(name || 'عضو سماك')),
+].join('&');
 const JITSI_SCRIPT = 'https://meet.jit.si/external_api.js';
 
 let scriptP = null;
@@ -58,6 +70,7 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
 
     const join = async () => {
         if (!room) return;
+        if (!EMBED) { window.open(roomUrl(room, userName), '_blank', 'noopener'); return; }
         setState('loading'); setErr('');
         try {
             await loadApi();
@@ -105,7 +118,7 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
         } catch (e) { setState('error'); setErr(e.message || 'تعذّر بدء المكالمة'); }
     };
 
-    const openTab = () => window.open('https://' + JITSI_HOST + '/' + room, '_blank', 'noopener');
+    const openTab = () => window.open(roomUrl(room, userName), '_blank', 'noopener');
 
     const leave = () => {
         try { apiRef.current && apiRef.current.dispose(); } catch (e) {}
@@ -149,8 +162,8 @@ export default function MeetCall({ userName, userEmail, meetingTitle, dense }) {
                 </div>
                 <p className="text-[12px] leading-6 text-slate-400">
                     اسم الغرفة سرٌّ عشوائي يصرفه خادم سماك لمن يملك حساباً هنا، ولا يُنشر في أي رابط عام.
-                    الوسائط تمرّ عبر Jitsi Meet مفتوح المصدر — استضافتنا المشتركة لا تحتمل خادم وسائط دائماً —
-                    وبقيّة الاجتماع (المهام والسبورة والمحضر) كلّها على خادمنا.
+                    المكالمة تُفتح في نافذتها بلا حدٍّ زمني، وتبقى الأجندة والسبورة هنا — ارجع إليها
+                    من التطبيقات المفتوحة دون أن تنقطع المكالمة.
                 </p>
                 <div className="flex items-center gap-2">
                     <button onClick={copyLink} disabled={!room}
