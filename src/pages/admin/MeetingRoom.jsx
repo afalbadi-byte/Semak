@@ -86,7 +86,7 @@ export default function MeetingRoom() {
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => {
-        fetch(`${API_URL}?action=me`).then(x => x.json()).then(r => setMe(r.user || r.data || r)).catch(() => {});
+        fetch(`${API_URL}?action=me`, { headers: { Authorization: 'Bearer ' + (localStorage.getItem('semak_admin_jwt') || '') } }).then(x => x.json()).then(r => setMe(r.user || r.data || r)).catch(() => {});
     }, []);
 
     useEffect(() => {
