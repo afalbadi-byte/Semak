@@ -3,6 +3,7 @@ import { Loader2, LogIn, KeyRound } from 'lucide-react';
 import { API_URL, LS_ADMIN_JWT } from '../../lib/api/client';
 import InstallApp from '../../components/InstallApp';
 import { PasskeyLoginButton } from '../../components/PasskeyButton';
+import { appBrand } from './appBrand';
 
 const DEVICE_KEY = 'semak_device_token';
 
@@ -92,7 +93,7 @@ export default function BuyLogin({ onDone }) {
             <div className="text-center mb-7">
                 <img src="/images/app-icon-512.png" alt="" className="w-20 h-20 mx-auto rounded-2xl"
                     onError={e => { e.currentTarget.style.display = 'none'; }} />
-                <h1 className="text-[24px] font-black mt-4">مشتريات سماك</h1>
+                <h1 className="text-[24px] font-black mt-4">{appBrand().name}</h1>
                 <p className="text-[13px] text-slate-400 mt-1">سجّل دخولك بحسابك في سماك</p>
             </div>
 

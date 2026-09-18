@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Smartphone, ShieldCheck, RefreshCw } from 'lucide-react';
 import InstallApp from '../../components/InstallApp';
+import { appBrand } from './appBrand';
 
 // ─── بوابة التثبيت: التطبيق يُستخدم مثبَّتاً على الجوال لا من داخل المتصفح ───
 // السبب عملي: النسخة المثبَّتة تفتح بملء الشاشة، وتحتفظ بالجلسة والكاميرا،
@@ -30,7 +31,7 @@ export default function BuyInstallGate() {
             <div className="text-center">
                 <img src="/images/app-icon-512.png" alt="" className="w-24 h-24 mx-auto rounded-3xl shadow-2xl"
                     onError={e => { e.currentTarget.style.display = 'none'; }} />
-                <h1 className="text-[24px] font-black mt-5">مشتريات سماك</h1>
+                <h1 className="text-[24px] font-black mt-5">{appBrand().name}</h1>
                 <p className="text-[14px] text-slate-300 mt-2 leading-relaxed">
                     ثبّت التطبيق على جوالك للمتابعة
                 </p>
@@ -40,7 +41,7 @@ export default function BuyInstallGate() {
                 <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex items-start gap-3">
                     <Smartphone size={18} className="text-[#c5a059] mt-0.5 shrink-0" />
                     <p className="text-[13px] text-slate-300 leading-relaxed">
-                        النسخة المثبّتة تفتح بملء الشاشة، وتفتح الكاميرا لتصوير الفواتير مباشرة،
+                        النسخة المثبّتة تفتح بملء الشاشة، و{appBrand().perk}،
                         وتبقيك مسجّل الدخول فلا تعيد الدخول كل مرة.
                     </p>
                 </div>

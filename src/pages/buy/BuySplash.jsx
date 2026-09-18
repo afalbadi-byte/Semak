@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { appBrand } from './appBrand';
 
 // ─── شاشة الترحيب المتحركة — نحو ثلاث ثوان ونصف ثم تنسحب ────────────────────
 // تعمل أثناء التحقق من الجلسة، فالوقت مستثمر لا مهدور.
@@ -45,9 +46,9 @@ export default function BuySplash({ onDone, userName = '' }) {
                         onError={e => { e.currentTarget.style.display = 'none'; }} />
                 </div>
 
-                <h1 className="sp-name text-white text-[26px] font-black mt-6">مشتريات سماك</h1>
+                <h1 className="sp-name text-white text-[26px] font-black mt-6">{appBrand().name}</h1>
                 <p className="sp-sub text-slate-300 text-[14px] mt-1.5 text-center">
-                    {userName ? `يا هلا ${userName}` : 'فاتورة تُصوَّر، وسعر يُعرف، وسداد يُوثَّق'}
+                    {userName ? `يا هلا ${userName}` : appBrand().sub}
                 </p>
                 <p className="sp-tag text-[#c5a059] text-[12px] font-bold mt-4 tracking-wide">سماك العقارية</p>
             </div>
