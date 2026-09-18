@@ -34,6 +34,7 @@ const PurchaseHub       = React.lazy(() => import('./PurchaseHub'));
 const TaxReports        = React.lazy(() => import('./TaxReports'));
 const MeetingRoom       = React.lazy(() => import('./MeetingRoom'));
 const ProjectStatements = React.lazy(() => import('./ProjectStatements'));
+const OpsCenter        = React.lazy(() => import('./OpsCenter'));
 const MeetingMinutes    = React.lazy(() => import('./MeetingMinutes'));
 const EntityView        = React.lazy(() => import('./EntityView'));
 const ItemPrices        = React.lazy(() => import('./ItemPrices'));
@@ -1140,6 +1141,7 @@ function DashboardInner({ onLogout }) {
             tools:[
                 { id:'daftra_link',  tabId:'daftra_link',  label:'ربط دفترة',   icon:Link2,      permKey:'finance',       color:'indigo', planRequired:'enterprise' },
                 { id:'activity_log', tabId:'activity_log', label:'سجل النشاط', icon:ScrollText, permKey:'activity_log',  color:'slate'  },
+                { id:'ops',          tabId:'ops',          label:'مركز الصيانة', icon:Wrench,      permKey:'ops',        color:'rose'   },
                 { id:'security',     tabId:'security',     label:'الأمان والبريد', icon:ShieldCheck, permKey:'all',       color:'emerald'},
                 { id:'subscription', tabId:'subscription', label:'الاشتراك والباقة', icon:Zap,    permKey:'all',           color:'amber' },
                 { id:'guide',        tabId:'guide',        label:'دليل الاستخدام',   icon:BookOpen, permKey:'guide',       color:'emerald' },
@@ -1180,7 +1182,7 @@ function DashboardInner({ onLogout }) {
         parties:'كشوف حسابات الأطراف', activity_log:'سجل النشاط', security:'الأمان والبريد',
         subscription:'الاشتراك والباقة',
         rega:'قيد المطور العقاري',
-        minutes:'محاضر الاجتماعات', meeting:'غرفة الاجتماع', tax_reports:'مركز التقارير', proj_stmt:'كشوف حسابات المشاريع',
+        minutes:'محاضر الاجتماعات', meeting:'غرفة الاجتماع', tax_reports:'مركز التقارير', proj_stmt:'كشوف حسابات المشاريع', ops:'مركز الصيانة',
         purchase_docs:'مستندات المشتريات', purchase_hub:'مركز المشتريات', month_close:'القفلة الشهرية', campaign:'الحملات التسويقية',
         ent:'بطاقة', item_prices:'متابعة أسعار الأصناف',
     };
@@ -1635,6 +1637,7 @@ function DashboardInner({ onLogout }) {
                 {activeTab === 'item_prices'  && hasPermission('finance')   && <div className="animate-fadeIn"><ItemPrices /></div>}
                 {activeTab === 'meeting'      && hasPermission('finance')   && <div className="animate-fadeIn"><MeetingRoom /></div>}
                 {activeTab === 'proj_stmt'    && hasPermission('finance')   && <div className="animate-fadeIn"><ProjectStatements /></div>}
+                {activeTab === 'ops'          && hasPermission('ops')       && <div className="animate-fadeIn"><OpsCenter /></div>}
                 {activeTab === 'minutes'      && <div className="animate-fadeIn"><MeetingMinutes /></div>}
                 {activeTab === 'ent'          && entity && <EntityView type={entity.type} value={entity.value} />}
                 {activeTab === 'expenses'    && hasPermission('finance')     && <div className="animate-fadeIn"><ExpensesManage /></div>}

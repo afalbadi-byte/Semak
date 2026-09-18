@@ -29,9 +29,6 @@ export default function BuyRecords() {
     const [more, setMore] = useState(false);
     const [proof, setProof] = useState(null);        // تدقيق إثباتات الدفعات
     const [onlyGap, setOnlyGap] = useState(true);
-    const [rcp, setRcp] = useState(null);      // معاينة ربط الإيصالات المقروءة بدفعاتها
-    const [rcpBusy, setRcpBusy] = useState('');
-    const [rcpSrc, setRcpSrc] = useState('sheet');
     const view = rows;
     // تبويب الدفعات مستقل: يقرأ تدقيق الإثباتات لا قائمة الفواتير
     useEffect(() => {
@@ -45,21 +42,6 @@ export default function BuyRecords() {
             .finally(() => live && setBusy(false));
         return () => { live = false; };
     }, [tab, onlyGap]);
-
-    // الإيصالات المقروءة سلفاً تُربط بدفعاتها بالمبلغ واليوم — لا بالفواتير
-    const rcpRun = async (apply) => {
-        setRcpBusy(apply ? 'apply' : 'plan');
-        // جدول التدفقات أولاً: فيه إيصال بنكي لكل تحويل بلا لبس
-        const act = rcpSrc === 'sheet' ? 'pay_receipt_from_sheet' : 'pay_receipt_from_files';
-        try {
-            const r = await fetch(`${API_URL}?action=${act}${apply ? '&apply=1' : ''}`,
-                { headers: auth() }).then(x => x.json());
-            if (!r.success) { alert(r.message || 'تعذر الربط'); return; }
-            if (apply) { setRcp(null); setProof(null); setOnlyGap(g => g); }
-            else setRcp(r);
-        } catch { alert('تعذر الاتصال'); }
-        finally { setRcpBusy(''); }
-    };
 
     const SORTS = tab === 'invoices'
         ? [{ k: 'date', t: 'التاريخ' }, { k: 'gross', t: 'المبلغ' }, { k: 'remaining', t: 'المتبقي' },
@@ -170,60 +152,6 @@ export default function BuyRecords() {
                                 الإثبات: مرفق الدفعة في دفترة، أو إيصال مربوط بها عندنا، أو مستند إيصال على فاتورتها.
                             </p>
 
-                            {!rcp && (
-                                <button onClick={() => rcpRun(false)} disabled={!!rcpBusy}
-                                    className="w-full min-h-[42px] rounded-xl bg-emerald-500/15 text-emerald-300 text-[12px] font-black disabled:opacity-60">
-                                    {rcpBusy === 'plan' ? '…' : (rcpSrc === 'sheet' ? 'اربط إيصالات جدول التدفقات' : 'اربط الإيصالات المقروءة')}
-                                </button>
-                            )}
-                            {rcp && (
-                                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-2.5 space-y-2">
-                                    <div className="text-[12px] font-black text-emerald-200">
-                                        {rcp.would_link} إيصالاً يطابق دفعةً واحدة
-                                    <button onClick={() => { setRcpSrc(v => v === 'sheet' ? 'files' : 'sheet'); setRcp(null); }}
-                                        className="mr-2 text-[10px] font-bold text-slate-400 underline">بدّل المصدر</button>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400">
-                                        من {rcp.files} ملفاً مقروءاً · دفعات بلا إثبات {rcp.payments_open}
-                                        {rcp.ambiguous > 0 && ` · ملتبس ${rcp.ambiguous}`}
-                                        {rcp.no_match > 0 && ` · بلا دفعة ${rcp.no_match}`}
-                                    </div>
-                                    {!rcp.would_link && (rcp.why || []).length > 0 && (
-                                        <div className="rounded-lg bg-black/30 p-2 space-y-1 max-h-[200px] overflow-y-auto">
-                                            <div className="text-[10px] text-slate-400">لماذا لم يجد — أقرب دفعة لكل ملف</div>
-                                            {rcp.why.map((w, i) => (
-                                                <div key={i} className="text-[10px] text-slate-300 leading-relaxed">
-                                                    <span className="text-slate-400">{w.file}</span> · {money(w.amount)} · {w.date}
-                                                    {w.nearest_payment && (
-                                                        <div className="text-slate-500">
-                                                            ← أقرب: {money(w.nearest_payment.amount)} · {w.nearest_payment.date}
-                                                            {' '}· فرق مبلغ {money(w.nearest_payment.amount_gap)}
-                                                            {' '}· فرق أيام {w.nearest_payment.days_gap}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <div className="max-h-[180px] overflow-y-auto space-y-0.5">
-                                        {(rcp.rows || []).map((x, i) => (
-                                            <div key={i} className="text-[10px] text-slate-300 flex gap-2">
-                                                <span className="truncate flex-1">{x.file}</span>
-                                                <span className="shrink-0 text-emerald-300 tabular-nums">{money(x.amount)}</span>
-                                                <span className="shrink-0 text-slate-500 truncate max-w-[90px]">{x.supplier}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => rcpRun(true)} disabled={!!rcpBusy || !rcp.would_link}
-                                            className="flex-1 min-h-[40px] rounded-xl bg-emerald-500 text-[#04140c] text-[12px] font-black disabled:opacity-50">
-                                            {rcpBusy === 'apply' ? '…' : `نفّذ (${rcp.would_link})`}
-                                        </button>
-                                        <button onClick={() => setRcp(null)}
-                                            className="px-4 min-h-[40px] rounded-xl bg-white/10 text-[12px] font-bold">إلغاء</button>
-                                    </div>
-                                </div>
-                            )}
                             <button onClick={() => setOnlyGap(v => !v)}
                                 className="w-full h-[40px] rounded-xl bg-white/10 text-[12px] font-bold">
                                 {onlyGap ? 'اعرض كل الدفعات' : 'اعرض الناقصة فقط'}

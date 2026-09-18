@@ -2740,6 +2740,36 @@ function pr_table($cols, $rows, $foot = null) {
 //   • كل 10 دقائق: أحدث صفحة فواتير (100) — تلتقط الجديد وأي تعديل أو دفعة على فاتورة قائمة
 //   • كل 6 ساعات: مسح كامل لكل الصفحات — يلتقط تعديلات الفترات السابقة البعيدة
 // والتفاصيل (بنود/دفعات/مرفقات) تُعاد لكل فاتورة تغيّر modified أو إجماليها أو مسددها.
+
+// حذف ما اختفى من دفترة — بشرطين: أن تكون الحمولة سليمة (فيها صفوف فعلاً)، وأن يُسجَّل ما يُحذف.
+// حمولة فارغة قد تعني عطلاً في دفترة لا حذفاً حقيقياً، فلا نلمس بياناتنا عندها.
+function dmirror_prune($conn, $table, $pid, $keepIds, $payloadCount, $entity) {
+    if ($payloadCount <= 0) return 0;                       // لا حمولة ⇒ لا حذف
+    $keep = array_values(array_unique(array_map('intval', $keepIds)));
+    if (!$keep) return 0;
+    $in = implode(',', $keep);
+    $tbl = $table === 'items' ? 'dmirror_purchase_items' : 'dmirror_payments';
+    $gone = [];
+    if ($r = $conn->query("SELECT id FROM `$tbl` WHERE purchase_id=" . (int)$pid . " AND id NOT IN ($in)"))
+        while ($x = $r->fetch_assoc()) $gone[] = (int)$x['id'];
+    if (!$gone) return 0;
+    // لا نحذف أكثر من نصف الصفوف دفعةً واحدة — مؤشر خلل لا تغيير حقيقي
+    $have = 0;
+    if ($c = $conn->query("SELECT COUNT(*) n FROM `$tbl` WHERE purchase_id=" . (int)$pid))
+        $have = (int)($c->fetch_assoc()['n'] ?? 0);
+    if ($have > 2 && count($gone) > $have / 2) {
+        $conn->query("INSERT INTO dmirror_changes (run_id, entity, entity_id, field, old_value, new_value)
+            VALUES (0, '" . $conn->real_escape_string($entity) . "', " . (int)$pid . ", 'prune_skipped', '"
+            . $conn->real_escape_string(implode(',', $gone)) . "', 'حُذف أكثر من النصف — أُوقف الحذف احترازاً')");
+        return 0;
+    }
+    foreach ($gone as $g)
+        $conn->query("INSERT INTO dmirror_changes (run_id, entity, entity_id, field, old_value, new_value)
+            VALUES (0, '" . $conn->real_escape_string($entity) . "', " . (int)$pid . ", 'deleted', '" . $g . "', 'اختفى من دفترة')");
+    $conn->query("DELETE FROM `$tbl` WHERE purchase_id=" . (int)$pid . " AND id IN (" . implode(',', $gone) . ")");
+    return count($gone);
+}
+
 function dmirror_cfg_get($conn, $k) {
     $r = $conn->query("SELECT sval FROM acc_settings WHERE tenant_id=1 AND skey='" . $conn->real_escape_string($k) . "' LIMIT 1");
     return ($r && ($x = $r->fetch_assoc())) ? (string)$x['sval'] : '';
@@ -2826,7 +2856,7 @@ function dmirror_pull($conn, $full = false, $deepBudget = 8) {
         if (!$o) continue;
         $items = (array)($o['PurchaseOrderItem'] ?? $o['PurchaseInvoiceItem'] ?? []);
         $keepI = [0]; foreach ($items as $itx) if (isset($itx['id'])) $keepI[] = (int)$itx['id'];
-        $conn->query("DELETE FROM dmirror_purchase_items WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepI) . ")");
+        dmirror_prune($conn, 'items', $pid, $keepI, count($items), 'purchase_item');
         foreach ($items as $it) {
             if (!isset($it['id'])) continue;
             $conn->query("REPLACE INTO dmirror_purchase_items
@@ -2839,7 +2869,7 @@ function dmirror_pull($conn, $full = false, $deepBudget = 8) {
         }
         $pays = (array)($o['PurchaseOrderPayment'] ?? []);
         $keepP = [0]; foreach ($pays as $pyx) if (isset($pyx['id'])) $keepP[] = (int)$pyx['id'];
-        $conn->query("DELETE FROM dmirror_payments WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepP) . ")");
+        dmirror_prune($conn, 'payments', $pid, $keepP, count($pays), 'purchase_payment');
         foreach ($pays as $pay) {
             if (!isset($pay['id'])) continue;
             $pd = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($pay['date'] ?? '')) ? "'" . substr($pay['date'], 0, 10) . "'" : 'NULL';
@@ -12365,7 +12395,9 @@ switch ($action) {
         $sum = $Q("SELECT COUNT(*) n, ROUND(SUM(p.total),2) gross,
                     ROUND(SUM(GREATEST(p.total - p.paid, 0)),2) outstanding,
                     SUM(CASE WHEN p.total > p.paid + 0.5 THEN 1 ELSE 0 END) unpaid_n,
-                    ROUND(SUM(GREATEST(p.paid - p.total, 0)),2) overpaid
+                    ROUND(SUM(GREATEST(p.paid - p.total, 0)),2) overpaid,
+                    SUM(CASE WHEN COALESCE(d.n,0) = 0 THEN 1 ELSE 0 END) no_docs_n,
+                    ROUND(SUM(CASE WHEN COALESCE(d.n,0) = 0 THEN p.total ELSE 0 END),2) no_docs_amount
                 FROM dmirror_purchases p
                 LEFT JOIN purchase_project pp ON pp.purchase_id = p.id
                 LEFT JOIN (SELECT purchase_id, COUNT(*) n FROM purchase_documents GROUP BY purchase_id) d
@@ -13777,9 +13809,10 @@ switch ($action) {
                 $items = (array)($o['PurchaseOrderItem'] ?? $o['PurchaseInvoiceItem'] ?? []);
                 // ما حُذف في دفترة يُحذف عندنا: نُفرغ البنود والدفعات ثم نكتب الوارد
                 $keepI = [0]; foreach ($items as $itx) if (isset($itx['id'])) $keepI[] = (int)$itx['id'];
-                $conn->query("DELETE FROM dmirror_purchase_items WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepI) . ")");
-                $keepP = [0]; foreach ((array)($o['PurchaseOrderPayment'] ?? []) as $pyx) if (isset($pyx['id'])) $keepP[] = (int)$pyx['id'];
-                $conn->query("DELETE FROM dmirror_payments WHERE purchase_id=$pid AND id NOT IN (" . implode(',', $keepP) . ")");
+                dmirror_prune($conn, 'items', $pid, $keepI, count($items), 'purchase_item');
+                $paysX = (array)($o['PurchaseOrderPayment'] ?? []);
+                $keepP = [0]; foreach ($paysX as $pyx) if (isset($pyx['id'])) $keepP[] = (int)$pyx['id'];
+                dmirror_prune($conn, 'payments', $pid, $keepP, count($paysX), 'purchase_payment');
                 foreach ($items as $it) {
                     if (!isset($it['id'])) continue;
                     $conn->query("REPLACE INTO dmirror_purchase_items

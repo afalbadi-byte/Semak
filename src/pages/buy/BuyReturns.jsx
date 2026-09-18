@@ -61,7 +61,8 @@ export default function BuyReturns() {
                         placeholder="ابحث برقم المرتجع أو المورد"
                         className="w-full min-w-0 h-[52px] pr-9 pl-3 rounded-xl bg-white/[0.06] border border-white/10 text-[15px] outline-none focus:border-[#c5a059]" />
                 </div>
-                <button onClick={sync} disabled={busy}
+                {/* السحب من دفترة صار تلقائياً، وزره انتقل إلى مركز الصيانة — هنا نعرض فقط */}
+                <button onClick={load} disabled={busy}
                     className="w-[52px] h-[52px] rounded-xl bg-white/10 flex items-center justify-center shrink-0">
                     <RefreshCw size={17} className={busy ? 'animate-spin' : ''} />
                 </button>

@@ -120,17 +120,21 @@ function Invoices() {
         { k: 'paid', t: 'المسدد', r: r => money(r.paid) },
         { k: 'remaining', t: 'المتبقي', r: r => <span className={Number(r.remaining) > 0.5 ? 'text-amber-600 dark:text-amber-300 font-bold' : ''}>{money(r.remaining)}</span> },
         { k: 'project', t: 'المشروع', r: r => r.project || <span className="text-slate-300">بلا</span> },
-        { k: 'docs', t: 'المستندات', r: r => <span className={Number(r.orig_docs) ? '' : 'text-amber-600'}>{r.docs}</span> },
+        { k: 'docs', t: 'المستندات', r: r => Number(r.docs) ? <span className={Number(r.orig_docs) ? '' : 'text-amber-600'}>{r.docs}</span>
+            : <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-black">بلا مستند</span> },
         { k: 'origin', t: 'المصدر', r: r => r.origin === 'local' ? 'التطبيق' : 'دفترة' },
     ];
 
     return (
         <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <Card t="الفواتير" v={s.n ?? '—'} />
                 <Card t="الإجمالي" v={money(s.gross)} />
                 <Card t="المستحق" v={money(s.outstanding)} warn={Number(s.outstanding) > 0} sub={`${s.unpaid_n || 0} فاتورة`} />
                 <Card t="زيادة سداد" v={money(s.overpaid)} warn={Number(s.overpaid) > 0.5} />
+                <button type="button" onClick={() => setFlt(f => f === 'no_docs' ? '' : 'no_docs')} className="text-right">
+                    <Card t="بلا مستند" v={s.no_docs_n ?? '—'} sub={money(s.no_docs_amount)} warn={Number(s.no_docs_n) > 0} />
+                </button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
                 <div className="relative flex-1 min-w-[220px]">
@@ -270,7 +274,7 @@ function Statement({ supplier, onBack, onOpen }) {
 }
 
 // ─── إثباتات السداد ─────────────────────────────────────────────────────────
-function Proofs() {
+export function Proofs() {
     const { openEntity } = useEntity();
     const [d, setD] = useState(null);
     const [only, setOnly] = useState('missing');
@@ -315,7 +319,7 @@ function Proofs() {
 }
 
 // ─── فجوات التوثيق ──────────────────────────────────────────────────────────
-function Gaps() {
+export function Gaps() {
     const { openEntity } = useEntity();
     const [d, setD] = useState(null);
     const [k, setK] = useState('neither');
@@ -425,7 +429,7 @@ function Refunds() {
 const T_KIND = { add: 'إضافة مستند', delete: 'حذف مستند' };
 const T_STATE = { pending: 'بانتظار القرار', approved: 'موافَق', rejected: 'مرفوض' };
 
-function Tickets() {
+export function Tickets() {
     const { openEntity } = useEntity();
     const [d, setD] = useState(null);
     const [st, setSt] = useState('pending');
