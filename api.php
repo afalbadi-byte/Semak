@@ -1603,6 +1603,30 @@ $conn->query("INSERT IGNORE INTO refund_project (refund_id, project_id, note, se
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (56)");
 } // end DDL v56
 
+// ─── DDL v57: سبورة الاجتماع ────────────────────────────────────────────
+// كل عنصر صفٌّ مستقل (لا ملف JSON واحد) حتى يعمل أكثر من شخص على السبورة معاً:
+// من يحرّك ملاحظة لا يمسح ما رسمه غيره، والمزامنة تجلب ما تغيّر بعد رقم النسخة فقط.
+if ($__sv < 57) {
+$conn->query("CREATE TABLE IF NOT EXISTS meeting_board (
+    id         VARCHAR(40) NOT NULL,
+    board_id   VARCHAR(60) NOT NULL,
+    kind       VARCHAR(16) NOT NULL DEFAULT 'note',
+    data       MEDIUMTEXT,
+    z          INT NOT NULL DEFAULT 0,
+    rev        BIGINT NOT NULL DEFAULT 0,
+    deleted    TINYINT(1) NOT NULL DEFAULT 0,
+    updated_by VARCHAR(120) DEFAULT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (board_id, id), INDEX (board_id, rev)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS meeting_board_rev (
+    board_id VARCHAR(60) PRIMARY KEY,
+    rev      BIGINT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+ensure_column($conn, 'meetings', 'room_key', "ADD COLUMN room_key VARCHAR(48) DEFAULT NULL");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (57)");
+} // end DDL v57
+
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
 // acc_invoices ببنودها وسنداتها، وتدخل «مسودّة» عمداً: الوثيقة تُحفظ، وترحيلها
@@ -13215,6 +13239,105 @@ switch ($action) {
                            FROM meetings m ORDER BY m.meet_date DESC, m.id DESC LIMIT 100");
         $rows = []; if ($r) while ($x = $r->fetch_assoc()) $rows[] = $x;
         echo json_encode(['success'=>true,'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // ─── سبورة الاجتماع ────────────────────────────────────────────────────
+    // القراءة: أعطِ since=<rev> فترجع ما تغيّر بعده فقط — استطلاعٌ خفيف يكفي لعمل جماعي.
+    case 'board_get': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $bid = $E(substr((string)($_GET['board'] ?? ''), 0, 60));
+        if ($bid === '') { echo json_encode(['success'=>false,'message'=>'board مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $since = (int)($_GET['since'] ?? 0);
+        $rev = 0;
+        if ($r = $conn->query("SELECT rev FROM meeting_board_rev WHERE board_id='$bid' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $rev = (int)$x['rev'];
+        $items = [];
+        if ($r = $conn->query("SELECT id, kind, data, z, deleted, updated_by, rev FROM meeting_board
+                               WHERE board_id='$bid' AND rev > $since ORDER BY rev"))
+            while ($x = $r->fetch_assoc()) {
+                $x['data'] = json_decode((string)$x['data'], true);
+                $x['z'] = (int)$x['z']; $x['deleted'] = (int)$x['deleted']; $x['rev'] = (int)$x['rev'];
+                $items[] = $x;
+            }
+        echo json_encode(['success'=>true, 'rev'=>$rev, 'items'=>$items, 'full'=>$since === 0], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // الكتابة: دفعة عناصر (إضافة أو تعديل أو حذف). كل عنصر يُكتب وحده فلا يدهس أحدٌ عمل غيره.
+    case 'board_save': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = (int)$_jwt_claims['sub']; $who = '';
+        if ($ur = $conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1"))
+            if ($ux = $ur->fetch_assoc()) $who = (string)$ux['name'];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $bid = $E(substr((string)($b['board'] ?? ''), 0, 60));
+        $ops = is_array($b['items'] ?? null) ? $b['items'] : [];
+        if ($bid === '') { echo json_encode(['success'=>false,'message'=>'board مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        if (count($ops) > 400) $ops = array_slice($ops, 0, 400);
+
+        $conn->query("INSERT INTO meeting_board_rev (board_id, rev) VALUES ('$bid', 1)
+                      ON DUPLICATE KEY UPDATE rev = rev + 1");
+        $rev = 0;
+        if ($r = $conn->query("SELECT rev FROM meeting_board_rev WHERE board_id='$bid' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $rev = (int)$x['rev'];
+
+        $n = 0;
+        foreach ($ops as $it) {
+            $id = $E(substr((string)($it['id'] ?? ''), 0, 40));
+            if ($id === '') continue;
+            $kind = $E(substr((string)($it['kind'] ?? 'note'), 0, 16));
+            $del  = !empty($it['deleted']) ? 1 : 0;
+            $z    = (int)($it['z'] ?? 0);
+            $data = $E(json_encode($it['data'] ?? null, JSON_UNESCAPED_UNICODE));
+            $conn->query("INSERT INTO meeting_board (id, board_id, kind, data, z, rev, deleted, updated_by)
+                VALUES ('$id', '$bid', '$kind', '$data', $z, $rev, $del, '" . $E($who) . "')
+                ON DUPLICATE KEY UPDATE kind=VALUES(kind), data=VALUES(data), z=VALUES(z),
+                    rev=VALUES(rev), deleted=VALUES(deleted), updated_by=VALUES(updated_by)");
+            $n++;
+        }
+        echo json_encode(['success'=>true, 'rev'=>$rev, 'saved'=>$n], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // مسح السبورة: لا حذف فعلي — تُعلَّم محذوفة فيمكن استرجاعها من السجل
+    case 'board_clear': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $bid = $E(substr((string)($b['board'] ?? ''), 0, 60));
+        if ($bid === '') { echo json_encode(['success'=>false,'message'=>'board مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("INSERT INTO meeting_board_rev (board_id, rev) VALUES ('$bid', 1)
+                      ON DUPLICATE KEY UPDATE rev = rev + 1");
+        $rev = 0;
+        if ($r = $conn->query("SELECT rev FROM meeting_board_rev WHERE board_id='$bid' LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $rev = (int)$x['rev'];
+        $conn->query("UPDATE meeting_board SET deleted=1, rev=$rev WHERE board_id='$bid' AND deleted=0");
+        echo json_encode(['success'=>true, 'rev'=>$rev], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // غرفة الاتصال: مفتاحٌ عشوائي ثابت لكل اجتماع — يُولَّد أول مرّة ثم يُعاد
+    case 'mtg_room': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $id = (int)($_GET['id'] ?? 0);
+        if (!$id) { $r = $conn->query("SELECT id FROM meetings ORDER BY meet_date DESC, id DESC LIMIT 1");
+                    if ($r && ($x = $r->fetch_assoc())) $id = (int)$x['id']; }
+        if (!$id) { echo json_encode(['success'=>false,'message'=>'لا يوجد اجتماع'], JSON_UNESCAPED_UNICODE); break; }
+        $key = '';
+        if ($r = $conn->query("SELECT room_key FROM meetings WHERE id=$id LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $key = (string)($x['room_key'] ?? '');
+        if ($key === '') {
+            $key = 'semak-' . $id . '-' . bin2hex(random_bytes(8));
+            $conn->query("UPDATE meetings SET room_key='" . $conn->real_escape_string($key) . "' WHERE id=$id");
+        }
+        echo json_encode(['success'=>true, 'meeting_id'=>$id, 'room'=>$key, 'board'=>('mtg-' . $id)], JSON_UNESCAPED_UNICODE);
         break;
     }
 

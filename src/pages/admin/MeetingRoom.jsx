@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Presentation, Plus, Check, Clock, Printer, Target, ListChecks, Megaphone,
-    Sparkles, AlertTriangle, Flag, RefreshCw, X, Maximize2, Trash2, Play, Pause
+    Sparkles, AlertTriangle, Flag, RefreshCw, X, Maximize2, Trash2, Play, Pause,
+    PenTool, Video
 } from 'lucide-react';
 import { API_URL } from '../../lib/api/client';
 import { useNavigate } from 'react-router-dom';
 import { entityPath } from '../../lib/entity';
+import MeetBoard from '../meet/MeetBoard';
+import MeetCall from '../meet/MeetCall';
 
 // أجندة Level 10 — سبعة أقسام بتوقيت ثابت (90 دقيقة)
 const AGENDA = [
@@ -52,6 +55,9 @@ export default function MeetingRoom() {
     const [dom, setDom]         = useState('purchases');
     const [left, setLeft]       = useState(AGENDA[0].min * 60);
     const [running, setRunning] = useState(false);
+    // السبورة والمكالمة تُفتحان ملء الشاشة فوق الأجندة — نفس محرّك تطبيق الجوّال
+    const [stage, setStage] = useState(null);   // null | 'board' | 'call'
+    const [me, setMe] = useState(null);
     const tick = useRef(null);
 
     const load = useCallback(async () => {
@@ -79,6 +85,9 @@ export default function MeetingRoom() {
     }, []);
 
     useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        fetch(`${API_URL}?action=me`).then(x => x.json()).then(r => setMe(r.user || r.data || r)).catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (!running) { clearInterval(tick.current); return; }
@@ -211,6 +220,14 @@ export default function MeetingRoom() {
                             بدء اجتماع جديد
                         </button>
                     )}
+                    <button onClick={() => setStage('board')} title="السبورة المشتركة"
+                        className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold flex items-center gap-1.5">
+                        <PenTool size={15} /> السبورة
+                    </button>
+                    <button onClick={() => setStage('call')} title="مكالمة مرئية"
+                        className="px-3 py-2 rounded-xl bg-sky-600 text-white text-sm font-bold flex items-center gap-1.5">
+                        <Video size={15} /> المكالمة
+                    </button>
                     <button onClick={() => setPresent(!present)} className="px-3 py-2 rounded-xl bg-gold-500 text-white text-sm font-bold">
                         {present ? <X size={15} /> : <Maximize2 size={15} />}
                     </button>
@@ -444,6 +461,26 @@ export default function MeetingRoom() {
                     </div>
                 </div>
             )}
+        {stage && (
+            <div className="fixed inset-0 z-[60] bg-[#0b1220] flex flex-col" dir="rtl">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-l from-[#1a365d] to-[#2d5299] text-white shrink-0">
+                    <span className="font-black text-sm">{stage === 'board' ? 'سبورة الاجتماع' : 'مكالمة الاجتماع'}</span>
+                    <span className="text-[11px] text-white/60 font-bold truncate">{meeting.title}</span>
+                    <button onClick={() => setStage(stage === 'board' ? 'call' : 'board')}
+                        className="ms-auto px-3 py-1.5 rounded-xl bg-white/10 text-[12px] font-bold flex items-center gap-1.5">
+                        {stage === 'board' ? <><Video size={14} />إلى المكالمة</> : <><PenTool size={14} />إلى السبورة</>}
+                    </button>
+                    <button onClick={() => setStage(null)} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center"><X size={15} /></button>
+                </div>
+                <div className="flex-1 min-h-0 font-cairo text-white">
+                    {stage === 'board'
+                        ? <MeetBoard boardId={'mtg-' + meeting.id} userName={me?.name || ''} />
+                        : <div className="h-full p-4 overflow-y-auto max-w-5xl mx-auto">
+                              <MeetCall userName={me?.name || ''} userEmail={me?.email || ''} meetingTitle={meeting.title} />
+                          </div>}
+                </div>
+            </div>
+        )}
         {editBud && <BudgetForm item={editBud} onCancel={() => setEditBud(null)} onSave={saveBudget} />}
         {drill && <KpiDrill item={drill} onClose={() => setDrill(null)} />}
         </div>
