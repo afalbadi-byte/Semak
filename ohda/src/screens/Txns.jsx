@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, X, Download, SlidersHorizontal, Paperclip, Trash2, RotateCcw, ReceiptText, Plus } from 'lucide-react';
+import { Search, X, Download, SlidersHorizontal, Paperclip, Trash2, RotateCcw, ReceiptText, Plus, FileDown } from 'lucide-react';
 import { call } from '../lib/api';
 import { href, go } from '../lib/router';
 import { dayLabel, shortDate, METHODS, fullDate } from '../lib/fmt';
@@ -81,6 +81,9 @@ export default function Txns({ q }) {
                         className={inputCls + ' pr-10'} />
                 </form>
                 <Btn kind="line" onClick={() => setOpen(true)} className="!px-3" aria-label="تصفية"><SlidersHorizontal size={18} /></Btn>
+                <a href={href('/statement', { fund: q.fund, from: q.from, to: q.to })} aria-label="كشف حساب PDF">
+                    <Btn kind="line" className="!px-3"><FileDown size={17} /><span className="hidden lg:inline">كشف PDF</span></Btn>
+                </a>
                 <Btn kind="line" onClick={exportCsv} className="!px-3 hidden sm:inline-flex" disabled={!rows || !rows.length}>
                     <Download size={17} /><span className="hidden lg:inline">تصدير Excel</span>
                 </Btn>

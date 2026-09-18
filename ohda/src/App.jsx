@@ -12,6 +12,7 @@ import FundView from './screens/FundView';
 import FundReport from './screens/FundReport';
 import Budgets from './screens/Budgets';
 import Settings from './screens/Settings';
+import Statement from './screens/Statement';
 
 // ─── البيانات المشتركة بين الشاشات ──────────────────────────────────────────
 const DataCtx = createContext(null);
@@ -85,13 +86,14 @@ function Shell() {
     else if (p0 === 'funds') { screen = <Funds />; title = 'العُهد'; }
     else if (p0 === 'fund' && p2 === 'report') { screen = <FundReport id={Number(p1)} />; title = 'تقرير التصفية'; sub = true; }
     else if (p0 === 'fund') { screen = <FundView id={Number(p1)} />; title = 'كشف العهدة'; sub = true; }
+    else if (p0 === 'statement') { screen = <Statement q={r.q} />; title = 'كشف حساب'; sub = true; }
     else if (p0 === 'budgets') { screen = <Budgets />; title = 'الميزانية'; }
     else if (p0 === 'settings') { screen = <Settings q={r.q} />; title = 'الإعدادات'; }
     else { screen = <Dashboard q={r.q} />; title = 'الرئيسية'; }
 
 
     return (
-        <div className="min-h-screen bg-paper text-ink lg:flex">
+        <div className="min-h-screen bg-paper text-ink lg:flex print:bg-white print:min-h-0 print:block">
             {/* ── الشريط الجانبي (الشاشة الكبيرة) ── */}
             <aside className="hidden lg:flex no-print flex-col w-64 shrink-0 h-screen sticky top-0 border-l border-paper-2 bg-paper-card px-4 py-6">
                 <div className="flex items-center gap-2.5 px-2 mb-8">
@@ -132,7 +134,7 @@ function Shell() {
                     style={{ paddingTop: 'env(safe-area-inset-top)' }}>
                     <div className="h-14 px-4 lg:px-8 lg:h-16 flex items-center gap-2 max-w-6xl mx-auto">
                         {sub ? (
-                            <button onClick={() => back(p0 === 'fund' && p2 === 'report' ? '/fund/' + p1 : '/')}
+                            <button onClick={() => back(p0 === 'fund' && p2 === 'report' ? '/fund/' + p1 : p0 === 'statement' && r.q.fund ? '/fund/' + r.q.fund : '/')}
                                 className="w-10 h-10 -me-1 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-2" aria-label="رجوع">
                                 <ChevronRight size={22} />
                             </button>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, FileCheck2, Pencil, Lock, Unlock, Paperclip, Wallet } from 'lucide-react';
+import { Plus, FileCheck2, FileDown, Pencil, Lock, Unlock, Paperclip, Wallet } from 'lucide-react';
 import { call } from '../lib/api';
 import { href, go } from '../lib/router';
 import { shortDate, dayLabel, KINDS, fullDate } from '../lib/fmt';
@@ -74,6 +74,7 @@ export default function FundView({ id }) {
             <div className="flex flex-wrap gap-2">
                 {!settled ? <a href={href('/txn/new', { type: 'out', fund: id })}><Btn><Plus size={17} />مصروف</Btn></a> : null}
                 {!settled ? <a href={href('/txn/new', { type: 'in', fund: id })}><Btn kind="soft"><Plus size={17} />استلام مبلغ</Btn></a> : null}
+                <a href={href('/statement', { fund: id })}><Btn kind="line"><FileDown size={17} />كشف حساب PDF</Btn></a>
                 <a href={'#/fund/' + id + '/report'}><Btn kind="line"><FileCheck2 size={17} />تقرير التصفية</Btn></a>
                 <Btn kind="ghost" onClick={() => setEdit(f)}><Pencil size={16} />تعديل</Btn>
                 <Btn kind="ghost" onClick={toggle}>{settled ? <><Unlock size={16} />إعادة فتح</> : <><Lock size={16} />تصفية العهدة</>}</Btn>

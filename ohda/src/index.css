@@ -17,4 +17,5 @@ input[type="date"] { min-height: 2.75rem; }
   main { padding: 0 !important; max-width: none !important; }
   .print-avoid { break-inside: avoid; }
   .print-break { break-before: page; }
+  a[href^="http"] { color: #1d4ed8 !important; text-decoration: underline; }
 }

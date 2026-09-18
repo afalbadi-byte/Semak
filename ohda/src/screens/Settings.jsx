@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, Users, HardDrive, Trash2, PieChart, LogOut, ChevronLeft, UserPlus, CheckCircle2, AlertTriangle, Link2, Download } from 'lucide-react';
+import { KeyRound, Users, HardDrive, Trash2, PieChart, LogOut, ChevronLeft, UserPlus, CheckCircle2, AlertTriangle, Link2, Download, FileDown } from 'lucide-react';
 import { call } from '../lib/api';
 import { fullDate } from '../lib/fmt';
 import { Card, Btn, Sheet, Field, inputCls, Spinner, useToast } from '../ui';
@@ -44,6 +44,7 @@ export default function Settings({ q }) {
                 <Card className="divide-y divide-paper-2 overflow-hidden">
                     <Row icon={PieChart} t="الميزانية والتصنيفات" sub="سقفٌ شهري لكل تصنيف" hrefTo="#/budgets" />
                     <Row icon={Trash2} t="السلّة" sub="الحركات المحذوفة تُستعاد من هنا" hrefTo="#/txns?trash=1" />
+                    <Row icon={FileDown} t="كشف حساب PDF" sub="رصيدٌ جارٍ وروابط المستندات" hrefTo="#/statement" />
                     <Row icon={Download} t="تصدير الحركات" sub="ملف Excel بكل ما سجّلته" hrefTo="#/txns" />
                     <Row icon={KeyRound} t="تغيير كلمة المرور" onClick={() => setPw(true)} />
                     <Row icon={LogOut} t="تسجيل الخروج" onClick={logout} danger />

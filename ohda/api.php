@@ -184,6 +184,15 @@ function need_admin() { $u = need(); if ($u['role'] !== 'admin') fail('للمد�
 
 // رابط موقَّع للملف: يصلح لوسم <img> الذي لا يحمل ترويسة الدخول، ويسقط بعد ساعتين
 function file_sig($id, $exp) { return b64u(hash_hmac('sha256', "f:$id:$exp", OH_KEY, true)); }
+function base_url() {
+    $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+    return 'https://' . ($_SERVER['HTTP_HOST'] ?? 'semak.sa') . $dir . '/';
+}
+function doc_link($id, $driveId) {
+    if ($driveId) return 'https://drive.google.com/file/d/' . rawurlencode($driveId) . '/view';
+    $exp = time() + 365 * 86400;
+    return base_url() . 'api.php?action=file&id=' . (int)$id . '&exp=' . $exp . '&sig=' . file_sig($id, $exp);
+}
 function file_url($id) { $exp = time() + 7200; return 'api.php?action=file&id=' . (int)$id . '&exp=' . $exp . '&sig=' . file_sig($id, $exp); }
 
 // ─── Google Drive ───────────────────────────────────────────────────────────
@@ -669,6 +678,45 @@ case 'file': {
 
 // ─── لوحة المعلومات ─────────────────────────────────────────────────────────
 // كل رقم هنا يُرجع معه ما يلزم لفتح تفاصيله: التصنيف والجهة واليوم والعهدة
+// ─── كشف الحساب ─────────────────────────────────────────────────────────────
+// رصيدٌ افتتاحي لما قبل الفترة، ثم الحركات من الأقدم بالرصيد الجاري، ولكل
+// مستندٍ رابطٌ يبقى صالحاً في ملف PDF بعد حفظه وإرساله
+case 'statement': {
+    $u = need(); $uid = (int)$u['id'];
+    $fund = (int)($_GET['fund'] ?? 0);
+    $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : '2000-01-01';
+    $to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['to'] ?? '')   ? $_GET['to']   : '2100-12-31';
+    $fw = $fund ? " AND t.fund_id=$fund" : '';
+    $f = null;
+    if ($fund) {
+        $f = $conn->query("SELECT id, name, kind, color, status FROM oh_funds WHERE id=$fund AND user_id=$uid")->fetch_assoc();
+        if (!$f) fail('العهدة غير موجودة');
+    }
+    $opening = (float)$conn->query("SELECT COALESCE(SUM(CASE WHEN type='in' THEN amount ELSE -amount END),0) s
+        FROM oh_txns t WHERE t.user_id=$uid AND t.deleted=0$fw AND t.d < '$from'")->fetch_assoc()['s'];
+    $rows = [];
+    $r = $conn->query("SELECT t.id, t.type, t.d, t.amount, t.vat, t.vendor, t.method, t.note, t.ref, t.fund_id,
+        c.name cat_name, fd.name fund_name,
+        (SELECT x.id FROM oh_files x WHERE x.txn_id=t.id AND x.deleted=0 ORDER BY x.id LIMIT 1) file_id,
+        (SELECT x.drive_id FROM oh_files x WHERE x.txn_id=t.id AND x.deleted=0 ORDER BY x.id LIMIT 1) drive_id
+        FROM oh_txns t LEFT JOIN oh_cats c ON c.id=t.cat_id LEFT JOIN oh_funds fd ON fd.id=t.fund_id
+        WHERE t.user_id=$uid AND t.deleted=0$fw AND t.d BETWEEN '$from' AND '$to'
+        ORDER BY t.d, t.id LIMIT 5000");
+    $bal = $opening;
+    while ($r && ($x = $r->fetch_assoc())) {
+        $x['amount'] = (float)$x['amount']; $x['vat'] = (float)$x['vat'];
+        $bal += $x['type'] === 'in' ? $x['amount'] : -$x['amount'];
+        $x['balance'] = round($bal, 2);
+        $x['doc_url'] = $x['file_id'] ? doc_link($x['file_id'], $x['drive_id']) : null;
+        $x['on_drive'] = !empty($x['drive_id']);
+        unset($x['drive_id']);
+        $rows[] = $x;
+    }
+    oh_log($uid, 'statement', 'fund', $fund ?: null, ['from' => $from, 'to' => $to, 'n' => count($rows)]);
+    out(['success' => true, 'fund' => $f, 'from' => $from, 'to' => $to, 'opening' => round($opening, 2),
+        'closing' => round($bal, 2), 'rows' => $rows, 'user' => $u['name']]);
+}
+
 case 'dashboard': {
     $u = need(); $uid = (int)$u['id'];
     $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '') ? $_GET['from'] : date('Y-m-01');
