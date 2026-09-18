@@ -1646,6 +1646,59 @@ $conn->query("CREATE TABLE IF NOT EXISTS meeting_board_presence (
 $conn->query("REPLACE INTO db_schema_version (id) VALUES (58)");
 } // end DDL v58
 
+// ─── DDL v59: مكالمة الاجتماع من صنعنا + دعوات الضيوف ───────────────────
+// الوسائط تسري بين الأجهزة مباشرة (WebRTC)، وخادمنا لا يحمل إلا «التعارف»:
+// من في الغرفة، ورسائل العرض والرد بين كل جهازين. وكل دخولٍ صفٌّ مستقل في
+// meeting_rtc_peers فيبقى سجلّ حضورٍ للمحضر: من دخل ومتى خرج ومن أدخله.
+if ($__sv < 59) {
+$conn->query("CREATE TABLE IF NOT EXISTS meeting_rtc_peers (
+    id          VARCHAR(24) NOT NULL PRIMARY KEY,
+    meeting_id  INT NOT NULL,
+    uid         INT DEFAULT NULL,
+    guest_id    INT DEFAULT NULL,
+    name        VARCHAR(120) DEFAULT NULL,
+    role        VARCHAR(10) NOT NULL DEFAULT 'member',
+    state       VARCHAR(10) NOT NULL DEFAULT 'in',
+    mic         TINYINT(1) NOT NULL DEFAULT 1,
+    cam         TINYINT(1) NOT NULL DEFAULT 1,
+    hand        TINYINT(1) NOT NULL DEFAULT 0,
+    share       TINYINT(1) NOT NULL DEFAULT 0,
+    admitted_by VARCHAR(120) DEFAULT NULL,
+    joined_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    seen_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    left_at     DATETIME DEFAULT NULL,
+    INDEX (meeting_id, state, seen_at), INDEX (guest_id), INDEX (uid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS meeting_rtc_signals (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    meeting_id  INT NOT NULL,
+    from_peer   VARCHAR(24) NOT NULL,
+    to_peer     VARCHAR(24) NOT NULL,
+    kind        VARCHAR(12) NOT NULL,
+    payload     MEDIUMTEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX (to_peer, id), INDEX (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("CREATE TABLE IF NOT EXISTS meeting_guests (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    meeting_id  INT NOT NULL,
+    token       VARCHAR(48) NOT NULL,
+    name        VARCHAR(120) NOT NULL,
+    phone       VARCHAR(40) DEFAULT NULL,
+    party_type  VARCHAR(12) DEFAULT NULL,
+    party_id    INT DEFAULT NULL,
+    can_draw    TINYINT(1) NOT NULL DEFAULT 0,
+    expires_at  DATETIME NOT NULL,
+    revoked     TINYINT(1) NOT NULL DEFAULT 0,
+    created_by  VARCHAR(120) DEFAULT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    first_joined_at DATETIME DEFAULT NULL,
+    last_seen_at    DATETIME DEFAULT NULL,
+    UNIQUE KEY (token), INDEX (meeting_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$conn->query("REPLACE INTO db_schema_version (id) VALUES (59)");
+} // end DDL v59
+
 // ─── سحب فواتير العملاء إلى سجلاتنا ─────────────────────────────────────
 // المشتريات صارت عندنا، وبقيت المبيعات معلّقة على رخصة دفترة. تُسحب هنا إلى
 // acc_invoices ببنودها وسنداتها، وتدخل «مسودّة» عمداً: الوثيقة تُحفظ، وترحيلها
@@ -2573,6 +2626,70 @@ function jaas_config() {
     if (!$pem) return null;
     if (strpos($kid, '/') === false) $kid = $app . '/' . $kid;
     return ['app' => $app, 'kid' => $kid, 'pem' => $pem];
+}
+
+// ─── مكالمة الاجتماع: خوادم الاتصال ─────────────────────────────────────
+// STUN من Google يكفي أغلب الشبكات. وخادم التمرير (TURN) اختياري: يُحقن من
+// أسرار النشر إن وُجد، فينقذ الاتصال خلف شبكات الجوال والشركات المقفلة.
+function rtc_ice() {
+    $ice = [['urls' => ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']]];
+    $turl = '__TURN_URLS__'; $tuser = '__TURN_USER__'; $tpass = '__TURN_PASS__';
+    if ($turl !== '' && strpos($turl, '__') !== 0 && strpos($tuser, '__') !== 0)
+        $ice[] = ['urls' => array_values(array_filter(array_map('trim', explode(',', $turl)))),
+                  'username' => $tuser, 'credential' => $tpass];
+    return $ice;
+}
+
+// الضيف يُعرَف برمز دعوته (ترويسة X-Guest-Token أو gt) — لا حساب ولا كلمة مرور.
+// الرمز صالحٌ لاجتماعه وحده، حتى موعد انتهائه، ما لم يُلغَ.
+function rtc_guest($conn) {
+    $t = $_SERVER['HTTP_X_GUEST_TOKEN'] ?? ($_GET['gt'] ?? '');
+    $t = preg_replace('/[^a-f0-9]/', '', strtolower((string)$t));
+    if (strlen($t) < 24) return null;
+    $r = $conn->query("SELECT * FROM meeting_guests WHERE token='$t' LIMIT 1");
+    $g = $r ? $r->fetch_assoc() : null;
+    if (!$g || (int)$g['revoked'] || strtotime($g['expires_at']) < time()) return null;
+    return $g;
+}
+
+// صاحب الطلب: موظّفٌ بجلسته، أو ضيفٌ برمزه
+function rtc_actor($conn, $claims) {
+    if ($claims && !empty($claims['sub'])) {
+        $uid = (int)$claims['sub']; $nm = '';
+        if ($r = $conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $nm = (string)$x['name'];
+        return ['kind' => 'member', 'uid' => $uid, 'name' => $nm, 'guest' => null];
+    }
+    if ($g = rtc_guest($conn)) return ['kind' => 'guest', 'uid' => null, 'name' => $g['name'], 'guest' => $g];
+    return null;
+}
+
+// الجهاز (peer) لا يُستعمل إلا ممن فتحه
+function rtc_own_peer($conn, $actor, $peer) {
+    $p = preg_replace('/[^a-f0-9]/', '', (string)$peer);
+    if ($p === '' || !$actor) return null;
+    $r = $conn->query("SELECT * FROM meeting_rtc_peers WHERE id='$p' LIMIT 1");
+    $row = $r ? $r->fetch_assoc() : null;
+    if (!$row) return null;
+    if ($actor['kind'] === 'member' && (int)$row['uid'] === $actor['uid'] && $row['role'] === 'member') return $row;
+    if ($actor['kind'] === 'guest' && (int)$row['guest_id'] === (int)$actor['guest']['id']) return $row;
+    return null;
+}
+
+// هل الضيف داخل المكالمة الآن؟ (شرطٌ لرؤية السبورة)
+function rtc_guest_in($conn, $g) {
+    $gid = (int)$g['id'];
+    $r = $conn->query("SELECT 1 FROM meeting_rtc_peers WHERE guest_id=$gid AND state='in'
+                       AND seen_at > (NOW() - INTERVAL 60 SECOND) LIMIT 1");
+    return $r && $r->num_rows > 0;
+}
+
+// ضيفٌ يُسمح له بسبورة اجتماعه وحده، وهو داخل المكالمة، والرسم لمن أُذن له به
+function board_guest_ok($conn, $bid, $draw) {
+    $g = rtc_guest($conn);
+    if (!$g || (string)$bid !== 'mtg-' . (int)$g['meeting_id']) return null;
+    if ($draw && !(int)$g['can_draw']) return null;
+    return rtc_guest_in($conn, $g) ? $g : null;
 }
 
 function jaas_jwt($cfg, $room, $uid, $name, $email, $moderator) {
@@ -13370,19 +13487,22 @@ switch ($action) {
 
     // نبضة الحضور: أرسل موضع مؤشّرك، وخذ مواضع البقيّة. صفٌّ واحد لكل مستخدم.
     case 'board_presence': {
-        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+        $__b0 = json_decode(file_get_contents('php://input'), true) ?: [];
+        $__g = (!$_jwt_claims || empty($_jwt_claims['sub'])) ? board_guest_ok($conn, $__b0['board'] ?? '', false) : null;
+        if ((!$_jwt_claims || empty($_jwt_claims['sub'])) && !$__g) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $b = json_decode(file_get_contents('php://input'), true) ?: [];
         $bid = $E(substr((string)($b['board'] ?? ''), 0, 60));
         if ($bid === '') { echo json_encode(['success'=>false,'message'=>'board مطلوب'], JSON_UNESCAPED_UNICODE); break; }
-        $uid = (int)$_jwt_claims['sub'];
-        $nm = '';
-        if ($r = $conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1"))
+        // الضيف يأخذ رقماً سالباً فلا يتصادم مع أرقام الموظفين
+        $uid = $__g ? -(int)$__g['id'] : (int)$_jwt_claims['sub'];
+        $nm = $__g ? ($__g['name'] . ' (ضيف)') : '';
+        if (!$__g && ($r = $conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1")))
             if ($x = $r->fetch_assoc()) $nm = (string)$x['name'];
         // لون ثابت لكل مستخدم — مشتقّ من رقمه فلا يتبدّل بين الجلسات
         $palette = ['#f6c343','#60a5fa','#34d399','#f87171','#c084fc','#fb923c','#22d3ee','#a3e635'];
-        $col = $palette[$uid % count($palette)];
+        $col = $palette[abs($uid) % count($palette)];
         $x = (float)($b['x'] ?? 0); $y = (float)($b['y'] ?? 0);
         $tool = $E(substr((string)($b['tool'] ?? ''), 0, 16));
         $seln = (int)($b['sel_n'] ?? 0);
@@ -13435,7 +13555,8 @@ switch ($action) {
     // ─── سبورة الاجتماع ────────────────────────────────────────────────────
     // القراءة: أعطِ since=<rev> فترجع ما تغيّر بعده فقط — استطلاعٌ خفيف يكفي لعمل جماعي.
     case 'board_get': {
-        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+        $__g = (!$_jwt_claims || empty($_jwt_claims['sub'])) ? board_guest_ok($conn, $_GET['board'] ?? '', false) : null;
+        if ((!$_jwt_claims || empty($_jwt_claims['sub'])) && !$__g) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
         $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
         $bid = $E(substr((string)($_GET['board'] ?? ''), 0, 60));
@@ -13458,13 +13579,15 @@ switch ($action) {
 
     // الكتابة: دفعة عناصر (إضافة أو تعديل أو حذف). كل عنصر يُكتب وحده فلا يدهس أحدٌ عمل غيره.
     case 'board_save': {
-        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+        $__b0 = json_decode(file_get_contents('php://input'), true) ?: [];
+        $__g = (!$_jwt_claims || empty($_jwt_claims['sub'])) ? board_guest_ok($conn, $__b0['board'] ?? '', true) : null;
+        if ((!$_jwt_claims || empty($_jwt_claims['sub'])) && !$__g) {
             echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
-        $uid = (int)$_jwt_claims['sub']; $who = '';
-        if ($ur = $conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1"))
+        $uid = $__g ? 0 : (int)$_jwt_claims['sub']; $who = $__g ? ($__g['name'] . ' (ضيف)') : '';
+        if (!$__g && ($ur = $conn->query("SELECT name FROM users WHERE id=$uid LIMIT 1")))
             if ($ux = $ur->fetch_assoc()) $who = (string)$ux['name'];
         $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
-        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $b = $__b0;
         $bid = $E(substr((string)($b['board'] ?? ''), 0, 60));
         $ops = is_array($b['items'] ?? null) ? $b['items'] : [];
         if ($bid === '') { echo json_encode(['success'=>false,'message'=>'board مطلوب'], JSON_UNESCAPED_UNICODE); break; }
@@ -13523,6 +13646,259 @@ switch ($action) {
             'meeting_board'=>$has('meeting_board'), 'meeting_board_rev'=>$has('meeting_board_rev'),
             // هل أسرار مكالمات 8x8 محقونة؟ نعم أو لا فقط — لا يُكشف منها حرف
             'jaas_ready'=>jaas_config() !== null], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  مكالمة الاجتماع (WebRTC) — التعارف فقط يمرّ من هنا
+    //  الجهاز يفتح «مقعداً» (peer)، ويسأل كل ثانية: من معي؟ وهل وصلتني رسالة؟
+    //  ورسائل العرض والرد بين كل جهازين تُحفظ هنا لحظات ثم تُمحى.
+    // ════════════════════════════════════════════════════════════════════
+    case 'rtc_join': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $actor = rtc_actor($conn, $_jwt_claims);
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $mid = (int)($b['meeting_id'] ?? 0);
+        if (!$mid && ($r = $conn->query("SELECT id FROM meetings ORDER BY meet_date DESC, id DESC LIMIT 1")))
+            if ($x = $r->fetch_assoc()) $mid = (int)$x['id'];
+        if (!$mid) { echo json_encode(['success'=>false,'message'=>'لا يوجد اجتماع'], JSON_UNESCAPED_UNICODE); break; }
+        $uid = $actor['uid'];
+        // دخولٌ جديد لنفس الشخص يُغلق مقعده القديم (تحديث الصفحة أو جهاز آخر)
+        $conn->query("UPDATE meeting_rtc_peers SET state='left', left_at=NOW()
+                      WHERE meeting_id=$mid AND uid=$uid AND role='member' AND state='in'");
+        $pid = bin2hex(random_bytes(8));
+        $nm = $conn->real_escape_string($actor['name'] ?: 'عضو سماك');
+        $mic = empty($b['mic']) ? 0 : 1; $cam = empty($b['cam']) ? 0 : 1;
+        $conn->query("INSERT INTO meeting_rtc_peers (id, meeting_id, uid, name, role, state, mic, cam, joined_at, seen_at)
+                      VALUES ('$pid', $mid, $uid, '$nm', 'member', 'in', $mic, $cam, NOW(), NOW())");
+        echo json_encode(['success'=>true, 'peer'=>$pid, 'meeting_id'=>$mid, 'name'=>$actor['name'],
+                          'role'=>'member', 'state'=>'in', 'ice'=>rtc_ice()], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // صفحة الضيف: بيانات الاجتماع والدعوة قبل الدخول
+    case 'rtc_guest_info': {
+        $g = rtc_guest($conn);
+        if (!$g) {
+            // نفرّق بين المنتهي والملغى والمجهول، ليفهم الضيف لماذا لا يدخل
+            $t = preg_replace('/[^a-f0-9]/', '', strtolower((string)($_GET['gt'] ?? '')));
+            $why = 'invalid';
+            if ($t !== '' && ($r = $conn->query("SELECT revoked, expires_at FROM meeting_guests WHERE token='$t' LIMIT 1")))
+                if ($x = $r->fetch_assoc()) $why = (int)$x['revoked'] ? 'revoked' : 'expired';
+            echo json_encode(['success'=>false, 'reason'=>$why], JSON_UNESCAPED_UNICODE); break;
+        }
+        $mid = (int)$g['meeting_id']; $m = null;
+        if ($r = $conn->query("SELECT id, title, meet_date, meet_time, status FROM meetings WHERE id=$mid LIMIT 1")) $m = $r->fetch_assoc();
+        echo json_encode(['success'=>true, 'guest'=>['name'=>$g['name'], 'can_draw'=>(int)$g['can_draw'],
+                          'expires_at'=>$g['expires_at']],
+                          'meeting'=>$m, 'board'=>'mtg-' . $mid], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // الضيف يطلب الدخول: يُفتح له مقعدٌ «في الانتظار» حتى يقبله أحد الفريق.
+    // ومن قُبل خلال العشر دقائق الأخيرة (انقطاع شبكة أو تحديث) يعود مباشرة.
+    case 'rtc_guest_join': {
+        $g = rtc_guest($conn);
+        if (!$g) { echo json_encode(['success'=>false,'message'=>'الدعوة غير صالحة أو انتهت'], JSON_UNESCAPED_UNICODE); break; }
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $gid = (int)$g['id']; $mid = (int)$g['meeting_id'];
+        $nm = trim(mb_substr((string)($b['name'] ?? ''), 0, 80)) ?: $g['name'];
+        $back = false;
+        if ($r = $conn->query("SELECT admitted_by FROM meeting_rtc_peers WHERE guest_id=$gid AND admitted_by IS NOT NULL
+                               AND state IN ('in','left') AND seen_at > (NOW() - INTERVAL 10 MINUTE) ORDER BY seen_at DESC LIMIT 1"))
+            if ($x = $r->fetch_assoc()) $back = $x['admitted_by'];
+        $conn->query("UPDATE meeting_rtc_peers SET state='left', left_at=NOW() WHERE guest_id=$gid AND state IN ('in','waiting')");
+        $pid = bin2hex(random_bytes(8));
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $st = $back ? 'in' : 'waiting';
+        $conn->query("INSERT INTO meeting_rtc_peers (id, meeting_id, guest_id, name, role, state, admitted_by, joined_at, seen_at)
+                      VALUES ('$pid', $mid, $gid, '" . $E($nm) . "', 'guest', '$st', "
+                      . ($back ? "'" . $E($back) . "'" : 'NULL') . ", NOW(), NOW())");
+        $conn->query("UPDATE meeting_guests SET last_seen_at=NOW(), first_joined_at=COALESCE(first_joined_at, NOW()) WHERE id=$gid");
+        echo json_encode(['success'=>true, 'peer'=>$pid, 'meeting_id'=>$mid, 'name'=>$nm, 'role'=>'guest',
+                          'state'=>$st, 'can_draw'=>(int)$g['can_draw'], 'ice'=>rtc_ice()], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // النبضة: حالتي (مايك/كاميرا/يد)، ورسائلي، ومن في الغرفة، ومن ينتظر الإذن
+    case 'rtc_poll': {
+        $actor = rtc_actor($conn, $_jwt_claims);
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $me = rtc_own_peer($conn, $actor, $b['peer'] ?? '');
+        if (!$me) { echo json_encode(['success'=>false,'state'=>'gone','message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $pid = $me['id']; $mid = (int)$me['meeting_id'];
+        if ($actor['kind'] === 'guest' && $me['state'] === 'in' && !rtc_guest($conn)) $me['state'] = 'kicked';
+        if (in_array($me['state'], ['in', 'waiting'], true)) {
+            $fm = empty($b['mic']) ? 0 : 1; $fc = empty($b['cam']) ? 0 : 1;
+            $fh = empty($b['hand']) ? 0 : 1; $fs = empty($b['share']) ? 0 : 1;
+            $conn->query("UPDATE meeting_rtc_peers SET seen_at=NOW(), mic=$fm, cam=$fc, hand=$fh, share=$fs WHERE id='$pid'");
+            if ($actor['kind'] === 'guest') $conn->query("UPDATE meeting_guests SET last_seen_at=NOW() WHERE id=" . (int)$actor['guest']['id']);
+        }
+        if ($me['state'] !== 'in') {
+            echo json_encode(['success'=>true, 'state'=>$me['state']], JSON_UNESCAPED_UNICODE); break; }
+
+        $since = (int)($b['since'] ?? 0);
+        if ($since > 0) $conn->query("DELETE FROM meeting_rtc_signals WHERE to_peer='$pid' AND id <= $since");
+        $sig = [];
+        if ($r = $conn->query("SELECT id, from_peer, kind, payload FROM meeting_rtc_signals
+                               WHERE to_peer='$pid' AND id > $since ORDER BY id LIMIT 60"))
+            while ($x = $r->fetch_assoc()) { $x['id'] = (int)$x['id']; $x['payload'] = json_decode($x['payload'], true); $sig[] = $x; }
+
+        $peers = [];
+        if ($r = $conn->query("SELECT id, uid, name, role, mic, cam, hand, share FROM meeting_rtc_peers
+                               WHERE meeting_id=$mid AND state='in' AND id <> '$pid'
+                               AND seen_at > (NOW() - INTERVAL 20 SECOND) ORDER BY joined_at"))
+            while ($x = $r->fetch_assoc()) {
+                foreach (['mic','cam','hand','share'] as $k) $x[$k] = (int)$x[$k];
+                $x['uid'] = $x['uid'] !== null ? (int)$x['uid'] : null;
+                $peers[] = $x;
+            }
+        $waiting = [];
+        if ($actor['kind'] === 'member' && ($r = $conn->query("SELECT p.id, p.name, g.phone FROM meeting_rtc_peers p
+                LEFT JOIN meeting_guests g ON g.id = p.guest_id
+                WHERE p.meeting_id=$mid AND p.state='waiting' AND p.seen_at > (NOW() - INTERVAL 20 SECOND) ORDER BY p.joined_at")))
+            while ($x = $r->fetch_assoc()) $waiting[] = $x;
+
+        // كنس: من انقطعت نبضته دقيقة يُسجَّل خارجاً (بوقت آخر نبضة)، والرسائل القديمة تُمحى
+        if (mt_rand(1, 20) === 1) {
+            $conn->query("UPDATE meeting_rtc_peers SET state='left', left_at=seen_at
+                          WHERE state IN ('in','waiting') AND seen_at < (NOW() - INTERVAL 60 SECOND)");
+            $conn->query("DELETE FROM meeting_rtc_signals WHERE created_at < (NOW() - INTERVAL 5 MINUTE)");
+        }
+        echo json_encode(['success'=>true, 'state'=>'in', 'signals'=>$sig, 'peers'=>$peers, 'waiting'=>$waiting],
+                         JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // رسالة تعارف من جهاز إلى جهاز (عرض، رد، إعادة اتصال)
+    case 'rtc_signal': {
+        $actor = rtc_actor($conn, $_jwt_claims);
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $me = rtc_own_peer($conn, $actor, $b['peer'] ?? '');
+        if (!$me || $me['state'] !== 'in') { echo json_encode(['success'=>false,'message'=>'لست في الغرفة'], JSON_UNESCAPED_UNICODE); break; }
+        $to = preg_replace('/[^a-f0-9]/', '', (string)($b['to'] ?? ''));
+        $kind = preg_replace('/[^a-z]/', '', (string)($b['kind'] ?? ''));
+        $payload = json_encode($b['payload'] ?? null, JSON_UNESCAPED_UNICODE);
+        if ($to === '' || $kind === '' || strlen($payload) > 65000) {
+            echo json_encode(['success'=>false,'message'=>'رسالة غير صالحة'], JSON_UNESCAPED_UNICODE); break; }
+        $mid = (int)$me['meeting_id'];
+        $r = $conn->query("SELECT 1 FROM meeting_rtc_peers WHERE id='$to' AND meeting_id=$mid AND state='in' LIMIT 1");
+        if (!$r || !$r->num_rows) { echo json_encode(['success'=>false,'message'=>'الطرف غادر'], JSON_UNESCAPED_UNICODE); break; }
+        $conn->query("INSERT INTO meeting_rtc_signals (meeting_id, from_peer, to_peer, kind, payload)
+                      VALUES ($mid, '{$me['id']}', '$to', '$kind', '" . $conn->real_escape_string($payload) . "')");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'rtc_leave': {
+        $actor = rtc_actor($conn, $_jwt_claims);
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        if ($me = rtc_own_peer($conn, $actor, $b['peer'] ?? ''))
+            $conn->query("UPDATE meeting_rtc_peers SET state='left', left_at=NOW() WHERE id='{$me['id']}' AND state IN ('in','waiting')");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // الفريق يقبل الضيف أو يرفضه، أو يُخرجه بعد دخوله
+    case 'rtc_admit':
+    case 'rtc_kick': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $actor = rtc_actor($conn, $_jwt_claims);
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $t = preg_replace('/[^a-f0-9]/', '', (string)($b['peer_id'] ?? ''));
+        $r = $conn->query("SELECT * FROM meeting_rtc_peers WHERE id='$t' AND role='guest' LIMIT 1");
+        $p = $r ? $r->fetch_assoc() : null;
+        if (!$p) { echo json_encode(['success'=>false,'message'=>'الضيف غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $by = $conn->real_escape_string($actor['name'] ?: 'عضو سماك');
+        if ($action === 'rtc_kick') $conn->query("UPDATE meeting_rtc_peers SET state='kicked', left_at=NOW() WHERE id='$t'");
+        elseif (!empty($b['allow'])) $conn->query("UPDATE meeting_rtc_peers SET state='in', admitted_by='$by' WHERE id='$t' AND state='waiting'");
+        else $conn->query("UPDATE meeting_rtc_peers SET state='denied', left_at=NOW() WHERE id='$t' AND state='waiting'");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // ─── دعوات الضيوف ──────────────────────────────────────────────────────
+    case 'mtg_guest_invite': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $actor = rtc_actor($conn, $_jwt_claims);
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $E = function($v) use ($conn) { return $conn->real_escape_string((string)$v); };
+        $mid = (int)($b['meeting_id'] ?? 0);
+        $m = null;
+        if ($mid && ($r = $conn->query("SELECT id, title, meet_date, meet_time FROM meetings WHERE id=$mid LIMIT 1"))) $m = $r->fetch_assoc();
+        if (!$m) { echo json_encode(['success'=>false,'message'=>'الاجتماع غير موجود'], JSON_UNESCAPED_UNICODE); break; }
+        $nm = trim(mb_substr((string)($b['name'] ?? ''), 0, 120));
+        if ($nm === '') { echo json_encode(['success'=>false,'message'=>'اسم الضيف مطلوب'], JSON_UNESCAPED_UNICODE); break; }
+        $ptype = in_array(($b['party_type'] ?? ''), ['customer','supplier','other'], true) ? $b['party_type'] : 'other';
+        $pidn = (int)($b['party_id'] ?? 0);
+        // الصلاحية: حتى نهاية يوم الاجتماع التالي افتراضاً، أو عدد ساعات يحدّده المرسِل
+        $hours = (int)($b['hours'] ?? 0);
+        $exp = $hours > 0 ? date('Y-m-d H:i:s', time() + min($hours, 24 * 30) * 3600)
+                          : date('Y-m-d 23:59:59', max(time(), strtotime($m['meet_date'])) + 86400);
+        $tok = bin2hex(random_bytes(16));
+        $conn->query("INSERT INTO meeting_guests (meeting_id, token, name, phone, party_type, party_id, can_draw, expires_at, created_by)
+                      VALUES ($mid, '$tok', '" . $E($nm) . "', '" . $E(substr((string)($b['phone'] ?? ''), 0, 40)) . "', '$ptype', "
+                      . ($pidn ?: 'NULL') . ", " . (empty($b['can_draw']) ? 0 : 1) . ", '$exp', '" . $E($actor['name']) . "')");
+        echo json_encode(['success'=>true, 'id'=>(int)$conn->insert_id, 'token'=>$tok, 'expires_at'=>$exp,
+                          'url'=>'https://semak.sa/join/' . $tok, 'meeting'=>$m], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_guest_list': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $mid = (int)($_GET['meeting_id'] ?? 0);
+        $rows = [];
+        if ($r = $conn->query("SELECT id, token, name, phone, party_type, can_draw, expires_at, revoked, created_by, created_at,
+                                      first_joined_at, last_seen_at FROM meeting_guests WHERE meeting_id=$mid ORDER BY id DESC"))
+            while ($x = $r->fetch_assoc()) {
+                $x['url'] = 'https://semak.sa/join/' . $x['token'];
+                $x['active'] = !(int)$x['revoked'] && strtotime($x['expires_at']) >= time();
+                $rows[] = $x;
+            }
+        echo json_encode(['success'=>true, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    case 'mtg_guest_revoke': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $b = json_decode(file_get_contents('php://input'), true) ?: [];
+        $gid = (int)($b['id'] ?? 0);
+        $conn->query("UPDATE meeting_guests SET revoked=1 WHERE id=$gid");
+        $conn->query("UPDATE meeting_rtc_peers SET state='kicked', left_at=NOW() WHERE guest_id=$gid AND state IN ('in','waiting')");
+        echo json_encode(['success'=>true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // بحثٌ في العملاء والموردين لتعبئة الدعوة (الاسم والجوال)
+    case 'mtg_contacts': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $q = $conn->real_escape_string(trim(mb_substr((string)($_GET['q'] ?? ''), 0, 60)));
+        $rows = [];
+        if ($q !== '' && ($r = $conn->query("SELECT id, type, name, phone FROM acc_parties
+                WHERE tenant_id=1 AND status=1 AND (name LIKE '%$q%' OR phone LIKE '%$q%') ORDER BY name LIMIT 12")))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
+    // سجلّ الحضور للمحضر: كل دخولٍ بوقته وخروجه ومن أدخله
+    case 'mtg_attendance': {
+        if (!$_jwt_claims || empty($_jwt_claims['sub'])) {
+            echo json_encode(['success'=>false,'message'=>'انتهت الجلسة'], JSON_UNESCAPED_UNICODE); break; }
+        $mid = (int)($_GET['meeting_id'] ?? 0);
+        $rows = [];
+        if ($r = $conn->query("SELECT name, role, MIN(joined_at) first_in, MAX(COALESCE(left_at, seen_at)) last_out,
+                                      MAX(admitted_by) admitted_by, COUNT(*) sessions
+                               FROM meeting_rtc_peers WHERE meeting_id=$mid AND state IN ('in','left','kicked')
+                               GROUP BY COALESCE(uid, -guest_id), name, role ORDER BY first_in"))
+            while ($x = $r->fetch_assoc()) $rows[] = $x;
+        echo json_encode(['success'=>true, 'data'=>$rows], JSON_UNESCAPED_UNICODE);
         break;
     }
 

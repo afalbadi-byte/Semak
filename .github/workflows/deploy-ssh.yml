@@ -103,6 +103,9 @@ jobs:
           sed -i "s|__JAAS_APP_ID__|${{ secrets.JAAS_APP_ID }}|g" dist/api.php
           sed -i "s|__JAAS_KID__|${{ secrets.JAAS_KID }}|g" dist/api.php
           sed -i "s|__JAAS_PRIVATE_KEY_B64__|${{ secrets.JAAS_PRIVATE_KEY_B64 }}|g" dist/api.php
+          sed -i "s|__TURN_URLS__|${{ secrets.TURN_URLS }}|g" dist/api.php
+          sed -i "s|__TURN_USER__|${{ secrets.TURN_USER }}|g" dist/api.php
+          sed -i "s|__TURN_PASS__|${{ secrets.TURN_PASS }}|g" dist/api.php
 
       # رفع محتوى dist إلى مجلد الويب عبر SCP/SSH — أوثق من FTP.
       # rm:false  → لا نحذف الملفات الأخرى على الخادم (الوسائط المرفوعة تبقى).

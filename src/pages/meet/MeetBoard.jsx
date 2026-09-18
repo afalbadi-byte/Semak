@@ -45,11 +45,12 @@ const TOOLS = [
 ];
 const SHAPE_ICONS = { rect: Square, roundrect: Square, ellipse: Circle, diamond: Diamond, triangle: Triangle, star: Star };
 
-export default function MeetBoard({ boardId, userName, dense }) {
-    const B = useBoard(boardId, {});
+// readOnly: للضيف غير المأذون له بالرسم — يرى ويتنقّل ويكبّر فقط
+export default function MeetBoard({ boardId, userName, dense, guestToken, readOnly }) {
+    const B = useBoard(boardId, { guestToken });
     const { items } = B;
 
-    const [tool, setTool]   = useState('sel');
+    const [tool, setTool]   = useState(readOnly ? 'pan' : 'sel');
     const [shape, setShape] = useState('rect');
     const [style, setStyle] = useState({ color: '#f6c343', fill: 'none', sw: 3, dash: '', size: 22 });
     const [sel, setSel]     = useState([]);
@@ -252,7 +253,7 @@ export default function MeetBoard({ boardId, userName, dense }) {
         }
         wrap.current.setPointerCapture(e.pointerId);
         const p = toWorld(e.clientX, e.clientY);
-        const T = toolR.current;
+        const T = readOnly ? 'pan' : toolR.current;
 
         // حدث dblclick لا يصل بعد أسر المؤشّر، ولا وجود له في اللمس أصلاً،
         // فنكشف النقرتين بأنفسنا: زمنٌ قريب وموضعٌ لم يتزحزح.
@@ -463,6 +464,7 @@ export default function MeetBoard({ boardId, userName, dense }) {
 
     const context = e => {
         e.preventDefault();
+        if (readOnly) return;
         const p = toWorld(e.clientX, e.clientY);
         const u = pickAt(p);
         if (u && !sel.includes(u.id)) setSel([u.id]);
@@ -473,6 +475,7 @@ export default function MeetBoard({ boardId, userName, dense }) {
     // ─── لوحة المفاتيح ──────────────────────────────────────────────────────
     useEffect(() => {
         const onKey = e => {
+            if (readOnly) return;
             const t = (e.target.tagName || '').toLowerCase();
             if (t === 'input' || t === 'textarea') {
                 if (e.key === 'Escape') e.target.blur();
@@ -654,7 +657,7 @@ export default function MeetBoard({ boardId, userName, dense }) {
             </div>
 
             {/* ── شريط الأدوات ── */}
-            <div dir="rtl" className={'absolute z-20 flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 shadow-2xl ' +
+            {!readOnly ? <div dir="rtl" className={'absolute z-20 flex gap-1.5 bg-slate-900/92 backdrop-blur border border-white/10 rounded-2xl p-1.5 shadow-2xl ' +
                 (dense ? 'inset-x-2 overflow-x-auto no-scrollbar' : 'top-1/2 -translate-y-1/2 right-3 flex-col max-h-[86vh] overflow-y-auto no-scrollbar')}
                 style={dense ? { bottom: 'calc(env(safe-area-inset-bottom) + 12px)' } : undefined}>
                 {TOOLS.map(t => {
@@ -669,7 +672,7 @@ export default function MeetBoard({ boardId, userName, dense }) {
                 <div className={dense ? 'w-px bg-white/15 mx-0.5 shrink-0' : 'h-px bg-white/15 my-0.5'} />
                 <button title="تراجع (Ctrl+Z)" onClick={B.undo} disabled={!B.canUndo} className={btn(false) + ' disabled:opacity-30'}><Undo2 size={17} /></button>
                 <button title="إعادة (Ctrl+Y)" onClick={B.redo} disabled={!B.canRedo} className={btn(false) + ' disabled:opacity-30'}><Redo2 size={17} /></button>
-            </div>
+            </div> : null}
             <input ref={file} type="file" accept="image/*" className="hidden"
                 onChange={e => { const f = e.target.files[0]; if (f) { const r = wrap.current.getBoundingClientRect(); placeImage(f, toWorld(r.left + r.width / 2, r.top + r.height / 2)); } e.target.value = ''; }} />
 

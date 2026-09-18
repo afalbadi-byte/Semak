@@ -56,7 +56,9 @@ export default function MeetingRoom() {
     const [left, setLeft]       = useState(AGENDA[0].min * 60);
     const [running, setRunning] = useState(false);
     // السبورة والمكالمة تُفتحان ملء الشاشة فوق الأجندة — نفس محرّك تطبيق الجوّال
-    const [stage, setStage] = useState(null);   // null | 'board' | 'call'
+    const [stage, setStage] = useState(null);
+    const [callOn, setCallOn] = useState(false);
+    useEffect(() => { if (stage === 'call') setCallOn(true); }, [stage]);   // null | 'board' | 'call'
     const [me, setMe] = useState(null);
     const tick = useRef(null);
 
@@ -461,8 +463,14 @@ export default function MeetingRoom() {
                     </div>
                 </div>
             )}
-        {stage && (
-            <div className="fixed inset-0 z-[60] bg-[#0b1220] flex flex-col" dir="rtl">
+        {!stage && callOn && (
+            <button onClick={() => setStage('call')}
+                className="fixed bottom-5 left-5 z-[55] h-12 px-4 rounded-2xl bg-[#1a365d] text-white font-black text-[13px] shadow-2xl flex items-center gap-2 border border-[#c5a059]/50">
+                <Video size={16} className="text-[#c5a059]" />المكالمة
+            </button>
+        )}
+        {(stage || callOn) && (
+            <div className={'fixed inset-0 z-[60] bg-[#0b1220] flex flex-col ' + (stage ? '' : 'hidden')} dir="rtl">
                 <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-l from-[#1a365d] to-[#2d5299] text-white shrink-0">
                     <span className="font-black text-sm">{stage === 'board' ? 'سبورة الاجتماع' : 'مكالمة الاجتماع'}</span>
                     <span className="text-[11px] text-white/60 font-bold truncate">{meeting.title}</span>
@@ -473,11 +481,12 @@ export default function MeetingRoom() {
                     <button onClick={() => setStage(null)} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center"><X size={15} /></button>
                 </div>
                 <div className="flex-1 min-h-0 relative font-cairo text-white">
-                    {stage === 'board'
-                        ? <MeetBoard boardId={'mtg-' + meeting.id} userName={me?.name || ''} />
-                        : <div className="h-full p-4 overflow-y-auto max-w-5xl mx-auto">
-                              <MeetCall userName={me?.name || ''} userEmail={me?.email || ''} meetingTitle={meeting.title} />
-                          </div>}
+                    {stage === 'board' ? <MeetBoard boardId={'mtg-' + meeting.id} userName={me?.name || ''} /> : null}
+                    {/* المكالمة تبقى حيّة عند الانتقال للسبورة أو إغلاق النافذة — تُخفى ولا تُهدم */}
+                    {callOn ? <div className={'h-full p-4 overflow-y-auto max-w-5xl mx-auto ' + (stage === 'call' ? '' : 'hidden')}>
+                              <MeetCall active={stage === 'call'} userName={me?.name || ''} userEmail={me?.email || ''} meetingTitle={meeting.title}
+                                  meetingId={meeting.id} meeting={meeting} />
+                          </div> : null}
                 </div>
             </div>
         )}

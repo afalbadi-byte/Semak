@@ -58,6 +58,8 @@ export default function MeetApp() {
     const [user, setUser]   = useState(null);
     const [state, setState] = useState('loading');   // loading | ok | denied | anon
     const [meeting, setMeeting] = useState(null);
+    const [callOn, setCallOn] = useState(false);
+    useEffect(() => { if (tab === 'call') setCallOn(true); }, [tab]);
     useMeetManifest();
 
     const check = useCallback(async () => {
@@ -109,8 +111,10 @@ export default function MeetApp() {
 
             <main className={'flex-1 min-h-0 relative ' + (tab === 'board' ? 'overflow-hidden' : 'overflow-y-auto pb-24')}>
                 {tab === 'agenda'  && <MeetAgenda userName={user?.name || ''} onMeeting={setMeeting} />}
-                {tab === 'call'    && <MeetCall userName={user?.name || ''} userEmail={user?.email || ''}
-                                          meetingTitle={meeting ? meeting.title : ''} dense />}
+                {/* المكالمة تبقى حيّة خلف التبويبات: تُخفى ولا تُهدم، فالانتقال للسبورة لا يقطعها */}
+                {callOn && <div className={tab === 'call' ? '' : 'hidden'}><MeetCall active={tab === 'call'} userName={user?.name || ''} userEmail={user?.email || ''}
+                                          meetingTitle={meeting ? meeting.title : ''}
+                                          meetingId={meeting ? meeting.id : 0} meeting={meeting} dense /></div>}
                 {/* صندوقٌ مموضَع ينتهي فوق شريط التبويبات، فتملؤه السبورة ولا تختفي أدواتها تحته */}
                 {tab === 'board'   && (
                     <div className="absolute inset-x-0 top-0" style={{ bottom: 'calc(58px + env(safe-area-inset-bottom))' }}>

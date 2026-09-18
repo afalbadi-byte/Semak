@@ -28,7 +28,9 @@ export default function useBoard(boardId, opts) {
     const [stack, setStack] = useState({ u: 0, r: 0 });   // لإحياء أزرار التراجع
     itemsR.current = items; revR.current = rev;
 
-    const auth = () => ({ Authorization: 'Bearer ' + getAdminToken() });
+    // الضيف يُعرَف برمز دعوته، والموظّف بجلسته
+    const guestToken = opts && opts.guestToken;
+    const auth = () => (guestToken ? { 'X-Guest-Token': guestToken } : { Authorization: 'Bearer ' + getAdminToken() });
     const jhdr = () => ({ 'Content-Type': 'application/json', ...auth() });
 
     // ─── الجلب ──────────────────────────────────────────────────────────────
