@@ -54,6 +54,21 @@ jobs:
       - name: Copy api.php to dist
         run: cp api.php dist/api.php
 
+      - name: Build Ohda (standalone expense app → dist/ohda)
+        run: |
+          npx vite build --config ohda/vite.config.js
+          cp ohda/api.php dist/ohda/api.php
+
+      - name: Inject Ohda secrets
+        run: |
+          sed -i "s|__DB_USER__|${{ secrets.DB_USER }}|g"                   dist/ohda/api.php
+          sed -i "s|__DB_PASS__|${{ secrets.DB_PASS }}|g"                   dist/ohda/api.php
+          sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"                   dist/ohda/api.php
+          sed -i "s|__TOKEN_SECRET__|${{ secrets.TOKEN_SECRET }}|g"         dist/ohda/api.php
+          sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g"   dist/ohda/api.php
+          sed -i "s|__GOOGLE_CLIENT_ID__|${{ secrets.GOOGLE_CLIENT_ID }}|g" dist/ohda/api.php
+          sed -i "s|__GOOGLE_CLIENT_SECRET__|${{ secrets.GOOGLE_CLIENT_SECRET }}|g" dist/ohda/api.php
+
       - name: Inject Anthropic API key
         run: sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g" dist/api.php
 

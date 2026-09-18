@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { background: #f5f3ee; }
+body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+input, select, textarea, button { font-family: inherit; }
+input[type="date"] { min-height: 2.75rem; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* ── الطباعة: تقرير التصفية على ورق A4 بلا واجهة التطبيق ── */
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body { background: #fff !important; }
+  .no-print { display: none !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  .print-avoid { break-inside: avoid; }
+  .print-break { break-before: page; }
+}

@@ -35,7 +35,7 @@ export default defineConfig({
         // استثناء مسارات المشاركة/الملفات المرفوعة يدوياً من إعادة توجيه SPA (حتى تفتح مباشرةً)
         // نطاقات التطبيقات تُستثنى: كان عامل الخدمة يقدّم index.html الجذر لكل تنقّل،
         // فلا تصل ‎/buy/index.html أبدا — ومعها بطاقة التعريف الصحيحة و og:url.
-        navigateFallbackDenylist: [/^\/share\//, /^\/api\.php/, /\.(pdf|zip|xml|txt)$/i, /^\/(buy|proj|qc)(\/|$)/],
+        navigateFallbackDenylist: [/^\/share\//, /^\/api\.php/, /\.(pdf|zip|xml|txt)$/i, /^\/(buy|proj|qc|meet|ohda)(\/|$)/],
         // الهيكل وحده يُنزَّل مقدماً؛ بقية الشاشات تُجلب عند فتحها وتُخزَّن حينها.
         // كان التخزين المسبق يشمل مئتي ملف بثلاثة ميغا فيبطئ أول فتح على الجوال.
         globPatterns: ['index.html', 'registerSW.js', 'assets/index-*.{js,css}', 'images/favicon.png'],
