@@ -71,7 +71,7 @@ export default function Statement({ q }) {
                 </div>
                 <div className="flex items-center gap-2">
                     <p className="text-[12px] text-ink-3 flex-1 leading-5">{t('في نافذة الطباعة اختر «حفظ PDF» — على الآيفون: مشاركة ثم «حفظ في الملفات». روابط المستندات تبقى قابلة للنقر داخل الملف.')}</p>
-                    <Btn kind="line" onClick={() => statementExcel(d, { fundName, from, to })} disabled={!d || !d.rows}><FileSpreadsheet size={17} />Excel</Btn>
+                    <Btn kind="line" onClick={() => statementExcel(d, { fundName, from, to, who: me && me.name })} disabled={!d || !d.rows}><FileSpreadsheet size={17} />Excel</Btn>
                     <Btn onClick={pdf} disabled={!d || !d.rows}><FileDown size={17} />{t('تنزيل PDF')}</Btn>
                 </div>
                 {d && d.rows && !d.profile.org_name ? (

@@ -10,24 +10,26 @@
  * @param {string} sheetName اسم ورقة العمل.
  */
 export async function exportToExcel(rows, columns, filename = 'export', sheetName = 'البيانات') {
-    const XLSX = await import('xlsx');
-    const data = (rows || []).map(r => {
-        const o = {};
-        columns.forEach(c => {
-            const raw = r[c.key];
-            o[c.label] = c.format ? c.format(raw, r) : (raw ?? '');
-        });
-        return o;
+    // الملفّ بهويّة سماك (الشعار والألوان والتذييل)، والأعمدة المالية أرقامٌ منسّقة تُجمع
+    const [{ brandedExcel, SEMAK_THEME }] = await Promise.all([import('../lib/brandedExcel')]);
+    const MONEY_KEY = /amount|total|price|balance|paid|vat|tax|cost|debit|credit|subtotal|due|remaining|value/i;
+    const list = rows || [];
+    const cols = columns.map(c => {
+        const money = MONEY_KEY.test(c.key) && list.every(r => { const v = r[c.key]; return v === null || v === undefined || v === '' || Number.isFinite(Number(v)); });
+        return { ...c, money };
     });
-    const ws = XLSX.utils.json_to_sheet(data, { header: columns.map(c => c.label) });
-    // عرض الأعمدة تلقائيًا
-    ws['!cols'] = columns.map(c => ({ wch: Math.max(12, (c.label || '').length + 4) }));
-    // اتجاه الورقة RTL
-    ws['!dir'] = 'rtl';
-    const wb = XLSX.utils.book_new();
-    wb.Workbook = { Views: [{ RTL: true }] };
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    XLSX.writeFile(wb, `${filename}_${dateStamp()}.xlsx`);
+    const title = String(filename).replace(/[-_]+/g, ' ').trim();
+    await brandedExcel({
+        title, sheet: sheetName, filename: filename + '_' + dateStamp(),
+        meta: [['عدد السجلات', String(list.length)]],
+        columns: cols.map(c => ({ label: c.label, type: c.money ? 'money' : 'text', width: c.money ? 15 : Math.min(40, Math.max(12, (c.label || '').length + 6)) })),
+        rows: list.map(r => cols.map(c => {
+            const raw = r[c.key];
+            if (c.money) return raw === null || raw === undefined || raw === '' ? '' : Number(raw);
+            const v = c.format ? c.format(raw, r) : raw;
+            return v === null || v === undefined ? '' : v;
+        })),
+    }, SEMAK_THEME);
 }
 
 /**

@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Printer } from 'lucide-react';
+import { Printer, FileSpreadsheet } from 'lucide-react';
 import { call } from '../lib/api';
 import { t } from '../lib/i18n';
 import { fullDate, METHODS, KINDS, money } from '../lib/fmt';
 import { Money, Btn, Spinner } from '../ui';
 import { useData } from '../App';
 import { DocHeader, Beneficiary, Signatures, DocFooter } from './DocParts';
+import { fundReportExcel } from '../lib/excel';
 
 // تقرير تصفية العهدة: ورقةٌ تُسلَّم للمحاسب — ملخّص، ثم جدولٌ مرقَّم، ثم الإيصالات
 // بأرقامها نفسها، فيُطابَق كل سطرٍ بإيصاله دون سؤال
@@ -13,6 +14,7 @@ export default function FundReport({ id }) {
     const { funds, me, profile, logo } = useData();
     const f = funds.find(x => Number(x.id) === id);
     const [rows, setRows] = useState(null);
+    const [xl, setXl] = useState(false);
 
     useEffect(() => { call('txns', { params: { fund: id } }).then(r => setRows(r.success ? r.data : [])); }, [id]);
 
@@ -40,6 +42,12 @@ export default function FundReport({ id }) {
     const pdfs = data.outs.filter(x => pagesOf(x).some(pg => pg.mime === 'application/pdf'));
     const th = 'border border-paper-2 px-2 py-1.5';
 
+    const excel = async () => {
+        if (xl) return;
+        setXl(true);
+        try { await fundReportExcel(f, data, { profile, logo, who: me && me.name }); } finally { setXl(false); }
+    };
+
     const print = () => {
         const old = document.title;
         document.title = t('تقرير تصفية عهدة') + ' - ' + f.name;
@@ -51,6 +59,7 @@ export default function FundReport({ id }) {
         <div className="pt-2 lg:pt-0">
             <div className="no-print flex items-center gap-2 mb-4">
                 <p className="text-[13px] text-ink-3 flex-1">{t('اطبعه أو احفظه PDF من نافذة الطباعة')}</p>
+                <Btn kind="line" busy={xl} onClick={excel}><FileSpreadsheet size={17} />Excel</Btn>
                 <Btn onClick={print}><Printer size={17} />{t('طباعة')}</Btn>
             </div>
 

@@ -75,7 +75,7 @@ export default function FundView({ id }) {
             <div className="flex flex-wrap gap-2">
                 {!settled ? <a href={href('/txn/new', { type: 'out', fund: id })}><Btn><Plus size={17} />{tr('مصروف')}</Btn></a> : null}
                 {!settled ? <a href={href('/txn/new', { type: 'in', fund: id })}><Btn kind="soft"><Plus size={17} />{tr('استلام مبلغ')}</Btn></a> : null}
-                <a href={href('/statement', { fund: id })}><Btn kind="line"><FileDown size={17} />{tr('كشف حساب PDF')}</Btn></a>
+                <a href={href('/statement', { fund: id })}><Btn kind="line"><FileDown size={17} />{tr('كشف حساب')}</Btn></a>
                 <a href={'#/fund/' + id + '/report'}><Btn kind="line"><FileCheck2 size={17} />{tr('تقرير التصفية')}</Btn></a>
                 <Btn kind="ghost" onClick={() => setEdit(f)}><Pencil size={16} />{tr('تعديل')}</Btn>
                 <Btn kind="ghost" onClick={toggle}>{settled ? <><Unlock size={16} />{tr('إعادة فتح')}</> : <><Lock size={16} />{tr('تصفية العهدة')}</>}</Btn>

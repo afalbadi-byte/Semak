@@ -241,4 +241,6 @@ export default {
     "الإجماليات": "Totals",
     "فتح المستند": "Open document",
     "كشف الحساب": "Statement",
+    "المتبقّي لدى صاحب العهدة": "Remaining with custodian",
+    "المستحق لصاحب العهدة": "Due to custodian",
 };
