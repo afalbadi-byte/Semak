@@ -119,6 +119,72 @@ if ($__v < 1) {
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '1')");
 }
 
+// ─── الإصدار ٢: مصحف الفرد (العلامات)، وجلسة الذكر (المكالمة والصفحة المشتركة) ─
+// العلامة لكل كلمةٍ في مصحف الفرد: كم مرّةً أخطأ فيها، وكم مرّةً نُبِّه، ومتى آخر مرّة،
+// وهل أتقنها. المفتاح «سورة:آية:موضع الكلمة» ثابتٌ في كل طبعات مصحف المدينة.
+if ($__v < 2) {
+    $conn->query("CREATE TABLE IF NOT EXISTS al_marks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        family_id INT NOT NULL,
+        member_id INT NOT NULL,
+        word_key VARCHAR(16) NOT NULL,
+        page SMALLINT NOT NULL,
+        err INT NOT NULL DEFAULT 0,
+        warn INT NOT NULL DEFAULT 0,
+        resolved TINYINT(1) NOT NULL DEFAULT 0,
+        last_d DATE DEFAULT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY (member_id, word_key), INDEX (member_id, page)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // كل ضغطةٍ حدثٌ مؤرَّخ: منه عدد أخطاء اليوم لكل جزءٍ من الورد، ومنه التراجع
+    $conn->query("CREATE TABLE IF NOT EXISTS al_mark_events (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        family_id INT NOT NULL,
+        member_id INT NOT NULL,
+        word_key VARCHAR(16) NOT NULL,
+        page SMALLINT NOT NULL,
+        kind VARCHAR(8) NOT NULL,
+        d DATE NOT NULL,
+        by_user INT DEFAULT NULL,
+        at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX (member_id, d)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("CREATE TABLE IF NOT EXISTS al_session (
+        family_id INT PRIMARY KEY,
+        member_id INT DEFAULT NULL,
+        page SMALLINT DEFAULT NULL,
+        by_user INT DEFAULT NULL,
+        rev INT NOT NULL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("CREATE TABLE IF NOT EXISTS al_rtc_peers (
+        id VARCHAR(24) NOT NULL PRIMARY KEY,
+        family_id INT NOT NULL,
+        user_id INT NOT NULL,
+        name VARCHAR(120) DEFAULT NULL,
+        state VARCHAR(10) NOT NULL DEFAULT 'in',
+        mic TINYINT(1) NOT NULL DEFAULT 1,
+        cam TINYINT(1) NOT NULL DEFAULT 1,
+        hand TINYINT(1) NOT NULL DEFAULT 0,
+        share TINYINT(1) NOT NULL DEFAULT 0,
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        left_at DATETIME DEFAULT NULL,
+        INDEX (family_id, state, seen_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("CREATE TABLE IF NOT EXISTS al_rtc_signals (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        family_id INT NOT NULL,
+        from_peer VARCHAR(24) NOT NULL,
+        to_peer VARCHAR(24) NOT NULL,
+        kind VARCHAR(12) NOT NULL,
+        payload MEDIUMTEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX (to_peer, id), INDEX (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '2')");
+}
+
 function al_log($uid, $action, $data = null) {
     global $conn;
     $ip = E(trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '')[0]));
@@ -525,6 +591,159 @@ case 'family_create': {
         . E(password_hash($pw, PASSWORD_DEFAULT)) . "', 'owner')");
     al_log($u['id'], 'family_create', ['family' => $fid, 'username' => $un]);
     out(['success' => true, 'id' => $fid]);
+}
+
+// ─── مصحف الفرد: علامات الأخطاء والتنبيهات ─────────────────────────────────
+case 'marks_page': {
+    $u = need(); $m = member_for($u, $_GET['member_id'] ?? 0);
+    $p = max(1, min(PAGES, (int)($_GET['page'] ?? 1)));
+    $list = rows("SELECT word_key, err, warn, resolved, last_d FROM al_marks WHERE member_id=" . (int)$m['id'] . " AND page=$p AND (err>0 OR warn>0)");
+    foreach ($list as &$x) { $x['err'] = (int)$x['err']; $x['warn'] = (int)$x['warn']; $x['resolved'] = (int)$x['resolved']; }
+    unset($x);
+    out(['success' => true, 'page' => $p, 'marks' => $list]);
+}
+
+// ضغطةٌ على كلمة: خطأ، تنبيه، تراجعٌ عن آخر ضغطة، إتقان، أو مسح
+case 'mark': {
+    $u = need(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
+    $mid = (int)$m['id']; $fid = (int)$u['family_id'];
+    $wk = (string)($b['word_key'] ?? '');
+    if (!preg_match('/^\d{1,3}:\d{1,3}:\d{1,3}$/', $wk)) fail('كلمة غير صحيحة');
+    $p = max(1, min(PAGES, (int)($b['page'] ?? 0)));
+    $op = (string)($b['op'] ?? '');
+    $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['d'] ?? '')) ? $b['d'] : date('Y-m-d');
+    $W = E($wk);
+    if ($op === 'err' || $op === 'warn') {
+        $conn->query("INSERT INTO al_mark_events (family_id, member_id, word_key, page, kind, d, by_user) VALUES ($fid, $mid, '$W', $p, '$op', '" . E($d) . "', " . (int)$u['id'] . ")");
+        $conn->query("INSERT INTO al_marks (family_id, member_id, word_key, page, $op, last_d) VALUES ($fid, $mid, '$W', $p, 1, '" . E($d) . "')
+                      ON DUPLICATE KEY UPDATE $op = $op + 1, resolved = 0, last_d = VALUES(last_d)");
+    } elseif ($op === 'undo') {
+        $ev = one("SELECT id, kind FROM al_mark_events WHERE member_id=$mid AND word_key='$W' ORDER BY id DESC LIMIT 1");
+        if ($ev) {
+            $k = $ev['kind'] === 'warn' ? 'warn' : 'err';
+            $conn->query("DELETE FROM al_mark_events WHERE id=" . (int)$ev['id']);
+            $conn->query("UPDATE al_marks SET $k = GREATEST(0, $k - 1) WHERE member_id=$mid AND word_key='$W'");
+        }
+    } elseif ($op === 'resolve') {
+        $conn->query("UPDATE al_marks SET resolved = 1 - resolved WHERE member_id=$mid AND word_key='$W'");
+    } elseif ($op === 'clear') {
+        $conn->query("UPDATE al_marks SET err=0, warn=0, resolved=0 WHERE member_id=$mid AND word_key='$W'");
+        al_log($u['id'], 'mark_clear', ['member' => $mid, 'word' => $wk]);
+    } else fail('عملية غير معروفة');
+    $x = one("SELECT word_key, err, warn, resolved, last_d FROM al_marks WHERE member_id=$mid AND word_key='$W'");
+    if ($x) { $x['err'] = (int)$x['err']; $x['warn'] = (int)$x['warn']; $x['resolved'] = (int)$x['resolved']; }
+    // من في جلسة الذكر يرى العلامة في نبضته التالية
+    $conn->query("UPDATE al_session SET rev = rev + 1 WHERE family_id=$fid");
+    out(['success' => true, 'mark' => $x]);
+}
+
+// ملخّص مواضع الضعف: أكثر الكلمات خطأً، وأكثر الصفحات، والمجموع
+case 'marks_summary': {
+    $u = need(); $m = member_for($u, $_GET['member_id'] ?? 0); $mid = (int)$m['id'];
+    $tot = one("SELECT COALESCE(SUM(err),0) err, COALESCE(SUM(warn),0) warn, COUNT(*) words FROM al_marks WHERE member_id=$mid AND resolved=0 AND (err>0 OR warn>0)");
+    $top = rows("SELECT word_key, page, err, warn, last_d FROM al_marks WHERE member_id=$mid AND resolved=0 AND (err>0 OR warn>0)
+                 ORDER BY (err*2 + warn) DESC, last_d DESC LIMIT 12");
+    $pages = rows("SELECT page, SUM(err) err, SUM(warn) warn, COUNT(*) words FROM al_marks WHERE member_id=$mid AND resolved=0 AND (err>0 OR warn>0)
+                   GROUP BY page ORDER BY (SUM(err)*2 + SUM(warn)) DESC LIMIT 10");
+    $mastered = (int)one("SELECT COUNT(*) n FROM al_marks WHERE member_id=$mid AND resolved=1")['n'];
+    foreach ($top as &$x) { $x['page'] = (int)$x['page']; $x['err'] = (int)$x['err']; $x['warn'] = (int)$x['warn']; } unset($x);
+    foreach ($pages as &$x) { $x['page'] = (int)$x['page']; $x['err'] = (int)$x['err']; $x['warn'] = (int)$x['warn']; $x['words'] = (int)$x['words']; } unset($x);
+    out(['success' => true, 'total' => ['err' => (int)$tot['err'], 'warn' => (int)$tot['warn'], 'words' => (int)$tot['words'], 'mastered' => $mastered],
+         'top' => $top, 'pages' => $pages]);
+}
+
+// علامات يومٍ بحسب الصفحة: منها تُعبّأ أخطاء التسميع لكل جزءٍ من الورد
+case 'marks_day': {
+    $u = need(); $m = member_for($u, $_GET['member_id'] ?? 0);
+    $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['d'] ?? '')) ? $_GET['d'] : date('Y-m-d');
+    $list = rows("SELECT page, SUM(kind='err') err, SUM(kind='warn') warn FROM al_mark_events WHERE member_id=" . (int)$m['id'] . " AND d='" . E($d) . "' GROUP BY page");
+    foreach ($list as &$x) { $x['page'] = (int)$x['page']; $x['err'] = (int)$x['err']; $x['warn'] = (int)$x['warn']; } unset($x);
+    out(['success' => true, 'data' => $list]);
+}
+
+// ─── جلسة الذكر: من يُسمِّع، وعلى أيّ صفحة — يراها الجميع ────────────────────
+case 'session_set': {
+    $u = need_sup(); $b = body(); $fid = (int)$u['family_id'];
+    $mid = (int)($b['member_id'] ?? 0);
+    if ($mid) member_for($u, $mid);
+    $p = max(1, min(PAGES, (int)($b['page'] ?? 1)));
+    $conn->query("INSERT INTO al_session (family_id, member_id, page, by_user, rev) VALUES ($fid, " . ($mid ?: 'NULL') . ", $p, " . (int)$u['id'] . ", 1)
+                  ON DUPLICATE KEY UPDATE member_id=VALUES(member_id), page=VALUES(page), by_user=VALUES(by_user), rev=rev+1");
+    out(['success' => true]);
+}
+
+case 'rtc_join': {
+    $u = need(); $fid = (int)$u['family_id']; $uid = (int)$u['id'];
+    $conn->query("UPDATE al_rtc_peers SET state='left', left_at=NOW() WHERE family_id=$fid AND user_id=$uid AND state='in'");
+    $pid = bin2hex(random_bytes(8));
+    $b = body();
+    $conn->query("INSERT INTO al_rtc_peers (id, family_id, user_id, name, mic, cam) VALUES ('$pid', $fid, $uid, '" . E($u['name']) . "', "
+        . (empty($b['mic']) ? 0 : 1) . ", " . (empty($b['cam']) ? 0 : 1) . ")");
+    out(['success' => true, 'peer' => $pid, 'name' => $u['name'], 'role' => 'member', 'state' => 'in',
+         'ice' => [['urls' => ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']]]]);
+}
+
+case 'rtc_poll': {
+    $u = need(); $b = body(); $fid = (int)$u['family_id'];
+    $pid = preg_replace('/[^a-f0-9]/', '', (string)($b['peer'] ?? ''));
+    $me = one("SELECT * FROM al_rtc_peers WHERE id='$pid' AND user_id=" . (int)$u['id'] . " LIMIT 1");
+    if (!$me) out(['success' => false, 'state' => 'gone']);
+    if ($me['state'] !== 'in') out(['success' => true, 'state' => $me['state']]);
+    $f = function ($k) use ($b) { return empty($b[$k]) ? 0 : 1; };
+    $fm = $f('mic'); $fc = $f('cam'); $fh = $f('hand'); $fs = $f('share');
+    $conn->query("UPDATE al_rtc_peers SET seen_at=NOW(), mic=$fm, cam=$fc, hand=$fh, share=$fs WHERE id='$pid'");
+    $since = (int)($b['since'] ?? 0);
+    if ($since > 0) $conn->query("DELETE FROM al_rtc_signals WHERE to_peer='$pid' AND id <= $since");
+    $sig = [];
+    foreach (rows("SELECT id, from_peer, kind, payload FROM al_rtc_signals WHERE to_peer='$pid' AND id > $since ORDER BY id LIMIT 60") as $x) {
+        $x['id'] = (int)$x['id']; $x['payload'] = json_decode($x['payload'], true); $sig[] = $x;
+    }
+    $peers = [];
+    foreach (rows("SELECT id, user_id, name, mic, cam, hand, share FROM al_rtc_peers WHERE family_id=$fid AND state='in' AND id <> '$pid'
+                   AND seen_at > (NOW() - INTERVAL 20 SECOND) ORDER BY joined_at") as $x) {
+        foreach (['mic', 'cam', 'hand', 'share', 'user_id'] as $k) $x[$k] = (int)$x[$k];
+        $x['role'] = 'member'; $peers[] = $x;
+    }
+    if (mt_rand(1, 20) === 1) {
+        $conn->query("UPDATE al_rtc_peers SET state='left', left_at=seen_at WHERE state='in' AND seen_at < (NOW() - INTERVAL 60 SECOND)");
+        $conn->query("DELETE FROM al_rtc_signals WHERE created_at < (NOW() - INTERVAL 5 MINUTE)");
+    }
+    out(['success' => true, 'state' => 'in', 'signals' => $sig, 'peers' => $peers, 'waiting' => []]);
+}
+
+case 'rtc_signal': {
+    $u = need(); $b = body(); $fid = (int)$u['family_id'];
+    $pid = preg_replace('/[^a-f0-9]/', '', (string)($b['peer'] ?? ''));
+    $me = one("SELECT id FROM al_rtc_peers WHERE id='$pid' AND user_id=" . (int)$u['id'] . " AND state='in' LIMIT 1");
+    if (!$me) fail('لست في الجلسة');
+    $to = preg_replace('/[^a-f0-9]/', '', (string)($b['to'] ?? ''));
+    $kind = preg_replace('/[^a-z]/', '', (string)($b['kind'] ?? ''));
+    $payload = json_encode($b['payload'] ?? null, JSON_UNESCAPED_UNICODE);
+    if ($to === '' || $kind === '' || strlen($payload) > 65000) fail('رسالة غير صالحة');
+    if (!one("SELECT id FROM al_rtc_peers WHERE id='$to' AND family_id=$fid AND state='in' LIMIT 1")) fail('الطرف غادر');
+    $conn->query("INSERT INTO al_rtc_signals (family_id, from_peer, to_peer, kind, payload) VALUES ($fid, '$pid', '$to', '$kind', '" . E($payload) . "')");
+    out(['success' => true]);
+}
+
+case 'rtc_leave': {
+    $u = need(); $b = body();
+    $pid = preg_replace('/[^a-f0-9]/', '', (string)($b['peer'] ?? ''));
+    $conn->query("UPDATE al_rtc_peers SET state='left', left_at=NOW() WHERE id='$pid' AND user_id=" . (int)$u['id'] . " AND state='in'");
+    out(['success' => true]);
+}
+
+// نبضة الجلسة الخفيفة: من يُسمِّع وأيّ صفحة، وعلاماتها — للمكالمة ولمن يتابع بلا مكالمة
+case 'session_get': {
+    $u = need(); $fid = (int)$u['family_id'];
+    $s = one("SELECT member_id, page, by_user, rev FROM al_session WHERE family_id=$fid");
+    $live = rows("SELECT name FROM al_rtc_peers WHERE family_id=$fid AND state='in' AND seen_at > (NOW() - INTERVAL 20 SECOND)");
+    $marks = [];
+    if ($s && $s['member_id'] && $s['page'] && (is_sup($u) || (int)$u['member_id'] === (int)$s['member_id'])) {
+        $marks = rows("SELECT word_key, err, warn, resolved FROM al_marks WHERE member_id=" . (int)$s['member_id'] . " AND page=" . (int)$s['page'] . " AND (err>0 OR warn>0)");
+        foreach ($marks as &$x) { $x['err'] = (int)$x['err']; $x['warn'] = (int)$x['warn']; $x['resolved'] = (int)$x['resolved']; } unset($x);
+    }
+    out(['success' => true, 'session' => $s ? ['member_id' => $s['member_id'] ? (int)$s['member_id'] : null, 'page' => $s['page'] ? (int)$s['page'] : null,
+         'rev' => (int)$s['rev']] : null, 'marks' => $marks, 'live' => array_column($live, 'name')]);
 }
 
 default:

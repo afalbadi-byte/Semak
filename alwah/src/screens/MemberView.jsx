@@ -2,12 +2,16 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Flame, Mic, BookOpen, Layers, RotateCcw, ExternalLink, Check, Pencil, CalendarDays, Award } from 'lucide-react';
 import { call } from '../lib/api';
 import { Card, Ring, Section, Spinner, Btn, hijri, greg, todayStr } from '../ui';
-import { surahsOn, surahsIn, rangeLabel, linesLabel, juzOf, readUrl, gradeOf } from '../lib/quran';
+import { surahsOn, surahsIn, rangeLabel, linesLabel, juzOf, gradeOf } from '../lib/quran';
+import { BookMarked } from 'lucide-react';
 import { partDone } from './Home';
 
 export default function MemberView({ id }) {
     const [d, setD] = useState(null);
-    const load = useCallback(async () => { const r = await call('member', { params: { id } }); setD(r.success ? r : { error: r.message }); }, [id]);
+    const load = useCallback(async () => {
+        const [r, k] = await Promise.all([call('member', { params: { id } }), call('marks_summary', { params: { member_id: id } })]);
+        setD(r.success ? { ...r, marks: k.success ? k : null } : { error: r.message });
+    }, [id]);
     useEffect(() => { load(); }, [load]);
 
     if (!d) return <Spinner />;
@@ -15,6 +19,8 @@ export default function MemberView({ id }) {
     const { member: m, plan, now, stats } = d;
     const today = stats.today;
     const color = m.color;
+    const mu = pg => '#/m/' + m.id + '/mushaf?p=' + pg;
+    const sm = d.marks;
 
     return (
         <div className="space-y-5">
@@ -48,18 +54,41 @@ export default function MemberView({ id }) {
                     <PlanRow icon={BookOpen} title="الحفظ الجديد" done={partDone(today, 'new')} color={color}
                         main={plan.new ? `صفحة ${plan.new.page} · ${surahsOn(plan.new.page).join('، ')}` : 'أتمّ الحفظ'}
                         sub={plan.new ? `من السطر ${plan.new.from_line} · المقدار ${linesLabel(plan.new.lines)}` : ''}
-                        link={plan.new ? readUrl(plan.new.page) : null} />
+                        link={plan.new ? mu(plan.new.page) : null} />
                     <PlanRow icon={Layers} title={`الألواح (${plan.alwah.length} صفحات)`} done={partDone(today, 'alwah')} color={color}
                         main={'صفحات ' + rangeLabel(plan.alwah)} sub={surahsIn(plan.alwah).join('، ')}
-                        link={plan.alwah.length ? readUrl(Math.min(...plan.alwah)) : null} />
+                        link={plan.alwah.length ? mu(Math.min(...plan.alwah)) : null} />
                     <PlanRow icon={RotateCcw} title={`المراجعة (${plan.review.length} صفحات)`} done={partDone(today, 'rev')} color={color}
                         main={plan.review.length ? 'صفحات ' + rangeLabel(plan.review) : 'تبدأ المراجعة بعد أن يتجاوز المحفوظ الألواح'}
                         sub={plan.review.length ? `${surahsIn(plan.review).join('، ')} · الموضع ${plan.cycle_pos} من ${plan.cycle} في الدورة` : ''}
-                        link={plan.review.length ? readUrl(plan.review[0]) : null} />
+                        link={plan.review.length ? mu(plan.review[0]) : null} />
                 </Card>
                 <a href={'#/m/' + m.id + '/log'} className="block mt-3">
                     <Btn className="w-full !h-12"><Mic size={18} />{today ? 'عدّل تسميع اليوم' : 'سجّل تسميع اليوم'}</Btn>
                 </a>
+            </Section>
+
+            {/* ── مصحف الفرد: مواضع الضعف ── */}
+            <Section title={'مصحف ' + m.name} action={<a href={mu(now.current || 604)} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><BookMarked size={13} />افتح المصحف</a>}>
+                <Card className="p-4">
+                    {sm && sm.total.words ? (
+                        <>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                                <div><div className="text-[20px] font-bold text-red-700">{sm.total.err}</div><div className="text-[11px] text-ink-3">خطأ</div></div>
+                                <div><div className="text-[20px] font-bold text-amber-600">{sm.total.warn}</div><div className="text-[11px] text-ink-3">تنبيه</div></div>
+                                <div><div className="text-[20px] font-bold text-green-700">{sm.total.mastered}</div><div className="text-[11px] text-ink-3">أُتقنت</div></div>
+                            </div>
+                            <div className="text-[12px] font-semibold text-ink-2 mt-4 mb-2">أكثر الصفحات حاجةً للمراجعة</div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {sm.pages.map(x => (
+                                    <a key={x.page} href={mu(x.page)} className="h-8 px-3 rounded-lg bg-red-50 text-red-800 text-[12px] font-semibold inline-flex items-center gap-1">
+                                        ص {x.page} · {surahsOn(x.page)[0]} <span className="opacity-60">({x.err + x.warn})</span>
+                                    </a>
+                                ))}
+                            </div>
+                        </>
+                    ) : <p className="text-[13px] text-ink-3 leading-6">افتح المصحف وقت التسميع والمس الكلمة التي أخطأ فيها أو نُبّه عليها، فتُحفظ في مصحفه ويظهر هنا أكثر ما يحتاج مراجعته.</p>}
+                </Card>
             </Section>
 
             {/* ── خريطة الأجزاء ── */}
@@ -143,7 +172,7 @@ function PlanRow({ icon: I, title, main, sub, done, link, color }) {
                 <div className="text-[15px] font-bold text-ink mt-0.5">{main}</div>
                 {sub ? <div className="text-[12px] text-ink-3 mt-0.5 leading-5">{sub}</div> : null}
             </div>
-            {link ? <a href={link} target="_blank" rel="noreferrer" title="افتح الصفحة في المصحف" className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-3 shrink-0"><ExternalLink size={16} /></a> : null}
+            {link ? <a href={link} title="افتح الصفحة في المصحف" className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-3 shrink-0"><BookMarked size={16} /></a> : null}
         </div>
     );
 }

@@ -14,6 +14,7 @@ export default function Record({ id, d: dIn }) {
     const [data, setData] = useState(null);
     const [f, setF] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [fromMushaf, setFromMushaf] = useState(false);
 
     useEffect(() => {
         setData(null); setF(null);
@@ -30,6 +31,17 @@ export default function Record({ id, d: dIn }) {
                 rev_list: l && l.rev_list.length ? l.rev_list : p.review,
                 rev_done: l ? !!l.rev_done : false, rev_grade: l ? l.rev_grade : 0, rev_err: l ? l.rev_err : 0, rev_warn: l ? l.rev_warn : 0,
                 note: l ? (l.note || '') : '',
+            });
+            // لا تسميع مسجّل بعد: أخطاء اليوم وتنبيهاته من علامات المصحف، موزّعةً على أجزاء الورد
+            if (!l) call('marks_day', { params: { member_id: id, d } }).then(k => {
+                if (!k.success || !k.data.length) return;
+                const sum = { new: [0, 0], alwah: [0, 0], rev: [0, 0] };
+                k.data.forEach(x => {
+                    const part = p.new && x.page === p.new.page ? 'new' : p.alwah.includes(x.page) ? 'alwah' : p.review.includes(x.page) ? 'rev' : null;
+                    if (part) { sum[part][0] += x.err; sum[part][1] += x.warn; }
+                });
+                setF(f0 => f0 && ({ ...f0, new_err: sum.new[0], new_warn: sum.new[1], alwah_err: sum.alwah[0], alwah_warn: sum.alwah[1], rev_err: sum.rev[0], rev_warn: sum.rev[1] }));
+                setFromMushaf(true);
             });
         });
     }, [id, d]);
@@ -66,6 +78,8 @@ export default function Record({ id, d: dIn }) {
                 </div>
                 <input type="date" className={inputCls + ' !w-auto'} value={d} max={todayStr()} onChange={e => e.target.value && setD(e.target.value)} />
             </div>
+
+            {fromMushaf ? <div className="rounded-xl bg-brand-50 text-brand-700 text-[12px] font-semibold p-3">عُبّئت الأخطاء والتنبيهات من علامات المصحف اليوم، وتقدر تعدّلها.</div> : null}
 
             {/* ── الحفظ الجديد ── */}
             <Part icon={BookOpen} title="الحفظ الجديد" color={m.color}

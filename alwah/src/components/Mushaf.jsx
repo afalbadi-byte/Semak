@@ -1,0 +1,109 @@
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Loader2, WifiOff } from 'lucide-react';
+import { loadPage, loadFont, fontName, surahName, prefetch } from '../lib/mushaf';
+
+// ─── صفحة المصحف ────────────────────────────────────────────────────────────
+// كل كلمةٍ زرّ: تُلمس فتُعلَّم خطأً أو تنبيهاً في مصحف صاحبها. والعلامات تتدرّج
+// لوناً بعدد مرّاتها، فيرى الحافظ مواضع ضعفه على الصفحة نفسها.
+const BASE = 22;
+
+export function markStyle(m) {
+    if (!m || (!m.err && !m.warn)) return null;
+    if (m.resolved) return { background: 'rgba(22,163,74,.12)', boxShadow: 'inset 0 -2px 0 rgba(22,163,74,.55)' };
+    if (m.err) {
+        const a = Math.min(0.42, 0.14 + m.err * 0.07);
+        return { background: `rgba(220,38,38,${a})`, boxShadow: 'inset 0 -2px 0 rgba(185,28,28,.8)' };
+    }
+    const a = Math.min(0.4, 0.14 + m.warn * 0.07);
+    return { background: `rgba(217,119,6,${a})`, boxShadow: 'inset 0 -2px 0 rgba(180,83,9,.75)' };
+}
+
+export default function Mushaf({ page, marks = {}, onWord, selected, readOnly }) {
+    const [data, setData] = useState(null);
+    const [err, setErr] = useState('');
+    const [ready, setReady] = useState(false);
+    const [size, setSize] = useState(BASE);
+    const box = useRef(null);
+    const meas = useRef(null);
+
+    useEffect(() => {
+        let dead = false;
+        setData(null); setErr(''); setReady(false);
+        Promise.all([loadPage(page), loadFont(page)])
+            .then(([d]) => { if (!dead) { setData(d); setReady(true); prefetch(page); } })
+            .catch(() => { if (!dead) setErr('تعذّر تحميل الصفحة، تحقق من الإنترنت'); });
+        return () => { dead = true; };
+    }, [page]);
+
+    // حجم الخطّ: أعرض سطرٍ في الصفحة يملأ عرض الإطار
+    useLayoutEffect(() => {
+        if (!ready || !box.current || !meas.current) return undefined;
+        const fit = () => {
+            const w = box.current.clientWidth - 14;
+            let max = 1;
+            meas.current.querySelectorAll('[data-line]').forEach(el => { max = Math.max(max, el.scrollWidth); });
+            // صفحتا الفاتحة وأوّل البقرة: أسطرٌ قصيرة في الوسط بفواصل بين الكلمات، فتُصغَّر لتتّسع
+            const s = Math.max(12, Math.min(44, ((BASE * w) / max) * (data && data.short ? 0.74 : 1)));
+            setSize(Math.floor(s * 10) / 10);
+        };
+        fit();
+        const ro = new ResizeObserver(fit);
+        ro.observe(box.current);
+        return () => ro.disconnect();
+    }, [ready, data]);
+
+    if (err) return <div className="py-16 text-center text-ink-3 text-[13px]"><WifiOff className="mx-auto mb-2" size={22} />{err}</div>;
+    if (!data || !ready) return <div className="py-24 flex justify-center"><Loader2 className="animate-spin text-brand" size={26} /></div>;
+
+    const ff = fontName(page);
+    const L = [];
+    for (let i = 1; i <= 15; i++) L.push(i);
+
+    return (
+        <div ref={box} className="relative w-full">
+            {/* قياس خفيّ لأعرض سطر بالحجم الأساس */}
+            <div ref={meas} aria-hidden className="invisible pointer-events-none" style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0, overflow: 'hidden', fontFamily: ff, fontSize: BASE, whiteSpace: 'nowrap', direction: 'rtl' }}>
+                {L.map(i => data.lines[i] ? <div key={i} data-line style={{ display: 'inline-block' }}>{data.lines[i].map(w => w.c).join('')}</div> : null)}
+            </div>
+
+            <div className="mushaf-page rounded-2xl bg-[#fffaf0] border border-[#e8dcc0] px-1 py-3 select-none" dir="rtl"
+                style={{ fontFamily: ff, fontSize: size, lineHeight: 1.95 }}>
+                {L.map(i => {
+                    const words = data.lines[i];
+                    const head = data.heads[i];
+                    if (head && head.type === 'name') return (
+                        <div key={i} className="flex items-center justify-center" style={{ height: size * 1.95 }}>
+                            <div className="px-6 rounded-full border-2 border-[#c9a45b] bg-[#f4e7c6] text-[#6b4f1d] font-quran" style={{ fontSize: size * 0.72, lineHeight: 1.7 }}>
+                                سورة {surahName(head.s)}
+                            </div>
+                        </div>
+                    );
+                    if (head && head.type === 'bism') return (
+                        <div key={i} className="text-center font-quran text-ink" style={{ fontSize: size * 0.8, height: size * 1.95, lineHeight: `${size * 1.95}px` }}>
+                            بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+                        </div>
+                    );
+                    if (!words) return data.short ? null : <div key={i} style={{ height: size * 1.95 }} />;
+                    return (
+                        <div key={i} className={'flex ' + (data.short ? 'justify-center gap-[0.35em]' : 'justify-between')} style={{ whiteSpace: 'nowrap' }}>
+                            {words.map(w => {
+                                if (w.end) return <span key={w.k} className="text-[#8a6a2c]">{w.c}</span>;
+                                const m = marks[w.k];
+                                const st = markStyle(m);
+                                const sel = selected === w.k;
+                                return (
+                                    <span key={w.k} role={readOnly ? undefined : 'button'} tabIndex={readOnly ? undefined : 0}
+                                        onClick={readOnly || !onWord ? undefined : e => onWord(w, e.currentTarget.getBoundingClientRect())}
+                                        className={'rounded-[6px] transition ' + (readOnly ? '' : 'cursor-pointer hover:bg-brand-50 ') + (sel ? 'ring-2 ring-brand' : '')}
+                                        style={{ ...(st || {}), padding: '0 .04em' }} title={w.t}>
+                                        {w.c}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}

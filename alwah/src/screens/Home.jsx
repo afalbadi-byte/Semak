@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, Mic, UserPlus, BookOpen, Check } from 'lucide-react';
+import { Flame, Mic, UserPlus, BookOpen, Check, Radio } from 'lucide-react';
 import { useData } from '../App';
 import { Card, Ring, Empty, Btn, hijri, greg, todayStr } from '../ui';
 import { surahOf, juzOf } from '../lib/quran';
@@ -22,6 +22,7 @@ export default function Home() {
                     <p className="text-[13px] text-white/80 mt-1">
                         {members.length ? `أتمّ ورد اليوم ${done} من ${members.length}` : 'ابدأ بإضافة أفراد الأسرة'}
                     </p>
+                    {members.length ? <a href="#/session" className="mt-3 inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-white/15 hover:bg-white/25 text-[13px] font-bold"><Radio size={16} />جلسة الذكر</a> : null}
                 </div>
             </div>
 
