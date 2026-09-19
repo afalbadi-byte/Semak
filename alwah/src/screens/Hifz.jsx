@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, ChevronLeft, EyeOff, Eye, ChevronDown, Plus, RotateCcw, Mic } from 'lucide-react';
+import { ChevronRight, ChevronLeft, EyeOff, Eye, ChevronDown, Plus, RotateCcw, Mic, SlidersHorizontal } from 'lucide-react';
 import { call } from '../lib/api';
 import { go, replace } from '../lib/router';
 import { useData } from '../App';
-import { useToast, todayStr, Empty, Seg } from '../ui';
+import { useToast, todayStr, Empty, Seg, Sheet } from '../ui';
 import Mushaf from '../components/Mushaf';
 import WordActions from '../components/WordActions';
 import Reciter from '../components/Reciter';
 import PassBar from '../components/PassBar';
+import WirdEditor from '../components/WirdEditor';
 import { loadPage } from '../lib/mushaf';
 import { surahsOn, juzOf, rangeLabel, SURAHS, JUZ_START, LPP } from '../lib/quran';
 import { BookOpen } from 'lucide-react';
@@ -19,7 +20,7 @@ import { BookOpen } from 'lucide-react';
 const TABS = [['new', 'حفظ اليوم'], ['alwah', 'الألواح'], ['rev', 'المراجعة'], ['all', 'المصحف']];
 
 export default function Hifz({ q }) {
-    const { me, sup, members } = useData();
+    const { me, sup, members, reloadMembers } = useData();
     const toast = useToast();
     const mid = +q.m || me.member_id || (members[0] && members[0].id) || 0;
     const m = members.find(x => x.id === mid);
@@ -45,6 +46,7 @@ export default function Hifz({ q }) {
     const [hl, setHl] = useState(null);
     const [pick, setPick] = useState(null);
     const [tools, setTools] = useState(true);
+    const [editW, setEditW] = useState(false);
 
     const load = useCallback(async () => {
         if (!mid) return;
@@ -127,6 +129,13 @@ export default function Hifz({ q }) {
 
             <Seg value={tab} onChange={t => go('/hifz', { m: mid, t })} options={TABS.map(([v, t]) => ({ v, t }))} />
 
+            {sup && plan ? (
+                <div className="flex items-center gap-2">
+                    {plan.custom ? <span className="text-[12px] font-semibold text-amber-700 bg-amber-50 rounded-lg px-2 py-1">ورد اليوم معدَّل يدوياً</span> : null}
+                    <button onClick={() => setEditW(true)} className="ms-auto h-8 px-3 rounded-lg bg-paper-card border border-paper-2 text-[12px] font-bold text-ink-2 inline-flex items-center gap-1.5"><SlidersHorizontal size={14} />عدّل ورد اليوم</button>
+                </div>
+            ) : null}
+
             {/* ── صفحات القسم ── */}
             {tab !== 'all' && set.length > 1 ? (
                 <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4">
@@ -135,7 +144,7 @@ export default function Hifz({ q }) {
                     ))}
                 </div>
             ) : null}
-            {tab !== 'all' && !set.length ? <p className="text-[13px] text-ink-3 text-center py-2">{tab === 'new' ? 'أتمّ الحفظ، ما شاء الله' : 'لا صفحات في هذا القسم بعد'}</p> : null}
+            {tab !== 'all' && !set.length ? <p className="text-[13px] text-ink-3 text-center py-2">{tab === 'new' ? (plan && plan.new_off ? 'لا حفظ جديد اليوم' : 'أتمّ الحفظ، ما شاء الله') : 'لا صفحات في هذا القسم اليوم'}</p> : null}
 
             {/* ── التقليب ── */}
             <div className="flex items-center gap-2">
@@ -187,6 +196,10 @@ export default function Hifz({ q }) {
                 <a href={'#/m/' + mid + '/log'} className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-brand text-white font-bold"><Mic size={17} />التسميع المفصّل (الأخطاء والملاحظة)</a>
             ) : null}
             {tab !== 'all' && set.length > 1 ? <p className="text-[11px] text-ink-3 text-center">{TABS.find(t => t[0] === tab)[1]}: صفحات {rangeLabel(set)}</p> : null}
+
+            <Sheet open={editW} onClose={() => setEditW(false)} title={'ورد اليوم · ' + m.name}>
+                {editW && plan ? <WirdEditor member={m} plan={plan} onDone={() => { setEditW(false); loadDay(); reloadMembers(); }} /> : null}
+            </Sheet>
 
             <WordActions word={sel} mark={sel ? marks[sel.k] : null} onOp={op} onClose={() => setSel(null)} busy={busy} />
         </div>

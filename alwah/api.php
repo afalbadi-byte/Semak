@@ -184,6 +184,20 @@ if ($__v < 2) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '2')");
 }
+if ($__v < 3) {
+    // ورد اليوم معدَّلاً يدوياً من المشرف (NULL = يبقى الحساب التلقائي لذلك الجزء)
+    $conn->query("CREATE TABLE IF NOT EXISTS al_wird (
+        member_id INT NOT NULL,
+        d DATE NOT NULL,
+        new_lines INT NULL,
+        alwah_list VARCHAR(600) NULL,
+        rev_list VARCHAR(600) NULL,
+        by_user INT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (member_id, d)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '3')");
+}
 
 function al_log($uid, $action, $data = null) {
     global $conn;
@@ -270,6 +284,24 @@ function member_plan($m, $exclude_d = null) {
         'cycle_pos' => $cycle_pos,
         'juz_map' => juz_map($dir, $L),
     ];
+}
+
+// ورد يومٍ عدّله المشرف يدوياً: يحلّ محلّ المحسوب في الأجزاء التي عدّلها
+function wird_apply($plan, $mid, $d) {
+    $w = one("SELECT * FROM al_wird WHERE member_id=" . (int)$mid . " AND d='" . E($d) . "' LIMIT 1");
+    $plan['custom'] = null;
+    if (!$w) return $plan;
+    $c = [];
+    if ($w['new_lines'] !== null && $plan['new']) {
+        $c['new_lines'] = (int)$w['new_lines'];
+        if ((int)$w['new_lines'] > 0) $plan['new']['lines'] = (int)$w['new_lines'];
+        else { $plan['new'] = null; $plan['new_off'] = true; }
+    }
+    $pl = function ($csv) { $a = array_values(array_filter(array_map('intval', explode(',', (string)$csv)), function ($p) { return $p >= 1 && $p <= PAGES; })); sort($a); return array_values(array_unique($a)); };
+    if ($w['alwah_list'] !== null) { $plan['alwah'] = $pl($w['alwah_list']); $c['alwah'] = true; }
+    if ($w['rev_list'] !== null) { $plan['review'] = $pl($w['rev_list']); $c['review'] = true; }
+    $plan['custom'] = $c ?: null;
+    return $plan;
 }
 
 // نسبة المحفوظ من كل جزء (للخريطة)
@@ -441,7 +473,7 @@ case 'members': {
     $w = is_sup($u) ? '' : ' AND id=' . (int)$u['member_id'];
     $list = [];
     foreach (rows("SELECT * FROM al_members WHERE family_id=$fid AND deleted=0$w ORDER BY sort, id") as $m) {
-        $p = member_plan($m); $s = member_stats($m['id']);
+        $p = wird_apply(member_plan($m), $m['id'], date('Y-m-d')); $s = member_stats($m['id']);
         $list[] = clean_member($m) + ['plan' => $p, 'streak' => $s['streak'], 'week_lines' => $s['week_lines'],
                                       'today' => clean_log($s['today'])];
     }
@@ -456,7 +488,7 @@ case 'member': {
     foreach (rows("SELECT id, name FROM al_users WHERE family_id=" . (int)$u['family_id']) as $x) $names[(int)$x['id']] = $x['name'];
     foreach ($hist as &$h) $h['by'] = $names[$h['recorded_by']] ?? null;
     unset($h);
-    out(['success' => true, 'member' => clean_member($m), 'plan' => member_plan($m, $today), 'now' => member_plan($m),
+    out(['success' => true, 'member' => clean_member($m), 'plan' => wird_apply(member_plan($m, $today), $m['id'], $today), 'now' => member_plan($m),
          'stats' => member_stats($m['id']), 'history' => $hist]);
 }
 
@@ -497,7 +529,32 @@ case 'log_get': {
     $u = need(); $m = member_for($u, $_GET['member_id'] ?? 0);
     $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['d'] ?? '')) ? $_GET['d'] : date('Y-m-d');
     $l = one("SELECT * FROM al_logs WHERE member_id=" . (int)$m['id'] . " AND d='" . E($d) . "' LIMIT 1");
-    out(['success' => true, 'member' => clean_member($m), 'd' => $d, 'log' => clean_log($l), 'plan' => member_plan($m, $d)]);
+    out(['success' => true, 'member' => clean_member($m), 'd' => $d, 'log' => clean_log($l), 'plan' => wird_apply(member_plan($m, $d), $m['id'], $d)]);
+}
+
+// ─── تعديل ورد اليوم يدوياً (للمشرف) ─────────────────────────────────────────
+case 'wird_save': {
+    $u = need_sup(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
+    $mid = (int)$m['id'];
+    $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['d'] ?? '')) ? $b['d'] : date('Y-m-d');
+    if (!empty($b['reset'])) {
+        $conn->query("DELETE FROM al_wird WHERE member_id=$mid AND d='" . E($d) . "'");
+        al_log($u['id'], 'wird_reset', ['member' => $mid, 'd' => $d]);
+        out(['success' => true]);
+    }
+    $nl = isset($b['new_lines']) && $b['new_lines'] !== null && $b['new_lines'] !== '' ? max(0, min(90, (int)$b['new_lines'])) : 'NULL';
+    $lst = function ($k) use ($b) {
+        if (!isset($b[$k]) || !is_array($b[$k])) return 'NULL';
+        $a = array_values(array_unique(array_filter(array_map('intval', $b[$k]), function ($p) { return $p >= 1 && $p <= PAGES; })));
+        if (count($a) > 60) fail('الحدّ ٦٠ صفحة');
+        sort($a);
+        return "'" . E(implode(',', $a)) . "'";
+    };
+    $al = $lst('alwah_list'); $rv = $lst('rev_list');
+    $conn->query("INSERT INTO al_wird (member_id, d, new_lines, alwah_list, rev_list, by_user) VALUES ($mid, '" . E($d) . "', $nl, $al, $rv, " . (int)$u['id'] . ")
+                  ON DUPLICATE KEY UPDATE new_lines=VALUES(new_lines), alwah_list=VALUES(alwah_list), rev_list=VALUES(rev_list), by_user=VALUES(by_user)");
+    al_log($u['id'], 'wird_save', ['member' => $mid, 'd' => $d, 'new_lines' => $nl, 'alwah' => $al, 'rev' => $rv]);
+    out(['success' => true, 'plan' => wird_apply(member_plan($m, $d), $mid, $d)]);
 }
 
 case 'log_save': {
