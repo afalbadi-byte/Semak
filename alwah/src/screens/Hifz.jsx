@@ -10,6 +10,7 @@ import Reciter from '../components/Reciter';
 import PassBar from '../components/PassBar';
 import WirdEditor from '../components/WirdEditor';
 import { loadPage } from '../lib/mushaf';
+import { rangeOfPages, ayahPage, partRange } from '../lib/ayah';
 import { surahsOn, juzOf, rangeLabel, SURAHS, JUZ_START, LPP } from '../lib/quran';
 import { BookOpen } from 'lucide-react';
 
@@ -60,7 +61,7 @@ export default function Hifz({ q }) {
         ? [plan.new.from_line, Math.min(LPP, plan.new.from_line + plan.new.lines - 1)] : null;
 
     // آيات الصفحة بالترتيب، والمقطع المقترح: آيات أسطر حفظ اليوم
-    const { ayahs, range, lines } = useMemo(() => {
+    const { range, lines } = useMemo(() => {
         if (!data) return { ayahs: [], range: null, lines: [] };
         const out = [], seen = new Set(), ls = [];
         let r0 = null, r1 = null;
@@ -82,6 +83,27 @@ export default function Hifz({ q }) {
     const [reps, setReps] = useState(0);
     useEffect(() => { try { setReps(+localStorage.getItem(ck) || 0); } catch (e) { setReps(0); } }, [ck]);
     const bump = v => { setReps(v); try { localStorage.setItem(ck, String(v)); } catch (e) { /* تجاهل */ } };
+
+    // مقطع المُسمِع المقترح: حفظ اليوم بأسطره، أو الألواح/المراجعة كاملةً، أو الصفحة المفتوحة
+    const seed = [mid, tab, set.join(','), focus ? focus.join('-') : '', plan && plan.new ? plan.new.page + '.' + plan.new.lines : '', plan && plan.ranges ? JSON.stringify(plan.ranges) : ''].join('|');
+    const [defRange, setDefRange] = useState(null);
+    useEffect(() => {
+        let dead = false;
+        (async () => {
+            let r = null;
+            if (tab !== 'all' && plan && (tab === 'new' ? plan.new : set.length)) r = await partRange(plan, tab);
+            else r = await rangeOfPages([page]);
+            if (!dead && r) setDefRange(r);
+        })().catch(() => {});
+        return () => { dead = true; };
+    }, [seed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // المصحف يتبع الآية المتلوّة إلى صفحتها
+    const pageRef = React.useRef(page); pageRef.current = page;
+    const follow = k => {
+        setHl(k);
+        if (k) ayahPage(k).then(p => { if (p && p !== pageRef.current) at({ p }); }).catch(() => {});
+    };
 
     const op = async o => {
         if (!sel) return;
@@ -175,7 +197,7 @@ export default function Hifz({ q }) {
                 hide={hide} onLine={reveal} focus={hide ? null : focus} hl={hl} onAyah={k => setPick({ k, t: Date.now() })} />
 
             <button onClick={() => setTools(v => !v)} className="text-[12px] font-semibold text-ink-3 mx-auto block">{tools ? 'أخفِ المُسمِع' : 'أظهر المُسمِع'}</button>
-            {tools ? <Reciter ayahs={ayahs} range={range} pick={pick} onAyah={setHl} /> : null}
+            {tools ? <Reciter defRange={defRange} seed={seed} pick={pick} onAyah={follow} /> : null}
 
             {tab === 'all' ? (
                 <div className="grid grid-cols-2 gap-2">
@@ -190,7 +212,7 @@ export default function Hifz({ q }) {
                 </div>
             ) : null}
 
-            {tab !== 'all' && set.length ? <PassBar member={m} part={tab} today={today} onDone={loadDay} /> : null}
+            {tab !== 'all' && set.length ? <PassBar member={m} part={tab} today={today} plan={plan} onDone={loadDay} /> : null}
 
             {sup ? (
                 <a href={'#/m/' + mid + '/log'} className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-brand text-white font-bold"><Mic size={17} />التسميع المفصّل (الأخطاء والملاحظة)</a>

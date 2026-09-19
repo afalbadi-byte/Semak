@@ -1,38 +1,57 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { RotateCcw, Save } from 'lucide-react';
 import { call } from '../lib/api';
-import { Btn, Stepper, useToast, todayStr, inputCls } from '../ui';
-import { linesLabel, rangeLabel, surahsIn } from '../lib/quran';
+import { Btn, useToast, todayStr } from '../ui';
+import { linesLabel } from '../lib/quran';
+import { partRange, pagesOf, linesOf, label } from '../lib/ayah';
+import AyahPicker, { AyahRange } from './AyahPicker';
 
 // ─── تعديل ورد اليوم يدوياً (للمشرف) ─────────────────────────────────────────
-// يُحفظ لهذا الفرد في هذا اليوم وحده، ويبقى الحساب التلقائي لما بعده. والمراجعة
-// تستكمل غداً بعد آخر صفحةٍ رُوجعت فعلاً، فالتعديل لا يُربك الدورة.
-const range = (a, b) => { a = +a; b = +b; if (!a && b) a = b; if (!b && a) b = a; if (!a || !b || a > 604 || b > 604) return []; if (a > b) [a, b] = [b, a]; const o = []; for (let p = Math.max(1, a); p <= Math.min(604, b) && o.length < 60; p++) o.push(p); return o; };
-const ends = l => (l && l.length ? [Math.min(...l), Math.max(...l)] : ['', '']);
-
+// كل جزءٍ يُحدَّد بالسورة ورقم الآية (أوّل آيةٍ وآخر آية مع أوّل كلماتهما)، ويُحفظ لهذا
+// الفرد في هذا اليوم وحده، ويعود الحساب التلقائي من الغد. وما لم يُلمس يبقى كما هو.
 export default function WirdEditor({ member, plan, onDone }) {
     const toast = useToast();
     const [busy, setBusy] = useState(false);
-    const newOff = !!plan.new_off;
-    // ما لم يُلمس يبقى كما هو (المراجعة قد تكون مقطعين من جزأين، فلا تُختصر في «من-إلى»)
     const [touched, setTouched] = useState({});
-    const touch = k => setTouched(t => ({ ...t, [k]: true }));
-    const [nl, setNl0] = useState(newOff ? 0 : plan.new ? plan.new.lines : member.target_lines);
-    const [a, setA0] = useState(ends(plan.alwah));
-    const [r, setR0] = useState(ends(plan.review));
-    const setNl = v => { setNl0(v); touch('n'); };
-    const setA = v => { setA0(v); touch('a'); };
-    const setR = v => { setR0(v); touch('r'); };
-    const hasNew = !!plan.new || newOff;
+    const [r, setR] = useState({});                 // المقاطع: new / alwah / rev
+    const [off, setOff] = useState({ new: !!plan.new_off });
+    const [start, setStart] = useState(null);        // بداية حفظ اليوم (ثابتة: من حيث وصل)
 
-    const bad = (t, v) => t && (v[0] !== '' || v[1] !== '') && !range(v[0], v[1]).length;
+    useEffect(() => {
+        let dead = false;
+        (async () => {
+            const o = {};
+            for (const k of ['new', 'alwah', 'rev']) o[k] = await partRange(plan, k).catch(() => null);
+            if (!dead) { setR(o); if (o.new) setStart(o.new[0]); }
+        })();
+        return () => { dead = true; };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const set = (k, v) => { setR(x => ({ ...x, [k]: v })); setTouched(t => ({ ...t, [k]: true })); setOff(o => ({ ...o, [k]: false })); };
+    const none = k => { setOff(o => ({ ...o, [k]: true })); setTouched(t => ({ ...t, [k]: true })); };
+
     const save = async reset => {
-        if (!reset && (bad(touched.a, a) || bad(touched.r, r))) { toast('أرقام الصفحات من ١ إلى ٦٠٤', 'err'); return; }
         setBusy(true);
-        const body = reset ? { member_id: member.id, d: todayStr(), reset: 1 }
-            : { member_id: member.id, d: todayStr(), new_lines: hasNew && touched.n ? nl : (plan.custom && plan.custom.new_lines !== undefined ? plan.custom.new_lines : null),
-                alwah_list: touched.a ? range(a[0], a[1]) : (plan.custom && plan.custom.alwah ? plan.alwah : null),
-                rev_list: touched.r ? range(r[0], r[1]) : (plan.custom && plan.custom.review ? plan.review : null) };
+        let body;
+        try {
+            if (reset) body = { member_id: member.id, d: todayStr(), reset: 1 };
+            else {
+                const ranges = { ...(plan.ranges || {}) };
+                const c = plan.custom || {};
+                body = { member_id: member.id, d: todayStr(),
+                    new_lines: c.new_lines !== undefined ? c.new_lines : null,
+                    alwah_list: c.alwah ? plan.alwah : null, rev_list: c.review ? plan.review : null };
+                if (touched.new) {
+                    if (off.new) { body.new_lines = 0; delete ranges.new; }
+                    else if (r.new) { body.new_lines = Math.max(1, Math.min(90, await linesOf(r.new[0], r.new[1]))); ranges.new = r.new; }
+                }
+                for (const [k, lk] of [['alwah', 'alwah_list'], ['rev', 'rev_list']]) {
+                    if (!touched[k]) continue;
+                    if (off[k]) { body[lk] = []; delete ranges[k]; } else if (r[k]) { body[lk] = await pagesOf(r[k][0], r[k][1]); ranges[k] = r[k]; }
+                }
+                body.ranges = ranges;
+            }
+        } catch (e) { setBusy(false); toast('تعذّر تحميل بيانات الآيات، تحقق من الإنترنت', 'err'); return; }
         const res = await call('wird_save', { body });
         setBusy(false);
         if (!res.success) { toast(res.message || 'تعذّر الحفظ', 'err'); return; }
@@ -40,55 +59,61 @@ export default function WirdEditor({ member, plan, onDone }) {
         onDone && onDone();
     };
 
-    const al = touched.a ? range(a[0], a[1]) : plan.alwah, rv = touched.r ? range(r[0], r[1]) : plan.review;
+    const hasNew = !!plan.new || !!plan.new_off;
     return (
         <div className="space-y-5">
             <p className="text-[12px] text-ink-3 leading-6">يسري التعديل على ورد <b className="text-ink">{member.name}</b> اليوم فقط، ويعود الحساب التلقائي من الغد.</p>
 
             {hasNew ? (
-                <div className="space-y-2">
-                    <div className="text-[13px] font-bold text-ink">الحفظ الجديد</div>
-                    <div className="flex items-center justify-between gap-3">
-                        <span className="text-[13px] text-ink-2">{nl ? linesLabel(nl) : 'لا حفظ جديد اليوم'}</span>
-                        <Stepper value={nl} onChange={setNl} max={90} />
-                    </div>
-                    <div className="flex gap-1.5 flex-wrap">
-                        {[[0, 'لا حفظ اليوم'], [3, '٣ أسطر'], [5, '٥ أسطر'], [8, 'نصف صفحة'], [15, 'صفحة'], [30, 'صفحتان']].map(([v, t]) => (
-                            <button key={v} type="button" onClick={() => setNl(v)} className={'h-8 px-3 rounded-lg text-[12px] font-semibold ' + (nl === v ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>{t}</button>
-                        ))}
-                    </div>
-                </div>
+                <Part title="الحفظ الجديد" off={off.new} onNone={() => none('new')} onOn={() => r.new && set('new', r.new)} noneText="لا حفظ جديد اليوم">
+                    {start && r.new ? (
+                        <>
+                            <div className="text-[11px] text-ink-3">يبدأ من حيث وصل</div>
+                            <StartText k={start} />
+                            <AyahPicker label="إلى" value={r.new[1]} min={start} onChange={v => set('new', [start, v])} />
+                            <NewLines r={r.new} />
+                        </>
+                    ) : <div className="text-[12px] text-ink-3">…</div>}
+                </Part>
             ) : null}
 
-            <Pages title="الألواح" v={a} set={setA} list={al} />
-            <Pages title="المراجعة" v={r} set={setR} list={rv} />
+            <Part title="الألواح" off={off.alwah} onNone={() => none('alwah')} onOn={() => r.alwah && set('alwah', r.alwah)} noneText="بلا ألواح اليوم">
+                {r.alwah ? <AyahRange from={r.alwah[0]} to={r.alwah[1]} onChange={v => set('alwah', v)} /> : <AyahRange from="78:1" to="78:40" onChange={v => set('alwah', v)} />}
+            </Part>
+
+            <Part title="المراجعة" off={off.rev} onNone={() => none('rev')} onOn={() => r.rev && set('rev', r.rev)} noneText="بلا مراجعة اليوم">
+                {r.rev ? <AyahRange from={r.rev[0]} to={r.rev[1]} onChange={v => set('rev', v)} /> : <AyahRange from="78:1" to="78:40" onChange={v => set('rev', v)} />}
+            </Part>
 
             <div className="flex gap-2">
                 <Btn className="flex-1 !h-12" busy={busy} onClick={() => save(false)}><Save size={17} />احفظ ورد اليوم</Btn>
-                {plan.custom ? <Btn kind="line" className="!h-12" disabled={busy} onClick={() => save(true)} title="الورد التلقائي"><RotateCcw size={16} />التلقائي</Btn> : null}
+                {plan.custom ? <Btn kind="line" className="!h-12" disabled={busy} onClick={() => save(true)}><RotateCcw size={16} />التلقائي</Btn> : null}
             </div>
         </div>
     );
 }
 
-// من صفحة إلى صفحة (يُعرض نزولاً من جهة البقرة إلى جهة الناس)
-function Pages({ title, v, set, list }) {
+function Part({ title, off, onNone, onOn, noneText, children }) {
     return (
-        <div className="space-y-2">
-            <div className="flex items-baseline gap-2">
-                <div className="text-[13px] font-bold text-ink">{title}</div>
-                <div className="text-[12px] text-ink-3">{list.length ? `${list.length} ${list.length <= 10 ? 'صفحات' : 'صفحة'}` : 'لا شيء اليوم'}</div>
+        <div className="space-y-2 rounded-2xl border border-paper-2 p-3">
+            <div className="flex items-center gap-2">
+                <div className="text-[13px] font-bold text-ink flex-1">{title}</div>
+                {off ? <button type="button" onClick={onOn} className="text-[12px] font-semibold text-brand">أعده</button>
+                    : <button type="button" onClick={onNone} className="text-[12px] font-semibold text-ink-3">{noneText}</button>}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-ink-3">من صفحة
-                    <input type="number" inputMode="numeric" min={1} max={604} onFocus={e => e.target.select()} className={inputCls + ' mt-0.5'} value={v[0]} onChange={e => set([e.target.value, v[1]])} />
-                </label>
-                <label className="text-[11px] text-ink-3">إلى صفحة
-                    <input type="number" inputMode="numeric" min={1} max={604} onFocus={e => e.target.select()} className={inputCls + ' mt-0.5'} value={v[1]} onChange={e => set([v[0], e.target.value])} />
-                </label>
-            </div>
-            {list.length ? <div className="text-[12px] text-ink-3">{rangeLabel(list)} · {surahsIn(list).slice(0, 4).join('، ')}</div> : null}
-            <button type="button" onClick={() => set(['', ''])} className="text-[12px] text-ink-3 font-semibold">بلا {title} اليوم</button>
+            {off ? <div className="text-[13px] text-ink-3">{noneText}</div> : children}
         </div>
     );
+}
+
+function StartText({ k }) {
+    const [t, setT] = useState('');
+    useEffect(() => { label(k).then(setT).catch(() => {}); }, [k]);
+    return <div className="font-quran text-[16px] text-ink">{t}</div>;
+}
+
+function NewLines({ r }) {
+    const [n, setN] = useState(null);
+    useEffect(() => { let dead = false; linesOf(r[0], r[1]).then(x => { if (!dead) setN(x); }).catch(() => {}); return () => { dead = true; }; }, [r[0], r[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+    return n ? <div className="text-[12px] text-ink-3">المقدار: {linesLabel(n)}</div> : null;
 }

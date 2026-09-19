@@ -198,6 +198,15 @@ if ($__v < 3) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '3')");
 }
+if ($__v < 4) {
+    // المقاطع بالآيات: {"new":["67:1","67:5"],"alwah":[..],"rev":[..]}
+    // (ADD COLUMN IF NOT EXISTS لا تعمل في MySQL: نفحص information_schema أوّلاً)
+    foreach (['al_wird', 'al_logs'] as $t) {
+        $has = one("SELECT 1 x FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$t' AND COLUMN_NAME='ranges'");
+        if (!$has) $conn->query("ALTER TABLE $t ADD COLUMN ranges VARCHAR(255) NULL");
+    }
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '4')");
+}
 
 function al_log($uid, $action, $data = null) {
     global $conn;
@@ -286,6 +295,19 @@ function member_plan($m, $exclude_d = null) {
     ];
 }
 
+// المقاطع بالآيات: تُقبل «سورة:آية» صحيحةً فقط
+function ranges_in($r) {
+    $o = [];
+    if (!is_array($r)) return null;
+    foreach (['new', 'alwah', 'rev'] as $k) {
+        if (!isset($r[$k]) || !is_array($r[$k]) || count($r[$k]) !== 2) continue;
+        $a = (string)$r[$k][0]; $b = (string)$r[$k][1];
+        if (preg_match('/^\d{1,3}:\d{1,3}$/', $a) && preg_match('/^\d{1,3}:\d{1,3}$/', $b)) $o[$k] = [$a, $b];
+    }
+    return $o ?: null;
+}
+function ranges_out($j) { $v = $j ? json_decode($j, true) : null; return is_array($v) ? $v : null; }
+
 // ورد يومٍ عدّله المشرف يدوياً: يحلّ محلّ المحسوب في الأجزاء التي عدّلها
 function wird_apply($plan, $mid, $d) {
     $w = one("SELECT * FROM al_wird WHERE member_id=" . (int)$mid . " AND d='" . E($d) . "' LIMIT 1");
@@ -301,6 +323,7 @@ function wird_apply($plan, $mid, $d) {
     if ($w['alwah_list'] !== null) { $plan['alwah'] = $pl($w['alwah_list']); $c['alwah'] = true; }
     if ($w['rev_list'] !== null) { $plan['review'] = $pl($w['rev_list']); $c['review'] = true; }
     $plan['custom'] = $c ?: null;
+    $plan['ranges'] = ranges_out($w['ranges'] ?? null);
     return $plan;
 }
 
@@ -400,6 +423,7 @@ function clean_log($l) {
               'rev_done', 'rev_grade', 'rev_err', 'rev_warn', 'recorded_by'] as $k) if (isset($l[$k])) $l[$k] = $l[$k] === null ? null : (int)$l[$k];
     $l['alwah_list'] = $l['alwah_list'] ? array_map('intval', explode(',', $l['alwah_list'])) : [];
     $l['rev_list'] = $l['rev_list'] ? array_map('intval', explode(',', $l['rev_list'])) : [];
+    $l['ranges'] = ranges_out($l['ranges'] ?? null);
     unset($l['family_id']);
     return $l;
 }
@@ -551,8 +575,9 @@ case 'wird_save': {
         return "'" . E(implode(',', $a)) . "'";
     };
     $al = $lst('alwah_list'); $rv = $lst('rev_list');
-    $conn->query("INSERT INTO al_wird (member_id, d, new_lines, alwah_list, rev_list, by_user) VALUES ($mid, '" . E($d) . "', $nl, $al, $rv, " . (int)$u['id'] . ")
-                  ON DUPLICATE KEY UPDATE new_lines=VALUES(new_lines), alwah_list=VALUES(alwah_list), rev_list=VALUES(rev_list), by_user=VALUES(by_user)");
+    $rg = ranges_in($b['ranges'] ?? null); $rg = $rg ? "'" . E(json_encode($rg)) . "'" : 'NULL';
+    $conn->query("INSERT INTO al_wird (member_id, d, new_lines, alwah_list, rev_list, ranges, by_user) VALUES ($mid, '" . E($d) . "', $nl, $al, $rv, $rg, " . (int)$u['id'] . ")
+                  ON DUPLICATE KEY UPDATE new_lines=VALUES(new_lines), alwah_list=VALUES(alwah_list), rev_list=VALUES(rev_list), ranges=VALUES(ranges), by_user=VALUES(by_user)");
     al_log($u['id'], 'wird_save', ['member' => $mid, 'd' => $d, 'new_lines' => $nl, 'alwah' => $al, 'rev' => $rv]);
     out(['success' => true, 'plan' => wird_apply(member_plan($m, $d), $mid, $d)]);
 }
@@ -572,6 +597,15 @@ case 'log_save': {
         'rev_grade' => $i('rev_grade', 5), 'rev_err' => $i('rev_err'), 'rev_warn' => $i('rev_warn'),
         'note' => "'" . E(mb_substr(trim((string)($b['note'] ?? '')), 0, 1000)) . "'", 'recorded_by' => (int)$u['id'],
     ];
+    $rg = ranges_in($b['ranges'] ?? null);
+    $f['ranges'] = $rg ? "'" . E(json_encode($rg)) . "'" : 'NULL';
+    // لا حفظ جديد قبل تسميع الألواح والمراجعة (إن كان عنده محفوظٌ يُراجَع)
+    if ($f['new_lines'] > 0 && $f['new_grade'] !== 1) {
+        $pl = wird_apply(member_plan($m, $d), $m['id'], $d);
+        $needA = $pl['lines'] > 0 && count($pl['alwah']) > 0 && $f['alwah_list'] !== "''";
+        $needR = count($pl['review']) > 0 && $f['rev_list'] !== "''";
+        if (($needA && !$f['alwah_done']) || ($needR && !$f['rev_done'])) fail('يُجاز الحفظ الجديد بعد تسميع الألواح والمراجعة');
+    }
     $cols = implode(', ', array_keys($f)); $vals = implode(', ', array_values($f));
     $upd = implode(', ', array_map(function ($k) { return "$k=VALUES($k)"; }, array_keys($f)));
     $conn->query("INSERT INTO al_logs (family_id, member_id, d, $cols) VALUES (" . (int)$u['family_id'] . ", " . (int)$m['id'] . ", '" . E($d) . "', $vals)

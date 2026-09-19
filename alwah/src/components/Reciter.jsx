@@ -1,98 +1,89 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, SkipForward, SkipBack, Repeat, Square } from 'lucide-react';
-import { SURAHS } from '../lib/quran';
+import { between, ayahName, cmp } from '../lib/ayah';
+import { AyahRange } from './AyahPicker';
 
-// ─── مُسمِع الشيخ محمد أيوب: آيةً آية، بتكرار الآية وتكرار المقطع ─────────────
-// التلاوة من everyayah.com (ملفّ لكل آية)، فيختار الحافظ مقطعاً من آيةٍ إلى آية
-// ويكرّر كل آيةٍ ما شاء ثم يعيد المقطع كلّه ما شاء، والآية المتلوّة تُظلَّل في المصحف.
+// ─── مُسمِع الشيخ محمد أيوب ─────────────────────────────────────────────────
+// المقطع من أيّ آيةٍ إلى أيّ آية في المصحف كلّه (السورة ورقم الآية وأوّل كلماتها)،
+// والتلاوة آيةً آية من everyayah.com. طريقتان للتكرار: «المقطع كاملاً» يتلوه من
+// أوّله إلى آخره ثم يعيده، و«كل آية» يكرّرها ثم ينتقل للتي بعدها.
+// والآية المتلوّة تُظلَّل في المصحف، والمصحف يتبعها إلى صفحتها.
 const SRC = 'https://everyayah.com/data/Muhammad_Ayyoub_128kbps/';
 const pad = n => String(n).padStart(3, '0');
 const url = k => { const [s, a] = k.split(':'); return SRC + pad(s) + pad(a) + '.mp3'; };
-// طريقتان للتكرار: «المقطع كاملاً» يتلو المقطع من أوّله إلى آخره ثم يعيده، و«كل آية» يكرّر
-// الآية ثم ينتقل للتي بعدها. n عدد المرّات (0 = بلا توقّف)
 const PREF = 'alwah_rec_v2';
 const DEF = { mode: 'seg', n: 3, rate: 1 };
 const loadPref = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(PREF) || '{}') }; } catch (e) { return { ...DEF }; } };
 const eachOf = p => (p.mode === 'ayah' ? Math.max(1, p.n || 1) : 1);
 const loopsOf = p => (p.mode === 'seg' ? p.n : 1);
 
-export const ayahLabel = k => { const [s, a] = k.split(':'); return (SURAHS[s - 1] ? SURAHS[s - 1][0] : '') + ' ' + a; };
+export const ayahLabel = ayahName;
 
-// ayahs: آيات الصفحة بالترتيب «سورة:آية»، range: المقطع المقترح [من، إلى]، pick: آيةٌ لُمست في المصحف
-export default function Reciter({ ayahs, range, pick, onAyah }) {
+// defRange: المقطع المقترح [من، إلى]، seed: يتغيّر فيُعاد ضبط المقطع، pick: آيةٌ لُمست في المصحف
+export default function Reciter({ defRange, seed, pick, onAyah }) {
     const [pref, setPref] = useState(loadPref);
-    const [from, setFrom] = useState(0);
-    const [to, setTo] = useState(0);
+    const [seg, setSeg] = useState(defRange || ['1:1', '1:7']);
     const [st, setSt] = useState({ on: false, i: 0, rep: 1, loop: 1, paused: false });
     const audio = useRef(null);
-    const stRef = useRef(st);
-    stRef.current = st;
+    const stRef = useRef(st); stRef.current = st;
+    const list = useMemo(() => between(seg[0], seg[1]), [seg[0], seg[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+    const listRef = useRef(list); listRef.current = list;
 
-    const key = ayahs.join(',');
-    // صفحةٌ جديدة أو مقطعٌ مقترح: يُضبط المقطع ويتوقّف التشغيل
-    useEffect(() => {
-        const f = range ? Math.max(0, ayahs.indexOf(range[0])) : 0;
-        const t = range && ayahs.indexOf(range[1]) >= 0 ? ayahs.indexOf(range[1]) : ayahs.length - 1;
-        setFrom(f); setTo(Math.max(f, t)); stop();
-    }, [key, range && range.join('-')]); // eslint-disable-line react-hooks/exhaustive-deps
+    // قسمٌ جديد أو فردٌ آخر: المقطع المقترح، ويتوقّف التشغيل
+    useEffect(() => { if (defRange) { setSeg(defRange); stop(); } }, [seed, defRange && defRange.join('-')]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // لمس رقم آيةٍ في المصحف: أوّل لمسةٍ بدايةُ المقطع، والثانية نهايته
     const tapRef = useRef(0);
     useEffect(() => {
         if (!pick) return;
-        const i = ayahs.indexOf(pick.k);
-        if (i < 0) return;
-        if (tapRef.current % 2 === 0 || i < from) { setFrom(i); setTo(i); } else setTo(i);
+        const k = pick.k;
+        if (tapRef.current % 2 === 0 || cmp(k, seg[0]) < 0) setSeg([k, k]); else setSeg([seg[0], k]);
         tapRef.current++;
+        stop();
     }, [pick]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const save = p => { setPref(p); try { localStorage.setItem(PREF, JSON.stringify(p)); } catch (e) { /* تجاهل */ } };
 
-    useEffect(() => { onAyah && onAyah(st.on ? ayahs[st.i] : null); }, [st.on, st.i]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { onAyah && onAyah(st.on ? list[st.i] : null); }, [st.on, st.i]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(() => () => { if (audio.current) audio.current.pause(); onAyah && onAyah(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const playAt = (i, rep, loop) => {
+        const L = listRef.current;
         const a = audio.current || (audio.current = new Audio());
         a.onended = next;
-        a.onerror = () => { stop(); };
-        a.src = url(ayahs[i]);
-        a.playbackRate = pref.rate;
+        a.onerror = () => stop();
+        a.src = url(L[i]);
+        a.playbackRate = loadPref().rate;
         a.play().catch(() => {});
         setSt({ on: true, i, rep, loop, paused: false });
         // تحميل الآية التالية مسبقاً فلا ينقطع التكرار
-        if (i + 1 <= to && ayahs[i + 1]) { const n = new Audio(); n.preload = 'auto'; n.src = url(ayahs[i + 1]); }
+        if (L[i + 1]) { const n = new Audio(); n.preload = 'auto'; n.src = url(L[i + 1]); }
     };
     function next() {
-        const s = stRef.current, p = loadPref();
+        const s = stRef.current, p = loadPref(), L = listRef.current;
         const each = eachOf(p), loops = loopsOf(p);
         if (s.rep < each) return playAt(s.i, s.rep + 1, s.loop);
-        if (s.i < toRef.current) return playAt(s.i + 1, 1, s.loop);
-        if (loops === 0 || s.loop < loops) return playAt(fromRef.current, 1, s.loop + 1);
+        if (s.i < L.length - 1) return playAt(s.i + 1, 1, s.loop);
+        if (loops === 0 || s.loop < loops) return playAt(0, 1, s.loop + 1);
         stop();
     }
-    const toRef = useRef(to); toRef.current = to;
-    const fromRef = useRef(from); fromRef.current = from;
-
     function stop() { if (audio.current) audio.current.pause(); setSt({ on: false, i: 0, rep: 1, loop: 1, paused: false }); }
     const toggle = () => {
-        if (!st.on) return playAt(from, 1, 1);
+        if (!st.on) return playAt(0, 1, 1);
         const a = audio.current;
         if (st.paused) { a.play().catch(() => {}); setSt(s => ({ ...s, paused: false })); } else { a.pause(); setSt(s => ({ ...s, paused: true })); }
     };
-    const jump = d => { const i = Math.min(to, Math.max(from, st.i + d)); playAt(i, 1, st.loop); };
+    const jump = d => playAt(Math.min(list.length - 1, Math.max(0, st.i + d)), 1, st.loop);
     useEffect(() => { if (audio.current) audio.current.playbackRate = pref.rate; }, [pref.rate]);
 
-    const opts = useMemo(() => ayahs.map((k, i) => <option key={k} value={i}>{ayahLabel(k)}</option>), [key]); // eslint-disable-line react-hooks/exhaustive-deps
-    if (!ayahs.length) return null;
-    const count = to - from + 1;
-
+    const count = list.length;
     return (
         <div className="rounded-2xl bg-paper-card border border-paper-2 p-3 space-y-3">
             <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
                     <div className="text-[12px] text-ink-3">تلاوة الشيخ محمد أيوب</div>
                     <div className="text-[14px] font-bold text-ink truncate">
-                        {st.on ? `${ayahLabel(ayahs[st.i])} · ${pref.mode === 'seg' ? `المقطع ${st.loop}${pref.n ? '/' + pref.n : ''}` : `الآية ${st.rep}/${eachOf(pref)}`}`
+                        {st.on ? `${ayahName(list[st.i])} · ${pref.mode === 'seg' ? `المقطع ${st.loop}${pref.n ? '/' + pref.n : ''}` : `الآية ${st.rep}/${eachOf(pref)}`}`
                             : `المقطع: ${count} ${count === 1 ? 'آية' : count <= 10 ? 'آيات' : 'آية'}`}
                     </div>
                 </div>
@@ -104,16 +95,7 @@ export default function Reciter({ ayahs, range, pick, onAyah }) {
                 {st.on ? <button onClick={stop} className="w-10 h-10 rounded-xl bg-paper-2 flex items-center justify-center text-ink-3" aria-label="إيقاف"><Square size={15} /></button> : null}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-ink-3">من
-                    <select className="mt-0.5 w-full h-10 rounded-xl bg-white border border-paper-2 px-2 text-[13px] text-ink" value={from}
-                        onChange={e => { const v = +e.target.value; setFrom(v); if (to < v) setTo(v); }}>{opts}</select>
-                </label>
-                <label className="text-[11px] text-ink-3">إلى
-                    <select className="mt-0.5 w-full h-10 rounded-xl bg-white border border-paper-2 px-2 text-[13px] text-ink" value={to}
-                        onChange={e => { const v = +e.target.value; setTo(v); if (from > v) setFrom(v); }}>{opts}</select>
-                </label>
-            </div>
+            <AyahRange from={seg[0]} to={seg[1]} onChange={v => { stop(); setSeg(v); }} labels={['بداية المقطع', 'نهاية المقطع']} />
 
             <div className="space-y-2">
                 <Row label="التكرار" icon>
@@ -127,7 +109,7 @@ export default function Reciter({ ayahs, range, pick, onAyah }) {
                     {[[0.75, 'بطيئة'], [1, 'عادية'], [1.25, 'أسرع']].map(([n, t]) => <Pill key={n} on={pref.rate === n} onClick={() => save({ ...pref, rate: n })}>{t}</Pill>)}
                 </Row>
             </div>
-            <p className="text-[11px] text-ink-3 leading-5">المس رقم الآية في المصحف لتبدأ المقطع منها، ثم المس رقم آخر آية لتنهيه.</p>
+            <p className="text-[11px] text-ink-3 leading-5">اختر السورة والآية للبداية والنهاية من أيّ موضعٍ في المصحف، أو المس رقم الآية في المصحف لتبدأ منها ثم المس رقم آخر آية.</p>
         </div>
     );
 }

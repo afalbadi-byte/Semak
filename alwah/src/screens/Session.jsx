@@ -140,7 +140,7 @@ export default function Session() {
                     ) : null}
                     <Mushaf page={page} marks={marks} onWord={sup ? w => setSel(w) : undefined} readOnly={!sup} selected={sel && sel.k} />
                     {/* المشرف يجيز ورد القارئ من المجلس نفسه: الجزء يُعرف من الصفحة المفتوحة */}
-                    {sup && m && m.plan ? <PassBar member={m} today={m.today}
+                    {sup && m && m.plan ? <PassBar member={m} today={m.today} plan={m.plan}
                         part={m.plan.new && m.plan.new.page === page ? 'new' : m.plan.alwah.includes(page) ? 'alwah' : m.plan.review.includes(page) ? 'rev' : null} /> : null}
                 </>
             ) : (
