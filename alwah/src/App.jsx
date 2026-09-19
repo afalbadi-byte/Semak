@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Settings as Cog, Home as HomeIcon, ChevronRight, Radio } from 'lucide-react';
+import { Settings as Cog, Home as HomeIcon, ChevronRight, Radio, BookOpenText } from 'lucide-react';
 import { call, token } from './lib/api';
 import { useRoute, back } from './lib/router';
 import { Spinner, ToastHost } from './ui';
@@ -10,6 +10,7 @@ import Record from './screens/Record';
 import Settings from './screens/Settings';
 import MushafView from './screens/MushafView';
 import Session from './screens/Session';
+import Hifz from './screens/Hifz';
 
 // ─── البيانات المشتركة بين الشاشات ──────────────────────────────────────────
 const DataCtx = createContext(null);
@@ -65,6 +66,7 @@ function Shell() {
     if (p[0] === 'm' && p[1] && p[2] === 'log') page = <Record id={+p[1]} d={r.q.d} />;
     else if (p[0] === 'm' && p[1] && p[2] === 'mushaf') page = <MushafView key={p[1]} id={+p[1]} p={r.q.p} />;
     else if (p[0] === 'session') page = <Session />;
+    else if (p[0] === 'hifz') page = <Hifz q={r.q} />;
     else if (p[0] === 'm' && p[1]) page = <MemberView id={+p[1]} />;
     else if (p[0] === 'settings') page = <Settings />;
     else page = solo ? <MemberView id={me.member_id} /> : <Home />;
@@ -86,6 +88,7 @@ function Shell() {
                         {members.length > 1 && sup ? <span className="text-[12px] text-ink-3 truncate">· {members.length} أفراد</span> : null}
                     </a>
                     {p[0] !== '' && p.length ? <a href="#/" className="w-10 h-10 rounded-xl flex items-center justify-center text-ink-2 hover:bg-paper-2" aria-label="الرئيسية"><HomeIcon size={19} /></a> : null}
+                    <a href="#/hifz" className={'w-10 h-10 rounded-xl flex items-center justify-center hover:bg-paper-2 ' + (p[0] === 'hifz' ? 'text-brand' : 'text-ink-2')} aria-label="صفحة الحفظ" title="صفحة الحفظ"><BookOpenText size={19} /></a>
                     <a href="#/session" className={'w-10 h-10 rounded-xl flex items-center justify-center hover:bg-paper-2 ' + (p[0] === 'session' ? 'text-brand' : 'text-ink-2')} aria-label="جلسة الذكر" title="جلسة الذكر"><Radio size={19} /></a>
                     <a href="#/settings" className={'w-10 h-10 rounded-xl flex items-center justify-center hover:bg-paper-2 ' + (p[0] === 'settings' ? 'text-brand' : 'text-ink-2')} aria-label="الإعدادات"><Cog size={19} /></a>
                 </div>

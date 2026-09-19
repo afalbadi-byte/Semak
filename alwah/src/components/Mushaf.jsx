@@ -18,7 +18,9 @@ export function markStyle(m) {
     return { background: `rgba(217,119,6,${a})`, boxShadow: 'inset 0 -2px 0 rgba(180,83,9,.75)' };
 }
 
-export default function Mushaf({ page, marks = {}, onWord, selected, readOnly }) {
+// hl: الآية المتلوّة الآن «سورة:آية» تُظلَّل، onAyah: لمس رقم الآية يختارها
+// hide: أسطرٌ مخفيّة للتسميع الذاتي (تُلمس فتنكشف عبر onLine)، focus: [من، إلى] أسطر حفظ اليوم وما عداها باهت
+export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, hide, onLine, focus, hl, onAyah }) {
     const [data, setData] = useState(null);
     const [err, setErr] = useState('');
     const [ready, setReady] = useState(false);
@@ -84,10 +86,18 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly })
                         </div>
                     );
                     if (!words) return data.short ? null : <div key={i} style={{ height: size * 1.95 }} />;
+                    const hid = hide && hide.has(i);
+                    const dim = focus && (i < focus[0] || i > focus[1]);
                     return (
-                        <div key={i} className={'flex ' + (data.short ? 'justify-center gap-[0.35em]' : 'justify-between')} style={{ whiteSpace: 'nowrap' }}>
+                        <div key={i} onClick={hid && onLine ? () => onLine(i) : undefined}
+                            className={'flex relative transition ' + (data.short ? 'justify-center gap-[0.35em]' : 'justify-between') + (hid ? ' cursor-pointer' : '')}
+                            style={{ whiteSpace: 'nowrap', opacity: dim && !hid ? 0.32 : 1 }}>
+                            {hid ? <span aria-hidden className="absolute inset-x-1 rounded-lg bg-[#efe3c4]" style={{ top: '22%', bottom: '22%' }} /> : null}
                             {words.map(w => {
-                                if (w.end) return <span key={w.k} className="text-[#8a6a2c]">{w.c}</span>;
+                                if (hid) return <span key={w.k} style={{ visibility: 'hidden' }}>{w.c}</span>;
+                                const ak = w.k.slice(0, w.k.lastIndexOf(':'));
+                                const on = hl && ak === hl;
+                                if (w.end) return <span key={w.k} onClick={onAyah ? () => onAyah(ak) : undefined} className={'text-[#8a6a2c] rounded-full ' + (onAyah ? 'cursor-pointer ' : '') + (on ? 'bg-[#f4e7c6]' : '')}>{w.c}</span>;
                                 const m = marks[w.k];
                                 const st = markStyle(m);
                                 const sel = selected === w.k;
@@ -95,7 +105,7 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly })
                                     <span key={w.k} role={readOnly ? undefined : 'button'} tabIndex={readOnly ? undefined : 0}
                                         onClick={readOnly || !onWord ? undefined : e => onWord(w, e.currentTarget.getBoundingClientRect())}
                                         className={'rounded-[6px] transition ' + (readOnly ? '' : 'cursor-pointer hover:bg-brand-50 ') + (sel ? 'ring-2 ring-brand' : '')}
-                                        style={{ ...(st || {}), padding: '0 .04em' }} title={w.t}>
+                                        style={{ ...(on ? { background: 'rgba(31,95,74,.13)' } : {}), ...(st || {}), padding: '0 .04em' }} title={w.t}>
                                         {w.c}
                                     </span>
                                 );

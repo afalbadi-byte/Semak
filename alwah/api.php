@@ -237,8 +237,16 @@ function member_plan($m, $exclude_d = null) {
                      ORDER BY d DESC, id DESC LIMIT 1");
         $start = 0;
         if ($last) {
+            // الورد يُعرض من جهة البقرة إلى جهة الناس، فآخر ما رُوجع في الدورة هو الصفحة
+            // التي لا تليها في الدورة صفحةٌ من الورد نفسه (لا آخر عنصرٍ في القائمة)
             $lst = array_map('intval', explode(',', $last['rev_list']));
+            $pos = array_flip($seq); $in = array_flip($lst); $cn = count($seq);
             $lp = end($lst);
+            foreach ($lst as $q) {
+                if (!isset($pos[$q])) continue;
+                $nx = $seq[($pos[$q] + 1) % $cn];
+                if (!isset($in[$nx])) { $lp = $q; break; }
+            }
             $lk = rev_key($dir, $lp);
             $start = 0;
             foreach ($seq as $i => $p) if (rev_key($dir, $p) > $lk) { $start = $i; break; }
@@ -248,6 +256,10 @@ function member_plan($m, $exclude_d = null) {
         for ($i = 0; $i < $n; $i++) $review[] = $seq[($start + $i) % count($seq)];
     }
 
+    // الورد دائماً نزولاً: يبدأ من جهة البقرة وينتهي بجهة الناس
+    $cycle_pos = $seq && $review ? (array_search($review[0], $seq, true) + 1) : 0;
+    sort($review);
+
     // الحفظ الجديد: من السطر التالي في الصفحة الجارية
     $tl = max(1, (int)$m['target_lines']);
     return [
@@ -255,7 +267,7 @@ function member_plan($m, $exclude_d = null) {
         'memorized_pages' => round($L / LPP, 2), 'juz' => round($L / LPP / 20, 2),
         'current' => $cur, 'new' => $cur ? ['page' => $cur, 'from_line' => $part + 1, 'lines' => $tl] : null,
         'alwah' => $alwah, 'review' => $review, 'cycle' => count($seq),
-        'cycle_pos' => $seq && $review ? (array_search($review[0], $seq, true) + 1) : 0,
+        'cycle_pos' => $cycle_pos,
         'juz_map' => juz_map($dir, $L),
     ];
 }

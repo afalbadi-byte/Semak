@@ -47,6 +47,14 @@ export default function MemberView({ id }) {
                 </div>
             </Card>
 
+            <a href={'#/hifz?m=' + m.id} className="flex items-center gap-3 rounded-2xl p-4 text-white shadow-card" style={{ background: color }}>
+                <BookMarked size={22} />
+                <div className="flex-1 min-w-0">
+                    <div className="font-bold">صفحة الحفظ</div>
+                    <div className="text-[12px] opacity-90">مصحفه بعلاماته · تلاوة الشيخ محمد أيوب بالتكرار · سمّع لنفسك</div>
+                </div>
+            </a>
+
             {/* ── ورد اليوم ── */}
             <Section title={'ورد اليوم · ' + greg(todayStr(), { weekday: 'long', day: 'numeric', month: 'long' })}
                 action={today ? <a href={'#/m/' + m.id + '/log'} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><Pencil size={12} />عدّل</a> : null}>
