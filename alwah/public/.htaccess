@@ -1,0 +1,16 @@
+# ألواح — تطبيق صفحة واحدة: كل ما ليس ملفاً يُخدَم بـ index.html
+# وجود RewriteEngine هنا يُسقط قواعد المجلد الأب (موقع سماك) عن هذا المجلد.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . index.html [L]
+</IfModule>
+
+<Files "index.html">
+  Header set Cache-Control "no-cache, no-store, must-revalidate"
+</Files>
+<FilesMatch "\.webmanifest$">
+  Header set Cache-Control "no-cache, must-revalidate"
+</FilesMatch>
+AddType application/manifest+json .webmanifest

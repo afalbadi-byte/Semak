@@ -69,6 +69,15 @@ jobs:
           sed -i "s|__GOOGLE_CLIENT_ID__|${{ secrets.GOOGLE_CLIENT_ID }}|g" dist/ohda/api.php
           sed -i "s|__GOOGLE_CLIENT_SECRET__|${{ secrets.GOOGLE_CLIENT_SECRET }}|g" dist/ohda/api.php
 
+      - name: Build Alwah (family Quran memorisation app → dist/alwah)
+        run: |
+          npx vite build --config alwah/vite.config.js
+          cp alwah/api.php dist/alwah/api.php
+          sed -i "s|__DB_USER__|${{ secrets.DB_USER }}|g"           dist/alwah/api.php
+          sed -i "s|__DB_PASS__|${{ secrets.DB_PASS }}|g"           dist/alwah/api.php
+          sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"           dist/alwah/api.php
+          sed -i "s|__TOKEN_SECRET__|${{ secrets.TOKEN_SECRET }}|g" dist/alwah/api.php
+
       - name: Inject Anthropic API key
         run: sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_API_KEY }}|g" dist/api.php
 
