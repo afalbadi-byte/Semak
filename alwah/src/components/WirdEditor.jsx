@@ -3,7 +3,7 @@ import { RotateCcw, Save } from 'lucide-react';
 import { call } from '../lib/api';
 import { Btn, useToast, todayStr } from '../ui';
 import { linesLabel } from '../lib/quran';
-import { partRange, segsPages, segsLines, memSegs, memEnds, label } from '../lib/ayah';
+import { partRange, segsPages, segsLines, memSegs, memEnds, oneRange, segsFor, label } from '../lib/ayah';
 import AyahPicker, { AyahRange } from './AyahPicker';
 
 // ─── تعديل ورد اليوم يدوياً (للمشرف) ─────────────────────────────────────────
@@ -15,6 +15,7 @@ export default function WirdEditor({ member, plan, onDone }) {
     const [touched, setTouched] = useState({});
     const [r, setR] = useState({});                 // المقاطع: new / alwah / rev، لكلٍّ قائمة مقاطع [من، إلى]
     const [off, setOff] = useState({ new: !!plan.new_off });
+    const [orig, setOrig] = useState({});           // المقاطع كما حُسبت (محتواها الدقيق ما لم تُعدَّل)
     const [start, setStart] = useState(null);        // بداية حفظ اليوم (ثابتة: من حيث وصل)
 
     useEffect(() => {
@@ -22,7 +23,7 @@ export default function WirdEditor({ member, plan, onDone }) {
         (async () => {
             const o = {};
             for (const k of ['new', 'alwah', 'rev']) o[k] = await partRange(plan, k).catch(() => null);
-            if (!dead) { setR(o); if (o.new) setStart(memEnds(plan.dir, o.new)[0]); }
+            if (!dead) { setR(o); setOrig(o); if (o.new) setStart(memEnds(plan.dir, o.new)[0]); }
         })();
         return () => { dead = true; };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -47,7 +48,8 @@ export default function WirdEditor({ member, plan, onDone }) {
                 }
                 for (const [k, lk] of [['alwah', 'alwah_list'], ['rev', 'rev_list']]) {
                     if (!touched[k]) continue;
-                    if (off[k]) { body[lk] = []; delete ranges[k]; } else if (r[k]) { body[lk] = await segsPages(r[k]); ranges[k] = r[k]; }
+                    const sg = segsFor(oneRange(r[k]), orig[k]);
+                    if (off[k]) { body[lk] = []; delete ranges[k]; } else if (sg) { body[lk] = await segsPages(sg); ranges[k] = sg; }
                 }
                 body.ranges = ranges;
             }
@@ -112,14 +114,10 @@ function StartText({ k }) {
     return <div className="font-quran text-[16px] text-ink">{t}</div>;
 }
 
-// مقاطع الجزء: لكلّ مقطعٍ من آيةٍ إلى آية (الألواح والمراجعة قد تكون من أكثر من سورة)
+// الجزء نطاقاً واحداً: من سورة كذا آية كذا إلى سورة كذا آية كذا
 function Segs({ v, onChange }) {
-    const segs = v && v.length ? v : [['78:1', '78:40']];
-    return segs.map((sg, i) => (
-        <div key={i} className={segs.length > 1 ? 'rounded-xl bg-paper-2/40 p-2' : ''}>
-            <AyahRange from={sg[0]} to={sg[1]} labels={[segs.length > 1 ? `المقطع ${i + 1}: من` : 'من', 'إلى']} onChange={x => onChange(segs.map((y, j) => (j === i ? x : y)))} />
-        </div>
-    ));
+    const one = oneRange(v) || ['78:1', '78:40'];
+    return <AyahRange from={one[0]} to={one[1]} labels={['من', 'إلى']} onChange={x => onChange([x])} />;
 }
 
 function NewLines({ r }) {

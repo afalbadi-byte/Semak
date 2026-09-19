@@ -99,7 +99,7 @@ export default function Reciter({ defRange, seed, pick, onAyah }) {
                     <div className="text-[12px] text-ink-3">تلاوة الشيخ محمد أيوب</div>
                     <div className="text-[14px] font-bold text-ink truncate">
                         {st.on ? `${ayahName(list[st.i])} · ${pref.mode === 'seg' ? `المقطع ${st.loop}${pref.n ? '/' + pref.n : ''}` : `الآية ${st.rep}/${eachOf(pref)}`}`
-                            : `المقطع: ${count} ${count === 1 ? 'آية' : count <= 10 ? 'آيات' : 'آية'}${segs.length > 1 ? ` من ${segs.length} سور` : ''}`}
+                            : `المقطع: ${count} ${count === 1 ? 'آية' : count <= 10 ? 'آيات' : 'آية'}`}
                     </div>
                 </div>
                 {st.on ? <button onClick={() => jump(-1)} className="w-10 h-10 rounded-xl bg-paper-2 flex items-center justify-center text-ink-2" aria-label="الآية السابقة"><SkipForward size={17} /></button> : null}

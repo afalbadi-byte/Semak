@@ -165,3 +165,19 @@ export function memEnds(dir, segs) {
     const hi = segs.reduce((a, b) => (sn(b[0]) > sn(a[0]) ? b : a)), lo = segs.reduce((a, b) => (sn(b[0]) < sn(a[0]) ? b : a));
     return [hi[0], lo[1]];
 }
+
+// ─── الجزء من الورد مقطعاً واحداً «من سورة كذا آية كذا إلى سورة كذا آية كذا» ─────────
+// من أوّل آيةٍ من جهة البقرة إلى آخر آيةٍ من جهة الناس. وما لم يُعدَّل يبقى محتواه
+// الدقيق كما حُسب (المحفوظ فقط)، وإن عُدِّل صار ما بين الآيتين.
+export function oneRange(segs) {
+    const s = segsOf(segs);
+    if (!s) return null;
+    let a = s[0][0], b = s[0][1];
+    s.forEach(([x, y]) => { if (cmp(x, a) < 0) a = x; if (cmp(y, b) > 0) b = y; });
+    return [a, b];
+}
+// المقاطع الفعلية لنطاقٍ واحد: الأصلية إن لم يتغيّر، وإلا ما بين الآيتين
+export const segsFor = (one, orig) => {
+    const o = oneRange(orig);
+    return o && one && o[0] === one[0] && o[1] === one[1] ? segsOf(orig) : one ? [one] : null;
+};

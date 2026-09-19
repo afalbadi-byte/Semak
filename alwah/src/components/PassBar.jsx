@@ -4,7 +4,7 @@ import { call } from '../lib/api';
 import { useData } from '../App';
 import { useToast, todayStr } from '../ui';
 import { GRADES, gradeOf } from '../lib/quran';
-import { partRange, segsOf, segsPages, segsLines, memSegs, memEnds, label } from '../lib/ayah';
+import { partRange, segsOf, segsPages, segsLines, memSegs, memEnds, oneRange, segsFor, label } from '../lib/ayah';
 import { linesLabel } from '../lib/quran';
 import AyahPicker from './AyahPicker';
 import { AyahRange } from './AyahPicker';
@@ -40,7 +40,7 @@ export default function PassBar({ member, part, today, plan, onDone }) {
     useEffect(() => {
         let dead = false;
         const r0 = today && today.ranges && segsOf(today.ranges[part]);
-        (r0 ? Promise.resolve(r0) : partRange(plan, part)).then(r => { if (!dead) { setDef(r); setRg(r); } }).catch(() => {});
+        (r0 ? Promise.resolve(r0) : partRange(plan, part)).then(r => { if (!dead) { setDef(r); setRg(oneRange(r)); } }).catch(() => {});
         return () => { dead = true; };
     }, [member && member.id, part, plan && JSON.stringify([plan.new, plan.alwah, plan.review, plan.ranges, plan.auto]), today && JSON.stringify(today.ranges)]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -73,16 +73,17 @@ export default function PassBar({ member, part, today, plan, onDone }) {
                 if (part === 'new') { f.new_lines = 0; f.new_grade = 0; } else f[part + '_done'] = false;
                 delete f.ranges[part];
             } else {
-                const changed = rg && def && JSON.stringify(rg) !== JSON.stringify(def);
+                const segs = segsFor(rg, def);
+                const changed = JSON.stringify(segs) !== JSON.stringify(segsOf(def));
                 // المقطع المُسمَّع بالآيات، ومنه الصفحات (وأسطر الحفظ الجديد إن غيّره المشرف)
-                const pages = rg ? await segsPages(rg) : [];
+                const pages = segs ? await segsPages(segs) : [];
                 let e = 0, w = 0;
                 if (k.success) k.data.forEach(x => { if (pages.includes(x.page)) { e += x.err; w += x.warn; } });
-                if (rg) f.ranges[part] = rg;
+                if (segs) f.ranges[part] = segs;
                 if (part === 'new') {
                     if (!p.new) { setBusy(false); return; }
                     // الأسطر إلى نهاية آخر آيةٍ سُمِّعت، فلا يبدأ الحفظ القادم من وسط آية
-                    const lines = rg ? await segsLines(rg) : (f.new_lines || p.new.lines);
+                    const lines = segs ? await segsLines(segs) : (f.new_lines || p.new.lines);
                     Object.assign(f, { new_page: p.new.page, new_lines: Math.max(1, Math.min(90, lines)), new_grade: grade, new_err: e, new_warn: w });
                 } else {
                     Object.assign(f, { [part + '_done']: true, [part + '_grade']: grade, [part + '_err']: e, [part + '_warn']: w });
@@ -138,18 +139,14 @@ export default function PassBar({ member, part, today, plan, onDone }) {
     return open ? (
         <div className="rounded-2xl p-3 bg-paper-card border border-brand/30 space-y-3">
             <div className="text-[12px] font-bold text-ink-2">ما سمّعه {member.name} من {NAMES[part]}</div>
-            {rg ? rg.map((sg, i) => (
-                <div key={i} className={rg.length > 1 ? 'rounded-xl bg-paper-2/40 p-2' : ''}>
-                    <AyahRange from={sg[0]} to={sg[1]} onChange={v => setRg(rg.map((x, j) => (j === i ? v : x)))} labels={[rg.length > 1 ? `المقطع ${i + 1}: من` : 'من', 'إلى']} />
-                </div>
-            )) : <div className="text-[12px] text-ink-3">…</div>}
+            {rg ? <AyahRange from={rg[0]} to={rg[1]} onChange={setRg} labels={['من', 'إلى']} /> : <div className="text-[12px] text-ink-3">…</div>}
             <div className="text-[12px] font-bold text-ink-2">التقدير</div>
             <div className="grid grid-cols-5 gap-1.5">
                 {GRADES.map(x => (
                     <button key={x.v} disabled={busy} onClick={() => save(x.v)} className="h-11 rounded-xl text-[12px] font-bold text-white disabled:opacity-50" style={{ background: x.c }}>{x.t}</button>
                 ))}
             </div>
-            <button onClick={() => { setOpen(false); setRg(def); }} className="block mx-auto text-[12px] text-ink-3 font-semibold">إلغاء</button>
+            <button onClick={() => { setOpen(false); setRg(oneRange(def)); }} className="block mx-auto text-[12px] text-ink-3 font-semibold">إلغاء</button>
         </div>
     ) : (
         <div className="space-y-2">
@@ -163,19 +160,17 @@ export default function PassBar({ member, part, today, plan, onDone }) {
 
 // «من الملك ١ · تبارك الذي بيده الملك إلى الملك ١٤ · ألا يعلم من خلق»، لكل مقطع
 export function RangeText({ r, muted }) {
-    const segs = segsOf(r) || [];
+    const one = oneRange(r);
     const [t, setT] = useState(null);
     useEffect(() => {
         let dead = false;
-        Promise.all(segs.map(([a, b]) => Promise.all([label(a), label(b)]))).then(x => { if (!dead) setT(x); });
+        if (one) Promise.all([label(one[0]), label(one[1])]).then(x => { if (!dead) setT(x); });
         return () => { dead = true; };
-    }, [JSON.stringify(segs)]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [one && one.join('-')]); // eslint-disable-line react-hooks/exhaustive-deps
     if (!t) return null;
     return (
-        <div className={'text-[12px] leading-6 space-y-0.5 ' + (muted ? 'text-ink-3' : '')}>
-            {t.map((x, i) => (
-                <div key={i}>من <b className="font-quran text-[15px]">{x[0]}</b>{segs[i][0] !== segs[i][1] ? <> إلى <b className="font-quran text-[15px]">{x[1]}</b></> : null}</div>
-            ))}
+        <div className={'text-[12px] leading-6 ' + (muted ? 'text-ink-3' : '')}>
+            من <b className="font-quran text-[15px]">{t[0]}</b>{one[0] !== one[1] ? <> إلى <b className="font-quran text-[15px]">{t[1]}</b></> : null}
         </div>
     );
 }
