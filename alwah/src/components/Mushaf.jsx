@@ -69,7 +69,8 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
         const el = pg.current.querySelector('[data-ak="' + hl + '"]');
         if (!el) return;
         const r = el.getBoundingClientRect();
-        if (r.top < 80 || r.bottom > window.innerHeight - 24) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        // شريط التقليب يغطّي أسفل الشاشة: ننزل قبل أن تصل الآية إليه
+        if (r.top < 80 || r.bottom > window.innerHeight - 150) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, [hl, ready, page]);
 
     if (err) return <div className="py-16 text-center text-ink-3 text-[13px]"><WifiOff className="mx-auto mb-2" size={22} />{err}</div>;

@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, ChevronLeft, EyeOff, Eye, ChevronDown, Plus, RotateCcw, Mic, SlidersHorizontal, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, EyeOff, Eye, ChevronDown, Plus, RotateCcw, Mic, SlidersHorizontal, Maximize2, Minimize2, Play, Pause, SkipForward, SkipBack, Square } from 'lucide-react';
 import { call } from '../lib/api';
 import { go, replace } from '../lib/router';
 import { useData } from '../App';
 import { useToast, todayStr, Empty, Seg, Sheet } from '../ui';
 import Mushaf from '../components/Mushaf';
 import WordActions from '../components/WordActions';
-import Reciter from '../components/Reciter';
+import ListenPanel from '../components/ListenPanel';
+import useReciter from '../lib/useReciter';
 import PassBar from '../components/PassBar';
 import WirdEditor from '../components/WirdEditor';
 import { loadPage } from '../lib/mushaf';
-import { rangeOfPages, ayahPage, partRange } from '../lib/ayah';
+import { rangeOfPages, ayahPage, partRange, oneRange, ayahName, cmp } from '../lib/ayah';
 import { surahsOn, juzOf, rangeLabel, SURAHS, JUZ_START, LPP } from '../lib/quran';
 import { BookOpen } from 'lucide-react';
 
@@ -45,8 +46,6 @@ export default function Hifz({ q }) {
     const [hide, setHide] = useState(null);        // Set للأسطر المخفية، أو null
     const [data, setData] = useState(null);
     const [hl, setHl] = useState(null);
-    const [pick, setPick] = useState(null);
-    const [tools, setTools] = useState(true);
     const [editW, setEditW] = useState(false);
     // ملء الشاشة: المصحف وشريط التقليب وحدهما (والتلاوة مستمرّة)
     const [full, setFull] = useState(false);
@@ -145,6 +144,8 @@ export default function Hifz({ q }) {
         setHl(k);
         if (k) ayahPage(k).then(p => { if (p && p !== pageRef.current) at({ p }); }).catch(() => {});
     };
+    // المُسمِع: يُشغَّل من نافذة الكلمة («استمع من هذه الآية») ويُدار من شريط التقليب
+    const rec = useReciter({ onAyah: follow });
 
     const op = async o => {
         if (!sel) return;
@@ -169,6 +170,14 @@ export default function Hifz({ q }) {
         at({ p: Math.min(604, Math.max(1, page + d)) });
     };
     const count = Object.values(marks).filter(x => !x.resolved).length;
+    // نهاية القراءة المقترحة: آخر الورد إن كانت الآية منه، وإلا آخر آيةٍ في الصفحة
+    const endFor = k => {
+        const one = oneRange(defRange);
+        if (one && cmp(k, one[0]) >= 0 && cmp(k, one[1]) <= 0) return one[1];
+        let last = null;
+        if (data) for (let i = 1; i <= 15; i++) (data.lines[i] || []).forEach(w => { last = w.k.slice(0, w.k.lastIndexOf(':')); });
+        return last || k;
+    };
 
     return (
         <div className="space-y-3 pb-28">
@@ -239,13 +248,11 @@ export default function Hifz({ q }) {
 
             <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                 <Mushaf page={page} marks={marks} onWord={w => setSel(w)} selected={sel && sel.k}
-                    hide={hide} onLine={reveal} focus={hide ? null : focus} hl={hl} onAyah={k => setPick({ k, t: Date.now() })} />
+                    hide={hide} onLine={reveal} focus={hide ? null : focus} hl={hl} onAyah={k => setSel({ k: k + ':0', t: ayahName(k), marker: true })} />
             </div>
 
             <div className="space-y-3 al-hide-full">
 
-            <button onClick={() => setTools(v => !v)} className="text-[12px] font-semibold text-ink-3 mx-auto block">{tools ? 'أخفِ المُسمِع' : 'أظهر المُسمِع'}</button>
-            {tools ? <Reciter defRange={defRange} seed={seed} pick={pick} onAyah={follow} /> : null}
 
             {tab === 'all' ? (
                 <div className="grid grid-cols-2 gap-2">
@@ -274,8 +281,17 @@ export default function Hifz({ q }) {
                 <div className="max-w-3xl mx-auto h-16 px-3 flex items-center gap-2">
                     <button onClick={() => flip(-1)} className="w-12 h-12 rounded-2xl bg-paper-card border border-paper-2 flex items-center justify-center text-ink-2" aria-label="الصفحة السابقة"><ChevronRight size={22} /></button>
                     <div className="flex-1 min-w-0 flex items-center justify-center">
-                        <div id="hifz-dock" className="flex items-center gap-1.5" />
-                        {!hl ? <div className="text-center leading-tight"><div className="text-[13px] font-bold text-ink truncate">{surahsOn(page).join('، ')}</div><div className="text-[11px] text-ink-3 tabular-nums">صفحة {page}</div></div> : null}
+                        {rec.st.on ? (
+                            <div className="flex items-center gap-1.5">
+                                <button onClick={() => rec.jump(-1)} className="w-9 h-9 rounded-xl bg-paper-2 flex items-center justify-center text-ink-2" aria-label="الآية السابقة"><SkipForward size={15} /></button>
+                                <button onClick={rec.toggle} className="h-10 px-3 rounded-xl bg-brand text-white flex items-center gap-1.5 text-[12px] font-bold max-w-[150px]" aria-label={rec.st.paused ? 'تشغيل' : 'إيقاف مؤقت'}>
+                                    {rec.st.paused ? <Play size={16} className="-scale-x-100" /> : <Pause size={16} />}<span className="truncate">{ayahName(rec.current)}</span>
+                                </button>
+                                <button onClick={() => rec.jump(1)} className="w-9 h-9 rounded-xl bg-paper-2 flex items-center justify-center text-ink-2" aria-label="الآية التالية"><SkipBack size={15} /></button>
+                                <button onClick={rec.stop} className="w-9 h-9 rounded-xl bg-paper-2 flex items-center justify-center text-ink-3" aria-label="إيقاف"><Square size={13} /></button>
+                            </div>
+                        ) : null}
+                        {!rec.st.on ? <div className="text-center leading-tight"><div className="text-[13px] font-bold text-ink truncate">{surahsOn(page).join('، ')}</div><div className="text-[11px] text-ink-3 tabular-nums">صفحة {page}</div></div> : null}
                     </div>
                     <button onClick={() => setFull(v => !v)} className="w-10 h-10 rounded-xl text-ink-3 flex items-center justify-center" aria-label={full ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}>{full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
                     <button onClick={() => flip(1)} className="w-12 h-12 rounded-2xl bg-paper-card border border-paper-2 flex items-center justify-center text-ink-2" aria-label="الصفحة التالية"><ChevronLeft size={22} /></button>
@@ -286,7 +302,9 @@ export default function Hifz({ q }) {
                 {editW && plan ? <WirdEditor member={m} plan={plan} onDone={() => { setEditW(false); loadDay(); reloadMembers(); }} /> : null}
             </Sheet>
 
-            <WordActions word={sel} mark={sel ? marks[sel.k] : null} onOp={op} onClose={() => setSel(null)} busy={busy} />
+            <WordActions word={sel} mark={sel ? marks[sel.k] : null} onOp={op} onClose={() => setSel(null)} busy={busy} noMarks={sel && sel.marker}>
+                {sel ? <ListenPanel from={sel.k.slice(0, sel.k.lastIndexOf(':'))} defEnd={endFor(sel.k.slice(0, sel.k.lastIndexOf(':')))} rec={rec} onStart={() => setSel(null)} /> : null}
+            </WordActions>
         </div>
     );
 }
