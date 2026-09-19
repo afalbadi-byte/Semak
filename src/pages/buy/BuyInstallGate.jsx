@@ -29,7 +29,7 @@ export default function BuyInstallGate() {
         <div dir="rtl" className="min-h-screen bg-[#0b1220] text-white font-cairo flex flex-col justify-center px-5"
             style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
             <div className="text-center">
-                <img src="/images/app-icon-512.png" alt="" className="w-24 h-24 mx-auto rounded-3xl shadow-2xl"
+                <img src={appBrand().icon} alt="" className="w-24 h-24 mx-auto rounded-3xl shadow-2xl"
                     onError={e => { e.currentTarget.style.display = 'none'; }} />
                 <h1 className="text-[24px] font-black mt-5">{appBrand().name}</h1>
                 <p className="text-[14px] text-slate-300 mt-2 leading-relaxed">

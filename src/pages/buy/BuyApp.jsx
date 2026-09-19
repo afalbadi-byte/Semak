@@ -13,6 +13,7 @@ import BuyInstallGate from './BuyInstallGate';
 import BuyChangePw from './BuyChangePw';
 import { useDepthGuard } from '../../lib/backstack';
 import { EntityProvider } from './entityStack';
+import HubButton from '../../components/HubButton';
 
 // ─── تطبيق المشتريات للجوال — يُثبَّت من المتصفح على الآيفون والأندرويد ──────
 const TABS = [
@@ -47,7 +48,7 @@ function useBuyManifest() {
         // سفاري يأخذ أيقونة الشاشة الرئيسية من apple-touch-icon لا من بطاقة التعريف
         const apple = document.querySelector('link[rel="apple-touch-icon"]');
         const appleOld = apple ? apple.getAttribute('href') : null;
-        if (apple) apple.setAttribute('href', '/images/app-icon-512.png');
+        if (apple) apple.setAttribute('href', '/images/icons/buy-180.png');
         return () => {
             if (prev && prevHref) prev.setAttribute('href', prevHref);
             if (apple && appleOld) apple.setAttribute('href', appleOld);
@@ -146,6 +147,7 @@ export default function BuyApp() {
                         <div className="text-[11px] text-white/60 font-bold">مشتريات سماك</div>
                         <div className="font-black">{user?.name || 'مدير المشتريات'}</div>
                     </div>
+                    <HubButton className="ml-2" />
                     <button onClick={() => setWelcome(true)} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center ml-2 text-[11px] font-bold">
                         دليل
                     </button>

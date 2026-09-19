@@ -10,9 +10,13 @@ const BRANDS = {
             perk: 'تفتح الكاميرا لتوثيق الفحص مباشرة' },
     meet: { name: 'غرفة اجتماعات سماك',   sub: 'أجندة ومهام ومكالمة وسبورة مشتركة',
             perk: 'تفتح الكاميرا والميكروفون للمكالمات مباشرة' },
+    apps: { name: 'تطبيقات سماك',         sub: 'كل تطبيقات سماك في مكانٍ واحد، حسب صلاحياتك',
+            perk: 'تفتح كل التطبيقات داخلها دون تثبيت كلٍّ منها' },
 };
 
 export function appBrand() {
     const seg = (typeof window !== 'undefined' ? window.location.pathname : '/buy').split('/')[1] || 'buy';
-    return BRANDS[seg] || BRANDS.buy;
+    const slug = BRANDS[seg] ? seg : 'buy';
+    // أيقونة التطبيق المميِّزة (شعار سماك وشارة التطبيق)
+    return { ...BRANDS[slug], icon: '/images/icons/' + slug + '-512.png' };
 }

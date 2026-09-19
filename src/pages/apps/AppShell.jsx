@@ -6,6 +6,7 @@ import BuyLogin from '../buy/BuyLogin';
 import BuySplash from '../buy/BuySplash';
 import BuyInstallGate from '../buy/BuyInstallGate';
 import BuyChangePw from '../buy/BuyChangePw';
+import HubButton from '../../components/HubButton';
 
 // ─── هيكل مشترك لتطبيقات الجوال ─────────────────────────────────────────────
 // نفس آلية تطبيق المشتريات: ترحيب، بوابة تثبيت، دخول داخلي، تبويبات،
@@ -36,6 +37,8 @@ export default function AppShell({ appKey, title, tabs, perms, manifest, childre
         const link = document.querySelector('link[rel="manifest"]');
         const old  = link ? link.getAttribute('href') : null;
         if (link && manifest) link.setAttribute('href', manifest);
+        const apple = document.querySelector('link[rel="apple-touch-icon"]');
+        if (apple) apple.setAttribute('href', '/images/icons/' + appKey + '-180.png');
         const t = document.title;
         document.title = title;
         return () => {
@@ -97,9 +100,12 @@ export default function AppShell({ appKey, title, tabs, perms, manifest, childre
                         <div className="text-[11px] text-white/60 font-bold">{title}</div>
                         <div className="font-black">{user?.name || ''}</div>
                     </div>
-                    <button onClick={logout} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
-                        <LogOut size={16} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <HubButton />
+                        <button onClick={logout} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
+                            <LogOut size={16} />
+                        </button>
+                    </div>
                 </div>
             </header>
 

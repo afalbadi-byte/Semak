@@ -35,7 +35,7 @@ export default defineConfig({
         // استثناء مسارات المشاركة/الملفات المرفوعة يدوياً من إعادة توجيه SPA (حتى تفتح مباشرةً)
         // نطاقات التطبيقات تُستثنى: كان عامل الخدمة يقدّم index.html الجذر لكل تنقّل،
         // فلا تصل ‎/buy/index.html أبدا — ومعها بطاقة التعريف الصحيحة و og:url.
-        navigateFallbackDenylist: [/^\/share\//, /^\/api\.php/, /\.(pdf|zip|xml|txt)$/i, /^\/(buy|proj|qc|meet|ohda)(\/|$)/],
+        navigateFallbackDenylist: [/^\/share\//, /^\/api\.php/, /\.(pdf|zip|xml|txt)$/i, /^\/(buy|proj|qc|meet|apps|ohda)(\/|$)/],
         // الهيكل وحده يُنزَّل مقدماً؛ بقية الشاشات تُجلب عند فتحها وتُخزَّن حينها.
         // كان التخزين المسبق يشمل مئتي ملف بثلاثة ميغا فيبطئ أول فتح على الجوال.
         globPatterns: ['index.html', 'registerSW.js', 'assets/index-*.{js,css}', 'images/favicon.png'],
@@ -45,7 +45,7 @@ export default defineConfig({
         runtimeCaching: [
           {
             // بعد استثنائها من إعادة التوجيه تحتاج كاشها الخاص لتفتح دون شبكة
-            urlPattern: /^https:\/\/semak\.sa\/(buy|proj|qc|meet)(\/|$)/,
+            urlPattern: /^https:\/\/semak\.sa\/(buy|proj|qc|meet|apps)(\/|$)/,
             handler: 'NetworkFirst',
             options: { cacheName: 'app-shell', networkTimeoutSeconds: 5 },
           },

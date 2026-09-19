@@ -44,6 +44,7 @@ const TechApp = lazy(() => import('./pages/tech/TechApp'));
 const BuyApp  = lazy(() => import('./pages/buy/BuyApp'));
 const MeetApp = lazy(() => import('./pages/meet/MeetApp'));
 const GuestJoin = lazy(() => import('./pages/meet/GuestJoin'));
+const AppsHub = lazy(() => import('./pages/apps/AppsHub'));
 const ProjApp = lazy(() => import('./pages/apps/ProjApp'));
 const QcApp   = lazy(() => import('./pages/apps/QcApp'));
 const BrandSocialKit = lazy(() => import('./pages/BrandSocialKit'));
@@ -197,6 +198,8 @@ const TechShell = () => {
         <Route path="/meet/*" element={<MeetApp />} />
         <Route path="/meet"   element={<MeetApp />} />
         <Route path="/join/:token" element={<GuestJoin />} />
+        <Route path="/apps/*" element={<AppsHub />} />
+        <Route path="/apps"   element={<AppsHub />} />
         <Route path="/tech/*" element={<TechApp />} />
         <Route path="/tech"   element={<TechApp />} />
       </Routes>
@@ -250,6 +253,7 @@ const AppRoot = () => {
   if (location.pathname.startsWith('/qc'))       return <TechShell />;
   if (location.pathname.startsWith('/meet'))     return <TechShell />;
   if (location.pathname.startsWith('/join/'))    return <TechShell />;   // صفحة ضيف الاجتماع
+  if (location.pathname.startsWith('/apps'))     return <TechShell />;   // بوابة تطبيقات سماك
   if (location.pathname.startsWith('/tech'))     return <TechShell />;
   if (location.pathname.startsWith('/platform')) return <PlatformShell />;
   return <MainShell />;

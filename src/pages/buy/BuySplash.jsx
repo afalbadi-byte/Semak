@@ -41,7 +41,7 @@ export default function BuySplash({ onDone, userName = '' }) {
             <div className="sp-wrap absolute inset-0 flex flex-col items-center justify-center px-8">
                 <div className="relative">
                     <span className="sp-ring absolute inset-0 rounded-[28px] border-2 border-[#c5a059]" />
-                    <img src="/images/app-icon-512.png" alt="سماك"
+                    <img src={appBrand().icon} alt="سماك"
                         className="sp-logo w-28 h-28 rounded-[28px] shadow-2xl"
                         onError={e => { e.currentTarget.style.display = 'none'; }} />
                 </div>

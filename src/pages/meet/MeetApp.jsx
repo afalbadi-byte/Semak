@@ -7,6 +7,7 @@ import MeetBoard from './MeetBoard';
 import MeetMinutes from './MeetMinutes';
 import BuyLogin from '../buy/BuyLogin';
 import BuyChangePw from '../buy/BuyChangePw';
+import HubButton from '../../components/HubButton';
 
 // ─── تطبيق غرفة الاجتماعات للجوال — بثوب تطبيق المشتريات نفسه ───────────────
 const TABS = [
@@ -38,7 +39,7 @@ function useMeetManifest() {
         setMeta('theme-color', '#1a365d');
         const apple = document.querySelector('link[rel="apple-touch-icon"]');
         const appleOld = apple ? apple.getAttribute('href') : null;
-        if (apple) apple.setAttribute('href', '/images/app-icon-512.png');
+        if (apple) apple.setAttribute('href', '/images/icons/meet-180.png');
         return () => {
             if (prev && prevHref) prev.setAttribute('href', prevHref);
             if (apple && appleOld) apple.setAttribute('href', appleOld);
@@ -103,9 +104,10 @@ export default function MeetApp() {
                         <div className="text-[11px] text-white/60 font-bold">غرفة اجتماعات سماك</div>
                         <div className="font-black truncate">{meeting ? meeting.title : (user?.name || 'الاجتماع الدوري')}</div>
                     </div>
+                    <div className="flex items-center gap-2 shrink-0"><HubButton />
                     <button onClick={logout} className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
                         <LogOut size={16} />
-                    </button>
+                    </button></div>
                 </div>
             </header>
 

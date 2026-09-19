@@ -15,6 +15,7 @@ const APPS = [
   { slug: 'proj', title: 'مشاريع سماك',   short: 'مشاريع'  },
   { slug: 'qc',   title: 'جودة سماك',     short: 'الجودة'  },
   { slug: 'meet', title: 'غرفة اجتماعات سماك', short: 'اجتماعات' },
+  { slug: 'apps', title: 'تطبيقات سماك', short: 'تطبيقات سماك' },
 ];
 
 const src = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
@@ -27,7 +28,7 @@ for (const a of APPS) {
   // ونضع واحدة صريحة، فلا يبقى للتخمين موضع.
   h = h.replace(/\s*<link rel="manifest"[^>]*>/g, '');
   h = h.replace('<link rel="apple-touch-icon" href="/logo.png" />',
-    `<link rel="apple-touch-icon" href="/images/app-icon-512.png" />\n` +
+    `<link rel="apple-touch-icon" href="/images/icons/${a.slug}-180.png" />\n` +   // لكل تطبيق أيقونته
     `    <link rel="manifest" href="/${a.slug}.webmanifest" />`);
 
   // بدونها يفتح iOS الرابط في سفاري بشريط العنوان، لا كتطبيق مستقل

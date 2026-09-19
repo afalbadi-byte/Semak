@@ -91,7 +91,7 @@ export default function BuyLogin({ onDone }) {
         <div dir="rtl" className="min-h-screen bg-[#0b1220] text-white font-cairo flex flex-col justify-center px-5"
             style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
             <div className="text-center mb-7">
-                <img src="/images/app-icon-512.png" alt="" className="w-20 h-20 mx-auto rounded-2xl"
+                <img src={appBrand().icon} alt="" className="w-20 h-20 mx-auto rounded-2xl"
                     onError={e => { e.currentTarget.style.display = 'none'; }} />
                 <h1 className="text-[24px] font-black mt-4">{appBrand().name}</h1>
                 <p className="text-[13px] text-slate-400 mt-1">سجّل دخولك بحسابك في سماك</p>
