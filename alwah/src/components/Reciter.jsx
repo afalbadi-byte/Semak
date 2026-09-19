@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Play, Pause, SkipForward, SkipBack, Repeat, Square } from 'lucide-react';
 import { ayahName, cmp, segsOf, segsAyahs } from '../lib/ayah';
 import { AyahRange } from './AyahPicker';
@@ -79,8 +80,20 @@ export default function Reciter({ defRange, seed, pick, onAyah }) {
     useEffect(() => { if (audio.current) audio.current.playbackRate = pref.rate; }, [pref.rate]);
 
     const count = list.length;
+    // أثناء التلاوة: أزرارها في شريط التقليب الثابت أسفل الشاشة، فتبقى في اليد مهما نزلت الصفحة
+    const dock = st.on && typeof document !== 'undefined' ? document.getElementById('hifz-dock') : null;
+    const mini = dock ? createPortal(
+        <>
+            <button onClick={() => jump(-1)} className="w-9 h-9 rounded-xl bg-paper-2 flex items-center justify-center text-ink-2" aria-label="الآية السابقة"><SkipForward size={15} /></button>
+            <button onClick={toggle} className="h-10 px-3 rounded-xl bg-brand text-white flex items-center gap-1.5 text-[12px] font-bold max-w-[150px]" aria-label={st.paused ? 'تشغيل' : 'إيقاف مؤقت'}>
+                {st.paused ? <Play size={16} className="-scale-x-100" /> : <Pause size={16} />}<span className="truncate">{ayahName(list[st.i])}</span>
+            </button>
+            <button onClick={() => jump(1)} className="w-9 h-9 rounded-xl bg-paper-2 flex items-center justify-center text-ink-2" aria-label="الآية التالية"><SkipBack size={15} /></button>
+            <button onClick={stop} className="w-9 h-9 rounded-xl bg-paper-2 flex items-center justify-center text-ink-3" aria-label="إيقاف"><Square size={13} /></button>
+        </>, dock) : null;
     return (
         <div className="rounded-2xl bg-paper-card border border-paper-2 p-3 space-y-3">
+            {mini}
             <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
                     <div className="text-[12px] text-ink-3">تلاوة الشيخ محمد أيوب</div>

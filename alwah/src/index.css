@@ -24,3 +24,8 @@ input[type="date"] { min-height: 2.75rem; }
 .al-rise { animation: al-rise .5s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes al-rise { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .al-rise { animation: none; } }
+
+/* ملء الشاشة في صفحة الحفظ: المصحف وشريط التقليب وحدهما */
+body.al-full header { display: none; }
+body.al-full .al-hide-full { display: none; }
+body.al-full main { padding-top: 8px !important; }

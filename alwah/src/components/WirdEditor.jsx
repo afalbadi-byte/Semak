@@ -3,7 +3,7 @@ import { RotateCcw, Save } from 'lucide-react';
 import { call } from '../lib/api';
 import { Btn, useToast, todayStr } from '../ui';
 import { linesLabel } from '../lib/quran';
-import { partRange, segsPages, segsLines, memSegs, label } from '../lib/ayah';
+import { partRange, segsPages, segsLines, memSegs, memEnds, label } from '../lib/ayah';
 import AyahPicker, { AyahRange } from './AyahPicker';
 
 // ─── تعديل ورد اليوم يدوياً (للمشرف) ─────────────────────────────────────────
@@ -91,14 +91,6 @@ export default function WirdEditor({ member, plan, onDone }) {
             </div>
         </div>
     );
-}
-
-// بداية مقطع الحفظ ونهايته بترتيب الحفظ (من الناس صعوداً: السورة الأعلى رقماً أوّلاً)
-function memEnds(dir, segs) {
-    if (dir === 'asc') return [segs[0][0], segs[segs.length - 1][1]];
-    const sn = k => +String(k).split(':')[0];
-    const hi = segs.reduce((a, b) => (sn(b[0]) > sn(a[0]) ? b : a)), lo = segs.reduce((a, b) => (sn(b[0]) < sn(a[0]) ? b : a));
-    return [hi[0], lo[1]];
 }
 
 function Part({ title, off, onNone, onOn, noneText, children }) {

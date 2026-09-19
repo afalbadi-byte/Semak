@@ -85,7 +85,7 @@ export default function Record({ id, d: dIn }) {
             {/* ── الحفظ الجديد ── */}
             <Part icon={BookOpen} title="الحفظ الجديد" color={m.color}
                 head={p.new ? `صفحة ${p.new.page} · ${surahsOn(p.new.page).join('، ')}` : 'أتمّ الحفظ'}
-                link={p.new ? readUrl(p.new.page) : null}>
+                link={p.new ? '#/hifz?m=' + id + '&t=new' : null}>
                 {p.new ? (
                     <>
                         <div className="flex items-center justify-between gap-3">
@@ -160,7 +160,7 @@ function Part({ icon: I, title, head, sub, color, done, onDone, link, children }
                     <div className="text-[15px] font-bold text-ink">{head}</div>
                     {sub ? <div className="text-[12px] text-ink-3 leading-5">{sub}</div> : null}
                 </div>
-                {link ? <a href={link} target="_blank" rel="noreferrer" title="افتح في المصحف" className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-3"><ExternalLink size={16} /></a> : null}
+                {link ? <a href={link} title="افتح في المصحف مع المُسمِع" className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-3"><ExternalLink size={16} /></a> : null}
                 {toggle && onDone ? (
                     <button type="button" onClick={() => onDone(!done)}
                         className={'h-10 px-3 rounded-xl text-[13px] font-bold inline-flex items-center gap-1.5 border ' + (done ? 'text-white border-transparent' : 'bg-white border-paper-2 text-ink-2')}

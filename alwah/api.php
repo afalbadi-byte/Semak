@@ -285,6 +285,17 @@ function ml_segs($lines) {
     if ($cs) $o[] = [$cs . ':' . $a0, $cs . ':' . $a1];
     return $o;
 }
+// مقطع الحفظ الجديد: وإن حدّد المشرف آخر آية، ينتهي المقطع عندها لا عند آخر السطر
+function new_segs($lines, $to) {
+    $sg = ml_segs($lines);
+    if (!is_string($to) || !preg_match('/^(\d{1,3}):(\d{1,3})$/', $to, $mm)) return $sg;
+    foreach ($sg as &$x) {
+        [$s0, $a0] = array_map('intval', explode(':', $x[0])); $a1 = (int)explode(':', $x[1])[1];
+        if ($s0 === (int)$mm[1] && (int)$mm[2] >= $a0 && (int)$mm[2] <= $a1) $x[1] = $to;
+    }
+    unset($x);
+    return $sg;
+}
 function ml_pages($lines) { $p = []; foreach ($lines as $x) $p[$x[0]] = true; $p = array_keys($p); sort($p); return $p; }
 
 // ترتيب المراجعة: من الجزء الثلاثين صعوداً، وصفحات الجزء بترتيب المصحف داخله
@@ -302,6 +313,16 @@ function member_plan($m, $exclude_d = null) {
     $L = max(0, min($T, (int)$m['init_lines'] + (int)$x['s']));
     $cur = $L < $T ? $seq[$L] : null;                       // أوّل سطرٍ لم يُحفظ
     $tl = max(1, (int)$m['target_lines']);
+    // الحفظ القادم حدّده المشرف عند تسميع الجديد (في سجلّ ذلك اليوم: ranges.next)، ويسري
+    // ما دام الموضع هو نفسه الذي حُدِّد عنده؛ وإلا فالمقدار اليومي المعتاد
+    $manual = null;
+    $nx = one("SELECT ranges FROM al_logs WHERE member_id=$mid AND ranges LIKE '%\"next\"%'$ex ORDER BY d DESC, id DESC LIMIT 1");
+    if ($nx) {
+        $rv = json_decode($nx['ranges'], true);
+        if (isset($rv['next']['pos'], $rv['next']['lines']) && (int)$rv['next']['pos'] === $L && (int)$rv['next']['lines'] > 0) {
+            $tl = min(90, (int)$rv['next']['lines']); $manual = $rv['next']['to'] ?? true;
+        }
+    }
 
     // الحفظ الجديد: الأسطر التالية بترتيب الحفظ (من أوّل السورة إلى آخرها)
     $newL = $cur ? array_slice($seq, $L, $tl) : [];
@@ -355,10 +376,10 @@ function member_plan($m, $exclude_d = null) {
         'lines' => $L, 'total' => $T, 'pos' => $L, 'dir' => $dir,
         'memorized_pages' => round($L * PAGES / $T, 2), 'juz' => round($L * 30 / $T, 2),
         'current' => $cur ? $cur[0] : null,
-        'new' => $cur ? ['page' => $cur[0], 'from_line' => $cur[1], 'to_line' => $toLine ?: $cur[1], 'lines' => $tl] : null,
+        'new' => $cur ? ['page' => $cur[0], 'from_line' => $cur[1], 'to_line' => $toLine ?: $cur[1], 'lines' => $tl, 'manual' => $manual] : null,
         'alwah' => $alwah, 'review' => $review, 'cycle' => count($cyc), 'cycle_pos' => $cycle_pos,
         // المقاطع بالآيات كما حُسبت (وما عدّله المشرف في ranges)
-        'auto' => ['new' => ml_segs($newL), 'alwah' => ml_segs($A), 'rev' => ml_segs($revL)],
+        'auto' => ['new' => new_segs($newL, $manual), 'alwah' => ml_segs($A), 'rev' => ml_segs($revL)],
         'juz_map' => juz_map($seq, $L),
     ];
 }
@@ -374,6 +395,11 @@ function ranges_in($r) {
         $v = [];
         foreach (array_slice($segs, 0, 20) as $sg) if (is_array($sg) && count($sg) === 2 && $ok($sg[0]) && $ok($sg[1])) $v[] = [$sg[0], $sg[1]];
         if ($v) $o[$k] = $v;
+    }
+    // الحفظ القادم كما حدّده المشرف: عند أيّ موضع، وكم سطراً، وإلى أيّ آية
+    if (isset($r['next']['pos'], $r['next']['lines']) && is_array($r['next'])) {
+        $to = (string)($r['next']['to'] ?? '');
+        $o['next'] = ['pos' => max(0, (int)$r['next']['pos']), 'lines' => max(1, min(90, (int)$r['next']['lines'])), 'to' => $ok($to) ? $to : null];
     }
     return $o ?: null;
 }
@@ -658,6 +684,25 @@ case 'wird_save': {
                   ON DUPLICATE KEY UPDATE new_lines=VALUES(new_lines), alwah_list=VALUES(alwah_list), rev_list=VALUES(rev_list), ranges=VALUES(ranges), by_user=VALUES(by_user)");
     al_log($u['id'], 'wird_save', ['member' => $mid, 'd' => $d, 'new_lines' => $nl, 'alwah' => $al, 'rev' => $rv]);
     out(['success' => true, 'plan' => wird_apply(member_plan($m, $d), $mid, $d)]);
+}
+
+// ─── الحفظ القادم: يحدّده المشرف عند تسميع الجديد ───────────────────────────────
+case 'next_save': {
+    $u = need_sup(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
+    $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['d'] ?? '')) ? $b['d'] : date('Y-m-d');
+    $l = one("SELECT id, ranges FROM al_logs WHERE member_id=" . (int)$m['id'] . " AND d='" . E($d) . "' LIMIT 1");
+    if (!$l) fail('سجّل تسميع اليوم أولاً');
+    $r = ranges_out($l['ranges']) ?: [];
+    if (!empty($b['reset'])) unset($r['next']);
+    else {
+        $pl = member_plan($m);                         // الموضع بعد تسميع اليوم
+        $to = (string)($b['to'] ?? '');
+        $r['next'] = ['pos' => $pl['lines'], 'lines' => max(1, min(90, (int)($b['lines'] ?? 0))), 'to' => preg_match('/^\d{1,3}:\d{1,3}$/', $to) ? $to : null];
+    }
+    $js = $r ? "'" . E(json_encode($r)) . "'" : 'NULL';
+    $conn->query("UPDATE al_logs SET ranges=$js WHERE id=" . (int)$l['id']);
+    al_log($u['id'], 'next_save', ['member' => (int)$m['id'], 'd' => $d, 'next' => $r['next'] ?? null]);
+    out(['success' => true, 'plan' => wird_apply(member_plan($m), $m['id'], date('Y-m-d'))]);
 }
 
 case 'log_save': {

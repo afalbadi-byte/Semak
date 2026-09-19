@@ -22,6 +22,8 @@ export default function MemberView({ id }) {
     const today = stats.today;
     const color = m.color;
     const mu = pg => '#/m/' + m.id + '/mushaf?p=' + pg;
+    // لمس جزءٍ من الورد يفتحه في صفحة الحفظ عند أوّل آيةٍ منه، والمُسمِع جاهزٌ عليه
+    const hz = t => '#/hifz?m=' + m.id + '&t=' + t;
     const sm = d.marks;
 
     return (
@@ -64,14 +66,14 @@ export default function MemberView({ id }) {
                     <PlanRow icon={BookOpen} title="الحفظ الجديد" done={partDone(today, 'new')} color={color}
                         main={plan.new ? `صفحة ${plan.new.page} · ${surahsOn(plan.new.page).join('، ')}` : 'أتمّ الحفظ'}
                         sub={plan.new ? `من السطر ${plan.new.from_line} · المقدار ${linesLabel(plan.new.lines)}` : ''}
-                        link={plan.new ? mu(plan.new.page) : null} />
+                        link={plan.new ? hz('new') : null} />
                     <PlanRow icon={Layers} title={`الألواح (${plan.alwah.length} صفحات)`} done={partDone(today, 'alwah')} color={color}
                         main={'صفحات ' + rangeLabel(plan.alwah)} sub={surahsIn(plan.alwah).join('، ')}
-                        link={plan.alwah.length ? mu(Math.min(...plan.alwah)) : null} />
+                        link={plan.alwah.length ? hz('alwah') : null} />
                     <PlanRow icon={RotateCcw} title={`المراجعة (${plan.review.length} صفحات)`} done={partDone(today, 'rev')} color={color}
                         main={plan.review.length ? 'صفحات ' + rangeLabel(plan.review) : 'تبدأ المراجعة بعد أن يتجاوز المحفوظ الألواح'}
                         sub={plan.review.length ? `${surahsIn(plan.review).join('، ')} · الموضع ${plan.cycle_pos} من ${plan.cycle} في الدورة` : ''}
-                        link={plan.review.length ? mu(plan.review[0]) : null} />
+                        link={plan.review.length ? hz('rev') : null} />
                 </Card>
                 {sup ? (
                     <a href={'#/m/' + m.id + '/log'} className="block mt-3">
@@ -175,7 +177,7 @@ function Stat({ label, value }) {
 
 function PlanRow({ icon: I, title, main, sub, done, link, color }) {
     return (
-        <div className="p-4 flex items-start gap-3">
+        <Row href={link} className="p-4 flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: done ? color : '#ebe5d8', color: done ? '#fff' : '#48534f' }}>
                 {done ? <Check size={18} /> : <I size={18} />}
             </div>
@@ -184,10 +186,11 @@ function PlanRow({ icon: I, title, main, sub, done, link, color }) {
                 <div className="text-[15px] font-bold text-ink mt-0.5">{main}</div>
                 {sub ? <div className="text-[12px] text-ink-3 mt-0.5 leading-5">{sub}</div> : null}
             </div>
-            {link ? <a href={link} title="افتح الصفحة في المصحف" className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-3 shrink-0"><BookMarked size={16} /></a> : null}
-        </div>
+            {link ? <span title="افتح في المصحف مع المُسمِع" className="w-9 h-9 rounded-xl flex items-center justify-center text-ink-3 shrink-0"><BookMarked size={16} /></span> : null}
+        </Row>
     );
 }
+const Row = ({ href, className, children }) => (href ? <a href={href} className={className + ' hover:bg-paper-2/40'}>{children}</a> : <div className={className}>{children}</div>);
 
 function HistoryRow({ h, mid }) {
     const g = k => { const x = gradeOf(h[k]); return x ? <span style={{ color: x.c }}>{x.t}</span> : null; };

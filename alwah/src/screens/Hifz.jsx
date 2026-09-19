@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, ChevronLeft, EyeOff, Eye, ChevronDown, Plus, RotateCcw, Mic, SlidersHorizontal } from 'lucide-react';
+import { ChevronRight, ChevronLeft, EyeOff, Eye, ChevronDown, Plus, RotateCcw, Mic, SlidersHorizontal, Maximize2, Minimize2 } from 'lucide-react';
 import { call } from '../lib/api';
 import { go, replace } from '../lib/router';
 import { useData } from '../App';
@@ -48,6 +48,29 @@ export default function Hifz({ q }) {
     const [pick, setPick] = useState(null);
     const [tools, setTools] = useState(true);
     const [editW, setEditW] = useState(false);
+    // ملء الشاشة: المصحف وشريط التقليب وحدهما (والتلاوة مستمرّة)
+    const [full, setFull] = useState(false);
+    useEffect(() => {
+        document.body.classList.toggle('al-full', full);
+        try {
+            if (full && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+            if (!full && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        } catch (e) { /* المتصفح لا يدعمه: يكفي إخفاء ما حول المصحف */ }
+    }, [full]);
+    useEffect(() => {
+        const f = () => { if (!document.fullscreenElement) setFull(false); };
+        document.addEventListener('fullscreenchange', f);
+        return () => { document.removeEventListener('fullscreenchange', f); document.body.classList.remove('al-full'); };
+    }, []);
+    // السحب بالإصبع يقلب الصفحة كالمصحف الورقي: إلى اليمين للتالية، وإلى اليسار للسابقة
+    const touch = React.useRef(null);
+    const onTouchStart = e => { const x = e.touches[0]; touch.current = { x: x.clientX, y: x.clientY, t: Date.now() }; };
+    const onTouchEnd = e => {
+        const s = touch.current; touch.current = null;
+        if (!s) return;
+        const x = e.changedTouches[0], dx = x.clientX - s.x, dy = x.clientY - s.y;
+        if (Math.abs(dx) > 70 && Math.abs(dy) < 50 && Date.now() - s.t < 700) flip(dx > 0 ? 1 : -1);
+    };
 
     const load = useCallback(async () => {
         if (!mid) return;
@@ -98,6 +121,24 @@ export default function Hifz({ q }) {
         return () => { dead = true; };
     }, [seed]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // فتح جزءٍ من الورد: المعاينة عند أوّل آيةٍ منه (مرّةً لكل ورد، لا عند كل تقليب)
+    const opened = React.useRef('');
+    useEffect(() => {
+        if (!defRange || !defRange[0] || opened.current === seed) return undefined;
+        const k = defRange[0][0];
+        let n = 0, tm = null;
+        // لم تُحدَّد صفحة في الرابط: افتح صفحة أوّل آيةٍ من الورد
+        if (!q.p) ayahPage(k).then(p => { if (p && p !== pageRef.current) at({ p }); }).catch(() => {});
+        // المصحف يُرسم بعد تحميل خطّ صفحته: نحاول حتى تظهر الآية (نحو ٤ ثوانٍ)
+        const tryIt = () => {
+            const el = document.querySelector('.mushaf-page [data-ak="' + k + '"]');
+            if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); opened.current = seed; return; }
+            if (++n < 20) tm = setTimeout(tryIt, 200);
+        };
+        tm = setTimeout(tryIt, 200);
+        return () => clearTimeout(tm);
+    }, [defRange, seed, page, data]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // المصحف يتبع الآية المتلوّة إلى صفحتها
     const pageRef = React.useRef(page); pageRef.current = page;
     const follow = k => {
@@ -131,6 +172,7 @@ export default function Hifz({ q }) {
 
     return (
         <div className="space-y-3 pb-28">
+            <div className="space-y-3 al-hide-full">
             {/* ── الفرد ── */}
             {sup && members.length > 1 ? (
                 <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4">
@@ -193,8 +235,14 @@ export default function Hifz({ q }) {
             </div>
             {hide ? <p className="text-[12px] text-ink-3 text-center">اقرأ من حفظك، ثم المس السطر لتتأكّد منه</p> : null}
 
-            <Mushaf page={page} marks={marks} onWord={w => setSel(w)} selected={sel && sel.k}
-                hide={hide} onLine={reveal} focus={hide ? null : focus} hl={hl} onAyah={k => setPick({ k, t: Date.now() })} />
+            </div>
+
+            <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
+                <Mushaf page={page} marks={marks} onWord={w => setSel(w)} selected={sel && sel.k}
+                    hide={hide} onLine={reveal} focus={hide ? null : focus} hl={hl} onAyah={k => setPick({ k, t: Date.now() })} />
+            </div>
+
+            <div className="space-y-3 al-hide-full">
 
             <button onClick={() => setTools(v => !v)} className="text-[12px] font-semibold text-ink-3 mx-auto block">{tools ? 'أخفِ المُسمِع' : 'أظهر المُسمِع'}</button>
             {tools ? <Reciter defRange={defRange} seed={seed} pick={pick} onAyah={follow} /> : null}
@@ -218,6 +266,21 @@ export default function Hifz({ q }) {
                 <a href={'#/m/' + mid + '/log'} className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-brand text-white font-bold"><Mic size={17} />التسميع المفصّل (الأخطاء والملاحظة)</a>
             ) : null}
             {tab !== 'all' && set.length > 1 ? <p className="text-[11px] text-ink-3 text-center">{TABS.find(t => t[0] === tab)[1]}: صفحات {rangeLabel(set)}</p> : null}
+
+            </div>
+
+            {/* ── شريط التقليب الثابت أسفل الشاشة، وفي وسطه التلاوة إذا اشتغلت ── */}
+            <div className="fixed inset-x-0 bottom-0 z-30 bg-paper/95 backdrop-blur border-t border-paper-2" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                <div className="max-w-3xl mx-auto h-16 px-3 flex items-center gap-2">
+                    <button onClick={() => flip(-1)} className="w-12 h-12 rounded-2xl bg-paper-card border border-paper-2 flex items-center justify-center text-ink-2" aria-label="الصفحة السابقة"><ChevronRight size={22} /></button>
+                    <div className="flex-1 min-w-0 flex items-center justify-center">
+                        <div id="hifz-dock" className="flex items-center gap-1.5" />
+                        {!hl ? <div className="text-center leading-tight"><div className="text-[13px] font-bold text-ink truncate">{surahsOn(page).join('، ')}</div><div className="text-[11px] text-ink-3 tabular-nums">صفحة {page}</div></div> : null}
+                    </div>
+                    <button onClick={() => setFull(v => !v)} className="w-10 h-10 rounded-xl text-ink-3 flex items-center justify-center" aria-label={full ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}>{full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
+                    <button onClick={() => flip(1)} className="w-12 h-12 rounded-2xl bg-paper-card border border-paper-2 flex items-center justify-center text-ink-2" aria-label="الصفحة التالية"><ChevronLeft size={22} /></button>
+                </div>
+            </div>
 
             <Sheet open={editW} onClose={() => setEditW(false)} title={'ورد اليوم · ' + m.name}>
                 {editW && plan ? <WirdEditor member={m} plan={plan} onDone={() => { setEditW(false); loadDay(); reloadMembers(); }} /> : null}

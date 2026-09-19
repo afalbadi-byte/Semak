@@ -156,3 +156,12 @@ export function memSegs(dir, from, to) {
     o.push([key(t.s, 1), to]);
     return o.sort((x, y) => cmp(x[0], y[0]));
 }
+
+// بداية مقطع الحفظ ونهايته بترتيب الحفظ (من الناس صعوداً: السورة الأعلى رقماً أوّلاً)
+export function memEnds(dir, segs) {
+    if (!segs || !segs.length) return [null, null];
+    if (dir === 'asc') return [segs[0][0], segs[segs.length - 1][1]];
+    const sn = k => +String(k).split(':')[0];
+    const hi = segs.reduce((a, b) => (sn(b[0]) > sn(a[0]) ? b : a)), lo = segs.reduce((a, b) => (sn(b[0]) < sn(a[0]) ? b : a));
+    return [hi[0], lo[1]];
+}
