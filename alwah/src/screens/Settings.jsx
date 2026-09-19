@@ -4,7 +4,7 @@ import { call } from '../lib/api';
 import { useRoute } from '../lib/router';
 import { useData } from '../App';
 import { Card, Section, Btn, Field, inputCls, Seg, Sheet, Stepper, PALETTE, useToast } from '../ui';
-import { SURAHS, LPP, initLinesFor, linesLabel } from '../lib/quran';
+import { SURAHS, TOTAL_LINES, initLinesFor, linesLabel } from '../lib/quran';
 
 export default function Settings() {
     const { me, family, sup, members, reloadMembers, logout, setFamily } = useData();
@@ -105,11 +105,11 @@ function MemberForm({ m, onDone }) {
                 </Field>
             </div>
 
-            <Field label="اتجاه الحفظ" hint={f.dir === 'desc' ? 'يبدأ من سورة الناس صعوداً: جزء عمّ ثم تبارك ثم ما قبلهما. الأشهر للصغار.' : 'يبدأ من الفاتحة والبقرة نزولاً إلى الناس.'}>
+            <Field label="اتجاه الحفظ" hint={f.dir === 'desc' ? 'من الناس صعوداً سورةً سورة، وكل سورةٍ تُحفظ من أوّلها إلى آخرها. الأشهر للصغار.' : 'يبدأ من الفاتحة والبقرة نزولاً إلى الناس.'}>
                 <Seg value={f.dir} onChange={v => set('dir', v)} options={[{ v: 'desc', t: 'من الناس صعوداً' }, { v: 'asc', t: 'من الفاتحة' }]} />
             </Field>
 
-            <Field label="أين وصل في الحفظ؟" hint={`المحفوظ عند البدء: ${linesLabel(init)} (${(init / LPP / 20).toFixed(1).replace('.0', '')} جزء)`}>
+            <Field label="أين وصل في الحفظ؟" hint={init ? `المحفوظ عند البدء: نحو ${(init * 30 / TOTAL_LINES).toFixed(1).replace('.0', '')} جزء` : 'لم يبدأ الحفظ بعد'}>
                 <Seg value={start.mode} onChange={v => setStart({ mode: v, value: '' })}
                     options={[...(isNew ? [] : [{ v: 'keep', t: 'كما هو' }]), { v: 'none', t: 'لم يبدأ' }, { v: 'surah', t: 'حتى سورة' }, { v: 'juz', t: 'أجزاء' }, { v: 'page', t: 'صفحة' }]} />
                 {start.mode === 'surah' ? (

@@ -58,7 +58,7 @@ export default function Hifz({ q }) {
 
     // أسطر حفظ اليوم في صفحته
     const focus = tab === 'new' && plan && plan.new && plan.new.page === page
-        ? [plan.new.from_line, Math.min(LPP, plan.new.from_line + plan.new.lines - 1)] : null;
+        ? [plan.new.from_line, plan.new.to_line || Math.min(LPP, plan.new.from_line + plan.new.lines - 1)] : null;
 
     // آيات الصفحة بالترتيب، والمقطع المقترح: آيات أسطر حفظ اليوم
     const { range, lines } = useMemo(() => {
@@ -85,14 +85,14 @@ export default function Hifz({ q }) {
     const bump = v => { setReps(v); try { localStorage.setItem(ck, String(v)); } catch (e) { /* تجاهل */ } };
 
     // مقطع المُسمِع المقترح: حفظ اليوم بأسطره، أو الألواح/المراجعة كاملةً، أو الصفحة المفتوحة
-    const seed = [mid, tab, set.join(','), focus ? focus.join('-') : '', plan && plan.new ? plan.new.page + '.' + plan.new.lines : '', plan && plan.ranges ? JSON.stringify(plan.ranges) : ''].join('|');
+    const seed = [mid, tab, set.join(','), focus ? focus.join('-') : '', plan && plan.new ? plan.new.page + '.' + plan.new.lines : '', plan ? JSON.stringify([plan.ranges, plan.auto]) : ''].join('|');
     const [defRange, setDefRange] = useState(null);
     useEffect(() => {
         let dead = false;
         (async () => {
             let r = null;
             if (tab !== 'all' && plan && (tab === 'new' ? plan.new : set.length)) r = await partRange(plan, tab);
-            else r = await rangeOfPages([page]);
+            else { const r0 = await rangeOfPages([page]); r = r0 ? [r0] : null; }
             if (!dead && r) setDefRange(r);
         })().catch(() => {});
         return () => { dead = true; };

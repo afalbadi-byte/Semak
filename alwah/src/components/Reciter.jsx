@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, SkipForward, SkipBack, Repeat, Square } from 'lucide-react';
-import { between, ayahName, cmp } from '../lib/ayah';
+import { ayahName, cmp, segsOf, segsAyahs } from '../lib/ayah';
 import { AyahRange } from './AyahPicker';
 
 // ─── مُسمِع الشيخ محمد أيوب ─────────────────────────────────────────────────
@@ -19,18 +19,20 @@ const loopsOf = p => (p.mode === 'seg' ? p.n : 1);
 
 export const ayahLabel = ayahName;
 
-// defRange: المقطع المقترح [من، إلى]، seed: يتغيّر فيُعاد ضبط المقطع، pick: آيةٌ لُمست في المصحف
+// defRange: المقطع المقترح: قائمة مقاطع [[من، إلى]، …] (الورد قد يكون من سورٍ مختلفة)، seed: يتغيّر فيُعاد ضبط المقطع، pick: آيةٌ لُمست في المصحف
 export default function Reciter({ defRange, seed, pick, onAyah }) {
     const [pref, setPref] = useState(loadPref);
-    const [seg, setSeg] = useState(defRange || ['1:1', '1:7']);
+    const [segs, setSegs] = useState(segsOf(defRange) || [['1:1', '1:7']]);
+    const seg = [segs[0][0], segs[segs.length - 1][1]];
+    const setSeg = v => setSegs([v]);
     const [st, setSt] = useState({ on: false, i: 0, rep: 1, loop: 1, paused: false });
     const audio = useRef(null);
     const stRef = useRef(st); stRef.current = st;
-    const list = useMemo(() => between(seg[0], seg[1]), [seg[0], seg[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+    const list = useMemo(() => segsAyahs(segs), [JSON.stringify(segs)]); // eslint-disable-line react-hooks/exhaustive-deps
     const listRef = useRef(list); listRef.current = list;
 
     // قسمٌ جديد أو فردٌ آخر: المقطع المقترح، ويتوقّف التشغيل
-    useEffect(() => { if (defRange) { setSeg(defRange); stop(); } }, [seed, defRange && defRange.join('-')]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { const d = segsOf(defRange); if (d) { setSegs(d); stop(); } }, [seed, JSON.stringify(defRange)]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // لمس رقم آيةٍ في المصحف: أوّل لمسةٍ بدايةُ المقطع، والثانية نهايته
     const tapRef = useRef(0);
@@ -84,7 +86,7 @@ export default function Reciter({ defRange, seed, pick, onAyah }) {
                     <div className="text-[12px] text-ink-3">تلاوة الشيخ محمد أيوب</div>
                     <div className="text-[14px] font-bold text-ink truncate">
                         {st.on ? `${ayahName(list[st.i])} · ${pref.mode === 'seg' ? `المقطع ${st.loop}${pref.n ? '/' + pref.n : ''}` : `الآية ${st.rep}/${eachOf(pref)}`}`
-                            : `المقطع: ${count} ${count === 1 ? 'آية' : count <= 10 ? 'آيات' : 'آية'}`}
+                            : `المقطع: ${count} ${count === 1 ? 'آية' : count <= 10 ? 'آيات' : 'آية'}${segs.length > 1 ? ` من ${segs.length} سور` : ''}`}
                     </div>
                 </div>
                 {st.on ? <button onClick={() => jump(-1)} className="w-10 h-10 rounded-xl bg-paper-2 flex items-center justify-center text-ink-2" aria-label="الآية السابقة"><SkipForward size={17} /></button> : null}

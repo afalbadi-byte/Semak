@@ -92,7 +92,7 @@ export default function Record({ id, d: dIn }) {
                             <div className="text-[13px] text-ink-2 leading-6">
                                 كم حفظ اليوم؟ <b className="text-ink">{linesLabel(f.new_lines)}</b>
                                 {f.new_lines ? <span className="block text-[12px] text-ink-3">
-                                    من السطر {fromLine}{endLine <= LPP ? ` إلى ${endLine}` : ` ويكمل في الصفحة التالية`}</span> : null}
+                                    من السطر {fromLine}{f.new_lines === p.new.lines && p.new.to_line ? ` إلى ${p.new.to_line}` : endLine <= LPP ? ` إلى ${endLine}` : ` ويكمل بعدها`}</span> : null}
                             </div>
                             <Stepper value={f.new_lines} onChange={v => set('new_lines', v)} max={90} />
                         </div>

@@ -120,19 +120,39 @@ export async function label(k) {
     return ayahName(k) + (i && i.t ? ' · ' + i.t : '');
 }
 
-// مقطع حفظ اليوم من أسطره: من أوّل آيةٍ في سطر البداية إلى آخر آيةٍ في سطر النهاية
-export async function newRange(plan) {
-    if (!plan || !plan.new) return null;
-    const d = await loadPage(plan.new.page), f0 = plan.new.from_line, f1 = Math.min(15, f0 + plan.new.lines - 1);
-    let a = null, b = null;
-    for (let i = f0; i <= 15; i++) (d.lines[i] || []).forEach(w => { if (w.end) return; const k = w.k.slice(0, w.k.lastIndexOf(':')); if (!a) a = k; if (i <= f1 || !b) b = k; });
-    return a ? [a, b] : rangeOfPages([plan.new.page]);
-}
-
-// المقطع المقترح لجزءٍ من الورد: ما حدّده المشرف، وإلا المحسوب من الصفحات
+// المقاطع المقترحة لجزءٍ من الورد: ما حدّده المشرف، وإلا ما حسبه الخادم بالسور والآيات
 export async function partRange(plan, part) {
     if (!plan) return null;
-    if (plan.ranges && plan.ranges[part]) return plan.ranges[part];
-    if (part === 'new') return newRange(plan);
-    return rangeOfPages(part === 'alwah' ? plan.alwah : plan.review);
+    const own = plan.ranges && segsOf(plan.ranges[part]);
+    if (own) return own;
+    const auto = plan.auto && segsOf(plan.auto[part]);
+    if (auto) return auto;
+    const r = await rangeOfPages(part === 'alwah' ? plan.alwah : part === 'rev' ? plan.review : plan.new ? [plan.new.page] : []);
+    return r ? [r] : null;
+}
+
+// ─── المقاطع المتعدّدة: الجزء من الورد قد يكون مقاطع من سورٍ مختلفة ────────────
+// صيغة المقطع [من، إلى]، والجزء قائمة مقاطع مرتّبة من جهة البقرة إلى جهة الناس
+export const segsOf = x => (!x || !x.length ? null : typeof x[0] === 'string' ? [x] : x);
+export const segsAyahs = segs => (segs || []).flatMap(([a, b]) => between(a, b));
+export async function segsPages(segs) {
+    const set = new Set();
+    for (const [a, b] of segs || []) (await pagesOf(a, b)).forEach(p => set.add(p));
+    return [...set].sort((x, y) => x - y);
+}
+export async function segsLines(segs) {
+    let n = 0;
+    for (const [a, b] of segs || []) n += await linesOf(a, b);
+    return n;
+}
+// مقطع الحفظ الجديد من آيةٍ إلى آية بترتيب الحفظ: لمن يحفظ من الناس صعوداً، بعد
+// آخر السورة تأتي السورة التي قبلها من أوّلها (الجاثية ثم الدخان…)
+export function memSegs(dir, from, to) {
+    const f = parse(from), t = parse(to);
+    if (dir === 'asc' || f.s === t.s) return cmp(from, to) <= 0 ? [[from, to]] : [[from, from]];
+    if (t.s > f.s) return [[from, from]];
+    const o = [[from, key(f.s, AYAT[f.s - 1])]];
+    for (let s = f.s - 1; s > t.s; s--) o.push([key(s, 1), key(s, AYAT[s - 1])]);
+    o.push([key(t.s, 1), to]);
+    return o.sort((x, y) => cmp(x[0], y[0]));
 }

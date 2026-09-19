@@ -25,6 +25,7 @@ jobs:
           php -l api.php
           php -l ohda/api.php
           php -l alwah/api.php
+          php -l alwah/lines.php
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -67,6 +68,7 @@ jobs:
         run: |
           npx vite build --config alwah/vite.config.js
           cp alwah/api.php dist/alwah/api.php
+          cp alwah/lines.php dist/alwah/lines.php
           sed -i "s|__DB_USER__|${{ secrets.DB_USER }}|g"           dist/alwah/api.php
           sed -i "s|__DB_PASS__|${{ secrets.DB_PASS }}|g"           dist/alwah/api.php
           sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"           dist/alwah/api.php

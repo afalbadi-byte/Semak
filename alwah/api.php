@@ -207,6 +207,30 @@ if ($__v < 4) {
     }
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '4')");
 }
+if ($__v < 5) {
+    // الحفظ صار بالسورة وبأسطر النصّ (بلا رؤوس السور)، فتُحوَّل نقطة بداية كل فرد من
+    // الوحدة القديمة (صفحات × ١٥ سطراً) إلى الجديدة. والقيم القديمة محفوظة في al_log للتراجع.
+    $S = ml_sur();
+    foreach (rows("SELECT id, dir, init_lines FROM al_members") as $m) {
+        $old = (int)$m['init_lines']; $done = intdiv($old, 15); $part = $old % 15; $new = 0;
+        if ($m['dir'] === 'asc') {
+            // من الفاتحة: أسطر الصفحات المُتمّة، وما حُفظ من الصفحة التالية
+            for ($q = 1; $q <= 114; $q++) foreach ($S[$q] as $x) {
+                if ($x[0] <= $done) $new++;
+                elseif ($x[0] === $done + 1 && $part > 0) { $new++; $part--; }
+            }
+        } elseif ($done > 0) {
+            // من الناس صعوداً: كل سورةٍ تبدأ في الصفحات المحفوظة (من ٦٠٤ حتى أوّل صفحةٍ محفوظة)
+            $fp = 605 - $done;
+            for ($q = 114; $q >= 1 && $S[$q][0][0] >= $fp; $q--) $new += count($S[$q]);
+        } else $new = $old;
+        if ($new !== $old) {
+            $conn->query("UPDATE al_members SET init_lines=$new WHERE id=" . (int)$m['id']);
+            al_log(0, 'migrate_v5_init_lines', ['member' => (int)$m['id'], 'old' => $old, 'new' => $new]);
+        }
+    }
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '5')");
+}
 
 function al_log($uid, $action, $data = null) {
     global $conn;
@@ -222,8 +246,46 @@ const PAGES = 604;
 const LPP = 15;
 function juz_of($p) { $j = 1; foreach (JUZ_START as $i => $s) if ($p >= $s) $j = $i + 1; return $j; }
 
-// ترتيب الحفظ: الصفحة رقم k (من الصفر) في مسيرة هذا الفرد
-function mem_page($dir, $k) { return $dir === 'asc' ? 1 + $k : PAGES - $k; }
+// ─── خريطة الأسطر وترتيب الحفظ ───────────────────────────────────────────────
+// الحفظ بالسورة: من الناس صعوداً سورةً سورة، وكل سورةٍ من أوّلها إلى آخرها (أو من
+// الفاتحة بترتيب المصحف). والتقدّم بأسطر النصّ (بلا رؤوس السور)، وكل سطرٍ في
+// خريطة الأسطر (lines.php) معروفةٌ صفحته وسورته وآياته.
+function ml_sur() {
+    static $S = null;
+    if ($S !== null) return $S;
+    $raw = require __DIR__ . '/lines.php';
+    $S = array_fill(1, 114, []);
+    foreach (explode('|', $raw) as $i => $pg) {
+        foreach (explode(';', $pg) as $ln) {
+            if ($ln === '') continue;
+            $v = array_map('intval', explode(',', $ln));
+            $S[$v[1]][] = [$i + 1, $v[0], $v[1], $v[2], $v[3]];     // [صفحة، سطر، سورة، أوّل آية، آخر آية]
+        }
+    }
+    return $S;
+}
+// أسطر المصحف كلّها بترتيب حفظ هذا الاتجاه
+function ml_seq($dir) {
+    static $C = [];
+    if (isset($C[$dir])) return $C[$dir];
+    $S = ml_sur(); $o = [];
+    if ($dir === 'asc') { for ($s = 1; $s <= 114; $s++) foreach ($S[$s] as $x) $o[] = $x; }
+    else { for ($s = 114; $s >= 1; $s--) foreach ($S[$s] as $x) $o[] = $x; }
+    return $C[$dir] = $o;
+}
+// أسطرٌ ← مقاطع بالآيات، مرتّبةً من جهة البقرة إلى جهة الناس: [["45:1","45:12"], ...]
+function ml_segs($lines) {
+    usort($lines, function ($a, $b) { return ($a[0] <=> $b[0]) ?: ($a[1] <=> $b[1]); });
+    $o = []; $cs = 0; $a0 = 0; $a1 = 0;
+    foreach ($lines as $x) {
+        if ($cs === $x[2] && $x[3] <= $a1 + 1) { $a1 = max($a1, $x[4]); continue; }
+        if ($cs) $o[] = [$cs . ':' . $a0, $cs . ':' . $a1];
+        $cs = $x[2]; $a0 = $x[3]; $a1 = $x[4];
+    }
+    if ($cs) $o[] = [$cs . ':' . $a0, $cs . ':' . $a1];
+    return $o;
+}
+function ml_pages($lines) { $p = []; foreach ($lines as $x) $p[$x[0]] = true; $p = array_keys($p); sort($p); return $p; }
 
 // ترتيب المراجعة: من الجزء الثلاثين صعوداً، وصفحات الجزء بترتيب المصحف داخله
 // (ولمن يحفظ من الفاتحة: بترتيب المصحف من أوّله)
@@ -235,27 +297,33 @@ function member_plan($m, $exclude_d = null) {
     $mid = (int)$m['id'];
     $ex = $exclude_d ? " AND d <> '" . E($exclude_d) . "'" : '';
     $x = one("SELECT COALESCE(SUM(CASE WHEN new_grade <> 1 THEN new_lines ELSE 0 END),0) s FROM al_logs WHERE member_id=$mid$ex");
-    $L = min(PAGES * LPP, (int)$m['init_lines'] + (int)$x['s']);
-    $done = intdiv($L, LPP);                 // صفحات أُتمّت
-    $part = $done >= PAGES ? 0 : $L % LPP;   // أسطر في الصفحة الجارية
     $dir = $m['dir'] === 'asc' ? 'asc' : 'desc';
-    $cur = $done < PAGES ? mem_page($dir, $done) : null;
+    $seq = ml_seq($dir); $T = count($seq);
+    $L = max(0, min($T, (int)$m['init_lines'] + (int)$x['s']));
+    $cur = $L < $T ? $seq[$L] : null;                       // أوّل سطرٍ لم يُحفظ
+    $tl = max(1, (int)$m['target_lines']);
 
-    // الألواح: الصفحة الجارية (فيها حفظ اليوم) وما قبلها من آخر المحفوظ
-    $an = max(1, (int)$m['alwah_n']);
-    $alwah = [];
-    if ($cur) $alwah[] = $cur;
-    for ($k = $done - 1; $k >= 0 && count($alwah) < $an; $k--) $alwah[] = mem_page($dir, $k);
-    sort($alwah);
+    // الحفظ الجديد: الأسطر التالية بترتيب الحفظ (من أوّل السورة إلى آخرها)
+    $newL = $cur ? array_slice($seq, $L, $tl) : [];
+    $toLine = 0;
+    foreach ($newL as $y) if ($y[0] === $cur[0]) $toLine = max($toLine, $y[1]);
 
-    // دورة المراجعة: كل ما أُتمّ حفظه عدا الألواح
-    $seq = [];
-    for ($k = 0; $k < $done; $k++) { $p = mem_page($dir, $k); if (!in_array($p, $alwah, true)) $seq[] = $p; }
-    usort($seq, function ($a, $b) use ($dir) { return rev_key($dir, $a) <=> rev_key($dir, $b); });
+    // الألواح: آخر (عدد الألواح × ١٥) سطراً من المحفوظ، وصفحة حفظ اليوم معها
+    $aw = max(1, (int)$m['alwah_n']) * LPP;
+    $a0 = max(0, $L - $aw);
+    $A = array_slice($seq, $a0, $L - $a0);
+    $alwah = ml_pages($A);
+    if ($cur && !in_array($cur[0], $alwah, true)) { $alwah[] = $cur[0]; sort($alwah); }
+
+    // دورة المراجعة: ما قبل الألواح من المحفوظ، بالصفحات (والصفحة المشتركة تبقى في الألواح)
+    $R = array_slice($seq, 0, $a0);
+    $inA = array_flip($alwah);
+    $cyc = array_values(array_filter(ml_pages($R), function ($p) use ($inA) { return !isset($inA[$p]); }));
+    usort($cyc, function ($a, $b) use ($dir) { return rev_key($dir, $a) <=> rev_key($dir, $b); });
 
     // تبدأ مراجعة اليوم بعد آخر صفحةٍ رُوجعت فعلاً
     $review = [];
-    if ($seq) {
+    if ($cyc) {
         $last = one("SELECT rev_list FROM al_logs WHERE member_id=$mid AND rev_done=1 AND rev_list IS NOT NULL AND rev_list <> ''$ex
                      ORDER BY d DESC, id DESC LIMIT 1");
         $start = 0;
@@ -263,61 +331,76 @@ function member_plan($m, $exclude_d = null) {
             // الورد يُعرض من جهة البقرة إلى جهة الناس، فآخر ما رُوجع في الدورة هو الصفحة
             // التي لا تليها في الدورة صفحةٌ من الورد نفسه (لا آخر عنصرٍ في القائمة)
             $lst = array_map('intval', explode(',', $last['rev_list']));
-            $pos = array_flip($seq); $in = array_flip($lst); $cn = count($seq);
+            $pos = array_flip($cyc); $in = array_flip($lst); $cn = count($cyc);
             $lp = end($lst);
             foreach ($lst as $q) {
                 if (!isset($pos[$q])) continue;
-                $nx = $seq[($pos[$q] + 1) % $cn];
+                $nx = $cyc[($pos[$q] + 1) % $cn];
                 if (!isset($in[$nx])) { $lp = $q; break; }
             }
             $lk = rev_key($dir, $lp);
-            $start = 0;
-            foreach ($seq as $i => $p) if (rev_key($dir, $p) > $lk) { $start = $i; break; }
-            if (rev_key($dir, end($seq)) <= $lk) $start = 0;      // انتهت الدورة: من أوّلها
+            foreach ($cyc as $i => $p) if (rev_key($dir, $p) > $lk) { $start = $i; break; }
+            if (rev_key($dir, end($cyc)) <= $lk) $start = 0;      // انتهت الدورة: من أوّلها
         }
-        $n = min(max(1, (int)$m['review_n']), count($seq));
-        for ($i = 0; $i < $n; $i++) $review[] = $seq[($start + $i) % count($seq)];
+        $n = min(max(1, (int)$m['review_n']), count($cyc));
+        for ($i = 0; $i < $n; $i++) $review[] = $cyc[($start + $i) % count($cyc)];
     }
-
     // الورد دائماً نزولاً: يبدأ من جهة البقرة وينتهي بجهة الناس
-    $cycle_pos = $seq && $review ? (array_search($review[0], $seq, true) + 1) : 0;
+    $cycle_pos = $cyc && $review ? (array_search($review[0], $cyc, true) + 1) : 0;
     sort($review);
+    $inR = array_flip($review);
+    $revL = array_values(array_filter($R, function ($y) use ($inR) { return isset($inR[$y[0]]); }));
 
-    // الحفظ الجديد: من السطر التالي في الصفحة الجارية
-    $tl = max(1, (int)$m['target_lines']);
     return [
-        'lines' => $L, 'pages_done' => $done, 'part_lines' => $part,
-        'memorized_pages' => round($L / LPP, 2), 'juz' => round($L / LPP / 20, 2),
-        'current' => $cur, 'new' => $cur ? ['page' => $cur, 'from_line' => $part + 1, 'lines' => $tl] : null,
-        'alwah' => $alwah, 'review' => $review, 'cycle' => count($seq),
-        'cycle_pos' => $cycle_pos,
-        'juz_map' => juz_map($dir, $L),
+        'lines' => $L, 'total' => $T, 'pos' => $L, 'dir' => $dir,
+        'memorized_pages' => round($L * PAGES / $T, 2), 'juz' => round($L * 30 / $T, 2),
+        'current' => $cur ? $cur[0] : null,
+        'new' => $cur ? ['page' => $cur[0], 'from_line' => $cur[1], 'to_line' => $toLine ?: $cur[1], 'lines' => $tl] : null,
+        'alwah' => $alwah, 'review' => $review, 'cycle' => count($cyc), 'cycle_pos' => $cycle_pos,
+        // المقاطع بالآيات كما حُسبت (وما عدّله المشرف في ranges)
+        'auto' => ['new' => ml_segs($newL), 'alwah' => ml_segs($A), 'rev' => ml_segs($revL)],
+        'juz_map' => juz_map($seq, $L),
     ];
 }
 
-// المقاطع بالآيات: تُقبل «سورة:آية» صحيحةً فقط
+// المقاطع بالآيات: لكل جزءٍ قائمة مقاطع [من، إلى] (وتُقبل الصيغة القديمة: مقطعٌ واحد)
 function ranges_in($r) {
     $o = [];
     if (!is_array($r)) return null;
+    $ok = function ($k) { return is_string($k) && preg_match('/^\d{1,3}:\d{1,3}$/', $k); };
     foreach (['new', 'alwah', 'rev'] as $k) {
-        if (!isset($r[$k]) || !is_array($r[$k]) || count($r[$k]) !== 2) continue;
-        $a = (string)$r[$k][0]; $b = (string)$r[$k][1];
-        if (preg_match('/^\d{1,3}:\d{1,3}$/', $a) && preg_match('/^\d{1,3}:\d{1,3}$/', $b)) $o[$k] = [$a, $b];
+        if (!isset($r[$k]) || !is_array($r[$k]) || !$r[$k]) continue;
+        $segs = is_string($r[$k][0] ?? null) ? [$r[$k]] : $r[$k];
+        $v = [];
+        foreach (array_slice($segs, 0, 20) as $sg) if (is_array($sg) && count($sg) === 2 && $ok($sg[0]) && $ok($sg[1])) $v[] = [$sg[0], $sg[1]];
+        if ($v) $o[$k] = $v;
     }
     return $o ?: null;
 }
-function ranges_out($j) { $v = $j ? json_decode($j, true) : null; return is_array($v) ? $v : null; }
+function ranges_out($j) {
+    $v = $j ? json_decode($j, true) : null;
+    if (!is_array($v)) return null;
+    foreach ($v as $k => $x) if (is_array($x) && is_string($x[0] ?? null)) $v[$k] = [$x];   // مقطعٌ واحد بالصيغة القديمة
+    return $v;
+}
 
 // ورد يومٍ عدّله المشرف يدوياً: يحلّ محلّ المحسوب في الأجزاء التي عدّلها
 function wird_apply($plan, $mid, $d) {
     $w = one("SELECT * FROM al_wird WHERE member_id=" . (int)$mid . " AND d='" . E($d) . "' LIMIT 1");
     $plan['custom'] = null;
+    $plan['ranges'] = null;
     if (!$w) return $plan;
     $c = [];
     if ($w['new_lines'] !== null && $plan['new']) {
         $c['new_lines'] = (int)$w['new_lines'];
-        if ((int)$w['new_lines'] > 0) $plan['new']['lines'] = (int)$w['new_lines'];
-        else { $plan['new'] = null; $plan['new_off'] = true; }
+        if ((int)$w['new_lines'] > 0) {
+            $n = (int)$w['new_lines'];
+            $plan['new']['lines'] = $n;
+            $nl = array_slice(ml_seq($plan['dir']), $plan['pos'], $n);
+            $plan['auto']['new'] = ml_segs($nl);
+            $to = 0; foreach ($nl as $y) if ($y[0] === $plan['new']['page']) $to = max($to, $y[1]);
+            $plan['new']['to_line'] = $to ?: $plan['new']['from_line'];
+        } else { $plan['new'] = null; $plan['new_off'] = true; }
     }
     $pl = function ($csv) { $a = array_values(array_filter(array_map('intval', explode(',', (string)$csv)), function ($p) { return $p >= 1 && $p <= PAGES; })); sort($a); return array_values(array_unique($a)); };
     if ($w['alwah_list'] !== null) { $plan['alwah'] = $pl($w['alwah_list']); $c['alwah'] = true; }
@@ -327,17 +410,12 @@ function wird_apply($plan, $mid, $d) {
     return $plan;
 }
 
-// نسبة المحفوظ من كل جزء (للخريطة)
-function juz_map($dir, $L) {
-    $done = intdiv($L, LPP); $part = $L % LPP;
-    $cnt = array_fill(1, 30, 0.0);
-    for ($k = 0; $k < min($done, PAGES); $k++) $cnt[juz_of(mem_page($dir, $k))] += 1;
-    if ($done < PAGES && $part) $cnt[juz_of(mem_page($dir, $done))] += $part / LPP;
+// نسبة المحفوظ من كل جزء (للخريطة): أسطره المحفوظة من أسطره كلّها
+function juz_map($seq, $L) {
+    $tot = array_fill(1, 30, 0); $got = array_fill(1, 30, 0);
+    foreach ($seq as $i => $x) { $j = juz_of($x[0]); $tot[$j]++; if ($i < $L) $got[$j]++; }
     $out = [];
-    for ($j = 1; $j <= 30; $j++) {
-        $size = ($j < 30 ? JUZ_START[$j] : PAGES + 1) - JUZ_START[$j - 1];
-        $out[] = round(min(1, $cnt[$j] / $size), 3);
-    }
+    for ($j = 1; $j <= 30; $j++) $out[] = $tot[$j] ? round($got[$j] / $tot[$j], 3) : 0;
     return $out;
 }
 
