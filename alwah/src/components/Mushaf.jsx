@@ -27,6 +27,7 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
     const [size, setSize] = useState(BASE);
     const box = useRef(null);
     const meas = useRef(null);
+    const pg = useRef(null);
 
     useEffect(() => {
         let dead = false;
@@ -41,11 +42,11 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
     useLayoutEffect(() => {
         if (!ready || !box.current || !meas.current) return undefined;
         const fit = () => {
-            const w = box.current.clientWidth - 14;
+            const w = box.current.clientWidth - 18;
             let max = 1;
             meas.current.querySelectorAll('[data-line]').forEach(el => { max = Math.max(max, el.scrollWidth); });
             // صفحتا الفاتحة وأوّل البقرة: أسطرٌ قصيرة في الوسط بفواصل بين الكلمات، فتُصغَّر لتتّسع
-            const s = Math.max(12, Math.min(44, ((BASE * w) / max) * (data && data.short ? 0.74 : 1)));
+            const s = Math.max(12, Math.min(44, ((BASE * w) / max) * (data && data.short ? 0.74 : 0.97)));
             setSize(Math.floor(s * 10) / 10);
         };
         fit();
@@ -53,6 +54,14 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
         ro.observe(box.current);
         return () => ro.disconnect();
     }, [ready, data]);
+
+    // حارسٌ بعد الرسم: إن خرج سطرٌ عن الإطار (خطٌّ يُرسم أعرض على جهازٍ ما) صغُر الخطّ حتى يتّسع
+    useLayoutEffect(() => {
+        if (!ready || !pg.current) return;
+        let over = 1;
+        pg.current.querySelectorAll('[data-row]').forEach(el => { if (el.scrollWidth > el.clientWidth + 1) over = Math.max(over, el.scrollWidth / el.clientWidth); });
+        if (over > 1) setSize(z => Math.max(12, Math.floor((z / over) * 0.99 * 10) / 10));
+    }, [size, ready]);
 
     if (err) return <div className="py-16 text-center text-ink-3 text-[13px]"><WifiOff className="mx-auto mb-2" size={22} />{err}</div>;
     if (!data || !ready) return <div className="py-24 flex justify-center"><Loader2 className="animate-spin text-brand" size={26} /></div>;
@@ -65,10 +74,11 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
         <div ref={box} className="relative w-full">
             {/* قياس خفيّ لأعرض سطر بالحجم الأساس */}
             <div ref={meas} aria-hidden className="invisible pointer-events-none" style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0, overflow: 'hidden', fontFamily: ff, fontSize: BASE, whiteSpace: 'nowrap', direction: 'rtl' }}>
-                {L.map(i => data.lines[i] ? <div key={i} data-line style={{ display: 'inline-block' }}>{data.lines[i].map(w => w.c).join('')}</div> : null)}
+                {/* الكلمات بحشوتها نفسها في الصفحة، فيطابق القياسُ العرضَ الفعلي */}
+                {L.map(i => data.lines[i] ? <div key={i} data-line style={{ display: 'inline-block' }}>{data.lines[i].map(w => <span key={w.k} style={w.end ? undefined : { padding: '0 .04em' }}>{w.c}</span>)}</div> : null)}
             </div>
 
-            <div className="mushaf-page rounded-2xl bg-[#fffaf0] border border-[#e8dcc0] px-1 py-3 select-none" dir="rtl"
+            <div ref={pg} className="mushaf-page rounded-2xl bg-[#fffaf0] border border-[#e8dcc0] px-1 py-3 select-none" dir="rtl"
                 style={{ fontFamily: ff, fontSize: size, lineHeight: 1.95 }}>
                 {L.map(i => {
                     const words = data.lines[i];
@@ -89,7 +99,7 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
                     const hid = hide && hide.has(i);
                     const dim = focus && (i < focus[0] || i > focus[1]);
                     return (
-                        <div key={i} onClick={hid && onLine ? () => onLine(i) : undefined}
+                        <div key={i} data-row onClick={hid && onLine ? () => onLine(i) : undefined}
                             className={'flex relative transition ' + (data.short ? 'justify-center gap-[0.35em]' : 'justify-between') + (hid ? ' cursor-pointer' : '')}
                             style={{ whiteSpace: 'nowrap', opacity: dim && !hid ? 0.32 : 1 }}>
                             {hid ? <span aria-hidden className="absolute inset-x-1 rounded-lg bg-[#efe3c4]" style={{ top: '22%', bottom: '22%' }} /> : null}
