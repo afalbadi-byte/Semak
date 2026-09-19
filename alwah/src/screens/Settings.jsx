@@ -194,7 +194,7 @@ function UserForm({ u, members, onDone }) {
         if (f.password) setSaved({ ...f }); else onDone();
     };
     const msg = s => [`السلام عليكم ${s.name}،`, 'حسابك في تطبيق «ألواح» لمتابعة حفظ القرآن:',
-        'الرابط: https://semak.sa/alwah', 'اسم الدخول: ' + s.username, 'كلمة المرور: ' + s.password,
+        'الرابط: ' + location.origin + location.pathname.replace(/index.html$/, ''), 'اسم الدخول: ' + s.username, 'كلمة المرور: ' + s.password,
         'افتح الرابط، ثم «إضافة إلى الشاشة الرئيسية» ليصير تطبيقاً على جوالك.'].join('\n');
 
     if (saved) return (

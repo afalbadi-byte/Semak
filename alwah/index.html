@@ -17,6 +17,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Amiri+Quran&family=Amiri:wght@700&display=swap" rel="stylesheet" />
+    <script>
+      // ألواح مستقلة عن سماك: متى ما عمل نطاقها الخاص alwah.semak.sa انتقل إليه تلقائياً،
+      // فلا يحسبها أندرويد من تطبيقات سماك المثبّتة على semak.sa
+      (function () {
+        if (location.hostname !== 'semak.sa' && location.hostname !== 'www.semak.sa') return;
+        var to = 'https://alwah.semak.sa/';
+        fetch(to + 'manifest.webmanifest', { mode: 'no-cors', cache: 'no-store' })
+          .then(function () { location.replace(to + location.hash); })
+          .catch(function () {});
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
