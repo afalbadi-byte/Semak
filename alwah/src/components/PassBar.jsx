@@ -2,11 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Hourglass, Undo2, BadgeCheck, Lock } from 'lucide-react';
 import { call } from '../lib/api';
 import { useData } from '../App';
-import { useToast, todayStr } from '../ui';
+import { useToast, todayStr, tomorrowStr } from '../ui';
 import { GRADES, gradeOf } from '../lib/quran';
-import { partRange, segsOf, segsPages, segsLines, memSegs, memEnds, oneRange, segsFor, label } from '../lib/ayah';
+import { partRange, segsOf, segsPages, segsLines, oneRange, segsFor, label } from '../lib/ayah';
 import { linesLabel } from '../lib/quran';
-import AyahPicker from './AyahPicker';
 import { AyahRange } from './AyahPicker';
 
 // ─── «تمّ التسميع»: المشرف وحده يجيز الورد ─────────────────────────────────
@@ -98,8 +97,8 @@ export default function PassBar({ member, part, today, plan, onDone }) {
         if (!res.success) { toast(res.message || 'تعذّر الحفظ', 'err'); return; }
         setOpen(false);
         toast(grade === null ? 'أُلغيت الإجازة' : grade === 1 ? 'يُعاد غداً' : `تمّ تسميع ${NAMES[part]}، بارك الله فيه`);
-        // بعد إجازة الحفظ الجديد: يحدّد المشرف الحفظ القادم استعداداً له
-        if (part === 'new' && grade !== null && grade !== 1) setNextOpen(true);
+        // بعد الإجازة: يحدّد المشرف ورد هذا الجزء القادم (لا حساب تلقائيّ)
+        if (grade !== null && !(part === 'new' && grade === 1)) setNextOpen(true);
         reloadMembers();
         onDone && onDone();
     };
@@ -114,12 +113,9 @@ export default function PassBar({ member, part, today, plan, onDone }) {
                 {sup ? <button disabled={busy} onClick={() => save(null)} className="h-8 px-3 rounded-lg bg-white/70 text-[12px] font-semibold inline-flex items-center gap-1 disabled:opacity-50"><Undo2 size={13} />تراجع</button> : null}
             </div>
             {today && today.ranges && today.ranges[part] ? <RangeText r={today.ranges[part]} /> : null}
-            {ok && part === 'new' ? (
-                nextOpen && sup ? <NextNew member={member} onDone={() => { setNextOpen(false); reloadMembers(); onDone && onDone(); }} />
-                    : <div className="flex items-center gap-2 pt-1 border-t border-green-200/70">
-                        <div className="flex-1 text-[12px]">{today.ranges && today.ranges.next && today.ranges.next.to ? <>الحفظ القادم: {linesLabel(today.ranges.next.lines)} إلى <NameOf k={today.ranges.next.to} /></> : 'الحفظ القادم: بالمقدار المعتاد'}</div>
-                        {sup ? <button onClick={() => setNextOpen(true)} className="h-8 px-3 rounded-lg bg-white/70 text-[12px] font-semibold">حدّده</button> : null}
-                    </div>
+            {ok ? (
+                nextOpen && sup ? <NextPart member={member} part={part} onDone={() => { setNextOpen(false); reloadMembers(); onDone && onDone(); }} />
+                    : sup ? <button onClick={() => setNextOpen(true)} className="h-8 px-3 rounded-lg bg-white/70 text-[12px] font-semibold">حدّد {NEXT[part]} القادم</button> : null
             ) : null}
         </div>
     );
@@ -181,49 +177,49 @@ function NameOf({ k }) {
     return <b className="font-quran text-[14px]">{t}</b>;
 }
 
-// ─── الحفظ القادم: يحدّده المشرف بعد إجازة حفظ اليوم ─────────────────────────────
-// يبدأ من حيث انتهى اليوم (بترتيب الحفظ: السورة من أوّلها، ثم التي قبلها)، ويختار
-// المشرف آخر آية، فيصير هذا المقطع ورد الحفظ الجديد القادم.
-function NextNew({ member, onDone }) {
+// ─── الورد القادم لجزءٍ من الورد: يحدّده المشرف بعد إجازته ─────────────────────────
+// المقترح: ما يلي ما سُمِّع اليوم (الحساب التلقائي اقتراحٌ فقط)، ويعدّله المشرف
+// «من سورة كذا آية كذا إلى سورة كذا آية كذا»، فيصير ورد هذا الجزء من الغد حتى يغيّره.
+const NEXT = { new: 'الحفظ', alwah: 'الألواح', rev: 'المراجعة' };
+function NextPart({ member, part, onDone }) {
     const toast = useToast();
-    const [st, setSt] = useState(null);           // { dir, start, end }
+    const [sug, setSug] = useState(null);
+    const [one, setOne] = useState(null);
     const [n, setN] = useState(null);
     const [busy, setBusy] = useState(false);
     useEffect(() => {
         call('member', { params: { id: member.id } }).then(r => {
-            const now = r.success && r.now;
-            if (!now || !now.new) { setSt({ done: true }); return; }
-            const [a, b] = memEnds(now.dir, segsOf(now.auto && now.auto.new) || []);
-            setSt({ dir: now.dir, start: a, end: b });
+            const s0 = r.success && r.now && r.now.auto ? segsOf(r.now.auto[part]) : null;
+            setSug(s0 || []); setOne(oneRange(s0));
         });
-    }, [member.id]);
+    }, [member.id, part]);
+    const segs = one ? segsFor(one, sug) : null;
     useEffect(() => {
-        if (!st || !st.start) return;
-        let dead = false;
-        segsLines(memSegs(st.dir, st.start, st.end)).then(x => { if (!dead) setN(x); }).catch(() => {});
+        if (part !== 'new' || !segs) return undefined;
+        let dead = false; segsLines(segs).then(x => { if (!dead) setN(x); }).catch(() => {});
         return () => { dead = true; };
-    }, [st && st.start, st && st.end]); // eslint-disable-line react-hooks/exhaustive-deps
-    const save = async reset => {
+    }, [JSON.stringify(segs)]); // eslint-disable-line react-hooks/exhaustive-deps
+    const save = async () => {
         setBusy(true);
-        const r = await call('next_save', { body: reset ? { member_id: member.id, d: todayStr(), reset: 1 } : { member_id: member.id, d: todayStr(), lines: n, to: st.end } });
+        const body = { member_id: member.id, d: tomorrowStr(), ranges: { [part]: segs } };
+        try {
+            if (part === 'new') body.new_lines = Math.max(1, Math.min(90, await segsLines(segs)));
+            else body[part === 'alwah' ? 'alwah_list' : 'rev_list'] = await segsPages(segs);
+        } catch (e) { setBusy(false); toast('تعذّر تحميل بيانات الآيات، تحقق من الإنترنت', 'err'); return; }
+        const r = await call('wird_save', { body });
         setBusy(false);
         if (!r.success) { toast(r.message || 'تعذّر الحفظ', 'err'); return; }
-        toast(reset ? 'الحفظ القادم بالمقدار المعتاد' : 'حُدِّد الحفظ القادم');
+        toast('حُدِّد ' + NEXT[part] + ' القادم');
         onDone();
     };
-    if (!st) return <div className="text-[12px] text-ink-3 pt-2">…</div>;
-    if (st.done) return <div className="text-[12px] pt-2">أتمّ الحفظ، ما شاء الله.</div>;
+    if (!sug) return <div className="text-[12px] text-ink-3 pt-2">…</div>;
+    if (!one) return <div className="text-[12px] pt-2">لا مقترح، حدّده من «عدّل الورد».</div>;
     return (
         <div className="rounded-xl bg-white p-3 space-y-2 text-ink mt-1">
-            <div className="text-[12px] font-bold text-ink-2">حدّد الحفظ القادم لـ{member.name}</div>
-            <div className="text-[11px] text-ink-3">يبدأ من</div>
-            <NameOf k={st.start} />
-            <AyahPicker label="إلى" value={st.end} min={st.dir === 'asc' ? st.start : null} onChange={v => setSt(x => ({ ...x, end: v }))} />
-            {n ? <div className="text-[12px] text-ink-3">المقدار: {linesLabel(n)}</div> : null}
-            <div className="flex gap-2">
-                <button disabled={busy || !n} onClick={() => save(false)} className="flex-1 h-10 rounded-xl bg-brand text-white text-[13px] font-bold disabled:opacity-50">اعتمد الحفظ القادم</button>
-                <button disabled={busy} onClick={() => save(true)} className="h-10 px-3 rounded-xl bg-paper-2 text-ink-2 text-[12px] font-semibold">المقدار المعتاد</button>
-            </div>
+            <div className="text-[12px] font-bold text-ink-2">حدّد {NEXT[part]} القادم لـ{member.name}</div>
+            <AyahRange from={one[0]} to={one[1]} onChange={setOne} labels={['من', 'إلى']} />
+            {part === 'new' && n ? <div className="text-[12px] text-ink-3">المقدار: {linesLabel(n)}</div> : null}
+            <button disabled={busy || !segs} onClick={save} className="w-full h-10 rounded-xl bg-brand text-white text-[13px] font-bold disabled:opacity-50">اعتمده وردَ الغد</button>
         </div>
     );
 }

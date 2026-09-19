@@ -192,3 +192,7 @@ export const todayStr = () => {
     const n = new Date(); const z = x => String(x).padStart(2, '0');
     return n.getFullYear() + '-' + z(n.getMonth() + 1) + '-' + z(n.getDate());
 };
+export const tomorrowStr = () => {
+    const n = new Date(); n.setDate(n.getDate() + 1); const z = x => String(x).padStart(2, '0');
+    return n.getFullYear() + '-' + z(n.getMonth() + 1) + '-' + z(n.getDate());
+};

@@ -410,29 +410,67 @@ function ranges_out($j) {
     return $v;
 }
 
-// ورد يومٍ عدّله المشرف يدوياً: يحلّ محلّ المحسوب في الأجزاء التي عدّلها
+// أسطر مقاطع الآيات [[من، إلى]، …] من خريطة الأسطر، مرتّبةً بترتيب الحفظ
+function ml_range_lines($segs, $dir) {
+    $S = ml_sur(); $out = [];
+    foreach ((array)$segs as $sg) {
+        if (!is_array($sg) || count($sg) !== 2) continue;
+        [$s0, $a0] = array_map('intval', explode(':', (string)$sg[0]));
+        [$s1, $a1] = array_map('intval', explode(':', (string)$sg[1]));
+        for ($s = max(1, $s0); $s <= min(114, $s1); $s++) {
+            $lo = $s === $s0 ? $a0 : 1; $hi = $s === $s1 ? $a1 : 9999;
+            foreach ($S[$s] as $x) if ($x[4] >= $lo && $x[3] <= $hi) $out[] = $x;
+        }
+    }
+    usort($out, function ($a, $b) use ($dir) {
+        if ($dir !== 'asc' && $a[2] !== $b[2]) return $b[2] <=> $a[2];     // من الناس صعوداً: السورة الأعلى رقماً أوّلاً
+        return ($a[0] <=> $b[0]) ?: ($a[1] <=> $b[1]);
+    });
+    return $out;
+}
+
+// ─── الورد اليدوي: ما يحدّده المشرف يبقى حتى يغيّره ─────────────────────────────
+// لكل جزءٍ (الجديد، الألواح، المراجعة) آخرُ ما حدّده المشرف في يومٍ لا يتجاوز اليوم
+// المطلوب. والمحسوب تلقائياً (auto) يبقى اقتراحاً فقط، ولمن لم يُحدَّد له وردٌ بعد.
 function wird_apply($plan, $mid, $d) {
-    $w = one("SELECT * FROM al_wird WHERE member_id=" . (int)$mid . " AND d='" . E($d) . "' LIMIT 1");
     $plan['custom'] = null;
     $plan['ranges'] = null;
-    if (!$w) return $plan;
-    $c = [];
-    if ($w['new_lines'] !== null && $plan['new']) {
-        $c['new_lines'] = (int)$w['new_lines'];
-        if ((int)$w['new_lines'] > 0) {
-            $n = (int)$w['new_lines'];
+    $rows = rows("SELECT * FROM al_wird WHERE member_id=" . (int)$mid . " AND d <= '" . E($d) . "' ORDER BY d DESC LIMIT 120");
+    if (!$rows) return $plan;
+    $pick = function ($f) use ($rows) { foreach ($rows as $w) if ($w[$f] !== null) return $w; return null; };
+    $pl = function ($csv) { $a = array_values(array_filter(array_map('intval', explode(',', (string)$csv)), function ($p) { return $p >= 1 && $p <= PAGES; })); sort($a); return array_values(array_unique($a)); };
+    $c = []; $rg = [];
+
+    $wn = $pick('new_lines');
+    if ($wn) {
+        $n = (int)$wn['new_lines']; $c['new_lines'] = $n;
+        $r = ranges_out($wn['ranges'] ?? null);
+        if ($n <= 0) { $plan['new'] = null; $plan['new_off'] = true; }
+        elseif ($r && !empty($r['new'])) {
+            // المقطع كما حدّده المشرف: صفحته وأسطره منه لا من الموضع المحسوب
+            $L = ml_range_lines($r['new'], $plan['dir']);
+            if ($L) {
+                $to = 0; foreach ($L as $y) if ($y[0] === $L[0][0]) $to = max($to, $y[1]);
+                $plan['new'] = ['page' => $L[0][0], 'from_line' => $L[0][1], 'to_line' => $to, 'lines' => count($L), 'manual' => true];
+            }
+            $rg['new'] = $r['new'];
+        } elseif ($plan['new']) {
             $plan['new']['lines'] = $n;
             $nl = array_slice(ml_seq($plan['dir']), $plan['pos'], $n);
             $plan['auto']['new'] = ml_segs($nl);
             $to = 0; foreach ($nl as $y) if ($y[0] === $plan['new']['page']) $to = max($to, $y[1]);
             $plan['new']['to_line'] = $to ?: $plan['new']['from_line'];
-        } else { $plan['new'] = null; $plan['new_off'] = true; }
+        }
     }
-    $pl = function ($csv) { $a = array_values(array_filter(array_map('intval', explode(',', (string)$csv)), function ($p) { return $p >= 1 && $p <= PAGES; })); sort($a); return array_values(array_unique($a)); };
-    if ($w['alwah_list'] !== null) { $plan['alwah'] = $pl($w['alwah_list']); $c['alwah'] = true; }
-    if ($w['rev_list'] !== null) { $plan['review'] = $pl($w['rev_list']); $c['review'] = true; }
+    foreach ([['alwah', 'alwah_list', 'alwah'], ['rev', 'rev_list', 'review']] as [$k, $f, $pk]) {
+        $w = $pick($f);
+        if (!$w) continue;
+        $plan[$pk] = $pl($w[$f]); $c[$pk] = true;
+        $r = ranges_out($w['ranges'] ?? null);
+        if ($r && !empty($r[$k])) $rg[$k] = $r[$k];
+    }
     $plan['custom'] = $c ?: null;
-    $plan['ranges'] = ranges_out($w['ranges'] ?? null);
+    $plan['ranges'] = $rg ?: null;
     return $plan;
 }
 
@@ -662,27 +700,42 @@ case 'log_get': {
 
 // ─── تعديل ورد اليوم يدوياً (للمشرف) ─────────────────────────────────────────
 case 'wird_save': {
+    // يُحفظ ما أُرسل من الأجزاء فقط (ويبقى غيره كما كان في ذلك اليوم)؛ reset يمسح الورد اليدوي كلّه
     $u = need_sup(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
     $mid = (int)$m['id'];
     $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['d'] ?? '')) ? $b['d'] : date('Y-m-d');
     if (!empty($b['reset'])) {
-        $conn->query("DELETE FROM al_wird WHERE member_id=$mid AND d='" . E($d) . "'");
-        al_log($u['id'], 'wird_reset', ['member' => $mid, 'd' => $d]);
+        $old = rows("SELECT * FROM al_wird WHERE member_id=$mid");
+        $conn->query("DELETE FROM al_wird WHERE member_id=$mid");
+        al_log($u['id'], 'wird_reset', ['member' => $mid, 'old' => $old]);      // المحذوف محفوظٌ هنا كاملاً
         out(['success' => true]);
     }
-    $nl = isset($b['new_lines']) && $b['new_lines'] !== null && $b['new_lines'] !== '' ? max(0, min(90, (int)$b['new_lines'])) : 'NULL';
-    $lst = function ($k) use ($b) {
-        if (!isset($b[$k]) || !is_array($b[$k])) return 'NULL';
+    $old = one("SELECT * FROM al_wird WHERE member_id=$mid AND d='" . E($d) . "' LIMIT 1");
+    $sql = function ($v) { return $v === null ? 'NULL' : "'" . E($v) . "'"; };
+    $nl = $old ? $old['new_lines'] : null;
+    if (array_key_exists('new_lines', $b)) $nl = $b['new_lines'] === null || $b['new_lines'] === '' ? null : (string)max(0, min(90, (int)$b['new_lines']));
+    $lst = function ($k, $cur) use ($b) {
+        if (!array_key_exists($k, $b)) return $cur;
+        if (!is_array($b[$k])) return null;
         $a = array_values(array_unique(array_filter(array_map('intval', $b[$k]), function ($p) { return $p >= 1 && $p <= PAGES; })));
         if (count($a) > 60) fail('الحدّ ٦٠ صفحة');
         sort($a);
-        return "'" . E(implode(',', $a)) . "'";
+        return implode(',', $a);
     };
-    $al = $lst('alwah_list'); $rv = $lst('rev_list');
-    $rg = ranges_in($b['ranges'] ?? null); $rg = $rg ? "'" . E(json_encode($rg)) . "'" : 'NULL';
-    $conn->query("INSERT INTO al_wird (member_id, d, new_lines, alwah_list, rev_list, ranges, by_user) VALUES ($mid, '" . E($d) . "', $nl, $al, $rv, $rg, " . (int)$u['id'] . ")
+    $al = $lst('alwah_list', $old ? $old['alwah_list'] : null);
+    $rv = $lst('rev_list', $old ? $old['rev_list'] : null);
+    $rg = ranges_out($old ? $old['ranges'] : null) ?: [];
+    $in = ranges_in($b['ranges'] ?? null) ?: [];
+    foreach (['new', 'alwah', 'rev'] as $k) if (isset($in[$k])) $rg[$k] = $in[$k];
+    if ($nl === null || (int)$nl === 0) unset($rg['new']);
+    if ($al === null || $al === '') unset($rg['alwah']);
+    if ($rv === null || $rv === '') unset($rg['rev']);
+    unset($rg['next']);
+    $rgs = $rg ? json_encode($rg) : null;
+    $conn->query("INSERT INTO al_wird (member_id, d, new_lines, alwah_list, rev_list, ranges, by_user) VALUES ($mid, '" . E($d) . "', "
+        . ($nl === null ? 'NULL' : (int)$nl) . ", " . $sql($al) . ", " . $sql($rv) . ", " . $sql($rgs) . ", " . (int)$u['id'] . ")
                   ON DUPLICATE KEY UPDATE new_lines=VALUES(new_lines), alwah_list=VALUES(alwah_list), rev_list=VALUES(rev_list), ranges=VALUES(ranges), by_user=VALUES(by_user)");
-    al_log($u['id'], 'wird_save', ['member' => $mid, 'd' => $d, 'new_lines' => $nl, 'alwah' => $al, 'rev' => $rv]);
+    al_log($u['id'], 'wird_save', ['member' => $mid, 'd' => $d, 'new_lines' => $nl, 'alwah' => $al, 'rev' => $rv, 'ranges' => $rg]);
     out(['success' => true, 'plan' => wird_apply(member_plan($m, $d), $mid, $d)]);
 }
 

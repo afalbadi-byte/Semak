@@ -204,8 +204,8 @@ export default function Hifz({ q }) {
 
             {sup && plan ? (
                 <div className="flex items-center gap-2">
-                    {plan.custom ? <span className="text-[12px] font-semibold text-amber-700 bg-amber-50 rounded-lg px-2 py-1">ورد اليوم معدَّل يدوياً</span> : null}
-                    <button onClick={() => setEditW(true)} className="ms-auto h-8 px-3 rounded-lg bg-paper-card border border-paper-2 text-[12px] font-bold text-ink-2 inline-flex items-center gap-1.5"><SlidersHorizontal size={14} />عدّل ورد اليوم</button>
+                    {plan.custom ? <span className="text-[12px] font-semibold text-amber-700 bg-amber-50 rounded-lg px-2 py-1">الورد يدويّ</span> : null}
+                    <button onClick={() => setEditW(true)} className="ms-auto h-8 px-3 rounded-lg bg-paper-card border border-paper-2 text-[12px] font-bold text-ink-2 inline-flex items-center gap-1.5"><SlidersHorizontal size={14} />عدّل الورد</button>
                 </div>
             ) : null}
 
@@ -298,7 +298,7 @@ export default function Hifz({ q }) {
                 </div>
             </div>
 
-            <Sheet open={editW} onClose={() => setEditW(false)} title={'ورد اليوم · ' + m.name}>
+            <Sheet open={editW} onClose={() => setEditW(false)} title={'الورد · ' + m.name}>
                 {editW && plan ? <WirdEditor member={m} plan={plan} onDone={() => { setEditW(false); loadDay(); reloadMembers(); }} /> : null}
             </Sheet>
 

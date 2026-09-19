@@ -3,27 +3,26 @@ import { RotateCcw, Save } from 'lucide-react';
 import { call } from '../lib/api';
 import { Btn, useToast, todayStr } from '../ui';
 import { linesLabel } from '../lib/quran';
-import { partRange, segsPages, segsLines, memSegs, memEnds, oneRange, segsFor, label } from '../lib/ayah';
-import AyahPicker, { AyahRange } from './AyahPicker';
+import { partRange, segsPages, segsLines, oneRange, segsFor } from '../lib/ayah';
+import { AyahRange } from './AyahPicker';
 
-// ─── تعديل ورد اليوم يدوياً (للمشرف) ─────────────────────────────────────────
-// كل جزءٍ يُحدَّد بالسورة ورقم الآية (أوّل آيةٍ وآخر آية مع أوّل كلماتهما)، ويُحفظ لهذا
-// الفرد في هذا اليوم وحده، ويعود الحساب التلقائي من الغد. وما لم يُلمس يبقى كما هو.
-export default function WirdEditor({ member, plan, onDone }) {
+// ─── ورد الفرد يدوياً (للمشرف) ───────────────────────────────────────────────
+// كل جزءٍ نطاقٌ واحد «من سورة كذا آية كذا إلى سورة كذا آية كذا»، ويبقى وردَه حتى
+// يغيّره المشرف (لا حساب تلقائيّ يطغى عليه). وما لم يُلمس من الأجزاء يبقى كما هو.
+export default function WirdEditor({ member, plan, onDone, d, title }) {
     const toast = useToast();
     const [busy, setBusy] = useState(false);
     const [touched, setTouched] = useState({});
-    const [r, setR] = useState({});                 // المقاطع: new / alwah / rev، لكلٍّ قائمة مقاطع [من، إلى]
+    const [r, setR] = useState({});                 // لكل جزءٍ نطاقٌ [من، إلى]
+    const [orig, setOrig] = useState({});           // المقاطع كما هي (محتواها الدقيق ما لم يُعدَّل النطاق)
     const [off, setOff] = useState({ new: !!plan.new_off });
-    const [orig, setOrig] = useState({});           // المقاطع كما حُسبت (محتواها الدقيق ما لم تُعدَّل)
-    const [start, setStart] = useState(null);        // بداية حفظ اليوم (ثابتة: من حيث وصل)
 
     useEffect(() => {
         let dead = false;
         (async () => {
-            const o = {};
-            for (const k of ['new', 'alwah', 'rev']) o[k] = await partRange(plan, k).catch(() => null);
-            if (!dead) { setR(o); setOrig(o); if (o.new) setStart(memEnds(plan.dir, o.new)[0]); }
+            const o = {}, one = {};
+            for (const k of ['new', 'alwah', 'rev']) { o[k] = await partRange(plan, k).catch(() => null); one[k] = oneRange(o[k]); }
+            if (!dead) { setOrig(o); setR(one); }
         })();
         return () => { dead = true; };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -32,24 +31,21 @@ export default function WirdEditor({ member, plan, onDone }) {
     const none = k => { setOff(o => ({ ...o, [k]: true })); setTouched(t => ({ ...t, [k]: true })); };
 
     const save = async reset => {
+        if (reset && !window.confirm('مسح الورد اليدوي لـ' + member.name + '؟ يعود الورد المقترح حتى تحدّده من جديد.')) return;
         setBusy(true);
-        let body;
+        let body = { member_id: member.id, d: d || todayStr() };
         try {
-            if (reset) body = { member_id: member.id, d: todayStr(), reset: 1 };
+            if (reset) body.reset = 1;
             else {
-                const ranges = { ...(plan.ranges || {}) };
-                const c = plan.custom || {};
-                body = { member_id: member.id, d: todayStr(),
-                    new_lines: c.new_lines !== undefined ? c.new_lines : null,
-                    alwah_list: c.alwah ? plan.alwah : null, rev_list: c.review ? plan.review : null };
-                if (touched.new) {
-                    if (off.new) { body.new_lines = 0; delete ranges.new; }
-                    else if (r.new) { body.new_lines = Math.max(1, Math.min(90, await segsLines(r.new))); ranges.new = r.new; }
-                }
-                for (const [k, lk] of [['alwah', 'alwah_list'], ['rev', 'rev_list']]) {
-                    if (!touched[k]) continue;
-                    const sg = segsFor(oneRange(r[k]), orig[k]);
-                    if (off[k]) { body[lk] = []; delete ranges[k]; } else if (sg) { body[lk] = await segsPages(sg); ranges[k] = sg; }
+                const ranges = {};
+                // يُرسل كل جزء: ما عُدِّل بنطاقه الجديد، وما لم يُعدَّل بمحتواه كما هو، فيثبت الورد كلّه
+                for (const [k, lk] of [['new', null], ['alwah', 'alwah_list'], ['rev', 'rev_list']]) {
+                    const segs = segsFor(r[k], orig[k]);
+                    if (k === 'new') {
+                        if (off.new) body.new_lines = 0;
+                        else if (segs) { body.new_lines = Math.max(1, Math.min(90, await segsLines(segs))); ranges.new = segs; }
+                    } else if (off[k]) body[lk] = [];
+                    else if (segs) { body[lk] = await segsPages(segs); ranges[k] = segs; }
                 }
                 body.ranges = ranges;
             }
@@ -57,39 +53,28 @@ export default function WirdEditor({ member, plan, onDone }) {
         const res = await call('wird_save', { body });
         setBusy(false);
         if (!res.success) { toast(res.message || 'تعذّر الحفظ', 'err'); return; }
-        toast(reset ? 'عاد الورد إلى الحساب التلقائي' : 'حُفظ ورد اليوم');
+        toast(reset ? 'مُسح الورد اليدوي' : 'حُفظ الورد');
         onDone && onDone();
     };
 
     const hasNew = !!plan.new || !!plan.new_off;
     return (
         <div className="space-y-5">
-            <p className="text-[12px] text-ink-3 leading-6">يسري التعديل على ورد <b className="text-ink">{member.name}</b> اليوم فقط، ويعود الحساب التلقائي من الغد.</p>
-
+            <p className="text-[12px] text-ink-3 leading-6">{title || <>يبقى هذا ورد <b className="text-ink">{member.name}</b> حتى تغيّره.</>}</p>
             {hasNew ? (
-                <Part title="الحفظ الجديد" off={off.new} onNone={() => none('new')} onOn={() => r.new && set('new', r.new)} noneText="لا حفظ جديد اليوم">
-                    {start && r.new ? (
-                        <>
-                            <div className="text-[11px] text-ink-3">يبدأ من حيث وصل</div>
-                            <StartText k={start} />
-                            <AyahPicker label="إلى" value={memEnds(plan.dir, r.new)[1]} min={plan.dir === 'asc' ? start : null} onChange={v => set('new', memSegs(plan.dir, start, v))} />
-                            <NewLines r={r.new} />
-                        </>
-                    ) : <div className="text-[12px] text-ink-3">…</div>}
+                <Part title="الحفظ الجديد" off={off.new} onNone={() => none('new')} onOn={() => r.new && set('new', r.new)} noneText="لا حفظ جديد">
+                    {r.new ? <><AyahRange from={r.new[0]} to={r.new[1]} onChange={v => set('new', v)} /><Lines r={segsFor(r.new, orig.new)} /></> : <div className="text-[12px] text-ink-3">…</div>}
                 </Part>
             ) : null}
-
-            <Part title="الألواح" off={off.alwah} onNone={() => none('alwah')} onOn={() => r.alwah && set('alwah', r.alwah)} noneText="بلا ألواح اليوم">
-                <Segs v={r.alwah} onChange={v => set('alwah', v)} />
+            <Part title="الألواح" off={off.alwah} onNone={() => none('alwah')} onOn={() => r.alwah && set('alwah', r.alwah)} noneText="بلا ألواح">
+                <AyahRange from={(r.alwah || ['78:1', '78:40'])[0]} to={(r.alwah || ['78:1', '78:40'])[1]} onChange={v => set('alwah', v)} />
             </Part>
-
-            <Part title="المراجعة" off={off.rev} onNone={() => none('rev')} onOn={() => r.rev && set('rev', r.rev)} noneText="بلا مراجعة اليوم">
-                <Segs v={r.rev} onChange={v => set('rev', v)} />
+            <Part title="المراجعة" off={off.rev} onNone={() => none('rev')} onOn={() => r.rev && set('rev', r.rev)} noneText="بلا مراجعة">
+                <AyahRange from={(r.rev || ['78:1', '78:40'])[0]} to={(r.rev || ['78:1', '78:40'])[1]} onChange={v => set('rev', v)} />
             </Part>
-
             <div className="flex gap-2">
-                <Btn className="flex-1 !h-12" busy={busy} onClick={() => save(false)}><Save size={17} />احفظ ورد اليوم</Btn>
-                {plan.custom ? <Btn kind="line" className="!h-12" disabled={busy} onClick={() => save(true)}><RotateCcw size={16} />التلقائي</Btn> : null}
+                <Btn className="flex-1 !h-12" busy={busy} onClick={() => save(false)}><Save size={17} />احفظ الورد</Btn>
+                {plan.custom && !d ? <Btn kind="line" className="!h-12" disabled={busy} onClick={() => save(true)}><RotateCcw size={16} />امسح</Btn> : null}
             </div>
         </div>
     );
@@ -108,20 +93,8 @@ function Part({ title, off, onNone, onOn, noneText, children }) {
     );
 }
 
-function StartText({ k }) {
-    const [t, setT] = useState('');
-    useEffect(() => { label(k).then(setT).catch(() => {}); }, [k]);
-    return <div className="font-quran text-[16px] text-ink">{t}</div>;
-}
-
-// الجزء نطاقاً واحداً: من سورة كذا آية كذا إلى سورة كذا آية كذا
-function Segs({ v, onChange }) {
-    const one = oneRange(v) || ['78:1', '78:40'];
-    return <AyahRange from={one[0]} to={one[1]} labels={['من', 'إلى']} onChange={x => onChange([x])} />;
-}
-
-function NewLines({ r }) {
+function Lines({ r }) {
     const [n, setN] = useState(null);
-    useEffect(() => { let dead = false; segsLines(r).then(x => { if (!dead) setN(x); }).catch(() => {}); return () => { dead = true; }; }, [JSON.stringify(r)]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { let dead = false; if (r) segsLines(r).then(x => { if (!dead) setN(x); }).catch(() => {}); return () => { dead = true; }; }, [JSON.stringify(r)]); // eslint-disable-line react-hooks/exhaustive-deps
     return n ? <div className="text-[12px] text-ink-3">المقدار: {linesLabel(n)}</div> : null;
 }
