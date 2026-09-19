@@ -5,8 +5,10 @@ import { Card, Ring, Section, Spinner, Btn, hijri, greg, todayStr } from '../ui'
 import { surahsOn, surahsIn, rangeLabel, linesLabel, juzOf, gradeOf } from '../lib/quran';
 import { BookMarked } from 'lucide-react';
 import { partDone } from './Home';
+import { useData } from '../App';
 
 export default function MemberView({ id }) {
+    const { sup } = useData();
     const [d, setD] = useState(null);
     const load = useCallback(async () => {
         const [r, k] = await Promise.all([call('member', { params: { id } }), call('marks_summary', { params: { member_id: id } })]);
@@ -57,7 +59,7 @@ export default function MemberView({ id }) {
 
             {/* ── ورد اليوم ── */}
             <Section title={'ورد اليوم · ' + greg(todayStr(), { weekday: 'long', day: 'numeric', month: 'long' })}
-                action={today ? <a href={'#/m/' + m.id + '/log'} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><Pencil size={12} />عدّل</a> : null}>
+                action={today && sup ? <a href={'#/m/' + m.id + '/log'} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><Pencil size={12} />عدّل</a> : null}>
                 <Card className="divide-y divide-paper-2">
                     <PlanRow icon={BookOpen} title="الحفظ الجديد" done={partDone(today, 'new')} color={color}
                         main={plan.new ? `صفحة ${plan.new.page} · ${surahsOn(plan.new.page).join('، ')}` : 'أتمّ الحفظ'}
@@ -71,9 +73,11 @@ export default function MemberView({ id }) {
                         sub={plan.review.length ? `${surahsIn(plan.review).join('، ')} · الموضع ${plan.cycle_pos} من ${plan.cycle} في الدورة` : ''}
                         link={plan.review.length ? mu(plan.review[0]) : null} />
                 </Card>
-                <a href={'#/m/' + m.id + '/log'} className="block mt-3">
-                    <Btn className="w-full !h-12"><Mic size={18} />{today ? 'عدّل تسميع اليوم' : 'سجّل تسميع اليوم'}</Btn>
-                </a>
+                {sup ? (
+                    <a href={'#/m/' + m.id + '/log'} className="block mt-3">
+                        <Btn className="w-full !h-12"><Mic size={18} />{today ? 'عدّل تسميع اليوم' : 'سجّل تسميع اليوم'}</Btn>
+                    </a>
+                ) : <p className="mt-3 text-center text-[12px] text-ink-3">يُجاز الورد حين يسمعه المشرف ويضع «تمّ التسميع».</p>}
             </Section>
 
             {/* ── مصحف الفرد: مواضع الضعف ── */}

@@ -9,7 +9,7 @@ import { surahsOn, surahsIn, rangeLabel, linesLabel, readUrl, LPP } from '../lib
 // ─── تسميع يوم: الحفظ الجديد والألواح والمراجعة ─────────────────────────────
 export default function Record({ id, d: dIn }) {
     const toast = useToast();
-    const { reloadMembers } = useData();
+    const { reloadMembers, sup } = useData();
     const [d, setD] = useState(dIn || todayStr());
     const [data, setData] = useState(null);
     const [f, setF] = useState(null);
@@ -46,6 +46,7 @@ export default function Record({ id, d: dIn }) {
         });
     }, [id, d]);
 
+    if (!sup) return <p className="text-center text-ink-3 py-16">إجازة التسميع للمشرف وحده.</p>;
     if (!data || (!f && !data.error)) return <Spinner />;
     if (data.error) return <p className="text-center text-ink-3 py-16">{data.error}</p>;
     const set = (k, v) => setF(x => ({ ...x, [k]: v }));

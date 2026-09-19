@@ -7,6 +7,7 @@ import { useToast, todayStr, Empty, Seg } from '../ui';
 import Mushaf from '../components/Mushaf';
 import WordActions from '../components/WordActions';
 import Reciter from '../components/Reciter';
+import PassBar from '../components/PassBar';
 import { loadPage } from '../lib/mushaf';
 import { surahsOn, juzOf, rangeLabel, SURAHS, JUZ_START, LPP } from '../lib/quran';
 import { BookOpen } from 'lucide-react';
@@ -22,7 +23,12 @@ export default function Hifz({ q }) {
     const toast = useToast();
     const mid = +q.m || me.member_id || (members[0] && members[0].id) || 0;
     const m = members.find(x => x.id === mid);
-    const plan = m && m.plan;
+    // ورد اليوم نفسه (قبل تسميعه): يبقى ثابتاً بعد الإجازة، ولا ينتقل إلى ورد الغد
+    const [day, setDay] = useState(null);
+    const loadDay = useCallback(async () => { if (!mid) return; const r = await call('member', { params: { id: mid } }); if (r.success) setDay({ id: mid, plan: r.plan, today: r.stats.today }); }, [mid]);
+    useEffect(() => { loadDay(); }, [loadDay]);
+    const plan = day && day.id === mid ? day.plan : (m && m.plan);
+    const today = day && day.id === mid ? day.today : (m && m.today);
     const tab = TABS.some(t => t[0] === q.t) ? q.t : 'new';
 
     // صفحات القسم
@@ -175,8 +181,10 @@ export default function Hifz({ q }) {
                 </div>
             ) : null}
 
+            {tab !== 'all' && set.length ? <PassBar member={m} part={tab} today={today} onDone={loadDay} /> : null}
+
             {sup ? (
-                <a href={'#/m/' + mid + '/log'} className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-brand text-white font-bold"><Mic size={17} />سجّل تسميع اليوم</a>
+                <a href={'#/m/' + mid + '/log'} className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-brand text-white font-bold"><Mic size={17} />التسميع المفصّل (الأخطاء والملاحظة)</a>
             ) : null}
             {tab !== 'all' && set.length > 1 ? <p className="text-[11px] text-ink-3 text-center">{TABS.find(t => t[0] === tab)[1]}: صفحات {rangeLabel(set)}</p> : null}
 

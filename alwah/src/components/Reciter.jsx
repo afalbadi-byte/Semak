@@ -8,8 +8,13 @@ import { SURAHS } from '../lib/quran';
 const SRC = 'https://everyayah.com/data/Muhammad_Ayyoub_128kbps/';
 const pad = n => String(n).padStart(3, '0');
 const url = k => { const [s, a] = k.split(':'); return SRC + pad(s) + pad(a) + '.mp3'; };
-const PREF = 'alwah_rec_v1';
-const loadPref = () => { try { return { each: 3, loops: 1, rate: 1, ...JSON.parse(localStorage.getItem(PREF) || '{}') }; } catch (e) { return { each: 3, loops: 1, rate: 1 }; } };
+// طريقتان للتكرار: «المقطع كاملاً» يتلو المقطع من أوّله إلى آخره ثم يعيده، و«كل آية» يكرّر
+// الآية ثم ينتقل للتي بعدها. n عدد المرّات (0 = بلا توقّف)
+const PREF = 'alwah_rec_v2';
+const DEF = { mode: 'seg', n: 3, rate: 1 };
+const loadPref = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(PREF) || '{}') }; } catch (e) { return { ...DEF }; } };
+const eachOf = p => (p.mode === 'ayah' ? Math.max(1, p.n || 1) : 1);
+const loopsOf = p => (p.mode === 'seg' ? p.n : 1);
 
 export const ayahLabel = k => { const [s, a] = k.split(':'); return (SURAHS[s - 1] ? SURAHS[s - 1][0] : '') + ' ' + a; };
 
@@ -59,9 +64,10 @@ export default function Reciter({ ayahs, range, pick, onAyah }) {
     };
     function next() {
         const s = stRef.current, p = loadPref();
-        if (s.rep < p.each) return playAt(s.i, s.rep + 1, s.loop);
+        const each = eachOf(p), loops = loopsOf(p);
+        if (s.rep < each) return playAt(s.i, s.rep + 1, s.loop);
         if (s.i < toRef.current) return playAt(s.i + 1, 1, s.loop);
-        if (p.loops === 0 || s.loop < p.loops) return playAt(fromRef.current, 1, s.loop + 1);
+        if (loops === 0 || s.loop < loops) return playAt(fromRef.current, 1, s.loop + 1);
         stop();
     }
     const toRef = useRef(to); toRef.current = to;
@@ -86,7 +92,7 @@ export default function Reciter({ ayahs, range, pick, onAyah }) {
                 <div className="flex-1 min-w-0">
                     <div className="text-[12px] text-ink-3">تلاوة الشيخ محمد أيوب</div>
                     <div className="text-[14px] font-bold text-ink truncate">
-                        {st.on ? `${ayahLabel(ayahs[st.i])} · تكرار ${st.rep}/${pref.each}${pref.loops !== 1 ? ` · الدورة ${st.loop}${pref.loops ? '/' + pref.loops : ''}` : ''}`
+                        {st.on ? `${ayahLabel(ayahs[st.i])} · ${pref.mode === 'seg' ? `المقطع ${st.loop}${pref.n ? '/' + pref.n : ''}` : `الآية ${st.rep}/${eachOf(pref)}`}`
                             : `المقطع: ${count} ${count === 1 ? 'آية' : count <= 10 ? 'آيات' : 'آية'}`}
                     </div>
                 </div>
@@ -110,11 +116,12 @@ export default function Reciter({ ayahs, range, pick, onAyah }) {
             </div>
 
             <div className="space-y-2">
-                <Row label="تكرار الآية">
-                    {[1, 3, 5, 10, 20].map(n => <Pill key={n} on={pref.each === n} onClick={() => save({ ...pref, each: n })}>{n === 1 ? 'مرة' : n}</Pill>)}
+                <Row label="التكرار" icon>
+                    <Pill on={pref.mode === 'seg'} onClick={() => save({ ...pref, mode: 'seg' })}>المقطع كاملاً</Pill>
+                    <Pill on={pref.mode === 'ayah'} onClick={() => save({ ...pref, mode: 'ayah', n: pref.n || 3 })}>كل آية ثم التي بعدها</Pill>
                 </Row>
-                <Row label="تكرار المقطع" icon>
-                    {[[1, 'مرة'], [3, '٣'], [5, '٥'], [10, '١٠'], [0, '∞']].map(([n, t]) => <Pill key={n} on={pref.loops === n} onClick={() => save({ ...pref, loops: n })}>{t}</Pill>)}
+                <Row label="عدد المرات">
+                    {[[1, 'مرة'], [3, '٣'], [5, '٥'], [10, '١٠'], [20, '٢٠']].concat(pref.mode === 'seg' ? [[0, '∞']] : []).map(([n, t]) => <Pill key={n} on={pref.n === n} onClick={() => save({ ...pref, n })}>{t}</Pill>)}
                 </Row>
                 <Row label="السرعة">
                     {[[0.75, 'بطيئة'], [1, 'عادية'], [1.25, 'أسرع']].map(([n, t]) => <Pill key={n} on={pref.rate === n} onClick={() => save({ ...pref, rate: n })}>{t}</Pill>)}

@@ -501,7 +501,8 @@ case 'log_get': {
 }
 
 case 'log_save': {
-    $u = need(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
+    // إجازة الورد للمشرف وحده: الفرد لا يسجّل تسميع نفسه
+    $u = need_sup(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
     $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['d'] ?? '')) ? $b['d'] : date('Y-m-d');
     if ($d > date('Y-m-d')) fail('لا يُسجَّل تسميعٌ ليومٍ لم يأتِ');
     $i = function ($k, $max = 999) use ($b) { return max(0, min($max, (int)($b[$k] ?? 0))); };
@@ -523,7 +524,7 @@ case 'log_save': {
 }
 
 case 'log_delete': {
-    $u = need(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
+    $u = need_sup(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
     $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($b['d'] ?? '')) ? $b['d'] : '';
     if (!$d) fail('التاريخ مطلوب');
     $old = one("SELECT * FROM al_logs WHERE member_id=" . (int)$m['id'] . " AND d='" . E($d) . "'");

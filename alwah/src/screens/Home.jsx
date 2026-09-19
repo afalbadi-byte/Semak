@@ -44,6 +44,7 @@ export default function Home() {
 }
 
 function MemberCard({ m }) {
+    const { sup } = useData();
     const p = m.plan;
     const cur = p.current;
     return (
@@ -76,7 +77,7 @@ function MemberCard({ m }) {
                         </span>
                     );
                 })}
-                <a href={'#/m/' + m.id + '/log'} className="h-8 px-3 rounded-lg bg-brand text-white text-[12px] font-bold inline-flex items-center gap-1"><Mic size={13} />تسميع</a>
+                {sup ? <a href={'#/m/' + m.id + '/log'} className="h-8 px-3 rounded-lg bg-brand text-white text-[12px] font-bold inline-flex items-center gap-1"><Mic size={13} />تسميع</a> : null}
             </div>
         </Card>
     );

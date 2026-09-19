@@ -7,6 +7,7 @@ import useRtc from '../lib/useRtc';
 import CallRoom from '../components/CallRoom';
 import Mushaf from '../components/Mushaf';
 import WordActions from '../components/WordActions';
+import PassBar from '../components/PassBar';
 import { surahsOn, juzOf, rangeLabel } from '../lib/quran';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -138,6 +139,9 @@ export default function Session() {
                         </div>
                     ) : null}
                     <Mushaf page={page} marks={marks} onWord={sup ? w => setSel(w) : undefined} readOnly={!sup} selected={sel && sel.k} />
+                    {/* المشرف يجيز ورد القارئ من المجلس نفسه: الجزء يُعرف من الصفحة المفتوحة */}
+                    {sup && m && m.plan ? <PassBar member={m} today={m.today}
+                        part={m.plan.new && m.plan.new.page === page ? 'new' : m.plan.alwah.includes(page) ? 'alwah' : m.plan.review.includes(page) ? 'rev' : null} /> : null}
                 </>
             ) : (
                 <Card className="p-8 text-center text-[13px] text-ink-3">
