@@ -63,6 +63,15 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
         if (over > 1) setSize(z => Math.max(12, Math.floor((z / over) * 0.99 * 10) / 10));
     }, [size, ready]);
 
+    // التلاوة تنزل إلى آيةٍ خارج الشاشة: تنزل المعاينة معها فتبقى الآية في الوسط
+    useEffect(() => {
+        if (!hl || !ready || !pg.current) return;
+        const el = pg.current.querySelector('[data-ak="' + hl + '"]');
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        if (r.top < 80 || r.bottom > window.innerHeight - 24) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, [hl, ready, page]);
+
     if (err) return <div className="py-16 text-center text-ink-3 text-[13px]"><WifiOff className="mx-auto mb-2" size={22} />{err}</div>;
     if (!data || !ready) return <div className="py-24 flex justify-center"><Loader2 className="animate-spin text-brand" size={26} /></div>;
 
@@ -112,7 +121,7 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
                                 const st = markStyle(m);
                                 const sel = selected === w.k;
                                 return (
-                                    <span key={w.k} role={readOnly ? undefined : 'button'} tabIndex={readOnly ? undefined : 0}
+                                    <span key={w.k} data-ak={ak} role={readOnly ? undefined : 'button'} tabIndex={readOnly ? undefined : 0}
                                         onClick={readOnly || !onWord ? undefined : e => onWord(w, e.currentTarget.getBoundingClientRect())}
                                         className={'rounded-[6px] transition ' + (readOnly ? '' : 'cursor-pointer hover:bg-brand-50 ') + (sel ? 'ring-2 ring-brand' : '')}
                                         style={{ ...(on ? { background: 'rgba(31,95,74,.13)' } : {}), ...(st || {}), padding: '0 .04em' }} title={w.t}>
