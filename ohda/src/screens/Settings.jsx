@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
     KeyRound, Users, HardDrive, Trash2, PieChart, LogOut, ChevronLeft, UserPlus, CheckCircle2, AlertTriangle,
-    Link2, Download, FileDown, Building2, Languages, MessageCircle, Fingerprint, ScanFace, ShieldCheck, Smartphone, Clock,
+    Link2, Download, FileDown, Building2, Languages, MessageCircle, Fingerprint, ScanFace, ShieldCheck, Smartphone, Clock, Send, Check, Copy,
 } from 'lucide-react';
 import { pkSupported, pkRegister, pkHere, pkCancelled, forgetHere } from '../lib/passkey';
 import { IDLE_OPTIONS, idleMinutes, setIdleMinutes } from '../lib/idle';
@@ -279,6 +279,23 @@ function inviteText({ name, username, password, lang }) {
     ].join('\n');
 }
 
+// رسالة تذكيرٍ جماعية: يضيف كلٌّ بريد جوجل في الإعدادات ليفتح مستنداته
+function emailAskText({ name, lang }) {
+    const url = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+    if (lang === 'en') return [
+        'Hi ' + name + ' 👋', '',
+        'To open your receipts and documents from the app, add your Google email in the settings:',
+        '', '1) Open Ohda: ' + url, '2) Settings ← your profile', '3) Add your Google (Gmail) email and save.',
+        '', 'Then your documents open from the statement, and you get view access to your own Drive folder.',
+    ].join(String.fromCharCode(10));
+    return [
+        'السلام عليكم ' + name + ' 👋', '',
+        'عشان تفتح إيصالاتك ومستنداتك من التطبيق، أضف بريد جوجل في الإعدادات:',
+        '', '١) افتح «عُهدة»: ' + url, '٢) الإعدادات ← ملفّك الشخصي', '٣) أضف بريد جوجل (Gmail) واحفظ.',
+        '', 'بعدها تنفتح مستنداتك من كشف الحساب، ويصير لك اطّلاع على مجلّدك في درايف.',
+    ].join(String.fromCharCode(10));
+}
+
 function waLink(phone, text) {
     return 'https://wa.me/' + (phone ? String(phone).replace(/\D/g, '').replace(/^0(?=5)/, '966') : '') + '?text=' + encodeURIComponent(text);
 }
@@ -290,6 +307,7 @@ function UsersPanel() {
     const [rows, setRows] = useState(null);
     const [edit, setEdit] = useState(null);
     const [sent, setSent] = useState(null);     // بيانات آخر حفظ — لزرّ الإرسال بعده
+    const [blast, setBlast] = useState(null);   // إرسالٌ جماعي: من أُرسل له
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
     const load = () => call('users').then(r => r.success && setRows(r.data));
@@ -316,6 +334,7 @@ function UsersPanel() {
                     <div className="font-bold text-[14px]">{t('المستخدمون')}</div>
                     <div className="text-[12px] text-ink-3">{t('لكل مستخدمٍ بياناته وحده — لا يرى أحدٌ بيانات غيره')}</div>
                 </div>
+                <Btn kind="line" className="!h-9 !px-3 text-[13px]" onClick={() => setBlast({})}><Send size={15} />{t('تذكير بالبريد')}</Btn>
                 <Btn kind="soft" className="!h-9 !px-3 text-[13px]" onClick={() => { setErr(''); setEdit({ username: '', name: '', password: '', phone: '', lang: 'ar', active: 1 }); }}>
                     <UserPlus size={15} />{t('إضافة')}
                 </Btn>
@@ -361,6 +380,10 @@ function UsersPanel() {
                     ))}
                 </div>
             )}
+
+            <Sheet open={!!blast} onClose={() => setBlast(null)} title={t('تذكير الجميع بإضافة البريد')}>
+                {blast ? <Blast rows={(rows || []).filter(u => u.active)} sentMap={blast} onSent={id => setBlast(b => ({ ...b, [id]: 1 }))} /> : null}
+            </Sheet>
 
             <Sheet open={!!edit} onClose={() => setEdit(null)} title={t(edit && edit.id ? 'تعديل المستخدم' : 'مستخدم جديد')}>
                 {edit ? (
