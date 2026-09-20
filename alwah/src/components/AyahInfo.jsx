@@ -4,8 +4,8 @@ import { ayahName } from '../lib/ayah';
 import { BOOKS, ayahText, nuzulFor } from '../lib/tafsir';
 
 // ─── تفسير الآية وسبب نزولها ─────────────────────────────────────────────────
-// نصوصٌ منشورة باسم كتابها ومؤلّفه: المختصر في التفسير للتفسير المبسّط، والوجيز
-// للواحدي (صاحب «أسباب النزول») لمناسبة النزول. ولا يُعرض شيءٌ من عند التطبيق.
+// نصوصٌ من كتبٍ معتمدة باسم كتابها ومؤلّفه: المختصر في التفسير، والميسر، والسعدي.
+// وسبب النزول لا يُعرض إلا إذا صرّح به المفسّر في أحدها، ولا يضيف التطبيق شيئاً.
 const TABS = [
     { k: 'tafsir', t: 'التفسير', icon: BookText },
     { k: 'nuzul', t: 'سبب النزول', icon: Sparkles },
@@ -59,14 +59,10 @@ export default function AyahInfo({ ayah }) {
 
                     {raw === undefined || raw === null ? <div className="text-[13px] text-ink-3">…</div>
                         : raw === 'err' ? <div className="text-[13px] text-red-700">تعذّر جلب النصّ، تحقّق من الإنترنت.</div>
-                            : !text ? <div className="text-[13px] text-ink-3">{tab === 'nuzul' ? 'لم يُذكر سبب نزولٍ لهذه الآية في المصادر المتاحة.' : 'لا نصّ لهذه الآية في هذا الكتاب.'}</div>
+                            : !text ? <div className="text-[13px] text-ink-3">{tab === 'nuzul' ? 'لم يُذكر سبب نزولٍ لهذه الآية في الكتب المعتمدة في التطبيق.' : 'لا نصّ لهذه الآية في هذا الكتاب.'}</div>
                                 : <p className="text-[14px] leading-8 text-ink whitespace-pre-line">{text}</p>}
 
-                    {text && b ? (
-                        <p className="text-[11px] text-ink-3 leading-5">المصدر: {b.name} · {b.by}
-                            {b.old ? <span className="block text-amber-700">من التفاسير المتقدّمة، وفي مروياتها ما يحتاج تحقيقاً، فليُراجَع أهل العلم عند الاعتماد.</span> : null}
-                        </p>
-                    ) : null}
+                    {text && b ? <p className="text-[11px] text-ink-3 leading-5">المصدر: {b.name} · {b.by}{tab === 'nuzul' ? ' — نصّ المفسّر كما هو' : ''}</p> : null}
                 </div>
             ) : null}
         </div>
