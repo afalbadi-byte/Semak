@@ -327,8 +327,9 @@ function base_url() {
     $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
     return 'https://' . ($_SERVER['HTTP_HOST'] ?? 'semak.sa') . $dir . '/';
 }
-function doc_link($id, $driveId) {
-    if ($driveId) return 'https://drive.google.com/file/d/' . rawurlencode($driveId) . '/view';
+// رابط المستند دائماً من التطبيق نفسه: يفتحه كل من يصله الرابط بلا حساب جوجل
+// (ودرايف نسخةٌ احتياطية، ويُجلب منها الملف إن فُقد من الخادم)
+function doc_link($id, $driveId = null) {
     $exp = time() + 365 * 86400;
     return base_url() . 'api.php?action=file&id=' . (int)$id . '&exp=' . $exp . '&sig=' . file_sig($id, $exp);
 }
@@ -1004,12 +1005,26 @@ case 'file': {
     $id = (int)($_GET['id'] ?? 0); $exp = (int)($_GET['exp'] ?? 0);
     if ($exp < time() || !hash_equals(file_sig($id, $exp), (string)($_GET['sig'] ?? ''))) fail('الرابط منتهٍ', 403);
     $f = $conn->query("SELECT * FROM oh_files WHERE id=$id AND deleted=0")->fetch_assoc();
-    if (!$f || !is_file(OH_FILES . '/' . $f['path'])) fail('غير موجود', 404);
+    if (!$f) fail('غير موجود', 404);
+    $local = OH_FILES . '/' . $f['path'];
+    $body = null;
+    if (!is_file($local)) {
+        // فُقد من الخادم: يُجلب من نسخة درايف بحساب التطبيق، فلا يحتاج الفاتح حساباً
+        if (empty($f['drive_id'])) fail('غير موجود', 404);
+        $tok = drive_token();
+        if (!$tok) fail('تعذّر جلب الملف', 502);
+        $ch = curl_init('https://www.googleapis.com/drive/v3/files/' . rawurlencode($f['drive_id']) . '?alt=media');
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok], CURLOPT_TIMEOUT => 25]);
+        $body = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code !== 200 || $body === false) fail('غير موجود', 404);
+    }
     ob_end_clean();
     header('Content-Type: ' . $f['mime']);
     header('Cache-Control: private, max-age=3600');
     header('Content-Disposition: inline; filename*=UTF-8\'\'' . rawurlencode($f['name']));
-    readfile(OH_FILES . '/' . $f['path']);
+    if ($body !== null) echo $body; else readfile($local);
     exit;
 }
 
