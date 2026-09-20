@@ -384,14 +384,28 @@ function drive_root($tok) {
 }
 function drive_user_folder($uid, $tok) {
     global $conn;
-    $u = $conn->query("SELECT name, drive_folder FROM oh_users WHERE id=" . (int)$uid)->fetch_assoc();
+    $u = $conn->query("SELECT name, email, drive_folder FROM oh_users WHERE id=" . (int)$uid)->fetch_assoc();
     if (!$u) return null;
     if ($u['drive_folder']) return $u['drive_folder'];
     $root = drive_root($tok);
     if (!$root) return null;
     $fid = drive_folder($u['name'], $root, $tok);
-    if ($fid) $conn->query("UPDATE oh_users SET drive_folder='" . E($fid) . "' WHERE id=" . (int)$uid);
+    if ($fid) {
+        $conn->query("UPDATE oh_users SET drive_folder='" . E($fid) . "' WHERE id=" . (int)$uid);
+        if (!empty($u['email'])) drive_share($fid, $u['email'], $tok);      // صاحب البريد يفتح مجلّده من درايف
+    }
     return $fid;
+}
+// صلاحية الاطّلاع لصاحب البريد على مجلّده في درايف (بلا رسالة إشعار)
+function drive_share($folderId, $email, $tok) {
+    if (!$folderId || !$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
+    $ch = curl_init('https://www.googleapis.com/drive/v3/files/' . rawurlencode($folderId) . '/permissions?sendNotificationEmail=false&fields=id');
+    curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok, 'Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode(['role' => 'reader', 'type' => 'user', 'emailAddress' => $email])]);
+    $res = json_decode((string)curl_exec($ch), true); curl_close($ch);
+    if (empty($res['id'])) { meta_set('drive_error', json_encode($res, JSON_UNESCAPED_UNICODE)); return false; }
+    return true;
 }
 function drive_upload_one($f, $tok) {
     global $conn;
@@ -416,6 +430,7 @@ function drive_upload_one($f, $tok) {
     $res = json_decode((string)curl_exec($ch), true); curl_close($ch);
     if (!empty($res['id'])) {
         $conn->query("UPDATE oh_files SET drive_id='" . E($res['id']) . "', drive_status='done' WHERE id=" . (int)$f['id']);
+        @unlink($full);     // لا يثقل الاستضافة: الأصل في درايف، والتطبيق يجلبه منها عند العرض
         return true;
     }
     meta_set('drive_error', json_encode($res, JSON_UNESCAPED_UNICODE));
@@ -431,6 +446,10 @@ function drive_tick() {
     $tok = drive_token();
     if (!$tok) return;
     // الملف يُرفع بعد ربطه بحركة، فيحمل اسماً مقروءاً؛ وما بقي يتيماً ساعةً يُرفع باسمه
+    // ما رُفع من قبل ولا يزال نسخةً على الاستضافة: يُحذف بالتدريج (الأصل في درايف)
+    $c = $conn->query("SELECT id, path FROM oh_files WHERE drive_status='done' AND drive_id IS NOT NULL ORDER BY id LIMIT 25");
+    while ($c && ($x = $c->fetch_assoc())) { $p = OH_FILES . '/' . $x['path']; if (is_file($p)) @unlink($p); }
+
     $r = $conn->query("SELECT * FROM oh_files WHERE drive_status='pending' AND deleted=0
         AND (txn_id IS NOT NULL OR created_at < NOW() - INTERVAL 1 HOUR) ORDER BY id LIMIT 6");
     while ($r && ($f = $r->fetch_assoc())) drive_upload_one($f, $tok);
@@ -602,6 +621,11 @@ case 'profile_save': {
     }
     if (in_array($b['lang'] ?? '', ['ar', 'en'], true)) $set .= ", lang='" . $b['lang'] . "'";
     $conn->query("UPDATE oh_users SET $set WHERE id=$uid");
+    // بريدٌ جديد: يُمنح صاحبه صلاحية الاطّلاع على مجلّده في درايف
+    if (array_key_exists('email', $b) && !empty($em) && drive_ready()) {
+        $row = $conn->query("SELECT drive_folder FROM oh_users WHERE id=$uid")->fetch_assoc();
+        if (!empty($row['drive_folder']) && ($tok = drive_token())) drive_share($row['drive_folder'], $em, $tok);
+    }
     oh_log($uid, 'profile_save', 'user', $uid, $b);
     out(['success' => true, 'profile' => $p]);
 }
@@ -734,7 +758,7 @@ case 'pk_delete': {
 case 'users': {
     need_admin();
     $rows = [];
-    $r = $conn->query("SELECT u.id, u.username, u.name, u.role, u.active, u.created_at, u.last_login, u.drive_folder, u.phone, u.lang,
+    $r = $conn->query("SELECT u.id, u.username, u.name, u.role, u.active, u.created_at, u.last_login, u.drive_folder, u.phone, u.email, u.lang,
         (SELECT COUNT(*) FROM oh_txns t WHERE t.user_id=u.id AND t.deleted=0) txns
         FROM oh_users u ORDER BY u.id");
     while ($r && ($x = $r->fetch_assoc())) $rows[] = $x;
@@ -750,6 +774,8 @@ case 'user_save': {
     $ph = norm_phone($b['phone'] ?? '');
     if (!empty($b['phone']) && $ph === '') fail('رقم الجوال غير صحيح');
     $lang = ($b['lang'] ?? 'ar') === 'en' ? 'en' : 'ar';
+    $em = trim((string)($b['email'] ?? ''));
+    if ($em !== '' && !filter_var($em, FILTER_VALIDATE_EMAIL)) fail('البريد الإلكتروني غير صحيح');
     if ($id) {
         $set = "name='" . E($nm) . "', active=" . (!empty($b['active']) ? 1 : 0);
         if ($id === (int)$a['id']) $set = "name='" . E($nm) . "'";          // لا يوقف المدير نفسه
@@ -758,7 +784,13 @@ case 'user_save': {
             if (strlen($b['password']) < 8) fail('كلمة المرور ثمانية أحرف فأكثر');
             $set .= ", pass_hash='" . E(password_hash($b['password'], PASSWORD_DEFAULT)) . "'";
         }
+        if (array_key_exists('email', $b)) $set .= ', email=' . ($em === '' ? 'NULL' : "'" . E($em) . "'");
         $conn->query("UPDATE oh_users SET $set WHERE id=$id");
+        // صاحب البريد يفتح مجلّده في درايف بحسابه
+        if ($em !== '' && drive_ready()) {
+            $row = $conn->query("SELECT drive_folder FROM oh_users WHERE id=$id")->fetch_assoc();
+            if (!empty($row['drive_folder']) && ($tok = drive_token())) drive_share($row['drive_folder'], $em, $tok);
+        }
         oh_log($a['id'], 'user_update', 'user', $id);
         out(['success' => true, 'id' => $id]);
     }
@@ -766,8 +798,8 @@ case 'user_save': {
     if (!preg_match('/^[a-z0-9_.-]{3,40}$/', $un)) fail('اسم الدخول: حروف إنجليزية وأرقام، ٣ أحرف فأكثر');
     if (strlen((string)($b['password'] ?? '')) < 8) fail('كلمة المرور ثمانية أحرف فأكثر');
     if ($conn->query("SELECT id FROM oh_users WHERE username='" . E($un) . "'")->num_rows) fail('اسم الدخول مستعمل');
-    $conn->query("INSERT INTO oh_users (username, name, pass_hash, role, lang, phone) VALUES ('" . E($un) . "', '" . E($nm) . "', '"
-        . E(password_hash($b['password'], PASSWORD_DEFAULT)) . "', 'user', '$lang', " . ($ph === '' ? 'NULL' : "'$ph'") . ")");
+    $conn->query("INSERT INTO oh_users (username, name, pass_hash, role, lang, phone, email) VALUES ('" . E($un) . "', '" . E($nm) . "', '"
+        . E(password_hash($b['password'], PASSWORD_DEFAULT)) . "', 'user', '$lang', " . ($ph === '' ? 'NULL' : "'$ph'") . ', ' . ($em === '' ? 'NULL' : "'" . E($em) . "'") . ")");
     $nid = (int)$conn->insert_id;
     seed_cats($nid, $lang);
     oh_log($a['id'], 'user_create', 'user', $nid, $un);

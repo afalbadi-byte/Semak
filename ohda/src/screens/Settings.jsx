@@ -374,6 +374,9 @@ function UsersPanel() {
                         <Field label={t(edit.id ? 'كلمة مرور جديدة' : 'كلمة المرور')} hint={t(edit.id ? 'اتركها فارغة لتبقى كما هي' : 'ثمانية أحرف فأكثر')}>
                             <input className={inputCls} dir="ltr" value={edit.password} onChange={e => setEdit({ ...edit, password: e.target.value })} autoComplete="new-password" />
                         </Field>
+                        <Field label={t('بريد جوجل')} hint={t('يُمنح صاحبه الاطّلاع على مجلّد مستنداته في درايف')}>
+                            <input className={inputCls} dir="ltr" type="email" inputMode="email" placeholder="name@gmail.com" value={edit.email || ''} onChange={e => setEdit({ ...edit, email: e.target.value })} />
+                        </Field>
                         <Field label={t('جوال واتساب')} hint={t('لإرسال بيانات الدخول مباشرة')}>
                             <input className={inputCls} dir="ltr" type="tel" inputMode="tel" placeholder="05xxxxxxxx" value={edit.phone || ''} onChange={e => setEdit({ ...edit, phone: e.target.value })} />
                         </Field>
