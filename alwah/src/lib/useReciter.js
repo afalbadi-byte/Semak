@@ -11,6 +11,9 @@ import { segsAyahs } from './ayah';
 const SRC = 'https://everyayah.com/data/Muhammad_Ayyoub_128kbps/';
 const pad = n => String(n).padStart(3, '0');
 const url = k => { const [s, a] = k.split(':'); return SRC + pad(s) + pad(a) + '.mp3'; };
+// البسملة بصوت الشيخ نفسه (أوّل الفاتحة)، فتسجيلات الآيات لا تتضمّنها
+const BISM = SRC + '001001.mp3';
+const needsBism = k => /:1$/.test(k) && k !== '1:1' && k !== '9:1';
 const PREF = 'alwah_rec_v2';
 const DEF = { mode: 'seg', n: 3, rate: 1 };
 export const loadPref = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(PREF) || '{}') }; } catch (e) { return { ...DEF }; } };
@@ -47,7 +50,23 @@ export default function useReciter({ onAyah } = {}) {
 
     useEffect(() => { onAyah && onAyah(st.on ? list[st.i] : null); }, [st.on, st.i, list]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // أوّل آيةٍ من سورة: تُتلى البسملة قبلها مرّةً (لا مع كل تكرارٍ للآية)
     const playAt = (i, rep, loop) => {
+        const L = listRef.current;
+        if (!L[i]) return;
+        const a = audio.current || (audio.current = new Audio());
+        if (rep === 1 && needsBism(L[i])) {
+            a.onended = () => playAyah(i, rep, loop);
+            a.onerror = () => playAyah(i, rep, loop);
+            a.src = BISM;
+            a.playbackRate = loadPref().rate;
+            a.play().catch(() => playAyah(i, rep, loop));
+            setSt({ on: true, i, rep, loop, paused: false, bism: true });
+            return;
+        }
+        playAyah(i, rep, loop);
+    };
+    const playAyah = (i, rep, loop) => {
         const L = listRef.current;
         if (!L[i]) return;
         const a = audio.current || (audio.current = new Audio());
