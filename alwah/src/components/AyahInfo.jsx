@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BookText, Sparkles, ChevronDown } from 'lucide-react';
 import { ayahName } from '../lib/ayah';
-import { BOOKS, ayahText, nuzulOf } from '../lib/tafsir';
+import { BOOKS, ayahText, nuzulFor } from '../lib/tafsir';
 
 // ─── تفسير الآية وسبب نزولها ─────────────────────────────────────────────────
 // نصوصٌ منشورة باسم كتابها ومؤلّفه: المختصر في التفسير للتفسير المبسّط، والوجيز
@@ -18,20 +18,20 @@ export default function AyahInfo({ ayah }) {
 
     useEffect(() => { setSt({}); setTab(null); }, [ayah]);
 
-    const key = tab === 'nuzul' ? 'wajiz' : book;
+    const key = tab === 'nuzul' ? 'nuzul' : book;
     useEffect(() => {
         if (!tab || st[key] !== undefined) return undefined;
         let dead = false;
         setSt(s => ({ ...s, [key]: null }));
-        ayahText(key, ayah)
-            .then(t => { if (!dead) setSt(s => ({ ...s, [key]: t || '' })); })
+        const job = tab === 'nuzul' ? nuzulFor(ayah) : ayahText(book, ayah).then(t => ({ book, text: t || '' }));
+        job.then(r => { if (!dead) setSt(s => ({ ...s, [key]: r || { book: null, text: '' } })); })
             .catch(() => { if (!dead) setSt(s => ({ ...s, [key]: 'err' })); });
         return () => { dead = true; };
     }, [tab, key, ayah]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const raw = st[key];
-    const text = tab === 'nuzul' && typeof raw === 'string' && raw !== 'err' ? nuzulOf(raw) : raw;
-    const b = BOOKS[key];
+    const text = raw && raw !== 'err' ? raw.text : raw;
+    const b = raw && raw !== 'err' && raw.book ? BOOKS[raw.book] : null;
 
     return (
         <div className="mt-3 pt-3 border-t border-paper-2 space-y-2">
@@ -59,10 +59,14 @@ export default function AyahInfo({ ayah }) {
 
                     {raw === undefined || raw === null ? <div className="text-[13px] text-ink-3">…</div>
                         : raw === 'err' ? <div className="text-[13px] text-red-700">تعذّر جلب النصّ، تحقّق من الإنترنت.</div>
-                            : !text ? <div className="text-[13px] text-ink-3">لم يُذكر سبب نزولٍ لهذه الآية في {b.name}.</div>
+                            : !text ? <div className="text-[13px] text-ink-3">{tab === 'nuzul' ? 'لم يُذكر سبب نزولٍ لهذه الآية في المصادر المتاحة.' : 'لا نصّ لهذه الآية في هذا الكتاب.'}</div>
                                 : <p className="text-[14px] leading-8 text-ink whitespace-pre-line">{text}</p>}
 
-                    {text && raw !== 'err' ? <p className="text-[11px] text-ink-3 leading-5">المصدر: {b.name} · {b.by}</p> : null}
+                    {text && b ? (
+                        <p className="text-[11px] text-ink-3 leading-5">المصدر: {b.name} · {b.by}
+                            {b.old ? <span className="block text-amber-700">من التفاسير المتقدّمة، وفي مروياتها ما يحتاج تحقيقاً، فليُراجَع أهل العلم عند الاعتماد.</span> : null}
+                        </p>
+                    ) : null}
                 </div>
             ) : null}
         </div>

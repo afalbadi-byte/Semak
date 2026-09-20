@@ -10,7 +10,7 @@ export const BOOKS = {
     mukhtasar: { slug: 'ar-tafsir-al-mukhtasar', name: 'المختصر في التفسير', by: 'مركز تفسير للدراسات القرآنية' },
     muyassar: { slug: 'ar-tafsir-muyassar', name: 'التفسير الميسر', by: 'مجمع الملك فهد لطباعة المصحف' },
     saadi: { slug: 'ar-tafsir-as-saadi', name: 'تيسير الكريم الرحمن', by: 'عبد الرحمن السعدي' },
-    wajiz: { slug: 'al-wajiz-wahidi', name: 'الوجيز', by: 'أبو الحسن الواحدي، صاحب «أسباب النزول»' },
+    wajiz: { slug: 'al-wajiz-wahidi', name: 'الوجيز', by: 'أبو الحسن الواحدي، صاحب «أسباب النزول»', old: true },
 };
 
 const CK = (b, k) => 'alwah_tf_' + b + '_' + k.replace(':', '_');
@@ -45,12 +45,23 @@ function clean(t) {
         .trim();
 }
 
-// جُمل سبب النزول: ما ذُكر فيه النزول أو السؤال الذي نزلت فيه الآية
-const CUES = /(نزلت|نزل|أنزل|فأنزل|سبب النزول|سأل|قالوا|لمّا)/;
+// جُمل سبب النزول: ما صُرّح فيه بالنزول
 export function nuzulOf(text) {
     if (!text) return '';
     const parts = text.split(/(?<=[.؟!])\s+|\n+/).map(x => x.trim()).filter(Boolean);
-    const hit = parts.filter(p => /(نزلت|أنزل الله|فأنزل|نزل في|سبب نزول)/.test(p));
-    if (hit.length) return hit.join(' ');
-    return parts.filter(p => CUES.test(p)).slice(0, 2).join(' ');
+    const hit = parts.filter(p => /(نزلت|نزلَت|أنزل الله|فأنزل|نزل في|سبب نزول|سبب النزول)/.test(p));
+    return hit.length ? hit.join(' ') : '';
+}
+
+// سبب النزول: يُطلب من المحقَّق الحديث أوّلاً (المختصر ثم الميسر ثم السعدي)، فإن لم
+// يذكروه فمن «الوجيز» للواحدي، مع التنبيه إلى أنّه من التفاسير المتقدّمة
+export const NUZUL_ORDER = ['mukhtasar', 'muyassar', 'saadi', 'wajiz'];
+export async function nuzulFor(key) {
+    for (const b of NUZUL_ORDER) {
+        let t = '';
+        try { t = await ayahText(b, key); } catch (e) { continue; }
+        const n = nuzulOf(t);
+        if (n) return { book: b, text: n };
+    }
+    return null;
 }
