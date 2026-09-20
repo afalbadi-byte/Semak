@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '0 14 * * *'   # ٥ مساءً بتوقيت السعودية: تذكير بورد اليوم
     - cron: '0 18 * * *'   # ٩ مساءً: ما لم يُسمَّع، أو اعتماد ورد الغد
+  push:
+    paths:
+      - '.github/workflows/alwah-notify.yml'   # تعديل هذا الملف يُطلق إرسالاً تجريبياً
   workflow_dispatch:
     inputs:
       slot:
