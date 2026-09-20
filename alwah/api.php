@@ -275,6 +275,20 @@ function al_log($uid, $action, $data = null) {
 // ─── المصحف: بدايات الأجزاء (مصحف المدينة، ٦٠٤ صفحات، ١٥ سطراً) ─────────────
 const JUZ_START = [1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282,
                    302, 322, 342, 362, 382, 402, 422, 442, 462, 482, 502, 522, 542, 562, 582];
+const SUR_NAMES = ['الفاتحة', 'البقرة', 'آل عمران', 'النساء', 'المائدة', 'الأنعام', 'الأعراف', 'الأنفال', 'التوبة', 'يونس', 'هود', 'يوسف', 'الرعد', 'إبراهيم', 'الحجر', 'النحل', 'الإسراء', 'الكهف', 'مريم', 'طه', 'الأنبياء', 'الحج', 'المؤمنون', 'النور', 'الفرقان', 'الشعراء', 'النمل', 'القصص', 'العنكبوت', 'الروم', 'لقمان', 'السجدة', 'الأحزاب', 'سبأ', 'فاطر', 'يس', 'الصافات', 'ص', 'الزمر', 'غافر', 'فصلت', 'الشورى', 'الزخرف', 'الدخان', 'الجاثية', 'الأحقاف', 'محمد', 'الفتح', 'الحجرات', 'ق', 'الذاريات', 'الطور', 'النجم', 'القمر', 'الرحمن', 'الواقعة', 'الحديد', 'المجادلة', 'الحشر', 'الممتحنة', 'الصف', 'الجمعة', 'المنافقون', 'التغابن', 'الطلاق', 'التحريم', 'الملك', 'القلم', 'الحاقة', 'المعارج', 'نوح', 'الجن', 'المزمل', 'المدثر', 'القيامة', 'الإنسان', 'المرسلات', 'النبأ', 'النازعات', 'عبس', 'التكوير', 'الانفطار', 'المطففين', 'الانشقاق', 'البروج', 'الطارق', 'الأعلى', 'الغاشية', 'الفجر', 'البلد', 'الشمس', 'الليل', 'الضحى', 'الشرح', 'التين', 'العلق', 'القدر', 'البينة', 'الزلزلة', 'العاديات', 'القارعة', 'التكاثر', 'العصر', 'الهمزة', 'الفيل', 'قريش', 'الماعون', 'الكوثر', 'الكافرون', 'النصر', 'المسد', 'الإخلاص', 'الفلق', 'الناس'];
+function sur_name($s) { return SUR_NAMES[$s - 1] ?? ''; }
+// «الجاثية ١ إلى الجاثية ٦» من مقاطع الآيات
+function segs_label($segs) {
+    if (!$segs) return '';
+    $a = null; $b = null;
+    foreach ($segs as $g) {
+        [$s0, $a0] = array_map('intval', explode(':', $g[0])); [$s1, $a1] = array_map('intval', explode(':', $g[1]));
+        if ($a === null || $s0 < $a[0] || ($s0 === $a[0] && $a0 < $a[1])) $a = [$s0, $a0];
+        if ($b === null || $s1 > $b[0] || ($s1 === $b[0] && $a1 > $b[1])) $b = [$s1, $a1];
+    }
+    $x = sur_name($a[0]) . ' ' . $a[1]; $y = sur_name($b[0]) . ' ' . $b[1];
+    return $x === $y ? $x : ($a[0] === $b[0] ? sur_name($a[0]) . ' ' . $a[1] . '-' . $b[1] : $x . ' إلى ' . $y);
+}
 const PAGES = 604;
 const LPP = 15;
 function juz_of($p) { $j = 1; foreach (JUZ_START as $i => $s) if ($p >= $s) $j = $i + 1; return $j; }
@@ -805,7 +819,7 @@ case 'push_unsub': {
 // ما يجب إرساله الآن: يناديه مرسِل الإشعارات بمفتاحٍ سرّي (لا جلسة)
 case 'push_due': {
     if (!hash_equals(PUSH_KEY, (string)($_GET['key'] ?? ''))) fail('غير مصرّح', 403);
-    $slot = ($_GET['slot'] ?? 'evening') === 'morning' ? 'morning' : 'evening';
+    $slot = in_array($_GET['slot'] ?? '', ['fajr', 'morning', 'evening'], true) ? $_GET['slot'] : 'evening';
     $today = date('Y-m-d');
     $out = [];
     foreach (rows("SELECT * FROM al_push WHERE failed < 5") as $p) {
@@ -814,7 +828,7 @@ case 'push_due': {
         if (!$usr || !(int)$usr['active']) continue;
         $sup = in_array($usr['role'], ['owner', 'supervisor'], true);
         $w = $sup ? '' : ' AND id=' . (int)$usr['member_id'];
-        $pend = []; $names = []; $noNext = 0;
+        $pend = []; $names = []; $noNext = 0; $wird = [];
         foreach (rows("SELECT * FROM al_members WHERE family_id=$fid AND deleted=0$w") as $m) {
             $pl = wird_apply(member_plan($m, $today), $m['id'], $today);
             $l = one("SELECT * FROM al_logs WHERE member_id=" . (int)$m['id'] . " AND d='" . E($today) . "' LIMIT 1");
@@ -826,11 +840,33 @@ case 'push_due': {
             $need = (($pl['new'] && !$done['new']) ? 1 : 0) + ((count($pl['alwah']) && !$done['alwah']) ? 1 : 0) + ((count($pl['review']) && !$done['rev']) ? 1 : 0);
             if ($need) { $pend[] = $m['name']; }
             $names[] = $m['name'];
+            // ورد اليوم بالسور والآيات (لإشعار الفجر)
+            $rg = function ($k) use ($pl) { $x = ($pl['ranges'][$k] ?? null) ?: ($pl['auto'][$k] ?? null); return $x ? segs_label($x) : ''; };
+            $parts = [];
+            if ($pl['new']) { $t = $rg('new'); if ($t) $parts[] = 'الجديد: ' . $t; }
+            if (count($pl['alwah'])) { $t = $rg('alwah'); if ($t) $parts[] = 'الألواح: ' . $t; }
+            if (count($pl['review'])) { $t = $rg('rev'); if ($t) $parts[] = 'المراجعة: ' . $t; }
+            if ($parts) $wird[] = ['name' => $m['name'], 'parts' => $parts, 'new' => $pl['new'] ? $rg('new') : ''];
             $nx = wird_apply(member_plan($m), $m['id'], date('Y-m-d', strtotime('+1 day')));
             if (!$nx['custom']) $noNext++;
         }
         $title = 'ألواح'; $body = ''; $url = './';
-        if ($slot === 'morning') {
+        if ($slot === 'fajr') {
+            // بعد الفجر: ورد اليوم جاهزاً بين يديه
+            if (!$wird) continue;
+            if ($sup && count($wird) > 1) {
+                $body = '';
+                foreach (array_slice($wird, 0, 5) as $w) $body .= $w['name'] . ($w['new'] ? ' · ' . $w['new'] : '') . "
+";
+                $body = 'ورد اليوم الجديد:' . "
+" . rtrim($body);
+            } else {
+                $body = implode("
+", $wird[0]['parts']);
+                $title = 'ورد ' . $wird[0]['name'];
+            }
+            $url = $sup && count($wird) > 1 ? '#/' : '#/hifz';
+        } elseif ($slot === 'morning') {
             if (!$pend) continue;
             $body = $sup ? ('ورد اليوم بانتظار التسميع: ' . implode('، ', array_slice($pend, 0, 4))) : 'ورد اليوم بانتظارك، بارك الله فيك';
             $url = $sup ? '#/' : '#/hifz';
