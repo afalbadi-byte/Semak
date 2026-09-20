@@ -63,7 +63,7 @@ function MemberCard({ m }) {
                         {m.streak ? <span className="ms-auto inline-flex items-center gap-0.5 text-[12px] font-bold text-orange-600"><Flame size={14} />{m.streak}</span> : null}
                     </div>
                     <div className="text-[12px] text-ink-3 mt-1 truncate flex items-center gap-1">
-                        <BookOpen size={12} />{cur ? `يحفظ في ${surahOf(cur)} · ص ${cur} · الجزء ${juzOf(cur)}` : 'أتمّ حفظ القرآن'}
+                        <BookOpen size={12} />{cur ? `يحفظ في ${surahOf(cur)} · ص ${cur} · الجزء ${juzOf(cur)}` : p.rest ? 'يوم راحة' : p.new_off ? 'لا حفظ جديد اليوم' : 'أتمّ حفظ القرآن'}
                     </div>
                 </div>
             </a>

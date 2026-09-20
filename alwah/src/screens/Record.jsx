@@ -84,7 +84,7 @@ export default function Record({ id, d: dIn }) {
 
             {/* ── الحفظ الجديد ── */}
             <Part icon={BookOpen} title="الحفظ الجديد" color={m.color}
-                head={p.new ? `صفحة ${p.new.page} · ${surahsOn(p.new.page).join('، ')}` : 'أتمّ الحفظ'}
+                head={p.new ? `صفحة ${p.new.page} · ${surahsOn(p.new.page).join('، ')}` : p.rest ? 'يوم راحة' : p.new_off ? 'لا حفظ جديد اليوم' : 'أتمّ الحفظ'}
                 link={p.new ? '#/hifz?m=' + id + '&t=new' : null}>
                 {p.new ? (
                     <>
@@ -106,7 +106,7 @@ export default function Record({ id, d: dIn }) {
                         {f.new_lines ? <Grade f={f} set={set} k="new" /> : null}
                         {f.new_grade === 1 ? <p className="text-[12px] text-red-700">«يعاد»: لا يُحتسب هذا المقدار في التقدّم، ويبقى ورده غداً كما هو.</p> : null}
                     </>
-                ) : <p className="text-[13px] text-ink-3">ما شاء الله، أتمّ حفظ القرآن كاملاً.</p>}
+                ) : <p className="text-[13px] text-ink-3">{p.rest ? 'يوم راحة، لا حفظ جديد.' : p.new_off ? 'لا حفظ جديد اليوم.' : 'ما شاء الله، أتمّ حفظ القرآن كاملاً.'}</p>}
             </Part>
 
             {/* ── الألواح ── */}

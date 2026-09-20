@@ -66,7 +66,7 @@ export default function MemberView({ id }) {
                 action={today && sup ? <a href={'#/m/' + m.id + '/log'} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><Pencil size={12} />عدّل</a> : null}>
                 <Card className="divide-y divide-paper-2">
                     <PlanRow icon={BookOpen} title="الحفظ الجديد" done={partDone(today, 'new')} color={color} late={plan.late && plan.late.new}
-                        main={plan.new ? `صفحة ${plan.new.page} · ${surahsOn(plan.new.page).join('، ')}` : 'أتمّ الحفظ'}
+                        main={plan.new ? `صفحة ${plan.new.page} · ${surahsOn(plan.new.page).join('، ')}` : plan.rest ? 'يوم راحة' : plan.new_off ? 'لا حفظ جديد اليوم' : 'أتمّ الحفظ'}
                         sub={plan.new ? `من السطر ${plan.new.from_line} · المقدار ${linesLabel(plan.new.lines)}` : ''}
                         link={plan.new ? hz('new') : null} />
                     <PlanRow icon={Layers} title={`الألواح (${plan.alwah.length} صفحات)`} done={partDone(today, 'alwah')} color={color} late={plan.late && plan.late.alwah}
