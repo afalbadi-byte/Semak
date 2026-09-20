@@ -65,3 +65,27 @@ export async function nuzulFor(key) {
     }
     return null;
 }
+
+// ─── أسباب النزول: «الصحيح المسند من أسباب النزول» للشيخ مقبل الوادعي ─────────
+// اقتصر مؤلّفه على ما صحّ إسناده، والنصّ يُعرض كما هو بإسناده وتخريجه ورقم صفحته
+// في المطبوع. البيانات ملفٌّ لكل سورة داخل التطبيق، فلا تعتمد على خدمةٍ خارجية.
+export const ASBAB_BOOK = { name: 'الصحيح المسند من أسباب النزول', by: 'الشيخ مقبل بن هادي الوادعي رحمه الله' };
+const suras = new Map();
+export async function asbabFor(key) {
+    const [s, a] = String(key).split(':');
+    if (!suras.has(s)) {
+        suras.set(s, (async () => {
+            try {
+                const c = localStorage.getItem('alwah_asbab_' + s);
+                if (c !== null) return JSON.parse(c);
+            } catch (e) { /* لا تخزين */ }
+            const r = await fetch('./asbab/' + s + '.json');
+            if (!r.ok) return {};
+            const j = await r.json();
+            try { localStorage.setItem('alwah_asbab_' + s, JSON.stringify(j)); } catch (e) { /* تجاهل */ }
+            return j;
+        })().catch(() => ({})));
+    }
+    const d = await suras.get(s);
+    return (d && d[a]) || null;
+}
