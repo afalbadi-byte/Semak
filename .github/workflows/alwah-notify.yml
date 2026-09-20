@@ -32,3 +32,5 @@ jobs:
           SLOT: ${{ github.event.inputs.slot || (github.event.schedule == '0 3 * * *' && 'fajr' || (github.event.schedule == '0 14 * * *' && 'morning' || 'evening')) }}
 
 # تجربة إرسال: 2026-09-20T10:28Z
+
+# تجربة إشعار الفجر: 2026-09-20T10:56Z
