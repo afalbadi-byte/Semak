@@ -397,6 +397,20 @@ function drive_user_folder($uid, $tok) {
     return $fid;
 }
 // صلاحية الاطّلاع لصاحب البريد على مجلّده في درايف (بلا رسالة إشعار)
+// محتوى الملف: من الاستضافة إن وُجد، وإلا من نسخة درايف بحساب التطبيق
+function file_bytes($f) {
+    $p = OH_FILES . '/' . $f['path'];
+    if (is_file($p)) return file_get_contents($p);
+    if (empty($f['drive_id'])) return null;
+    $tok = drive_token();
+    if (!$tok) return null;
+    $ch = curl_init('https://www.googleapis.com/drive/v3/files/' . rawurlencode($f['drive_id']) . '?alt=media');
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok]]);
+    $b = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ($code === 200 && $b !== false) ? $b : null;
+}
 function drive_share($folderId, $email, $tok) {
     if (!$folderId || !$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
     $ch = curl_init('https://www.googleapis.com/drive/v3/files/' . rawurlencode($folderId) . '/permissions?sendNotificationEmail=false&fields=id');
@@ -446,9 +460,19 @@ function drive_tick() {
     $tok = drive_token();
     if (!$tok) return;
     // الملف يُرفع بعد ربطه بحركة، فيحمل اسماً مقروءاً؛ وما بقي يتيماً ساعةً يُرفع باسمه
-    // ما رُفع من قبل ولا يزال نسخةً على الاستضافة: يُحذف بالتدريج (الأصل في درايف)
-    $c = $conn->query("SELECT id, path FROM oh_files WHERE drive_status='done' AND drive_id IS NOT NULL ORDER BY id LIMIT 25");
-    while ($c && ($x = $c->fetch_assoc())) { $p = OH_FILES . '/' . $x['path']; if (is_file($p)) @unlink($p); }
+    // (تنظيف النسخ القديمة موقوفٌ حتى يُتحقَّق من الفتح من درايف: meta 'drive_purge' = on)
+    if (meta_get('drive_purge') === 'on') {
+        $c = $conn->query("SELECT id, path, size, drive_id FROM oh_files WHERE drive_status='done' AND drive_id IS NOT NULL ORDER BY id LIMIT 10");
+        while ($c && ($x = $c->fetch_assoc())) {
+            $p = OH_FILES . '/' . $x['path'];
+            if (!is_file($p)) continue;
+            // لا يُحذف إلا بعد التأكّد من وجود نسخة درايف وحجمها
+            $ch = curl_init('https://www.googleapis.com/drive/v3/files/' . rawurlencode($x['drive_id']) . '?fields=id,size');
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok]]);
+            $g = json_decode((string)curl_exec($ch), true); curl_close($ch);
+            if (!empty($g['id']) && (int)($g['size'] ?? 0) === (int)filesize($p)) @unlink($p);
+        }
+    }
 
     $r = $conn->query("SELECT * FROM oh_files WHERE drive_status='pending' AND deleted=0
         AND (txn_id IS NOT NULL OR created_at < NOW() - INTERVAL 1 HOUR) ORDER BY id LIMIT 6");
@@ -466,9 +490,9 @@ function scan_file($files, $cats, $lang = 'ar') {
     if (isset($files['path'])) $files = [$files];
     $blocks = [];
     foreach (array_slice($files, 0, 8) as $f) {
-        $full = OH_FILES . '/' . $f['path'];
-        if (!is_file($full)) continue;
-        $data = base64_encode(file_get_contents($full));
+        $bytes = file_bytes($f);
+        if ($bytes === null) continue;
+        $data = base64_encode($bytes);
         $blocks[] = $f['mime'] === 'application/pdf'
             ? ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $data]]
             : ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $f['mime'], 'data' => $data]];
@@ -1039,19 +1063,8 @@ case 'file': {
     $f = $conn->query("SELECT * FROM oh_files WHERE id=$id AND deleted=0")->fetch_assoc();
     if (!$f) fail('غير موجود', 404);
     $local = OH_FILES . '/' . $f['path'];
-    $body = null;
-    if (!is_file($local)) {
-        // فُقد من الخادم: يُجلب من نسخة درايف بحساب التطبيق، فلا يحتاج الفاتح حساباً
-        if (empty($f['drive_id'])) fail('غير موجود', 404);
-        $tok = drive_token();
-        if (!$tok) fail('تعذّر جلب الملف', 502);
-        $ch = curl_init('https://www.googleapis.com/drive/v3/files/' . rawurlencode($f['drive_id']) . '?alt=media');
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $tok], CURLOPT_TIMEOUT => 25]);
-        $body = curl_exec($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if ($code !== 200 || $body === false) fail('غير موجود', 404);
-    }
+    $body = is_file($local) ? null : file_bytes($f);     // فُقد من الخادم: من نسخة درايف
+    if (!is_file($local) && $body === null) fail('غير موجود', 404);
     ob_end_clean();
     header('Content-Type: ' . $f['mime']);
     header('Cache-Control: private, max-age=3600');
