@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Flame, Mic, BookOpen, Layers, RotateCcw, ExternalLink, Check, Pencil, CalendarDays, Award } from 'lucide-react';
 import { call } from '../lib/api';
-import { Card, Ring, Section, Spinner, Btn, hijri, greg, todayStr } from '../ui';
+import { Card, Ring, Section, Spinner, Btn, hijri, greg, todayStr, useToast } from '../ui';
 import { Target } from 'lucide-react';
 import { surahsOn, surahsIn, rangeLabel, linesLabel, juzOf, gradeOf, SURAHS } from '../lib/quran';
 import { BookMarked } from 'lucide-react';
@@ -84,11 +84,16 @@ export default function MemberView({ id }) {
                 ) : <p className="mt-3 text-center text-[12px] text-ink-3">يُجاز الورد حين يسمعه المشرف ويضع «تمّ التسميع».</p>}
             </Section>
 
+            {sup && plan.new && plan.late && plan.late.new >= 1 ? <Double member={m} lines={plan.new.lines} onDone={load} /> : null}
+
             {now.goal ? <GoalCard g={now.goal} color={color} /> : null}
 
             <TomorrowCard member={m} plan={d.next} sup={sup} onDone={load} />
 
             {/* ── مصحف الفرد: مواضع الضعف ── */}
+            {/* التفاصيل والإحصاءات للمشرف؛ والفرد يرى ورده كبيراً واضحاً */}
+            {sup ? (
+            <>
             <Section title={'مصحف ' + m.name} action={<a href={mu(now.current || 604)} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><BookMarked size={13} />افتح المصحف</a>}>
                 <Card className="p-4">
                     {sm && sm.total.words ? (
@@ -162,6 +167,8 @@ export default function MemberView({ id }) {
                     </Card>
                 ) : <Card className="p-6 text-center text-[13px] text-ink-3"><CalendarDays className="mx-auto mb-2 text-ink-3" size={22} />لا تسميع بعد</Card>}
             </Section>
+            </>
+            ) : null}
         </div>
     );
 }
@@ -182,6 +189,26 @@ function Stat({ label, value }) {
 }
 
 // الهدف: سورةٌ في تاريخ، والمطلوب يومياً، وهل هو متقدّم أم متأخّر
+// قضاءٌ اختياري ليومٍ فات: يُضاعَف حفظ اليوم مرّةً واحدة
+function Double({ member, lines, onDone }) {
+    const toast = useToast();
+    const [busy, setBusy] = useState(false);
+    const go = async () => {
+        setBusy(true);
+        const r = await call('wird_save', { body: { member_id: member.id, d: todayStr(), new_lines: Math.min(90, lines * 2), ranges: { new: null } } });
+        setBusy(false);
+        if (!r.success) { toast(r.message || 'تعذّر الحفظ', 'err'); return; }
+        toast('ضوعف حفظ اليوم');
+        onDone();
+    };
+    return (
+        <Card className="p-3 flex items-center gap-2">
+            <div className="flex-1 text-[12px] text-ink-2">فاته حفظ أمس. تقدر تضاعف حفظ اليوم مرّةً واحدة.</div>
+            <Btn kind="soft" busy={busy} onClick={go}>ضاعف حفظ اليوم</Btn>
+        </Card>
+    );
+}
+
 function GoalCard({ g, color }) {
     const st = { done: ['أتمّ الهدف، ما شاء الله', 'text-green-700'], ahead: ['متقدّم على الهدف', 'text-green-700'], on: ['على المسار', 'text-brand-700'], behind: ['متأخّر عن الهدف', 'text-amber-700'] }[g.state] || ['', ''];
     return (

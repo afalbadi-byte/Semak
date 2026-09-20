@@ -47,6 +47,7 @@ export default function TomorrowCard({ member, plan, sup, onDone }) {
             <div className="flex items-center gap-2">
                 <CalendarDays size={17} className="text-ink-3" />
                 <div className="font-bold text-ink flex-1">ورد الغد · {greg(tomorrowStr(), { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                {plan.rest ? <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 rounded-lg px-2 py-0.5">يوم راحة</span> : null}
                 {plan.custom ? <span className="text-[11px] font-semibold text-brand-700 bg-brand-50 rounded-lg px-2 py-0.5">معتمد</span> : <span className="text-[11px] font-semibold text-ink-3">مقترح</span>}
             </div>
             <div className="space-y-2">
@@ -54,6 +55,7 @@ export default function TomorrowCard({ member, plan, sup, onDone }) {
                     <PartLine key={k} t={t} I={I} c={c} segs={k === 'new' && plan.new_off ? null : partSegs(plan, k)} />
                 ))}
             </div>
+            {sup && !plan.custom && new Date().getHours() >= 18 ? <p className="text-[12px] text-amber-700 font-semibold">لم يُعتمد ورد الغد بعد.</p> : null}
             {sup ? (
                 <div className="flex gap-2">
                     <Btn className="flex-1" busy={busy} onClick={accept}><Check size={16} />اعتمد ورد الغد</Btn>

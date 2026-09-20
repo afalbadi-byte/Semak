@@ -73,6 +73,7 @@ function MemberForm({ m, onDone }) {
         name: m.name || '', gender: m.gender || 'm', color: m.color || PALETTE[0], dir: m.dir || 'desc',
         target_lines: m.target_lines || 5, alwah_n: m.alwah_n || 5, review_n: m.review_n || 10,
         rest_days: m.rest_days || [], goal_surah: m.goal_surah || '', goal_date: m.goal_date || '',
+        rest_lines: m.rest_lines || 0, rest_alwah: m.rest_alwah === undefined ? 1 : m.rest_alwah,
     });
     const [start, setStart] = useState({ mode: isNew ? 'none' : 'keep', value: '' });
     const [busy, setBusy] = useState(false);
@@ -146,6 +147,21 @@ function MemberForm({ m, onDone }) {
                             className={'h-9 px-3 rounded-xl text-[13px] font-semibold ' + (on ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>{t}</button>;
                     })}
                 </div>
+                {(f.rest_days || []).length ? (
+                    <div className="mt-3 space-y-2 rounded-xl bg-paper-2/50 p-3">
+                        <div className="text-[12px] font-bold text-ink-2">في يوم الراحة</div>
+                        <div className="flex gap-1.5 flex-wrap">
+                            {[[0, 'لا حفظ جديد'], [2, 'سطران'], [3, '٣ أسطر'], [5, '٥ أسطر']].map(([v, t]) => (
+                                <button key={v} type="button" onClick={() => set('rest_lines', v)}
+                                    className={'h-9 px-3 rounded-xl text-[13px] font-semibold ' + (f.rest_lines === v ? 'bg-brand text-white' : 'bg-white text-ink-2')}>{t}</button>
+                            ))}
+                        </div>
+                        <label className="flex items-center gap-2 text-[13px] text-ink-2">
+                            <input type="checkbox" checked={!!f.rest_alwah} onChange={e => set('rest_alwah', e.target.checked ? 1 : 0)} />تبقى الألواح في يوم الراحة
+                        </label>
+                        <p className="text-[11px] text-ink-3 leading-5">المراجعة تبقى دائماً، فهي التي تثبّت المحفوظ.</p>
+                    </div>
+                ) : null}
             </Field>
 
             <Field label="الهدف (اختياري)" hint="سورةٌ يُتمّها في تاريخ، فيبيّن التطبيق المطلوب يومياً وهل هو متقدّم أم متأخّر">
