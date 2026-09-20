@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Settings as Cog, Home as HomeIcon, ChevronRight, Radio, BookOpenText, CalendarDays } from 'lucide-react';
 import { call, token } from './lib/api';
+import useReciter from './lib/useReciter';
+import MiniPlayer from './components/MiniPlayer';
 import { useRoute, back } from './lib/router';
 import { Spinner, ToastHost } from './ui';
 import Login from './screens/Login';
@@ -16,6 +18,9 @@ import About from './screens/About';
 
 // ─── البيانات المشتركة بين الشاشات ──────────────────────────────────────────
 const DataCtx = createContext(null);
+// المُسمِع في جذر التطبيق: التلاوة تستمرّ مهما تنقّلت بين الشاشات
+const RecCtx = createContext(null);
+export const useRec = () => useContext(RecCtx);
 export const useData = () => useContext(DataCtx);
 
 export default function App() {
@@ -59,6 +64,7 @@ export default function App() {
 
 function Shell() {
     const r = useRoute();
+    const rec = useReciter();
     const { me, sup, members } = useData();
     const p = r.parts;
 
@@ -98,9 +104,13 @@ function Shell() {
                     <a href="#/settings" className={'w-10 h-10 rounded-xl flex items-center justify-center hover:bg-paper-2 ' + (p[0] === 'settings' ? 'text-brand' : 'text-ink-2')} aria-label="الإعدادات"><Cog size={19} /></a>
                 </div>
             </header>
-            <main className="max-w-3xl mx-auto px-4 pt-4 pb-16" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 64px)' }}>
-                {page}
-            </main>
+            <RecCtx.Provider value={rec}>
+                <main className="max-w-3xl mx-auto px-4 pt-4 pb-16" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 64px)' }}>
+                    {page}
+                </main>
+                {/* شريط التلاوة في بقيّة الشاشات (صفحة الحفظ لها شريطها) */}
+                {rec.st.on && p[0] !== 'hifz' ? <MiniPlayer rec={rec} /> : null}
+            </RecCtx.Provider>
         </div>
     );
 }

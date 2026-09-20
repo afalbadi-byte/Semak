@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronRight, ChevronLeft, EyeOff, Eye, ChevronDown, Plus, RotateCcw, Mic, SlidersHorizontal, Maximize2, Minimize2, Play, Pause, SkipForward, SkipBack, Square } from 'lucide-react';
 import { call } from '../lib/api';
 import { go, replace } from '../lib/router';
-import { useData } from '../App';
+import { useData, useRec } from '../App';
 import { useToast, todayStr, Empty, Seg, Sheet } from '../ui';
 import Mushaf from '../components/Mushaf';
 import WordActions from '../components/WordActions';
 import ListenPanel from '../components/ListenPanel';
 import AyahInfo from '../components/AyahInfo';
-import useReciter from '../lib/useReciter';
+
 import PassBar from '../components/PassBar';
 import WirdEditor from '../components/WirdEditor';
 import { loadPage } from '../lib/mushaf';
@@ -146,7 +146,11 @@ export default function Hifz({ q }) {
         if (k) ayahPage(k).then(p => { if (p && p !== pageRef.current) at({ p }); }).catch(() => {});
     };
     // المُسمِع: يُشغَّل من نافذة الكلمة («استمع من هذه الآية») ويُدار من شريط التقليب
-    const rec = useReciter({ onAyah: follow });
+    const rec = useRec();
+
+    // المصحف يتبع آية المُسمِع (وهو في جذر التطبيق، فلا يتوقّف بالتنقّل)
+    useEffect(() => { follow(rec.current); }, [rec.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
     const op = async o => {
         if (!sel) return;
