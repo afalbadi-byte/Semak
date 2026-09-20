@@ -301,6 +301,43 @@ function waLink(phone, text) {
 }
 
 // ─── المستخدمون ─────────────────────────────────────────────────────────────
+// ─── تذكير الجميع: رسالةٌ جاهزة لكل مستخدم، تُرسل بضغطةٍ لكلٍّ منهم ─────────────
+// واتساب لا يفتح محادثاتٍ متعدّدة بضغطةٍ واحدة، فتُفتح محادثة كلٍّ برسالته جاهزة،
+// ويُعلَّم من أُرسل له حتى لا يلتبس على المدير من بقي.
+function Blast({ rows, sentMap, onSent }) {
+    const toast = useToast();
+    const withPhone = rows.filter(u => u.phone);
+    const noPhone = rows.length - withPhone.length;
+    const copy = async u => {
+        try { await navigator.clipboard.writeText(emailAskText({ name: u.name, lang: u.lang })); toast(t('نُسخ النص')); }
+        catch (e) { /* تجاهل */ }
+    };
+    return (
+        <div className="space-y-3">
+            <p className="text-[12.5px] text-ink-2 leading-6">{t('يفتح واتساب لكل مستخدمٍ برسالته جاهزة. أرسلها ثم ارجع وأكمل التالي.')}</p>
+            {rows.length && !rows.some(u => !u.email) ? <p className="text-[13px] text-brand-800 font-semibold">{t('كل المستخدمين أضافوا بريدهم')}</p> : null}
+            <div className="rounded-2xl border border-paper-2 divide-y divide-paper-2">
+                {withPhone.map(u => (
+                    <div key={u.id} className="flex items-center gap-2 px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                            <div className="text-[13.5px] font-semibold truncate">{u.name}</div>
+                            <div className="text-[11.5px] text-ink-3 truncate" dir="ltr">{u.email || t('بلا بريد')}</div>
+                        </div>
+                        {u.email ? <span className="text-[11px] font-semibold text-brand-800 bg-brand-50 rounded-lg px-2 py-0.5">{t('مضاف')}</span> : null}
+                        <button onClick={() => copy(u)} title={t('انسخ النص')} className="w-9 h-9 rounded-xl hover:bg-paper flex items-center justify-center text-ink-3"><Copy size={15} /></button>
+                        <a href={waLink(u.phone, emailAskText({ name: u.name, lang: u.lang }))} target="_blank" rel="noreferrer" onClick={() => onSent(u.id)}
+                            className={'h-9 px-3 rounded-xl text-[12.5px] font-bold inline-flex items-center gap-1 ' + (sentMap[u.id] ? 'bg-paper-2 text-ink-2' : 'bg-brand text-white')}>
+                            {sentMap[u.id] ? <Check size={14} /> : <Send size={14} />}{t(sentMap[u.id] ? 'أُرسل' : 'أرسل')}
+                        </a>
+                    </div>
+                ))}
+            </div>
+            {!withPhone.length ? <p className="text-[13px] text-ink-3">{t('لا يوجد مستخدمٌ له رقم جوال — أضف الأرقام أو انسخ النص وأرسله يدوياً')}</p> : null}
+            {noPhone ? <p className="text-[12px] text-ink-3">{t('{n} بلا رقم جوال — انسخ لهم النص', { n: noPhone })}</p> : null}
+        </div>
+    );
+}
+
 function UsersPanel() {
     const { me } = useData();
     const toast = useToast();
