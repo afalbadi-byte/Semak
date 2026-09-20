@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { UserPlus, Pencil, LogOut, KeyRound, Users, Home as HomeIcon, Share2, Trash2, Building } from 'lucide-react';
+import { UserPlus, Pencil, LogOut, KeyRound, Users, Home as HomeIcon, Share2, Trash2, Building, BellRing } from 'lucide-react';
 import { call } from '../lib/api';
+import { subscribe, unsubscribe, pushState } from '../lib/push';
 import { useRoute } from '../lib/router';
 import { useData } from '../App';
 import { Card, Section, Btn, Field, inputCls, Seg, Sheet, Stepper, PALETTE, useToast, todayStr } from '../ui';
@@ -35,6 +36,7 @@ export default function Settings() {
             ) : null}
 
             {owner ? <Accounts members={members} /> : null}
+            <Notifications />
             <Password />
             {me.is_admin ? <Families /> : null}
 
@@ -45,6 +47,37 @@ export default function Settings() {
                 {edit ? <MemberForm m={edit} onDone={async msg => { setEdit(null); await reloadMembers(); if (msg) toast(msg); }} /> : null}
             </Sheet>
         </div>
+    );
+}
+
+// ─── الإشعارات: تصل الجوال ولو كان التطبيق مغلقاً ─────────────────────────────
+function Notifications() {
+    const toast = useToast();
+    const [st, setSt] = useState('…');
+    const [busy, setBusy] = useState(false);
+    useEffect(() => { setSt(pushState()); }, []);
+    const on = async () => {
+        setBusy(true);
+        try { await subscribe(); setSt('on'); toast('فُعِّلت الإشعارات على هذا الجهاز'); }
+        catch (e) { toast(e.message || 'تعذّر التفعيل', 'err'); setSt(pushState()); }
+        setBusy(false);
+    };
+    const off = async () => { setBusy(true); try { await unsubscribe(); toast('أُوقفت على هذا الجهاز'); } catch (e) { /* تجاهل */ } setSt(pushState() === 'on' ? 'off' : pushState()); setBusy(false); };
+    return (
+        <Section title="الإشعارات">
+            <Card className="p-4 space-y-2">
+                {st === 'nokey' ? <p className="text-[13px] text-ink-3 leading-6">خدمة الإشعارات غير مهيّأة بعد على الخادم.</p>
+                    : st === 'unsupported' ? <p className="text-[13px] text-ink-3 leading-6">هذا المتصفّح لا يدعم الإشعارات. ثبّت التطبيق على الشاشة الرئيسية ثم افتحه منها.</p>
+                    : st === 'blocked' ? <p className="text-[13px] text-red-700 leading-6">الإشعارات محظورة لهذا الموقع. فعّلها من إعدادات المتصفّح ثم أعد المحاولة.</p>
+                        : <>
+                            <p className="text-[13px] text-ink-2 leading-6">تذكيرٌ بورد اليوم عصراً، وتذكيرٌ مساءً بما لم يُسمَّع وباعتماد ورد الغد. تصل ولو كان التطبيق مغلقاً.</p>
+                            {st === 'on'
+                                ? <div className="flex gap-2"><Btn kind="soft" className="flex-1" busy={busy} onClick={on}><BellRing size={16} />أعد التفعيل هنا</Btn><Btn kind="line" busy={busy} onClick={off}>أوقفها</Btn></div>
+                                : <Btn className="w-full" busy={busy} onClick={on}><BellRing size={16} />فعّل الإشعارات على هذا الجهاز</Btn>}
+                        </>}
+                <p className="text-[11px] text-ink-3">لكل جهازٍ تفعيله. في الآيفون لا بدّ من تثبيت التطبيق على الشاشة الرئيسية أوّلاً.</p>
+            </Card>
+        </Section>
     );
 }
 

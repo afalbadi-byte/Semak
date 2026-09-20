@@ -73,6 +73,8 @@ jobs:
           sed -i "s|__DB_PASS__|${{ secrets.DB_PASS }}|g"           dist/alwah/api.php
           sed -i "s|__DB_NAME__|${{ secrets.DB_NAME }}|g"           dist/alwah/api.php
           sed -i "s|__TOKEN_SECRET__|${{ secrets.TOKEN_SECRET }}|g" dist/alwah/api.php
+          sed -i "s|__PUSH_KEY__|${{ secrets.PUSH_KEY }}|g"         dist/alwah/api.php
+          sed -i "s|__VAPID_PUBLIC__|${{ secrets.VAPID_PUBLIC }}|g" dist/alwah/assets/*.js
 
       - name: Build per-app entry pages (iOS PWA install)
         run: node scripts/build-app-pages.mjs

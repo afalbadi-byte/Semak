@@ -1,0 +1,28 @@
+name: Alwah notifications
+
+on:
+  schedule:
+    - cron: '0 14 * * *'   # ٥ مساءً بتوقيت السعودية: تذكير بورد اليوم
+    - cron: '0 18 * * *'   # ٩ مساءً: ما لم يُسمَّع، أو اعتماد ورد الغد
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'morning أو evening'
+        required: false
+        default: 'evening'
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i --no-save web-push@3
+      - run: node scripts/alwah-push.mjs
+        env:
+          ALWAH_API: https://alwah.semak.sa/api.php
+          PUSH_KEY: ${{ secrets.PUSH_KEY }}
+          VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          SLOT: ${{ github.event.inputs.slot || (github.event.schedule == '0 14 * * *' && 'morning' || 'evening') }}

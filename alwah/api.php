@@ -30,6 +30,7 @@ $conn->query("SET time_zone = '+03:00'");
 
 // مفتاح التوقيع مخصوصٌ بهذا التطبيق: مفتاح سماك أو عُهدة لا يفتح ألواح
 define('AL_KEY', hash_hmac('sha256', 'alwah-app-v1', '__TOKEN_SECRET__'));
+const PUSH_KEY = '__PUSH_KEY__';                 // مفتاح مرسِل الإشعارات (لا جلسة)
 
 function out($a) { ob_end_clean(); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
 function fail($m, $code = 200) { http_response_code($code); out(['success' => false, 'message' => $m]); }
@@ -246,6 +247,22 @@ if ($__v < 7) {
         if (!$has) $conn->query("ALTER TABLE al_members ADD COLUMN $c $t");
     }
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '7')");
+}
+if ($__v < 8) {
+    // أجهزة الإشعارات: لكل جهازٍ اشتراكه (endpoint فريد)
+    $conn->query("CREATE TABLE IF NOT EXISTS al_push (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        family_id INT NOT NULL,
+        user_id INT NOT NULL,
+        endpoint VARCHAR(500) NOT NULL,
+        p256dh VARCHAR(200) NOT NULL,
+        auth VARCHAR(100) NOT NULL,
+        agent VARCHAR(160) NULL,
+        failed INT NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY ep (endpoint(190)), INDEX (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '8')");
 }
 
 function al_log($uid, $action, $data = null) {
@@ -767,6 +784,77 @@ case 'log_get': {
 }
 
 // ─── تعديل ورد اليوم يدوياً (للمشرف) ─────────────────────────────────────────
+// ─── الإشعارات: اشتراك الأجهزة وما يُرسَل في كل موعد ─────────────────────────
+case 'push_sub': {
+    $u = need(); $b = body();
+    $ep = trim((string)($b['endpoint'] ?? ''));
+    $p2 = trim((string)($b['p256dh'] ?? '')); $au = trim((string)($b['auth'] ?? ''));
+    if (!preg_match('#^https://#', $ep) || strlen($ep) > 500 || !$p2 || !$au) fail('اشتراك غير صحيح');
+    $conn->query("INSERT INTO al_push (family_id, user_id, endpoint, p256dh, auth, agent) VALUES ("
+        . (int)$u['family_id'] . ", " . (int)$u['id'] . ", '" . E($ep) . "', '" . E($p2) . "', '" . E($au) . "', '" . E(mb_substr((string)($b['agent'] ?? ''), 0, 120)) . "')
+        ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), family_id=VALUES(family_id), p256dh=VALUES(p256dh), auth=VALUES(auth), agent=VALUES(agent), failed=0");
+    out(['success' => true]);
+}
+
+case 'push_unsub': {
+    $u = need(); $b = body();
+    $conn->query("DELETE FROM al_push WHERE user_id=" . (int)$u['id'] . " AND endpoint='" . E((string)($b['endpoint'] ?? '')) . "'");
+    out(['success' => true]);
+}
+
+// ما يجب إرساله الآن: يناديه مرسِل الإشعارات بمفتاحٍ سرّي (لا جلسة)
+case 'push_due': {
+    if (!hash_equals(PUSH_KEY, (string)($_GET['key'] ?? ''))) fail('غير مصرّح', 403);
+    $slot = ($_GET['slot'] ?? 'evening') === 'morning' ? 'morning' : 'evening';
+    $today = date('Y-m-d');
+    $out = [];
+    foreach (rows("SELECT * FROM al_push WHERE failed < 5") as $p) {
+        $uid = (int)$p['user_id']; $fid = (int)$p['family_id'];
+        $usr = one("SELECT id, role, member_id, active FROM al_users WHERE id=$uid LIMIT 1");
+        if (!$usr || !(int)$usr['active']) continue;
+        $sup = in_array($usr['role'], ['owner', 'supervisor'], true);
+        $w = $sup ? '' : ' AND id=' . (int)$usr['member_id'];
+        $pend = []; $names = []; $noNext = 0;
+        foreach (rows("SELECT * FROM al_members WHERE family_id=$fid AND deleted=0$w") as $m) {
+            $pl = wird_apply(member_plan($m, $today), $m['id'], $today);
+            $l = one("SELECT * FROM al_logs WHERE member_id=" . (int)$m['id'] . " AND d='" . E($today) . "' LIMIT 1");
+            $done = [
+                'new' => $l && (int)$l['new_lines'] > 0 && (int)$l['new_grade'] !== 1,
+                'alwah' => $l && (int)$l['alwah_done'],
+                'rev' => $l && (int)$l['rev_done'],
+            ];
+            $need = (($pl['new'] && !$done['new']) ? 1 : 0) + ((count($pl['alwah']) && !$done['alwah']) ? 1 : 0) + ((count($pl['review']) && !$done['rev']) ? 1 : 0);
+            if ($need) { $pend[] = $m['name']; }
+            $names[] = $m['name'];
+            $nx = wird_apply(member_plan($m), $m['id'], date('Y-m-d', strtotime('+1 day')));
+            if (!$nx['custom']) $noNext++;
+        }
+        $title = 'ألواح'; $body = ''; $url = './';
+        if ($slot === 'morning') {
+            if (!$pend) continue;
+            $body = $sup ? ('ورد اليوم بانتظار التسميع: ' . implode('، ', array_slice($pend, 0, 4))) : 'ورد اليوم بانتظارك، بارك الله فيك';
+            $url = $sup ? '#/' : '#/hifz';
+        } else {
+            if ($pend) $body = $sup ? ('لم يُسمَّع بعد: ' . implode('، ', array_slice($pend, 0, 4))) : 'ما زال ورد اليوم بانتظارك';
+            elseif ($sup && $noNext) $body = 'تمّ ورد اليوم. اعتمد ورد الغد';
+            else continue;
+            $url = $sup && !$pend ? '#/tomorrow' : ($sup ? '#/' : '#/hifz');
+        }
+        $out[] = ['id' => (int)$p['id'], 'endpoint' => $p['endpoint'], 'p256dh' => $p['p256dh'], 'auth' => $p['auth'],
+                  'title' => $title, 'body' => $body, 'url' => $url, 'tag' => 'alwah-' . $slot];
+    }
+    out(['success' => true, 'slot' => $slot, 'data' => $out]);
+}
+
+// نتيجة الإرسال: يُبلّغ المرسِل عن الاشتراكات المنتهية فتُحذف
+case 'push_result': {
+    if (!hash_equals(PUSH_KEY, (string)($_GET['key'] ?? ''))) fail('غير مصرّح', 403);
+    $b = body();
+    foreach ((array)($b['gone'] ?? []) as $id) $conn->query("DELETE FROM al_push WHERE id=" . (int)$id);
+    foreach ((array)($b['failed'] ?? []) as $id) $conn->query("UPDATE al_push SET failed=failed+1 WHERE id=" . (int)$id);
+    out(['success' => true]);
+}
+
 case 'wird_save': {
     // يُحفظ ما أُرسل من الأجزاء فقط (ويبقى غيره كما كان في ذلك اليوم)؛ reset يمسح الورد اليدوي كلّه
     $u = need_sup(); $b = body(); $m = member_for($u, $b['member_id'] ?? 0);
