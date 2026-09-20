@@ -137,7 +137,7 @@ export default function Statement({ q }) {
                                             // صفحاتٌ عدّة: رابطٌ مرقَّم لكل صفحة
                                             <span className="inline-flex flex-wrap justify-center gap-x-1.5">
                                                 {x.docs.map((dc, k) => (
-                                                    <a key={k} href={dc.url} target="_blank" rel="noreferrer" title={t(dc.drive ? 'درايف' : 'عرض')}
+                                                    <a key={k} href={dc.url} target="_blank" rel="noreferrer" title={t('عرض المستند')}
                                                         className="text-blue-700 underline underline-offset-2 font-semibold tabular-nums">{k + 1}</a>
                                                 ))}
                                             </span>
