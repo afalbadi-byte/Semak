@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { UserPlus, Pencil, LogOut, KeyRound, Users, Home as HomeIcon, Share2, Trash2, Building, BellRing } from 'lucide-react';
+import { UserPlus, Pencil, LogOut, KeyRound, Users, Home as HomeIcon, Share2, Trash2, Building, BellRing, Info } from 'lucide-react';
 import { call } from '../lib/api';
 import { subscribe, unsubscribe, pushState } from '../lib/push';
 import { useRoute } from '../lib/router';
@@ -40,6 +40,7 @@ export default function Settings() {
             <Password />
             {me.is_admin ? <Families /> : null}
 
+            <a href="#/about" className="block"><Btn kind="line" className="w-full"><Info size={16} />حول ألواح</Btn></a>
             <Btn kind="line" className="w-full" onClick={logout}><LogOut size={16} />تسجيل الخروج</Btn>
             <p className="text-center text-[11px] text-ink-3">{me.name} · {me.username}</p>
 

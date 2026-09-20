@@ -12,6 +12,7 @@ import MushafView from './screens/MushafView';
 import Session from './screens/Session';
 import Hifz from './screens/Hifz';
 import Tomorrow from './screens/Tomorrow';
+import About from './screens/About';
 
 // ─── البيانات المشتركة بين الشاشات ──────────────────────────────────────────
 const DataCtx = createContext(null);
@@ -69,6 +70,7 @@ function Shell() {
     else if (p[0] === 'session') page = <Session />;
     else if (p[0] === 'hifz') page = <Hifz q={r.q} />;
     else if (p[0] === 'tomorrow') page = <Tomorrow />;
+    else if (p[0] === 'about') page = <About />;
     else if (p[0] === 'm' && p[1]) page = <MemberView id={+p[1]} />;
     else if (p[0] === 'settings') page = <Settings />;
     else page = solo ? <MemberView id={me.member_id} /> : <Home />;

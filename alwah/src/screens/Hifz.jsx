@@ -7,6 +7,7 @@ import { useToast, todayStr, Empty, Seg, Sheet } from '../ui';
 import Mushaf from '../components/Mushaf';
 import WordActions from '../components/WordActions';
 import ListenPanel from '../components/ListenPanel';
+import AyahInfo from '../components/AyahInfo';
 import useReciter from '../lib/useReciter';
 import PassBar from '../components/PassBar';
 import WirdEditor from '../components/WirdEditor';
@@ -303,7 +304,8 @@ export default function Hifz({ q }) {
             </Sheet>
 
             <WordActions word={sel} mark={sel ? marks[sel.k] : null} onOp={op} onClose={() => setSel(null)} busy={busy} noMarks={sel && sel.marker}>
-                {sel ? <ListenPanel from={sel.k.slice(0, sel.k.lastIndexOf(':'))} defEnd={endFor(sel.k.slice(0, sel.k.lastIndexOf(':')))} rec={rec} onStart={() => setSel(null)} /> : null}
+                {sel ? <><ListenPanel from={sel.k.slice(0, sel.k.lastIndexOf(':'))} defEnd={endFor(sel.k.slice(0, sel.k.lastIndexOf(':')))} rec={rec} onStart={() => setSel(null)} />
+                    <AyahInfo ayah={sel.k.slice(0, sel.k.lastIndexOf(':'))} /></> : null}
             </WordActions>
         </div>
     );
