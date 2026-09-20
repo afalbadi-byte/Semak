@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Flame, Mic, BookOpen, Layers, RotateCcw, ExternalLink, Check, Pencil, CalendarDays, Award } from 'lucide-react';
 import { call } from '../lib/api';
 import { Card, Ring, Section, Spinner, Btn, hijri, greg, todayStr } from '../ui';
-import { surahsOn, surahsIn, rangeLabel, linesLabel, juzOf, gradeOf } from '../lib/quran';
+import { Target } from 'lucide-react';
+import { surahsOn, surahsIn, rangeLabel, linesLabel, juzOf, gradeOf, SURAHS } from '../lib/quran';
 import { BookMarked } from 'lucide-react';
 import { partDone } from './Home';
+import TomorrowCard from '../components/TomorrowCard';
 import { useData } from '../App';
 
 export default function MemberView({ id }) {
@@ -63,14 +65,14 @@ export default function MemberView({ id }) {
             <Section title={'ورد اليوم · ' + greg(todayStr(), { weekday: 'long', day: 'numeric', month: 'long' })}
                 action={today && sup ? <a href={'#/m/' + m.id + '/log'} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><Pencil size={12} />عدّل</a> : null}>
                 <Card className="divide-y divide-paper-2">
-                    <PlanRow icon={BookOpen} title="الحفظ الجديد" done={partDone(today, 'new')} color={color}
+                    <PlanRow icon={BookOpen} title="الحفظ الجديد" done={partDone(today, 'new')} color={color} late={plan.late && plan.late.new}
                         main={plan.new ? `صفحة ${plan.new.page} · ${surahsOn(plan.new.page).join('، ')}` : 'أتمّ الحفظ'}
                         sub={plan.new ? `من السطر ${plan.new.from_line} · المقدار ${linesLabel(plan.new.lines)}` : ''}
                         link={plan.new ? hz('new') : null} />
-                    <PlanRow icon={Layers} title={`الألواح (${plan.alwah.length} صفحات)`} done={partDone(today, 'alwah')} color={color}
+                    <PlanRow icon={Layers} title={`الألواح (${plan.alwah.length} صفحات)`} done={partDone(today, 'alwah')} color={color} late={plan.late && plan.late.alwah}
                         main={'صفحات ' + rangeLabel(plan.alwah)} sub={surahsIn(plan.alwah).join('، ')}
                         link={plan.alwah.length ? hz('alwah') : null} />
-                    <PlanRow icon={RotateCcw} title={`المراجعة (${plan.review.length} صفحات)`} done={partDone(today, 'rev')} color={color}
+                    <PlanRow icon={RotateCcw} title={`المراجعة (${plan.review.length} صفحات)`} done={partDone(today, 'rev')} color={color} late={plan.late && plan.late.rev}
                         main={plan.review.length ? 'صفحات ' + rangeLabel(plan.review) : 'تبدأ المراجعة بعد أن يتجاوز المحفوظ الألواح'}
                         sub={plan.review.length ? `${surahsIn(plan.review).join('، ')} · الموضع ${plan.cycle_pos} من ${plan.cycle} في الدورة` : ''}
                         link={plan.review.length ? hz('rev') : null} />
@@ -81,6 +83,10 @@ export default function MemberView({ id }) {
                     </a>
                 ) : <p className="mt-3 text-center text-[12px] text-ink-3">يُجاز الورد حين يسمعه المشرف ويضع «تمّ التسميع».</p>}
             </Section>
+
+            {now.goal ? <GoalCard g={now.goal} color={color} /> : null}
+
+            <TomorrowCard member={m} plan={d.next} sup={sup} onDone={load} />
 
             {/* ── مصحف الفرد: مواضع الضعف ── */}
             <Section title={'مصحف ' + m.name} action={<a href={mu(now.current || 604)} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><BookMarked size={13} />افتح المصحف</a>}>
@@ -175,14 +181,33 @@ function Stat({ label, value }) {
     );
 }
 
-function PlanRow({ icon: I, title, main, sub, done, link, color }) {
+// الهدف: سورةٌ في تاريخ، والمطلوب يومياً، وهل هو متقدّم أم متأخّر
+function GoalCard({ g, color }) {
+    const st = { done: ['أتمّ الهدف، ما شاء الله', 'text-green-700'], ahead: ['متقدّم على الهدف', 'text-green-700'], on: ['على المسار', 'text-brand-700'], behind: ['متأخّر عن الهدف', 'text-amber-700'] }[g.state] || ['', ''];
+    return (
+        <Card className="p-4 space-y-2">
+            <div className="flex items-center gap-2">
+                <Target size={17} className="text-ink-3" />
+                <div className="font-bold text-ink flex-1">الهدف: {SURAHS[g.surah - 1] ? 'سورة ' + SURAHS[g.surah - 1][0] : ''}</div>
+                <span className={'text-[12px] font-bold ' + st[1]}>{st[0]}</span>
+            </div>
+            <div className="h-2 rounded-full bg-paper-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: Math.round(g.progress * 100) + '%', background: color }} /></div>
+            <div className="text-[12px] text-ink-3 leading-6">
+                {g.remain_lines ? <>الباقي {linesLabel(g.remain_lines)} في {g.days} يوماً · المطلوب {linesLabel(g.need)} يومياً{g.need > g.target ? <span className="text-amber-700 font-semibold"> (الورد الحالي {linesLabel(g.target)})</span> : null}</> : 'اكتمل'}
+                <span className="block">الموعد: {greg(g.date, { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            </div>
+        </Card>
+    );
+}
+
+function PlanRow({ icon: I, title, main, sub, done, link, color, late }) {
     return (
         <Row href={link} className="p-4 flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: done ? color : '#ebe5d8', color: done ? '#fff' : '#48534f' }}>
                 {done ? <Check size={18} /> : <I size={18} />}
             </div>
             <div className="flex-1 min-w-0">
-                <div className="text-[12px] font-semibold text-ink-3">{title}</div>
+                <div className="text-[12px] font-semibold text-ink-3">{title}{!done && late ? <span className="ms-1 text-amber-700 font-bold">· {late === 1 ? 'مؤجّل من أمس' : `متأخّر ${late} أيام`}</span> : null}</div>
                 <div className="text-[15px] font-bold text-ink mt-0.5">{main}</div>
                 {sub ? <div className="text-[12px] text-ink-3 mt-0.5 leading-5">{sub}</div> : null}
             </div>

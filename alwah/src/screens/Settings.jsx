@@ -3,7 +3,7 @@ import { UserPlus, Pencil, LogOut, KeyRound, Users, Home as HomeIcon, Share2, Tr
 import { call } from '../lib/api';
 import { useRoute } from '../lib/router';
 import { useData } from '../App';
-import { Card, Section, Btn, Field, inputCls, Seg, Sheet, Stepper, PALETTE, useToast } from '../ui';
+import { Card, Section, Btn, Field, inputCls, Seg, Sheet, Stepper, PALETTE, useToast, todayStr } from '../ui';
 import { SURAHS, TOTAL_LINES, initLinesFor, linesLabel } from '../lib/quran';
 
 export default function Settings() {
@@ -72,6 +72,7 @@ function MemberForm({ m, onDone }) {
     const [f, setF] = useState({
         name: m.name || '', gender: m.gender || 'm', color: m.color || PALETTE[0], dir: m.dir || 'desc',
         target_lines: m.target_lines || 5, alwah_n: m.alwah_n || 5, review_n: m.review_n || 10,
+        rest_days: m.rest_days || [], goal_surah: m.goal_surah || '', goal_date: m.goal_date || '',
     });
     const [start, setStart] = useState({ mode: isNew ? 'none' : 'keep', value: '' });
     const [busy, setBusy] = useState(false);
@@ -134,6 +135,26 @@ function MemberForm({ m, onDone }) {
                         <button key={v} type="button" onClick={() => set('target_lines', v)}
                             className={'h-9 px-3 rounded-xl text-[13px] font-semibold ' + (f.target_lines === v ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>{t}</button>
                     ))}
+                </div>
+            </Field>
+
+            <Field label="أيام الراحة" hint="لا حفظ جديد فيها، والمراجعة تستمرّ، ولا تكسر عدّاد الأيام المتتالية">
+                <div className="flex gap-1.5 flex-wrap">
+                    {['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map((t, i) => {
+                        const on = (f.rest_days || []).includes(i);
+                        return <button key={i} type="button" onClick={() => set('rest_days', on ? f.rest_days.filter(x => x !== i) : [...(f.rest_days || []), i])}
+                            className={'h-9 px-3 rounded-xl text-[13px] font-semibold ' + (on ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>{t}</button>;
+                    })}
+                </div>
+            </Field>
+
+            <Field label="الهدف (اختياري)" hint="سورةٌ يُتمّها في تاريخ، فيبيّن التطبيق المطلوب يومياً وهل هو متقدّم أم متأخّر">
+                <div className="grid grid-cols-2 gap-2">
+                    <select className={inputCls} value={f.goal_surah} onChange={e => set('goal_surah', e.target.value)}>
+                        <option value="">بلا هدف</option>
+                        {SURAHS.map(([n], i) => <option key={i} value={i + 1}>{i + 1}. {n}</option>)}
+                    </select>
+                    <input type="date" className={inputCls} value={f.goal_date || ''} min={todayStr()} onChange={e => set('goal_date', e.target.value)} />
                 </div>
             </Field>
 

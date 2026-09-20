@@ -231,6 +231,14 @@ if ($__v < 5) {
     }
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '5')");
 }
+if ($__v < 6) {
+    // أيام الراحة (أرقام أيام الأسبوع: الأحد ٠) والهدف: سورةٌ وتاريخ
+    foreach ([['rest_days', "VARCHAR(20) NULL"], ['goal_surah', 'INT NULL'], ['goal_date', 'DATE NULL']] as [$c, $t]) {
+        $has = one("SELECT 1 x FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='al_members' AND COLUMN_NAME='$c'");
+        if (!$has) $conn->query("ALTER TABLE al_members ADD COLUMN $c $t");
+    }
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '6')");
+}
 
 function al_log($uid, $action, $data = null) {
     global $conn;
@@ -372,8 +380,21 @@ function member_plan($m, $exclude_d = null) {
     $inR = array_flip($review);
     $revL = array_values(array_filter($R, function ($y) use ($inR) { return isset($inR[$y[0]]); }));
 
+    // المؤجَّل: كم يوماً مضى على آخر إجازةٍ لكل جزء (ورد الأمس يعود، ولا يتراكم)
+    $d0 = $exclude_d ?: date('Y-m-d');
+    $late = [];
+    foreach ([['new', 'new_lines > 0 AND new_grade <> 1'], ['alwah', 'alwah_done=1'], ['rev', 'rev_done=1']] as [$k, $w]) {
+        $x2 = one("SELECT d FROM al_logs WHERE member_id=$mid AND $w AND d < '" . E($d0) . "'$ex ORDER BY d DESC LIMIT 1");
+        $late[$k] = $x2 ? max(0, (int)round((strtotime($d0) - strtotime($x2['d'])) / 86400) - 1) : null;
+    }
+    // يوم راحة: لا حفظ جديد فيه (والمراجعة تبقى فهي التي تثبّت المحفوظ)
+    $rest = array_filter(array_map('intval', explode(',', (string)($m['rest_days'] ?? ''))), function ($x) { return $x >= 0 && $x <= 6; });
+    $isRest = in_array((int)date('w', strtotime($d0)), $rest, true);
+
     return [
         'lines' => $L, 'total' => $T, 'pos' => $L, 'dir' => $dir,
+        'late' => $late, 'rest' => $isRest,
+        'goal' => member_goal($m, $seq, $L, $d0, count($rest)),
         'memorized_pages' => round($L * PAGES / $T, 2), 'juz' => round($L * 30 / $T, 2),
         'current' => $cur ? $cur[0] : null,
         'new' => $cur ? ['page' => $cur[0], 'from_line' => $cur[1], 'to_line' => $toLine ?: $cur[1], 'lines' => $tl, 'manual' => $manual] : null,
@@ -474,6 +495,23 @@ function wird_apply($plan, $mid, $d) {
     return $plan;
 }
 
+// الهدف: سورةٌ يُتمّها في تاريخ، ومنه المقدار اليومي المطلوب وهل هو متقدّم أم متأخّر
+function member_goal($m, $seq, $L, $d0, $restCount) {
+    $gs = (int)($m['goal_surah'] ?? 0); $gd = (string)($m['goal_date'] ?? '');
+    if (!$gs || !$gd) return null;
+    $end = 0;
+    foreach ($seq as $i => $x) if ((int)$x[2] === $gs) $end = $i;            // آخر سطرٍ في السورة الهدف بترتيب الحفظ
+    $remain = max(0, $end + 1 - $L);
+    $days = max(0, (int)floor((strtotime($gd) - strtotime($d0)) / 86400));
+    $active = max(1, (int)round($days * max(1, 7 - $restCount) / 7));
+    $need = $remain > 0 ? (int)ceil($remain / $active) : 0;
+    $tl = max(1, (int)$m['target_lines']);
+    $state = $remain === 0 ? 'done' : ($need <= $tl ? ($need <= $tl - 1 ? 'ahead' : 'on') : 'behind');
+    return ['surah' => $gs, 'date' => $gd, 'remain_lines' => $remain, 'days' => $days, 'active_days' => $active,
+            'need' => $need, 'target' => $tl, 'state' => $state,
+            'progress' => $end + 1 > 0 ? round(min(1, $L / ($end + 1)), 3) : 0];
+}
+
 // نسبة المحفوظ من كل جزء (للخريطة): أسطره المحفوظة من أسطره كلّها
 function juz_map($seq, $L) {
     $tot = array_fill(1, 30, 0); $got = array_fill(1, 30, 0);
@@ -556,6 +594,8 @@ function member_for($u, $id) {
 }
 function clean_member($m) {
     foreach (['id', 'init_lines', 'target_lines', 'alwah_n', 'review_n', 'sort'] as $k) $m[$k] = (int)$m[$k];
+    $m['goal_surah'] = isset($m['goal_surah']) && $m['goal_surah'] !== null ? (int)$m['goal_surah'] : null;
+    $m['rest_days'] = array_values(array_filter(array_map('intval', explode(',', (string)($m['rest_days'] ?? ''))), function ($x) { return $x >= 0 && $x <= 6; }));
     unset($m['deleted'], $m['family_id']);
     return $m;
 }
@@ -640,8 +680,8 @@ case 'members': {
     $list = [];
     foreach (rows("SELECT * FROM al_members WHERE family_id=$fid AND deleted=0$w ORDER BY sort, id") as $m) {
         $p = wird_apply(member_plan($m), $m['id'], date('Y-m-d')); $s = member_stats($m['id']);
-        $list[] = clean_member($m) + ['plan' => $p, 'streak' => $s['streak'], 'week_lines' => $s['week_lines'],
-                                      'today' => clean_log($s['today'])];
+        $list[] = clean_member($m) + ['plan' => $p, 'next' => wird_apply(member_plan($m), $m['id'], date('Y-m-d', strtotime('+1 day'))),
+                                      'streak' => $s['streak'], 'week_lines' => $s['week_lines'], 'today' => clean_log($s['today'])];
     }
     out(['success' => true, 'data' => $list]);
 }
@@ -655,6 +695,7 @@ case 'member': {
     foreach ($hist as &$h) $h['by'] = $names[$h['recorded_by']] ?? null;
     unset($h);
     out(['success' => true, 'member' => clean_member($m), 'plan' => wird_apply(member_plan($m, $today), $m['id'], $today), 'now' => member_plan($m),
+         'next' => wird_apply(member_plan($m), $m['id'], date('Y-m-d', strtotime('+1 day'))),
          'stats' => member_stats($m['id']), 'history' => $hist]);
 }
 
@@ -670,7 +711,11 @@ case 'member_save': {
     $rn = max(1, min(60, (int)($b['review_n'] ?? 10)));
     $g = ($b['gender'] ?? 'm') === 'f' ? 'f' : 'm';
     $col = preg_match('/^#[0-9a-f]{6}$/i', (string)($b['color'] ?? '')) ? $b['color'] : '#1f5f4a';
-    $set = "name='" . E($nm) . "', gender='$g', color='" . E($col) . "', dir='$dir', init_lines=$init, target_lines=$tl, alwah_n=$an, review_n=$rn";
+    $rest = implode(',', array_values(array_unique(array_filter(array_map('intval', (array)($b['rest_days'] ?? [])), function ($x) { return $x >= 0 && $x <= 6; }))));
+    $gs = (int)($b['goal_surah'] ?? 0); $gs = $gs >= 1 && $gs <= 114 ? $gs : 0;
+    $gd = preg_match('/^d{4}-d{2}-d{2}$/', (string)($b['goal_date'] ?? '')) ? $b['goal_date'] : '';
+    $set = "name='" . E($nm) . "', gender='$g', color='" . E($col) . "', dir='$dir', init_lines=$init, target_lines=$tl, alwah_n=$an, review_n=$rn"
+        . ", rest_days='" . E($rest) . "', goal_surah=" . ($gs ?: 'NULL') . ", goal_date=" . ($gd ? "'" . E($gd) . "'" : 'NULL');
     if ($id) {
         member_for($u, $id);
         $conn->query("UPDATE al_members SET $set WHERE id=$id AND family_id=$fid");
@@ -726,7 +771,11 @@ case 'wird_save': {
     $rv = $lst('rev_list', $old ? $old['rev_list'] : null);
     $rg = ranges_out($old ? $old['ranges'] : null) ?: [];
     $in = ranges_in($b['ranges'] ?? null) ?: [];
-    foreach (['new', 'alwah', 'rev'] as $k) if (isset($in[$k])) $rg[$k] = $in[$k];
+    $rb = is_array($b['ranges'] ?? null) ? $b['ranges'] : [];
+    foreach (['new', 'alwah', 'rev'] as $k) {
+        if (isset($in[$k])) $rg[$k] = $in[$k];
+        elseif (array_key_exists($k, $rb) && $rb[$k] === null) unset($rg[$k]);   // يعود المقطع إلى الحساب من الموضع
+    }
     if ($nl === null || (int)$nl === 0) unset($rg['new']);
     if ($al === null || $al === '') unset($rg['alwah']);
     if ($rv === null || $rv === '') unset($rg['rev']);
