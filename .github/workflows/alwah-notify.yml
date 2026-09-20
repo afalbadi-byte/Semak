@@ -29,7 +29,7 @@ jobs:
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
           VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
-          SLOT: ${{ github.event.inputs.slot || (github.event.schedule == '0 3 * * *' && 'fajr' || (github.event.schedule == '0 14 * * *' && 'morning' || 'evening')) }}
+          SLOT: fajr   # مؤقّتاً للتجربة
 
 # تجربة إرسال: 2026-09-20T10:28Z
 
