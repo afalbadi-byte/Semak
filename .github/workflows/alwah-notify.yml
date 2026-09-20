@@ -29,3 +29,5 @@ jobs:
           VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
           VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
           SLOT: ${{ github.event.inputs.slot || (github.event.schedule == '0 14 * * *' && 'morning' || 'evening') }}
+
+# تجربة إرسال: 2026-09-20T10:28Z
