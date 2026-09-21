@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { BookText, Sparkles, ChevronDown } from 'lucide-react';
-import { ayahName } from '../lib/ayah';
-import { BOOKS, ayahText, nuzulFor, asbabFor, ASBAB_BOOK } from '../lib/tafsir';
+import { BookText, Sparkles, ChevronDown, PenLine } from 'lucide-react';
+import { ayahName, surahName } from '../lib/ayah';
+import { BOOKS, ayahText, nuzulFor, asbabFor, ASBAB_BOOK, IRAB_BOOK, irabFor } from '../lib/tafsir';
 
 // ─── تفسير الآية وسبب نزولها ─────────────────────────────────────────────────
 // نصوصٌ من كتبٍ معتمدة باسم كتابها ومؤلّفه: المختصر في التفسير، والميسر، والسعدي.
@@ -9,6 +9,7 @@ import { BOOKS, ayahText, nuzulFor, asbabFor, ASBAB_BOOK } from '../lib/tafsir';
 const TABS = [
     { k: 'tafsir', t: 'التفسير', icon: BookText },
     { k: 'nuzul', t: 'سبب النزول', icon: Sparkles },
+    { k: 'irab', t: 'الإعراب', icon: PenLine },
 ];
 
 export default function AyahInfo({ ayah }) {
@@ -18,14 +19,16 @@ export default function AyahInfo({ ayah }) {
 
     useEffect(() => { setSt({}); setTab(null); }, [ayah]);
 
-    const key = tab === 'nuzul' ? 'nuzul' : book;
+    const key = tab === 'nuzul' ? 'nuzul' : tab === 'irab' ? 'irab' : book;
     useEffect(() => {
         if (!tab || st[key] !== undefined) return undefined;
         let dead = false;
         setSt(s => ({ ...s, [key]: null }));
         const job = tab === 'nuzul'
             ? asbabFor(ayah).then(list => (list && list.length ? { asbab: list } : nuzulFor(ayah)))
-            : ayahText(book, ayah).then(t => ({ book, text: t || '' }));
+            : tab === 'irab'
+                ? irabFor(ayah).then(r => ({ irab: r }))
+                : ayahText(book, ayah).then(t => ({ book, text: t || '' }));
         job.then(r => { if (!dead) setSt(s => ({ ...s, [key]: r || { book: null, text: '' } })); })
             .catch(() => { if (!dead) setSt(s => ({ ...s, [key]: 'err' })); });
         return () => { dead = true; };
@@ -33,7 +36,8 @@ export default function AyahInfo({ ayah }) {
 
     const raw = st[key];
     const asbab = raw && raw !== 'err' ? raw.asbab : null;
-    const text = raw && raw !== 'err' && !asbab ? raw.text : raw && raw !== 'err' ? '' : raw;
+    const irab = raw && raw !== 'err' ? raw.irab : null;
+    const text = raw && raw !== 'err' && !asbab && !irab ? raw.text : raw && raw !== 'err' ? '' : raw;
     const b = raw && raw !== 'err' && raw.book ? BOOKS[raw.book] : null;
 
     return (
@@ -60,7 +64,7 @@ export default function AyahInfo({ ayah }) {
                         </div>
                     ) : null}
 
-                    {asbab ? (
+                    {irab ? <Irab r={irab} ayah={ayah} /> : asbab ? (
                         <div className="space-y-3">
                             {asbab.map((x, i) => (
                                 <div key={i} className="space-y-1">
@@ -77,6 +81,34 @@ export default function AyahInfo({ ayah }) {
                     {text && b ? <p className="text-[11px] text-ink-3 leading-5">المصدر: {b.name} · {b.by}{tab === 'nuzul' ? ' — نصّ المفسّر كما هو' : ''}</p> : null}
                 </div>
             ) : null}
+        </div>
+    );
+}
+
+// إعراب الآية: قسم «الإعراب» أوّلاً، وما بقي من أقسام الكتاب (الصرف، البلاغة،
+// الفوائد) يُفتح بالضغط. والكتاب قد يعرب آياتٍ معاً، فنقول للقارئ ما يغطّيه.
+function Irab({ r, ayah }) {
+    const secs = (r.secs || []).filter(x => x.t);
+    const [i, setI] = useState(0);
+    const s = +String(ayah).split(':')[0];
+    const a0 = r.start || +String(ayah).split(':')[1];
+    const a1 = a0 + (r.count || 1) - 1;
+    if (!secs.length) return <div className="text-[13px] text-ink-3">لا إعراب لهذه الآية في الكتاب.</div>;
+    return (
+        <div className="space-y-2">
+            {secs.length > 1 ? (
+                <div className="flex gap-1.5 flex-wrap">
+                    {secs.map((x, k) => (
+                        <button key={k} onClick={() => setI(k)}
+                            className={'h-8 px-2.5 rounded-lg text-[12px] font-semibold ' + (i === k ? 'bg-brand text-white' : 'bg-white text-ink-2 border border-paper-2')}>{x.h}</button>
+                    ))}
+                </div>
+            ) : null}
+            <p className="text-[14px] leading-8 text-ink whitespace-pre-line">{secs[Math.min(i, secs.length - 1)].t}</p>
+            <p className="text-[11px] text-ink-3 leading-5">
+                {IRAB_BOOK.name} · {IRAB_BOOK.by} · {IRAB_BOOK.via}
+                {a1 > a0 ? <span className="block">يعرب الكتاب هنا {surahName(s)} {a0}–{a1} معاً</span> : null}
+            </p>
         </div>
     );
 }

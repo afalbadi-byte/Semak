@@ -69,6 +69,25 @@ export async function nuzulFor(key) {
 // ─── أسباب النزول: «الصحيح المسند من أسباب النزول» للشيخ مقبل الوادعي ─────────
 // اقتصر مؤلّفه على ما صحّ إسناده، والنصّ يُعرض كما هو بإسناده وتخريجه ورقم صفحته
 // في المطبوع. البيانات ملفٌّ لكل سورة داخل التطبيق، فلا تعتمد على خدمةٍ خارجية.
+// ─── الإعراب: «الجدول في إعراب القرآن وصرفه وبيانه» لمحمود صافي ──────────────
+// يُجلب عند الطلب عبر خادمنا من الباحث القرآني (tafsir.app)، ولا يُخزَّن، والنصّ
+// يُعرض كما هو باسم كتابه ومؤلّفه. وإعراب الكتاب قد يجمع آياتٍ في موضعٍ واحد،
+// فنُبيّن للقارئ مدى ما يغطّيه.
+export const IRAB_BOOK = { name: 'الجدول في إعراب القرآن وصرفه وبيانه', by: 'محمود بن عبد الرحيم صافي', via: 'عبر الباحث القرآني' };
+const irabMem = new Map();
+export function irabFor(key) {
+    if (irabMem.has(key)) return irabMem.get(key);
+    const [s, a] = String(key).split(':');
+    const pr = (async () => {
+        const { call } = await import('./api');
+        const r = await call('irab', { params: { s, a } });
+        if (!r.success) throw new Error(r.message || 'تعذّر جلب الإعراب');
+        return r;
+    })().catch(e => { irabMem.delete(key); throw e; });
+    irabMem.set(key, pr);
+    return pr;
+}
+
 export const ASBAB_BOOK = { name: 'الصحيح المسند من أسباب النزول', by: 'الشيخ مقبل بن هادي الوادعي رحمه الله' };
 const suras = new Map();
 export async function asbabFor(key) {

@@ -271,6 +271,20 @@ if ($__v < 9) {
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '9')");
 }
 
+// جلب نصٍّ من خدمةٍ خارجية (الإعراب من الباحث القرآني) — بلا تخزينٍ عندنا
+function fetch_text($url) {
+    if (function_exists('curl_init')) {
+        $c = curl_init($url);
+        curl_setopt_array($c, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_FOLLOWLOCATION => true,
+                               CURLOPT_USERAGENT => 'alwah.semak.sa']);
+        $r = curl_exec($c); $code = (int)curl_getinfo($c, CURLINFO_HTTP_CODE); curl_close($c);
+        return ($r !== false && $code === 200) ? $r : null;
+    }
+    $ctx = stream_context_create(['http' => ['timeout' => 10, 'header' => "User-Agent: alwah.semak.sa\r\n"]]);
+    $r = @file_get_contents($url, false, $ctx);
+    return $r === false ? null : $r;
+}
+
 function al_log($uid, $action, $data = null) {
     global $conn;
     $ip = E(trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '')[0]));
@@ -1162,6 +1176,31 @@ case 'family_create': {
 }
 
 // ─── مصحف الفرد: علامات الأخطاء والتنبيهات ─────────────────────────────────
+// ─── إعراب الآية ────────────────────────────────────────────────────────────
+// «الجدول في إعراب القرآن وصرفه وبيانه» لمحمود صافي، يُجلب عند الطلب من الباحث
+// القرآني (tafsir.app) ولا يُخزَّن عندنا. والوسيط لأنّ الخدمة لا تسمح بالنداء
+// المباشر من المتصفّح، والنصّ يُعرض كما هو باسم كتابه ومؤلّفه.
+case 'irab': {
+    need();
+    $s = (int)($_GET['s'] ?? 0); $a = (int)($_GET['a'] ?? 0);
+    if ($s < 1 || $s > 114 || $a < 1 || $a > 300) fail('آية غير صحيحة');
+    $raw = fetch_text('https://tafsir.app/get.php?src=aljadwal&s=' . $s . '&a=' . $a . '&ver=1');
+    if ($raw === null) fail('تعذّر جلب الإعراب الآن');
+    $j = json_decode($raw, true);
+    $txt = trim((string)($j['data'] ?? ''));
+    // النصّ أقسامٌ يبدأ كلٌّ منها بسطرٍ مثل «* الإعراب:»
+    $secs = [];
+    foreach (preg_split('/\n\s*\*\s+/u', "\n" . $txt) as $part) {
+        $part = trim($part);
+        if ($part === '') continue;
+        $p = explode("\n", $part, 2);
+        $h = trim(trim(trim($p[0]), ':'));
+        $t = isset($p[1]) ? trim($p[1]) : '';
+        if ($t !== '' && mb_strlen($h) <= 40) $secs[] = ['h' => $h, 't' => $t];
+    }
+    out(['success' => true, 'start' => (int)($j['ayahs_start'] ?? $a), 'count' => max(1, (int)($j['count'] ?? 1)), 'secs' => $secs]);
+}
+
 case 'marks_page': {
     $u = need(); $m = member_for($u, $_GET['member_id'] ?? 0);
     $p = max(1, min(PAGES, (int)($_GET['page'] ?? 1)));
