@@ -751,6 +751,30 @@ case 'setup': {
     out(['success' => true, 'token' => make_token($uid)]);
 }
 
+// تسجيلٌ جديد: من أراد أن يفتح لأسرته حساباً بنفسه، فيصير مشرفها
+// (لا صلاحية له على غير أسرته، وبياناتها لا يراها أحدٌ سواه)
+case 'register': {
+    $b = body();
+    $un = strtolower(trim((string)($b['username'] ?? '')));
+    $nm = trim((string)($b['name'] ?? ''));
+    $fam = trim((string)($b['family'] ?? '')) ?: 'أسرتي';
+    $pw = (string)($b['password'] ?? '');
+    if (!preg_match('/^[a-z0-9_.-]{3,40}$/', $un)) fail('اسم الدخول: حروف إنجليزية وأرقام، ٣ أحرف فأكثر');
+    if (mb_strlen($nm) < 2) fail('الاسم مطلوب');
+    if (strlen($pw) < 6) fail('كلمة المرور ستة أحرف فأكثر');
+    if (one("SELECT id FROM al_users WHERE username='" . E($un) . "' LIMIT 1")) fail('اسم الدخول مستعمل، اختر غيره');
+    $ip = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '')[0]);
+    $n = (int)one("SELECT COUNT(*) n FROM al_log WHERE action='register' AND ip='" . E($ip) . "' AND at > NOW() - INTERVAL 1 HOUR")['n'];
+    if ($n >= 5) fail('محاولات كثيرة من هذا الجهاز، حاول بعد ساعة');
+    $conn->query("INSERT INTO al_families (name) VALUES ('" . E(mb_substr($fam, 0, 120)) . "')");
+    $fid = (int)$conn->insert_id;
+    $conn->query("INSERT INTO al_users (family_id, username, name, pass_hash, role, is_admin) VALUES ($fid, '" . E($un) . "', '" . E($nm) . "', '"
+        . E(password_hash($pw, PASSWORD_DEFAULT)) . "', 'owner', 0)");
+    $uid = (int)$conn->insert_id;
+    al_log($uid, 'register', ['family' => $fam]);
+    out(['success' => true, 'token' => make_token($uid)]);
+}
+
 case 'login': {
     $b = body();
     $un = strtolower(trim((string)($b['username'] ?? '')));

@@ -3,19 +3,22 @@ import { LogIn } from 'lucide-react';
 import { call, token } from '../lib/api';
 import { Btn, Field, inputCls } from '../ui';
 
-// ─── الدخول، أو تهيئة أوّل حساب (صاحب الأسرة) ───────────────────────────────
+// ─── الدخول، أو فتح حسابٍ جديد لأسرة ────────────────────────────────────────
+// من لا حساب له يسجّل بنفسه فيصير مشرف أسرته، ثم يضيف أفرادها من داخل حسابه.
 export default function Login({ setup, onDone }) {
     const [f, setF] = useState({ family: '', name: '', username: '', password: '' });
+    const [tab, setTab] = useState(setup ? 'new' : 'in');   // in: دخول · new: حساب جديد
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
     const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+    const isNew = tab === 'new';
 
     const submit = async e => {
         e.preventDefault();
         setBusy(true); setErr('');
-        const r = await call(setup ? 'setup' : 'login', { body: f });
+        const r = await call(isNew ? (setup ? 'setup' : 'register') : 'login', { body: f });
         setBusy(false);
-        if (!r.success) { setErr(r.message || 'تعذّر الدخول'); return; }
+        if (!r.success) { setErr(r.message || (isNew ? 'تعذّر إنشاء الحساب' : 'تعذّر الدخول')); return; }
         token.set(r.token);
         onDone();
     };
@@ -38,11 +41,19 @@ export default function Login({ setup, onDone }) {
             <div className="px-5 -mt-6 lg:mt-0 lg:flex-1 lg:flex lg:items-center relative">
                 <form onSubmit={submit} className="al-rise bg-paper-card rounded-3xl border border-paper-2 shadow-card p-5 space-y-3 max-w-md mx-auto w-full"
                     style={{ animationDelay: '.35s' }}>
-                    <h2 className="font-bold text-ink text-[17px]">{setup ? 'تهيئة حساب الأسرة' : 'تسجيل الدخول'}</h2>
-                    {setup ? (
+                    {!setup ? (
+                        <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-paper-2">
+                            {[['in', 'دخول'], ['new', 'حساب جديد']].map(([k, t]) => (
+                                <button key={k} type="button" onClick={() => { setTab(k); setErr(''); }}
+                                    className={'h-10 rounded-xl text-[13px] font-bold ' + (tab === k ? 'bg-paper-card text-ink shadow-card' : 'text-ink-3')}>{t}</button>
+                            ))}
+                        </div>
+                    ) : null}
+                    <h2 className="font-bold text-ink text-[17px]">{isNew ? 'حساب جديد لأسرتك' : 'تسجيل الدخول'}</h2>
+                    {isNew ? (
                         <>
-                            <p className="text-[12px] text-ink-3 leading-6">أنت صاحب الحساب: تضيف أفراد الأسرة، وتعطي من تشاء دخولاً خاصاً به.</p>
-                            <Field label="اسم الأسرة"><input className={inputCls} value={f.family} onChange={e => set('family', e.target.value)} placeholder="أسرة البادي" /></Field>
+                            <p className="text-[12px] text-ink-3 leading-6">تصير مشرف أسرتك: تضيف أفرادها من داخل حسابك، وتعطي من تشاء دخولاً خاصاً به. ولا يرى أحدٌ بيانات أسرتك.</p>
+                            <Field label="اسم الأسرة"><input className={inputCls} value={f.family} onChange={e => set('family', e.target.value)} placeholder="أسرة فلان" /></Field>
                             <Field label="اسمك"><input className={inputCls} value={f.name} onChange={e => set('name', e.target.value)} /></Field>
                         </>
                     ) : null}
@@ -50,10 +61,11 @@ export default function Login({ setup, onDone }) {
                         <input className={inputCls} dir="ltr" autoCapitalize="none" autoComplete="username" value={f.username} onChange={e => set('username', e.target.value)} />
                     </Field>
                     <Field label="كلمة المرور">
-                        <input className={inputCls} dir="ltr" type="password" autoComplete={setup ? 'new-password' : 'current-password'} value={f.password} onChange={e => set('password', e.target.value)} />
+                        <input className={inputCls} dir="ltr" type="password" autoComplete={isNew ? 'new-password' : 'current-password'} value={f.password} onChange={e => set('password', e.target.value)} />
                     </Field>
                     {err ? <div className="rounded-xl bg-red-50 text-red-700 p-3 text-[13px] font-semibold">{err}</div> : null}
-                    <Btn className="w-full !h-12" busy={busy}><LogIn size={17} />{setup ? 'أنشئ الحساب' : 'دخول'}</Btn>
+                    <Btn className="w-full !h-12" busy={busy}><LogIn size={17} />{isNew ? 'أنشئ الحساب' : 'دخول'}</Btn>
+                    {isNew ? <p className="text-[11px] text-ink-3 leading-6 text-center">بعد الإنشاء: الإعدادات ← أفراد الأسرة ← إضافة</p> : null}
                 </form>
                 <p className="text-center text-[11px] text-ink-3 mt-4 mb-8 lg:hidden">لا يحتاج الدخول إلا مرّة على كل جهاز</p>
             </div>
