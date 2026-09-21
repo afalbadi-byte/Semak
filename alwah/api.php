@@ -297,6 +297,15 @@ function segs_label($segs) {
 }
 const PAGES = 604;
 const LPP = 15;
+const JUZ_AYAH = ['1:1', '2:142', '2:253', '3:93', '4:24', '4:148', '5:82', '6:111', '7:88', '8:41', '9:93', '11:6', '12:53', '15:1', '17:1', '18:75', '21:1', '23:1', '25:21', '27:56', '29:46', '33:31', '36:28', '39:32', '41:47', '46:1', '51:31', '58:1', '67:1', '78:1'];
+// جزء الآية بحدود الأجزاء نفسها (لا بالصفحة، فبعض الأجزاء تبدأ في وسط صفحة)
+function juz_of_ayah($s, $a) {
+    static $B = null;
+    if ($B === null) { $B = []; foreach (JUZ_AYAH as $k) { [$x, $y] = array_map('intval', explode(':', $k)); $B[] = [$x, $y]; } }
+    $j = 1;
+    foreach ($B as $i => $b) if ($s > $b[0] || ($s === $b[0] && $a >= $b[1])) $j = $i + 1;
+    return $j;
+}
 function juz_of($p) { $j = 1; foreach (JUZ_START as $i => $s) if ($p >= $s) $j = $i + 1; return $j; }
 
 // ─── خريطة الأسطر وترتيب الحفظ ───────────────────────────────────────────────
@@ -348,6 +357,14 @@ function new_segs($lines, $to) {
     }
     unset($x);
     return $sg;
+}
+// مجموع أسطر كل صفحة وكل جزء في المصحف (لحساب المحفوظ بالصفحات والأجزاء)
+function ml_totals() {
+    static $T = null;
+    if ($T !== null) return $T;
+    $pg = array_fill(1, PAGES, 0); $jz = array_fill(1, 30, 0);
+    foreach (ml_seq('asc') as $x) { $pg[$x[0]]++; $jz[juz_of_ayah($x[2], $x[3])]++; }
+    return $T = ['p' => $pg, 'j' => $jz];
 }
 function ml_pages($lines) { $p = []; foreach ($lines as $x) $p[$x[0]] = true; $p = array_keys($p); sort($p); return $p; }
 
@@ -440,6 +457,13 @@ function member_plan($m, $exclude_d = null) {
     $inR = array_flip($review);
     $revL = array_values(array_filter($R, function ($y) use ($inR) { return isset($inR[$y[0]]); }));
 
+    // المحفوظ: كل صفحةٍ بنسبة أسطرها المحفوظة، وكل جزءٍ كذلك، فالجزء التامّ جزءٌ تامّ
+    $tot = ml_totals(); $gp = []; $gj = [];
+    for ($i = 0; $i < $L; $i++) { $x = $seq[$i]; $gp[$x[0]] = ($gp[$x[0]] ?? 0) + 1; $j = juz_of_ayah($x[2], $x[3]); $gj[$j] = ($gj[$j] ?? 0) + 1; }
+    $mp = 0.0; foreach ($gp as $p => $n) $mp += $tot['p'][$p] ? $n / $tot['p'][$p] : 0;
+    $mj = 0.0; foreach ($gj as $j => $n) $mj += $tot['j'][$j] ? $n / $tot['j'][$j] : 0;
+    $mem = ['pages' => round($mp, 2), 'juz' => round($mj, 2)];
+
     // المؤجَّل: كم يوماً مضى على آخر إجازةٍ لكل جزء (ورد الأمس يعود، ولا يتراكم)
     $d0 = $exclude_d ?: date('Y-m-d');
     $late = [];
@@ -471,7 +495,7 @@ function member_plan($m, $exclude_d = null) {
         'lines' => $L, 'total' => $T, 'pos' => $L, 'dir' => $dir,
         'late' => $late, 'rest' => $isRest, 'new_hold' => $hold, 'rules' => $R,
         'goal' => member_goal($m, $seq, $L, $d0, count($rest)),
-        'memorized_pages' => round($L * PAGES / $T, 2), 'juz' => round($L * 30 / $T, 2),
+        'memorized_pages' => $mem['pages'], 'juz' => $mem['juz'],
         'current' => $cur ? $cur[0] : null,
         'new' => $cur ? ['page' => $cur[0], 'from_line' => $cur[1], 'to_line' => $toLine ?: $cur[1], 'lines' => $tl, 'manual' => $manual] : null,
         'alwah' => $alwah, 'review' => $review, 'cycle' => count($cyc), 'cycle_pos' => $cycle_pos,
@@ -591,7 +615,7 @@ function member_goal($m, $seq, $L, $d0, $restCount) {
 // نسبة المحفوظ من كل جزء (للخريطة): أسطره المحفوظة من أسطره كلّها
 function juz_map($seq, $L) {
     $tot = array_fill(1, 30, 0); $got = array_fill(1, 30, 0);
-    foreach ($seq as $i => $x) { $j = juz_of($x[0]); $tot[$j]++; if ($i < $L) $got[$j]++; }
+    foreach ($seq as $i => $x) { $j = juz_of_ayah($x[2], $x[3]); $tot[$j]++; if ($i < $L) $got[$j]++; }
     $out = [];
     for ($j = 1; $j <= 30; $j++) $out[] = $tot[$j] ? round($got[$j] / $tot[$j], 3) : 0;
     return $out;

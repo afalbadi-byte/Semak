@@ -6,7 +6,8 @@ import { Target } from 'lucide-react';
 import { surahsOn, surahsIn, rangeLabel, linesLabel, juzOf, gradeOf, SURAHS } from '../lib/quran';
 import { BookMarked } from 'lucide-react';
 import { partDone } from './Home';
-import TomorrowCard from '../components/TomorrowCard';
+import TomorrowCard, { partSegs } from '../components/TomorrowCard';
+import { oneRange, label as ayahLabel } from '../lib/ayah';
 import { useData } from '../App';
 
 export default function MemberView({ id }) {
@@ -66,15 +67,17 @@ export default function MemberView({ id }) {
                 action={today && sup ? <a href={'#/m/' + m.id + '/log'} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><Pencil size={12} />عدّل</a> : null}>
                 <Card className="divide-y divide-paper-2">
                     <PlanRow icon={BookOpen} title="الحفظ الجديد" done={partDone(today, 'new')} color={color} late={plan.late && plan.late.new}
-                        main={plan.new ? `صفحة ${plan.new.page} · ${surahsOn(plan.new.page).join('، ')}` : plan.rest ? 'يوم راحة' : plan.new_off ? 'لا حفظ جديد اليوم' : 'أتمّ الحفظ'}
-                        sub={plan.new ? `من السطر ${plan.new.from_line} · المقدار ${linesLabel(plan.new.lines)}` : ''}
+                        segs={plan.new ? partSegs(plan, 'new') : null}
+                        main={plan.new ? null : plan.rest ? 'يوم راحة' : plan.new_off ? 'لا حفظ جديد اليوم' : 'أتمّ الحفظ'}
+                        sub={plan.new ? linesLabel(plan.new.lines) : ''}
                         link={plan.new ? hz('new') : null} />
-                    <PlanRow icon={Layers} title={`الألواح (${plan.alwah.length} صفحات)`} done={partDone(today, 'alwah')} color={color} late={plan.late && plan.late.alwah}
-                        main={'صفحات ' + rangeLabel(plan.alwah)} sub={surahsIn(plan.alwah).join('، ')}
+                    <PlanRow icon={Layers} title="الألواح" done={partDone(today, 'alwah')} color={color} late={plan.late && plan.late.alwah}
+                        segs={partSegs(plan, 'alwah')} main={plan.alwah.length ? null : 'لا ألواح اليوم'}
+                        sub={plan.alwah.length ? `${plan.alwah.length} صفحات` : ''}
                         link={plan.alwah.length ? hz('alwah') : null} />
-                    <PlanRow icon={RotateCcw} title={`المراجعة (${plan.review.length} صفحات)`} done={partDone(today, 'rev')} color={color} late={plan.late && plan.late.rev}
-                        main={plan.review.length ? 'صفحات ' + rangeLabel(plan.review) : 'تبدأ المراجعة بعد أن يتجاوز المحفوظ الألواح'}
-                        sub={plan.review.length ? `${surahsIn(plan.review).join('، ')} · الموضع ${plan.cycle_pos} من ${plan.cycle} في الدورة` : ''}
+                    <PlanRow icon={RotateCcw} title="المراجعة" done={partDone(today, 'rev')} color={color} late={plan.late && plan.late.rev}
+                        segs={partSegs(plan, 'rev')} main={plan.review.length ? null : 'تبدأ المراجعة بعد أن يتجاوز المحفوظ الألواح'}
+                        sub={plan.review.length ? `${plan.review.length} صفحات · الموضع ${plan.cycle_pos} من ${plan.cycle} في الدورة` : ''}
                         link={plan.review.length ? hz('rev') : null} />
                 </Card>
                 {sup ? (
@@ -227,7 +230,7 @@ function GoalCard({ g, color }) {
     );
 }
 
-function PlanRow({ icon: I, title, main, sub, done, link, color, late }) {
+function PlanRow({ icon: I, title, main, sub, segs, done, link, color, late }) {
     return (
         <Row href={link} className="p-4 flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: done ? color : '#ebe5d8', color: done ? '#fff' : '#48534f' }}>
@@ -235,13 +238,31 @@ function PlanRow({ icon: I, title, main, sub, done, link, color, late }) {
             </div>
             <div className="flex-1 min-w-0">
                 <div className="text-[12px] font-semibold text-ink-3">{title}{!done && late ? <span className="ms-1 text-amber-700 font-bold">· {late === 1 ? 'مؤجّل من أمس' : `متأخّر ${late} أيام`}</span> : null}</div>
-                <div className="text-[15px] font-bold text-ink mt-0.5">{main}</div>
+                {segs ? <RangeLine segs={segs} /> : <div className="text-[15px] font-bold text-ink mt-0.5">{main}</div>}
                 {sub ? <div className="text-[12px] text-ink-3 mt-0.5 leading-5">{sub}</div> : null}
             </div>
             {link ? <span title="افتح في المصحف مع المُسمِع" className="w-9 h-9 rounded-xl flex items-center justify-center text-ink-3 shrink-0"><BookMarked size={16} /></span> : null}
         </Row>
     );
 }
+// الورد يُقرأ نطاقاً: «من سورة كذا آية كذا إلى سورة كذا آية كذا»
+function RangeLine({ segs }) {
+    const one = oneRange(segs);
+    const [t, setT] = useState(null);
+    useEffect(() => {
+        let dead = false;
+        if (one) Promise.all([ayahLabel(one[0]), ayahLabel(one[1])]).then(x => { if (!dead) setT(x); });
+        return () => { dead = true; };
+    }, [one && one.join('-')]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!one) return null;
+    if (!t) return <div className="text-[15px] font-bold text-ink mt-0.5">…</div>;
+    return (
+        <div className="text-[14px] text-ink mt-0.5 leading-7">
+            من <b className="font-quran text-[16px]">{t[0]}</b>{one[0] !== one[1] ? <> إلى <b className="font-quran text-[16px]">{t[1]}</b></> : null}
+        </div>
+    );
+}
+
 const Row = ({ href, className, children }) => (href ? <a href={href} className={className + ' hover:bg-paper-2/40'}>{children}</a> : <div className={className}>{children}</div>);
 
 function HistoryRow({ h, mid }) {
