@@ -91,3 +91,44 @@ export const surahName = s => (SURAHS[s - 1] ? SURAHS[s - 1][0] : '');
 export function prefetch(p) {
     [p - 1, p + 1].forEach(q => { if (q >= 1 && q <= 604) { loadPage(q).catch(() => {}); loadFont(q).catch(() => {}); } });
 }
+
+// ─── علامات المصحف: بدايات الأرباع والأحزاب والأجزاء، ومواضع السجدات ─────────
+// كما في طبعة مصحف المدينة، لكل صفحة ما فيها من علامات على أسطرها
+let marksAll = null;
+export async function pageMarks(p) {
+    if (!marksAll) {
+        marksAll = (async () => {
+            try { const c = localStorage.getItem('alwah_marks_v1'); if (c) return JSON.parse(c); } catch (e) { /* لا تخزين */ }
+            const r = await fetch('./marks.json');
+            if (!r.ok) return {};
+            const j = await r.json();
+            try { localStorage.setItem('alwah_marks_v1', JSON.stringify(j)); } catch (e) { /* تجاهل */ }
+            return j;
+        })().catch(() => ({}));
+    }
+    const all = await marksAll;
+    return all[p] || null;
+}
+// موضع الصفحة: الجزء والحزب والربع (من آخر علامةٍ قبلها أو فيها)
+export async function pagePlace(p) {
+    const all = await (marksAll || pageMarks(p).then(() => marksAll));
+    let best = null;
+    for (let q = p; q >= 1; q--) {
+        const x = all && all[q];
+        if (x && x.m && x.m.length) { best = x.m[q === p ? 0 : x.m.length - 1]; break; }
+    }
+    if (!best) return null;
+    const quarter = ((best.rub - 1) % 4);
+    return { juz: best.juz, hizb: best.hizb, rub: best.rub, quarter, label: ['أوّل الحزب', 'ربع الحزب', 'نصف الحزب', 'ثلاثة أرباع الحزب'][quarter] };
+}
+
+// فهرس الأجزاء والأحزاب: لكل حزبٍ صفحته وجزؤه (من العلامات نفسها)
+export async function hizbIndex() {
+    await pageMarks(1);
+    const all = await marksAll;
+    const out = [];
+    for (const [p, x] of Object.entries(all || {})) {
+        (x.m || []).forEach(m => { if ((m.rub - 1) % 4 === 0) out.push({ hizb: m.hizb, juz: m.juz, page: +p, k: m.k }); });
+    }
+    return out.sort((a, b) => a.page - b.page);
+}

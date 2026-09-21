@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2, WifiOff } from 'lucide-react';
-import { loadPage, loadFont, fontName, surahName, prefetch } from '../lib/mushaf';
+import { loadPage, loadFont, fontName, surahName, prefetch, pageMarks } from '../lib/mushaf';
 
 // ─── صفحة المصحف ────────────────────────────────────────────────────────────
 // كل كلمةٍ زرّ: تُلمس فتُعلَّم خطأً أو تنبيهاً في مصحف صاحبها. والعلامات تتدرّج
@@ -22,6 +22,7 @@ export function markStyle(m) {
 // hide: أسطرٌ مخفيّة للتسميع الذاتي (تُلمس فتنكشف عبر onLine)، focus: [من، إلى] أسطر حفظ اليوم وما عداها باهت
 export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, hide, onLine, focus, hl, onAyah }) {
     const [data, setData] = useState(null);
+    const [mk, setMk] = useState(null);          // علامات الصفحة: الأرباع والسجدات
     const [err, setErr] = useState('');
     const [ready, setReady] = useState(false);
     const [size, setSize] = useState(BASE);
@@ -32,6 +33,8 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
     useEffect(() => {
         let dead = false;
         setData(null); setErr(''); setReady(false);
+        setMk(null);
+        pageMarks(page).then(x => { if (!dead) setMk(x); }).catch(() => {});
         Promise.all([loadPage(page), loadFont(page)])
             .then(([d]) => { if (!dead) { setData(d); setReady(true); prefetch(page); } })
             .catch(() => { if (!dead) setErr('تعذّر تحميل الصفحة، تحقق من الإنترنت'); });
@@ -88,7 +91,7 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
                 {L.map(i => data.lines[i] ? <div key={i} data-line style={{ display: 'inline-block' }}>{data.lines[i].map(w => <span key={w.k} style={w.end ? undefined : { padding: '0 .04em' }}>{w.c}</span>)}</div> : null)}
             </div>
 
-            <div ref={pg} className="mushaf-page rounded-2xl bg-[#fffaf0] border border-[#e8dcc0] px-1 py-3 select-none" dir="rtl"
+            <div ref={pg} className="mushaf-page rounded-2xl bg-[#fffaf0] border border-[#e8dcc0] px-4 py-3 select-none relative" dir="rtl"
                 style={{ fontFamily: ff, fontSize: size, lineHeight: 1.95 }}>
                 {L.map(i => {
                     const words = data.lines[i];
@@ -107,12 +110,16 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
                     );
                     if (!words) return data.short ? null : <div key={i} style={{ height: size * 1.95 }} />;
                     const hid = hide && hide.has(i);
+                    const rub = mk && mk.m && mk.m.find(x => x.l === i);
+                    const saj = mk && mk.s && mk.s.find(x => x.l === i);
                     const dim = focus && (i < focus[0] || i > focus[1]);
                     return (
                         <div key={i} data-row onClick={hid && onLine ? () => onLine(i) : undefined}
                             className={'flex relative transition ' + (data.short ? 'justify-center gap-[0.35em]' : 'justify-between') + (hid ? ' cursor-pointer' : '')}
                             style={{ whiteSpace: 'nowrap', opacity: dim && !hid ? 0.32 : 1 }}>
                             {hid ? <span aria-hidden className="absolute inset-x-1 rounded-lg bg-[#efe3c4]" style={{ top: '22%', bottom: '22%' }} /> : null}
+                            {rub ? <span title={'الجزء ' + rub.juz + ' · الحزب ' + rub.hizb} className="absolute text-[#b8893a] select-none" style={{ insetInlineStart: -14, fontSize: Math.min(15, size * 0.6), lineHeight: 1 }}>۞</span> : null}
+                            {saj ? <span title={'موضع سجدة'} className="absolute text-[#8a6a2c] select-none" style={{ insetInlineEnd: -14, fontSize: Math.min(15, size * 0.6), lineHeight: 1 }}>۩</span> : null}
                             {words.map(w => {
                                 if (hid) return <span key={w.k} style={{ visibility: 'hidden' }}>{w.c}</span>;
                                 const ak = w.k.slice(0, w.k.lastIndexOf(':'));

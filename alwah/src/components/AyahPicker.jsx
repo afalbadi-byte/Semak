@@ -57,7 +57,7 @@ export default function AyahPicker({ label, value, onChange, min }) {
 }
 
 // نافذة اختيارٍ ببحث: تُرشِّح بالاسم أو الرقم أو أوّل الكلمات
-function Picker({ title, hint, rows, onPick, onClose, active, quran }) {
+export function Picker({ title, hint, rows, onPick, onClose, active, quran }) {
     const [q, setQ] = useState('');
     const inp = useRef(null);
     const box = useRef(null);
@@ -92,6 +92,7 @@ function Picker({ title, hint, rows, onPick, onClose, active, quran }) {
                             className={'w-full text-start px-3 py-2.5 rounded-xl flex items-center gap-2 ' + (r.id === active ? 'bg-brand-50 text-brand-800 font-bold' : 'hover:bg-paper-2')}>
                             <span className="text-[12px] text-ink-3 tabular-nums w-8 shrink-0">{r.id}</span>
                             <span className={'flex-1 min-w-0 truncate ' + (quran ? 'font-quran text-[16px]' : 'text-[14px]')}>{r.t.replace(/^\d+\.?\s*/, '')}</span>
+                            {r.note ? <span className="text-[11px] text-ink-3 shrink-0 tabular-nums">{r.note}</span> : null}
                         </button>
                     )) : <p className="text-center text-[13px] text-ink-3 py-8">لا نتيجة</p>}
                 </div>

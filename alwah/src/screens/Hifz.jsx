@@ -7,11 +7,12 @@ import { useToast, todayStr, Empty, Seg, Sheet } from '../ui';
 import Mushaf from '../components/Mushaf';
 import WordActions from '../components/WordActions';
 import ListenPanel from '../components/ListenPanel';
+import { Picker } from '../components/AyahPicker';
 import AyahInfo from '../components/AyahInfo';
 
 import PassBar from '../components/PassBar';
 import WirdEditor from '../components/WirdEditor';
-import { loadPage } from '../lib/mushaf';
+import { loadPage, pagePlace, hizbIndex } from '../lib/mushaf';
 import { rangeOfPages, ayahPage, partRange, oneRange, ayahName, cmp } from '../lib/ayah';
 import { surahsOn, juzOf, rangeLabel, SURAHS, JUZ_START, LPP } from '../lib/quran';
 import { BookOpen } from 'lucide-react';
@@ -48,6 +49,9 @@ export default function Hifz({ q }) {
     const [data, setData] = useState(null);
     const [hl, setHl] = useState(null);
     const [editW, setEditW] = useState(false);
+    const [index, setIndex] = useState(false);     // فهرس السور
+    const [jindex, setJindex] = useState(null);    // فهرس الأجزاء والأحزاب
+    const [place, setPlace] = useState(null);      // موضع الصفحة: الجزء والحزب والربع
     // ملء الشاشة: المصحف وشريط التقليب وحدهما (والتلاوة مستمرّة)
     const [full, setFull] = useState(false);
     useEffect(() => {
@@ -77,7 +81,7 @@ export default function Hifz({ q }) {
         const r = await call('marks_page', { params: { member_id: mid, page } });
         if (r.success) { const o = {}; r.marks.forEach(x => { o[x.word_key] = x; }); setMarks(o); }
     }, [mid, page]);
-    useEffect(() => { setSel(null); setHide(null); setData(null); load(); loadPage(page).then(setData).catch(() => {}); }, [load, page]);
+    useEffect(() => { setSel(null); setHide(null); setData(null); load(); loadPage(page).then(setData).catch(() => {}); pagePlace(page).then(setPlace).catch(() => {}); }, [load, page]);
 
     // أسطر حفظ اليوم في صفحته
     const focus = tab === 'new' && plan && plan.new && plan.new.page === page
@@ -175,6 +179,8 @@ export default function Hifz({ q }) {
         at({ p: Math.min(604, Math.max(1, page + d)) });
     };
     const count = Object.values(marks).filter(x => !x.resolved).length;
+    // السورة التي تبدأ فيها الصفحة أو ما قبلها: يُفتح عليها الفهرس
+    const surahIdx = pg => { let k = 1; SURAHS.forEach(([, p], i) => { if (p <= pg) k = i + 1; }); return k; };
     // نهاية القراءة المقترحة: آخر الورد إن كانت الآية منه، وإلا آخر آيةٍ في الصفحة
     const endFor = k => {
         const one = oneRange(defRange);
@@ -228,8 +234,8 @@ export default function Hifz({ q }) {
             <div className="flex items-center gap-2">
                 <button onClick={() => flip(-1)} className="w-11 h-11 rounded-xl bg-paper-card border border-paper-2 flex items-center justify-center" aria-label="السابقة"><ChevronRight size={20} /></button>
                 <div className="flex-1 text-center leading-tight">
-                    <div className="font-bold text-ink">{surahsOn(page).join('، ')}</div>
-                    <div className="text-[11px] text-ink-3">صفحة {page} · الجزء {juzOf(page)}{focus ? ` · الأسطر ${focus[0]}–${focus[1]}` : ''}{count ? ` · ${count} علامة` : ''}</div>
+                    <button onClick={() => setIndex(true)} className="font-bold text-ink" title="فهرس السور">{surahsOn(page).join('، ')}</button>
+                    <button onClick={() => hizbIndex().then(setJindex)} className="text-[11px] text-ink-3">صفحة {page} · الجزء {juzOf(page)}{place ? ` · الحزب ${place.hizb}` : ''}{focus ? ` · الأسطر ${focus[0]}–${focus[1]}` : ''}{count ? ` · ${count} علامة` : ''}</button>
                 </div>
                 <button onClick={() => flip(1)} className="w-11 h-11 rounded-xl bg-paper-card border border-paper-2 flex items-center justify-center" aria-label="التالية"><ChevronLeft size={20} /></button>
             </div>
@@ -296,12 +302,26 @@ export default function Hifz({ q }) {
                                 <button onClick={rec.stop} className="w-9 h-9 rounded-xl bg-paper-2 flex items-center justify-center text-ink-3" aria-label="إيقاف"><Square size={13} /></button>
                             </div>
                         ) : null}
-                        {!rec.st.on ? <div className="text-center leading-tight"><div className="text-[13px] font-bold text-ink truncate">{surahsOn(page).join('، ')}</div><div className="text-[11px] text-ink-3 tabular-nums">صفحة {page}</div></div> : null}
+                        {!rec.st.on ? <div className="text-center leading-tight"><button onClick={() => setIndex(true)} className="text-[13px] font-bold text-ink truncate max-w-full">{surahsOn(page).join('، ')}</button><div className="text-[11px] text-ink-3 tabular-nums">صفحة {page}</div></div> : null}
                     </div>
                     <button onClick={() => setFull(v => !v)} className="w-10 h-10 rounded-xl text-ink-3 flex items-center justify-center" aria-label={full ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}>{full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
                     <button onClick={() => flip(1)} className="w-12 h-12 rounded-2xl bg-paper-card border border-paper-2 flex items-center justify-center text-ink-2" aria-label="الصفحة التالية"><ChevronLeft size={22} /></button>
                 </div>
             </div>
+
+            {jindex ? (
+                <Picker title="الأجزاء والأحزاب" hint="اكتب رقم الجزء أو الحزب أو الصفحة" active={(jindex.find(h => h.page > page) || jindex[jindex.length - 1]).hizb}
+                    rows={jindex.map(h => ({ id: h.hizb, t: 'الحزب ' + h.hizb, note: 'الجزء ' + h.juz + ' · ص ' + h.page, find: 'الحزب ' + h.hizb + ' جزء ' + h.juz + ' ' + h.page }))}
+                    onPick={hz => { const h = jindex.find(x => x.hizb === hz); setJindex(null); if (h) at({ p: h.page }, true); }}
+                    onClose={() => setJindex(null)} />
+            ) : null}
+
+            {index ? (
+                <Picker title="فهرس السور" hint="اكتب اسم السورة أو رقمها أو رقم صفحتها" active={surahIdx(page)}
+                    rows={SURAHS.map(([n, pg], i) => ({ id: i + 1, t: (i + 1) + '. ' + n, note: 'ص ' + pg + ' · ج' + juzOf(pg), find: n + ' ' + (i + 1) + ' ' + pg }))}
+                    onPick={i => { setIndex(false); at({ p: SURAHS[i - 1][1] }, true); }}
+                    onClose={() => setIndex(false)} />
+            ) : null}
 
             <Sheet open={editW} onClose={() => setEditW(false)} title={'الورد · ' + m.name}>
                 {editW && plan ? <WirdEditor member={m} plan={plan} onDone={() => { setEditW(false); loadDay(); reloadMembers(); }} /> : null}
