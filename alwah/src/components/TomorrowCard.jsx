@@ -55,6 +55,7 @@ export default function TomorrowCard({ member, plan, sup, onDone }) {
                     <PartLine key={k} t={t} I={I} c={c} segs={k === 'new' && plan.new_off ? null : partSegs(plan, k)} />
                 ))}
             </div>
+            {plan.new_hold ? <p className="text-[12px] text-amber-700 font-semibold leading-6">لا حفظ جديد حتى يُسمّع {plan.new_hold} اليوم.</p> : null}
             {sup && !plan.custom && new Date().getHours() >= 18 ? <p className="text-[12px] text-amber-700 font-semibold">لم يُعتمد ورد الغد بعد.</p> : null}
             {sup ? (
                 <div className="flex gap-2">

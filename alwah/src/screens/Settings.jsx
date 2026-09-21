@@ -17,6 +17,7 @@ export default function Settings() {
     return (
         <div className="space-y-6">
             {owner ? <FamilyName family={family} onSaved={n => setFamily({ ...family, name: n })} /> : null}
+            {owner ? <FamilyRules family={family} onSaved={rules => setFamily({ ...family, rules })} /> : null}
 
             {sup ? (
                 <Section title="أفراد الأسرة" action={<button onClick={() => setEdit({})} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><UserPlus size={14} />إضافة</button>}>
@@ -99,15 +100,104 @@ function FamilyName({ family, onSaved }) {
     );
 }
 
+// ─── قواعد الحفظ للأسرة: تسري على الجميع، وتُعدَّل من هنا ─────────────────────
+// ومنها ما يُستعمل قِيَماً افتراضية للفرد الجديد (المقدار، الألواح، المراجعة…)
+function FamilyRules({ family, onSaved }) {
+    const toast = useToast();
+    const R = (family && family.rules) || {};
+    const [f, setF] = useState({
+        new_needs_rev: R.new_needs_rev === undefined ? 1 : +R.new_needs_rev,
+        new_needs_alwah: +R.new_needs_alwah || 0,
+        target_lines: +R.target_lines || 5, alwah_n: +R.alwah_n || 5, review_n: +R.review_n || 10,
+        dir: R.dir === 'asc' ? 'asc' : 'desc',
+        rest_days: String(R.rest_days || '').split(',').filter(Boolean).map(Number),
+        rest_lines: +R.rest_lines || 0, rest_alwah: R.rest_alwah === undefined ? 1 : +R.rest_alwah,
+    });
+    const [busy, setBusy] = useState(false);
+    const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+    const save = async () => {
+        setBusy(true);
+        const r = await call('family_save', { body: { rules: f } });
+        setBusy(false);
+        if (!r.success) { toast(r.message || 'تعذّر الحفظ', 'err'); return; }
+        toast('حُفظت قواعد الأسرة');
+        onSaved && onSaved(r.rules);
+    };
+    const Toggle = ({ k, t, hint }) => (
+        <label className="flex items-start gap-2 py-1.5">
+            <input type="checkbox" className="mt-1" checked={!!f[k]} onChange={e => set(k, e.target.checked ? 1 : 0)} />
+            <span className="flex-1"><span className="block text-[13.5px] font-semibold text-ink">{t}</span><span className="block text-[12px] text-ink-3 leading-6">{hint}</span></span>
+        </label>
+    );
+    return (
+        <Section title="قواعد الحفظ في الأسرة">
+            <Card className="p-4 space-y-4">
+                <div>
+                    <div className="text-[12px] font-bold text-ink-2 mb-1">شروط الحفظ الجديد</div>
+                    <Toggle k="new_needs_rev" t="لا يأخذ حفظاً جديداً حتى يُسمّع المراجعة" hint="درس اليوم يُسجَّل متى سُمِّع، وإنّما يتوقّف الحفظ الجديد القادم." />
+                    <Toggle k="new_needs_alwah" t="والألواح أيضاً" hint="يشترط تسميع الألواح كذلك قبل الحفظ الجديد القادم." />
+                </div>
+
+                <Field label="المقدار اليومي الافتراضي" hint={linesLabel(f.target_lines)}>
+                    <div className="flex gap-1.5 flex-wrap">
+                        {[[3, '٣ أسطر'], [5, '٥ أسطر'], [8, 'نصف صفحة'], [15, 'صفحة']].map(([v, t]) => (
+                            <button key={v} type="button" onClick={() => set('target_lines', v)}
+                                className={'h-9 px-3 rounded-xl text-[13px] font-semibold ' + (f.target_lines === v ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>{t}</button>
+                        ))}
+                    </div>
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <Card className="p-3 flex flex-col items-center gap-1"><span className="text-[12px] font-semibold text-ink-2">صفحات الألواح</span><Stepper value={f.alwah_n} onChange={v => set('alwah_n', v)} min={1} max={20} /></Card>
+                    <Card className="p-3 flex flex-col items-center gap-1"><span className="text-[12px] font-semibold text-ink-2">صفحات المراجعة</span><Stepper value={f.review_n} onChange={v => set('review_n', v)} min={1} max={60} /></Card>
+                </div>
+
+                <Field label="اتجاه الحفظ الافتراضي">
+                    <Seg value={f.dir} onChange={v => set('dir', v)} options={[{ v: 'desc', t: 'من الناس صعوداً' }, { v: 'asc', t: 'من الفاتحة' }]} />
+                </Field>
+
+                <Field label="أيام الراحة الافتراضية" hint="تُقترح على الفرد الجديد، ولكلٍّ أن يُخصَّص له غيرها">
+                    <div className="flex gap-1.5 flex-wrap">
+                        {['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map((t, i) => {
+                            const on = f.rest_days.includes(i);
+                            return <button key={i} type="button" onClick={() => set('rest_days', on ? f.rest_days.filter(x => x !== i) : [...f.rest_days, i])}
+                                className={'h-9 px-3 rounded-xl text-[13px] font-semibold ' + (on ? 'bg-brand text-white' : 'bg-paper-2 text-ink-2')}>{t}</button>;
+                        })}
+                    </div>
+                </Field>
+
+                {f.rest_days.length ? (
+                    <div className="space-y-2 rounded-xl bg-paper-2/50 p-3">
+                        <div className="text-[12px] font-bold text-ink-2">في يوم الراحة</div>
+                        <div className="flex gap-1.5 flex-wrap">
+                            {[[0, 'لا حفظ جديد'], [2, 'سطران'], [3, '٣ أسطر'], [5, '٥ أسطر']].map(([v, t]) => (
+                                <button key={v} type="button" onClick={() => set('rest_lines', v)}
+                                    className={'h-9 px-3 rounded-xl text-[13px] font-semibold ' + (f.rest_lines === v ? 'bg-brand text-white' : 'bg-white text-ink-2')}>{t}</button>
+                            ))}
+                        </div>
+                        <label className="flex items-center gap-2 text-[13px] text-ink-2"><input type="checkbox" checked={!!f.rest_alwah} onChange={e => set('rest_alwah', e.target.checked ? 1 : 0)} />تبقى الألواح في يوم الراحة</label>
+                    </div>
+                ) : null}
+
+                <p className="text-[11px] text-ink-3 leading-6">الورد نفسه يحدّده المشرف لكل فرد ويبقى حتى يغيّره. وهذه القواعد تضبط ما يسري على الجميع، وما يُقترح للفرد الجديد.</p>
+                <Btn className="w-full !h-12" busy={busy} onClick={save}>احفظ القواعد</Btn>
+            </Card>
+        </Section>
+    );
+}
+
 // ─── بيانات الفرد ونقطة بدايته ──────────────────────────────────────────────
 function MemberForm({ m, onDone }) {
     const toast = useToast();
+    const { family } = useData();
+    const R = (family && family.rules) || {};      // قواعد الأسرة: قِيَمٌ افتراضية للفرد الجديد
     const isNew = !m.id;
     const [f, setF] = useState({
-        name: m.name || '', gender: m.gender || 'm', color: m.color || PALETTE[0], dir: m.dir || 'desc',
-        target_lines: m.target_lines || 5, alwah_n: m.alwah_n || 5, review_n: m.review_n || 10,
-        rest_days: m.rest_days || [], goal_surah: m.goal_surah || '', goal_date: m.goal_date || '',
-        rest_lines: m.rest_lines || 0, rest_alwah: m.rest_alwah === undefined ? 1 : m.rest_alwah,
+        name: m.name || '', gender: m.gender || 'm', color: m.color || PALETTE[0], dir: m.dir || R.dir || 'desc',
+        target_lines: m.target_lines || +R.target_lines || 5, alwah_n: m.alwah_n || +R.alwah_n || 5, review_n: m.review_n || +R.review_n || 10,
+        rest_days: m.rest_days || String(R.rest_days || '').split(',').filter(Boolean).map(Number),
+        goal_surah: m.goal_surah || '', goal_date: m.goal_date || '',
+        rest_lines: m.rest_lines || +R.rest_lines || 0, rest_alwah: m.rest_alwah === undefined ? (R.rest_alwah === undefined ? 1 : +R.rest_alwah) : m.rest_alwah,
     });
     const [start, setStart] = useState({ mode: isNew ? 'none' : 'keep', value: '' });
     const [busy, setBusy] = useState(false);

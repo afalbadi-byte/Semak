@@ -264,6 +264,12 @@ if ($__v < 8) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '8')");
 }
+if ($__v < 9) {
+    // قواعد الحفظ للأسرة كلّها (تُعدَّل من الإعدادات)
+    $has = one("SELECT 1 x FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='al_families' AND COLUMN_NAME='rules'");
+    if (!$has) $conn->query("ALTER TABLE al_families ADD COLUMN rules VARCHAR(600) NULL");
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '9')");
+}
 
 function al_log($uid, $action, $data = null) {
     global $conn;
@@ -344,6 +350,21 @@ function new_segs($lines, $to) {
     return $sg;
 }
 function ml_pages($lines) { $p = []; foreach ($lines as $x) $p[$x[0]] = true; $p = array_keys($p); sort($p); return $p; }
+
+// ─── قواعد الأسرة: تُعدَّل من الإعدادات، وتسري على أفرادها ────────────────────
+const RULES_DEF = [
+    'new_needs_rev' => 1,     // لا يُعطى حفظاً جديداً حتى يُسمّع المراجعة
+    'new_needs_alwah' => 0,   // وكذلك الألواح
+    'target_lines' => 5, 'alwah_n' => 5, 'review_n' => 10, 'dir' => 'desc',
+    'rest_days' => '', 'rest_lines' => 0, 'rest_alwah' => 1,
+];
+function family_rules($fid) {
+    static $c = [];
+    if (isset($c[$fid])) return $c[$fid];
+    $r = one("SELECT rules FROM al_families WHERE id=" . (int)$fid);
+    $v = $r && $r['rules'] ? json_decode($r['rules'], true) : null;
+    return $c[$fid] = array_merge(RULES_DEF, is_array($v) ? $v : []);
+}
 
 // ترتيب المراجعة: من الجزء الثلاثين صعوداً، وصفحات الجزء بترتيب المصحف داخله
 // (ولمن يحفظ من الفاتحة: بترتيب المصحف من أوّله)
@@ -426,6 +447,16 @@ function member_plan($m, $exclude_d = null) {
         $x2 = one("SELECT d FROM al_logs WHERE member_id=$mid AND $w AND d < '" . E($d0) . "'$ex ORDER BY d DESC LIMIT 1");
         $late[$k] = $x2 ? max(0, (int)round((strtotime($d0) - strtotime($x2['d'])) / 86400) - 1) : null;
     }
+    // «لا يأخذ حفظاً جديداً حتى يُسمّع المراجعة»: يُحسب لخطة الغد من سجلّ اليوم
+    $R = family_rules((int)$m['family_id']);
+    $hold = null;
+    if ($exclude_d === null) {
+        $lg = one("SELECT alwah_done, rev_done FROM al_logs WHERE member_id=$mid AND d='" . E(date('Y-m-d')) . "' LIMIT 1");
+        $needR = !empty($R['new_needs_rev']) && count($review) > 0 && (!$lg || !(int)$lg['rev_done']);
+        $needA = !empty($R['new_needs_alwah']) && count($alwah) > 0 && (!$lg || !(int)$lg['alwah_done']);
+        if ($needR || $needA) $hold = $needR && $needA ? 'المراجعة والألواح' : ($needR ? 'المراجعة' : 'الألواح');
+    }
+
     // يوم راحة: لا حفظ جديد فيه (والمراجعة تبقى فهي التي تثبّت المحفوظ)
     $rest = array_filter(array_map('intval', explode(',', (string)($m['rest_days'] ?? ''))), function ($x) { return $x >= 0 && $x <= 6; });
     $isRest = in_array((int)date('w', strtotime($d0)), $rest, true);
@@ -438,7 +469,7 @@ function member_plan($m, $exclude_d = null) {
 
     return [
         'lines' => $L, 'total' => $T, 'pos' => $L, 'dir' => $dir,
-        'late' => $late, 'rest' => $isRest,
+        'late' => $late, 'rest' => $isRest, 'new_hold' => $hold, 'rules' => $R,
         'goal' => member_goal($m, $seq, $L, $d0, count($rest)),
         'memorized_pages' => round($L * PAGES / $T, 2), 'juz' => round($L * 30 / $T, 2),
         'current' => $cur ? $cur[0] : null,
@@ -712,6 +743,7 @@ case 'me': {
     $u = need();
     $f = one("SELECT id, name FROM al_families WHERE id=" . (int)$u['family_id']);
     foreach (['id', 'family_id', 'member_id', 'is_admin'] as $k) $u[$k] = $u[$k] === null ? null : (int)$u[$k];
+    if ($f) $f['rules'] = family_rules((int)$u['family_id']);
     out(['success' => true, 'user' => $u, 'family' => $f, 'sup' => is_sup($u)]);
 }
 
@@ -971,13 +1003,7 @@ case 'log_save': {
     ];
     $rg = ranges_in($b['ranges'] ?? null);
     $f['ranges'] = $rg ? "'" . E(json_encode($rg)) . "'" : 'NULL';
-    // لا حفظ جديد قبل تسميع الألواح والمراجعة (إن كان عنده محفوظٌ يُراجَع)
-    if ($f['new_lines'] > 0 && $f['new_grade'] !== 1) {
-        $pl = wird_apply(member_plan($m, $d), $m['id'], $d);
-        $needA = $pl['lines'] > 0 && count($pl['alwah']) > 0 && $f['alwah_list'] !== "''";
-        $needR = count($pl['review']) > 0 && $f['rev_list'] !== "''";
-        if (($needA && !$f['alwah_done']) || ($needR && !$f['rev_done'])) fail('يُجاز الحفظ الجديد بعد تسميع الألواح والمراجعة');
-    }
+    // درس اليوم يُسجَّل متى سُمِّع. وإنّما يتوقّف «الحفظ الجديد القادم» حتى تُسمَّع المراجعة
     $cols = implode(', ', array_keys($f)); $vals = implode(', ', array_values($f));
     $upd = implode(', ', array_map(function ($k) { return "$k=VALUES($k)"; }, array_keys($f)));
     $conn->query("INSERT INTO al_logs (family_id, member_id, d, $cols) VALUES (" . (int)$u['family_id'] . ", " . (int)$m['id'] . ", '" . E($d) . "', $vals)
@@ -998,10 +1024,28 @@ case 'log_delete': {
 
 // ─── الأسرة والحسابات ───────────────────────────────────────────────────────
 case 'family_save': {
-    $u = need_owner(); $nm = trim(mb_substr((string)(body()['name'] ?? ''), 0, 120));
-    if (mb_strlen($nm) < 2) fail('اسم الأسرة مطلوب');
-    $conn->query("UPDATE al_families SET name='" . E($nm) . "' WHERE id=" . (int)$u['family_id']);
-    out(['success' => true]);
+    $u = need_owner(); $b = body();
+    $set = [];
+    if (isset($b['name'])) {
+        $nm = trim(mb_substr((string)$b['name'], 0, 120));
+        if (mb_strlen($nm) < 2) fail('اسم الأسرة مطلوب');
+        $set[] = "name='" . E($nm) . "'";
+    }
+    if (isset($b['rules']) && is_array($b['rules'])) {
+        $r = family_rules((int)$u['family_id']);
+        foreach (RULES_DEF as $k => $dv) {
+            if (!array_key_exists($k, $b['rules'])) continue;
+            $v = $b['rules'][$k];
+            if ($k === 'dir') $r[$k] = $v === 'asc' ? 'asc' : 'desc';
+            elseif ($k === 'rest_days') $r[$k] = implode(',', array_values(array_unique(array_filter(array_map('intval', (array)$v), function ($x) { return $x >= 0 && $x <= 6; }))));
+            elseif (is_int($dv)) $r[$k] = max(0, min(90, (int)$v));
+            else $r[$k] = $v;
+        }
+        $set[] = "rules='" . E(json_encode($r, JSON_UNESCAPED_UNICODE)) . "'";
+    }
+    if ($set) $conn->query("UPDATE al_families SET " . implode(', ', $set) . " WHERE id=" . (int)$u['family_id']);
+    al_log($u['id'], 'family_save', $b);
+    out(['success' => true, 'rules' => family_rules((int)$u['family_id'])]);
 }
 
 case 'users': {

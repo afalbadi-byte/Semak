@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Hourglass, Undo2, BadgeCheck, Lock } from 'lucide-react';
+import { CheckCircle2, Hourglass, Undo2, BadgeCheck } from 'lucide-react';
 import { call } from '../lib/api';
 import { useData } from '../App';
 import { useToast, todayStr, tomorrowStr } from '../ui';
@@ -10,21 +10,12 @@ import { AyahRange } from './AyahPicker';
 
 // ─── «تمّ التسميع»: المشرف وحده يجيز الورد ─────────────────────────────────
 // يحدّد المشرف ما سُمِّع بالسورة ورقم الآية (أوّل آيةٍ وآخر آية، مع أوّل كلماتهما)،
-// ثم التقدير. وما لم يُجَز يبقى وردَ الغد كما هو. والحفظ الجديد لا يُجاز قبل
-// تسميع الألواح والمراجعة. وأخطاء اليوم وتنبيهاته تُؤخذ من علامات مصحفه.
+// ثم التقدير. وما لم يُجَز يبقى وردَ الغد كما هو. ودرس اليوم يُسجَّل متى سُمِّع،
+// وإنّما يتوقّف الحفظ الجديد القادم حتى تُسمَّع المراجعة. والأخطاء من علامات مصحفه.
 const NAMES = { new: 'حفظ اليوم', alwah: 'الألواح', rev: 'المراجعة' };
 
 export const passed = (t, k) => !!t && (k === 'new' ? t.new_lines > 0 && t.new_grade !== 1 : k === 'alwah' ? !!t.alwah_done : !!t.rev_done);
 const gradeKey = k => (k === 'new' ? 'new_grade' : k + '_grade');
-
-// ما يلزم تسميعه قبل الحفظ الجديد
-export function newLocks(plan, today) {
-    if (!plan) return [];
-    const o = [];
-    if (plan.lines > 0 && plan.alwah && plan.alwah.length && !passed(today, 'alwah')) o.push('الألواح');
-    if (plan.review && plan.review.length && !passed(today, 'rev')) o.push('المراجعة');
-    return o;
-}
 
 export default function PassBar({ member, part, today, plan, onDone }) {
     const { sup, reloadMembers } = useData();
@@ -47,7 +38,6 @@ export default function PassBar({ member, part, today, plan, onDone }) {
     const ok = passed(today, part);
     const g = today ? gradeOf(today[gradeKey(part)]) : null;
     const redo = part === 'new' && today && today.new_lines > 0 && today.new_grade === 1;
-    const locks = part === 'new' ? newLocks(plan, today) : [];
 
     const save = async grade => {
         setBusy(true);
@@ -117,12 +107,6 @@ export default function PassBar({ member, part, today, plan, onDone }) {
                 nextOpen && sup ? <NextPart member={member} part={part} onDone={() => { setNextOpen(false); reloadMembers(); onDone && onDone(); }} />
                     : sup ? <button onClick={() => setNextOpen(true)} className="h-8 px-3 rounded-lg bg-white/70 text-[12px] font-semibold">حدّد {NEXT[part]} القادم</button> : null
             ) : null}
-        </div>
-    );
-
-    if (locks.length) return (
-        <div className="rounded-2xl p-3 bg-paper-2/60 text-ink-2 text-[13px] font-semibold flex items-center gap-2">
-            <Lock size={17} />يُجاز الحفظ الجديد بعد تسميع {locks.join(' و')}
         </div>
     );
 
