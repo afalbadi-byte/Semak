@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Wallet, CheckCircle2 } from 'lucide-react';
+import { Plus, Wallet, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { call } from '../lib/api';
 import { href, go } from '../lib/router';
 import { KINDS } from '../lib/fmt';
@@ -16,6 +16,7 @@ export default function Funds() {
 
     return (
         <div className="space-y-5 pt-2 lg:pt-0">
+            <NoFundBanner />
             <div className="flex items-center justify-between">
                 <p className="text-[13px] text-ink-3">{t('لكل غرضٍ عهدته ورصيده المستقل')}</p>
                 <Btn kind="soft" onClick={() => setEdit({ name: '', kind: 'custody', color: PALETTE[open.length % PALETTE.length], note: '' })}>
@@ -42,6 +43,30 @@ export default function Funds() {
 
             <FundSheet f={edit} onClose={() => setEdit(null)} />
         </div>
+    );
+}
+
+// حركاتٌ حُفظت بلا عهدة: موجودة في «الحركات» لكنها لا تُخصم من رصيد أيّ عهدة.
+// نعرضها هنا صراحةً ونطلب تسكينها، فلا يبقى مصروفٌ معلّقاً بلا حساب.
+export function NoFundBanner() {
+    const { noFund } = useData();
+    if (!noFund || !noFund.n) return null;
+    return (
+        <Card className="p-4 border-amber-200 bg-amber-50/60">
+            <div className="flex items-start gap-2.5">
+                <span className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0"><AlertTriangle size={17} /></span>
+                <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[14px] text-amber-900">{t('{n} حركة بلا عهدة', { n: noFund.n })}</div>
+                    <div className="text-[12.5px] text-amber-800 leading-6">
+                        {t('مسجّلة ومحفوظة، لكنها لا تُخصم من رصيد أيّ عهدة حتى تُسكَّن.')}
+                        {noFund.out ? <> {t('مصروف')} <Money v={noFund.out} cur={false} className="font-bold" />.</> : null}
+                    </div>
+                    <a href={href('/txns', { fund: -1 })} className="inline-block mt-2">
+                        <Btn kind="soft" className="!h-9 !px-3 text-[13px]"><Wallet size={15} />{t('سكّنها الآن')}</Btn>
+                    </a>
+                </div>
+            </div>
+        </Card>
     );
 }
 

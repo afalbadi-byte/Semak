@@ -231,6 +231,11 @@ function DrivePanel() {
                         <p className="text-[11.5px] text-ink-3 flex gap-1.5"><AlertTriangle size={13} className="shrink-0 text-amber mt-0.5" />
                             {t('آخر خطأ:')} {(s.last_error.error && (s.last_error.error.message || s.last_error.error)) || s.last_error.error_description || '—'}</p>
                     ) : null}
+                    {s.root ? (
+                        <a href={'https://drive.google.com/drive/folders/' + s.root} target="_blank" rel="noopener" className="block">
+                            <Btn kind="line" className="w-full"><HardDrive size={16} />{t('افتح مجلد «عُهدة» في درايف')}</Btn>
+                        </a>
+                    ) : null}
                     <div className="flex gap-2">
                         <Btn kind="line" className="flex-1" busy={busy} onClick={link}>{t('إعادة الربط')}</Btn>
                         <Btn kind="ghost" onClick={unlink}>{t('فكّ الربط')}</Btn>
@@ -409,6 +414,12 @@ function UsersPanel() {
                                     </span>
                                 </span>
                             </button>
+                            {u.drive_folder ? (
+                                <a title={t('مجلد الدرايف')} href={'https://drive.google.com/drive/folders/' + u.drive_folder} target="_blank" rel="noopener"
+                                    className="w-9 h-9 rounded-xl text-ink-3 hover:bg-paper-2 hover:text-ink flex items-center justify-center shrink-0">
+                                    <HardDrive size={17} />
+                                </a>
+                            ) : null}
                             <button title={t('أرسل الرابط واتساب')} onClick={() => sendInvite({ name: u.name, username: u.username, password: '', phone: u.phone, lang: u.lang })}
                                 className="w-9 h-9 rounded-xl text-[#1da851] hover:bg-[#25D366]/10 flex items-center justify-center shrink-0">
                                 <MessageCircle size={17} />

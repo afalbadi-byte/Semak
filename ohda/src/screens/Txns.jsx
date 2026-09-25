@@ -10,12 +10,26 @@ import { TxnRow } from './Dashboard';
 
 // الحركات: كل ما في الرابط مرشِّح — فأي رقمٍ في التطبيق يفتح هنا مصفّى على ما يخصّه
 export default function Txns({ q }) {
-    const { funds, cats } = useData();
+    const { funds, cats, reloadFunds } = useData();
     const toast = useToast();
     const [rows, setRows] = useState(null);
     const [open, setOpen] = useState(false);
     const [text, setText] = useState(q.q || '');
+    const [busy, setBusy] = useState(false);
     const trash = q.trash === '1';
+
+    // تسكين المعروض كلّه في عهدة: تُرسل معرّفات الصفوف الظاهرة لا غير
+    const assign = async f => {
+        const ids = (rows || []).map(x => x.id);
+        if (!ids.length) return;
+        setBusy(true);
+        const r = await call('txn_fund', { body: { fund_id: f.id, ids } });
+        setBusy(false);
+        if (!r.success) { toast(t(r.message || 'تعذّر التسكين')); return; }
+        toast(t('سُكّنت {n} حركة في {f}', { n: r.n, f: f.name }));
+        reloadFunds();
+        setRows([]);
+    };
 
     useEffect(() => {
         let live = true;
@@ -46,7 +60,7 @@ export default function Txns({ q }) {
     // الشارات تشرح ما يُعرض الآن، وكلٌّ منها يُزال بلمسة
     const chips = [];
     if (q.type) chips.push(['type', t(q.type === 'in' ? 'المستلم' : 'المصروف')]);
-    if (q.fund) chips.push(['fund', (funds.find(f => String(f.id) === q.fund) || {}).name || t('عهدة')]);
+    if (q.fund) chips.push(['fund', q.fund === '-1' ? t('بلا عهدة') : (funds.find(f => String(f.id) === q.fund) || {}).name || t('عهدة')]);
     if (q.cat) chips.push(['cat', q.cat === '-1' ? t('بلا تصنيف') : (cats.find(c => String(c.id) === q.cat) || {}).name || t('تصنيف')]);
     if (q.from || q.to) chips.push(['from', q.from === q.to ? fullDate(q.from) : (shortDate(q.from) || '…') + ' — ' + (shortDate(q.to) || '…')]);
     if (q.vendor) chips.push(['vendor', q.vendor]);
@@ -101,6 +115,25 @@ export default function Txns({ q }) {
                     ))}
                     {chips.length > 1 ? <a href="#/txns" className="h-8 px-3 rounded-full text-[12px] font-semibold text-ink-3 flex items-center">{t('مسح الكل')}</a> : null}
                 </div>
+            ) : null}
+
+            {/* تسكين الحركات المعروضة بلا عهدة في عهدةٍ واحدة */}
+            {q.fund === '-1' && rows && rows.length ? (
+                <Card className="p-4 border-amber-200 bg-amber-50/60 space-y-2">
+                    <div className="text-[13px] font-bold text-amber-900">{t('سكّن هذه الحركات في عهدة')}</div>
+                    <p className="text-[12px] text-amber-800 leading-6">{t('اختر العهدة التي صُرفت منها، فتُخصم من رصيدها وتظهر في كشفها.')}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {funds.filter(f => f.status !== 'settled').map(f => (
+                            <button key={f.id} disabled={busy} onClick={() => assign(f)}
+                                className="h-9 px-3 rounded-xl bg-paper-card border border-paper-2 text-[13px] font-semibold hover:border-ink disabled:opacity-50">
+                                <span className="inline-block w-2.5 h-2.5 rounded-full me-1.5 align-middle" style={{ background: f.color }} />{f.name}
+                            </button>
+                        ))}
+                        {!funds.filter(f => f.status !== 'settled').length ? (
+                            <a href="#/funds" className="text-[13px] font-semibold text-brand">{t('لا عهدة مفتوحة — أنشئ واحدة أولاً')}</a>
+                        ) : null}
+                    </div>
+                </Card>
             ) : null}
 
             {/* المجاميع — لكل رقمٍ رابطه */}

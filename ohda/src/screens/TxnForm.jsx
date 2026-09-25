@@ -7,11 +7,17 @@ import { Btn, Field, inputCls, Seg, CatIcon, Money, Spinner, Sheet, useToast } f
 import { useData } from '../App';
 import { t } from '../lib/i18n';
 
-const blank = (q, funds) => ({
-    type: q.type === 'in' ? 'in' : 'out',
-    amount: '', vat: '', d: today(), vendor: '', cat_id: 0, method: 'cash', ref: '', note: '',
-    fund_id: Number(q.fund) || (funds.find(f => f.status !== 'settled') || {}).id || 0,
-});
+// العهدة لا تُختار تلقائياً إلا إذا كانت واحدة: مع تعدّدها يختار صاحبها بنفسه،
+// فلا يُخصم مصروفٌ من عهدةٍ لم تُصرف منها
+const openOf = funds => funds.filter(f => f.status !== 'settled');
+const blank = (q, funds) => {
+    const op = openOf(funds);
+    return {
+        type: q.type === 'in' ? 'in' : 'out',
+        amount: '', vat: '', d: today(), vendor: '', cat_id: 0, method: 'cash', ref: '', note: '',
+        fund_id: Number(q.fund) || (op.length === 1 ? op[0].id : 0),
+    };
+};
 
 export default function TxnForm({ id, q }) {
     const { funds, cats, flags, reloadFunds } = useData();
@@ -110,6 +116,8 @@ export default function TxnForm({ id, q }) {
     const save = async (force, again) => {
         setErr('');
         if (!(Number(f.amount) > 0)) { setErr(t('اكتب المبلغ')); amt.current && amt.current.focus(); return; }
+        // مع وجود عهدةٍ مفتوحة لا تُحفظ حركةٌ معلّقة بلا عهدة: لا تُخصم من رصيدٍ ولا تظهر في كشف
+        if (!Number(f.fund_id) && openOf(funds).length) { setErr(t('اختر العهدة')); window.scrollTo(0, 0); return; }
         setBusy(true);
         const r = await call('txn_save', { body: { ...f, amount: Number(f.amount), vat: Number(f.vat) || 0, file_ids: files.map(x => x.id), force: force ? 1 : 0 } });
         setBusy(false);
@@ -305,7 +313,8 @@ export default function TxnForm({ id, q }) {
 
                 {openFunds.length ? (
                     <div>
-                        <span className="block text-[12px] font-semibold text-ink-2 mb-1.5">{t(out ? 'من عهدة' : 'إلى عهدة')}</span>
+                        <span className="block text-[12px] font-semibold text-ink-2 mb-1.5">{t(out ? 'من عهدة' : 'إلى عهدة')}
+                            {openFunds.length > 1 ? <span className="text-red-600"> *</span> : null}</span>
                         <div className="flex flex-wrap gap-1.5">
                             {openFunds.map(x => (
                                 <button key={x.id} type="button" onClick={() => set('fund_id', Number(x.id))}
@@ -316,6 +325,8 @@ export default function TxnForm({ id, q }) {
                                 </button>
                             ))}
                         </div>
+                        {openFunds.length > 1 && !Number(f.fund_id)
+                            ? <p className="text-[11.5px] text-amber-700 mt-1.5">{t('اختر العهدة التي صُرفت منها، وإلا لن تُخصم الحركة من أيّ رصيد.')}</p> : null}
                     </div>
                 ) : null}
 

@@ -845,7 +845,29 @@ case 'funds': {
         $x['balance'] = round($x['received'] - $x['spent'], 2);
         $rows[] = $x;
     }
-    out(['success' => true, 'data' => $rows]);
+    // الحركات بلا عهدة: محفوظة لكنها لا تُخصم من رصيد أيّ عهدة، فتُعرض ليسكّنها صاحبها
+    $nf = $conn->query("SELECT COUNT(*) n,
+        COALESCE(SUM(CASE WHEN type='out' THEN amount END),0) out_total,
+        COALESCE(SUM(CASE WHEN type='in'  THEN amount END),0) in_total,
+        MIN(d) first_d, MAX(d) last_d
+        FROM oh_txns WHERE user_id=$uid AND deleted=0 AND fund_id IS NULL")->fetch_assoc();
+    out(['success' => true, 'data' => $rows, 'no_fund' => [
+        'n' => (int)$nf['n'], 'out' => (float)$nf['out_total'], 'in' => (float)$nf['in_total'],
+        'first_d' => $nf['first_d'], 'last_d' => $nf['last_d'],
+    ]]);
+}
+
+// تسكين حركاتٍ في عهدة: للحركات المحدّدة، أو لكل ما لا عهدة له
+case 'txn_fund': {
+    $u = need(); $uid = (int)$u['id']; $b = body();
+    $fund = (int)($b['fund_id'] ?? 0);
+    if (!$fund || !$conn->query("SELECT id FROM oh_funds WHERE id=$fund AND user_id=$uid AND deleted=0")->num_rows) fail('اختر عهدة');
+    $ids = array_values(array_filter(array_map('intval', is_array($b['ids'] ?? null) ? $b['ids'] : [])));
+    $w = "user_id=$uid AND deleted=0 AND " . ($ids ? 'id IN (' . implode(',', array_slice($ids, 0, 500)) . ')' : 'fund_id IS NULL');
+    $conn->query("UPDATE oh_txns SET fund_id=$fund WHERE $w");
+    $n = (int)$conn->affected_rows;
+    oh_log($uid, 'txn_fund', 'fund', $fund, ['n' => $n, 'ids' => $ids]);
+    out(['success' => true, 'n' => $n]);
 }
 
 case 'fund_save': {
@@ -910,7 +932,8 @@ case 'txns': {
     $u = need(); $uid = (int)$u['id'];
     $w = ["t.user_id=$uid", "t.deleted=" . (!empty($_GET['trash']) ? 1 : 0)];
     if (!empty($_GET['id']))   $w[] = 't.id=' . (int)$_GET['id'];
-    if (!empty($_GET['fund'])) $w[] = 't.fund_id=' . (int)$_GET['fund'];
+    // fund=-1 يعني «بلا عهدة» — حركاتٌ لا تُخصم من رصيد أيّ عهدة
+    if (!empty($_GET['fund'])) $w[] = ((int)$_GET['fund'] === -1 ? 't.fund_id IS NULL' : 't.fund_id=' . (int)$_GET['fund']);
     if (!empty($_GET['cat']))  $w[] = ((int)$_GET['cat'] === -1 ? 't.cat_id IS NULL' : 't.cat_id=' . (int)$_GET['cat']);
     if (in_array($_GET['type'] ?? '', ['in', 'out'], true)) $w[] = "t.type='" . $_GET['type'] . "'";
     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['from'] ?? '')) $w[] = "t.d >= '" . $_GET['from'] . "'";
@@ -1234,7 +1257,7 @@ case 'drive_status': {
     $r = $conn->query("SELECT drive_status s, COUNT(*) n FROM oh_files WHERE deleted=0 GROUP BY drive_status");
     while ($r && ($x = $r->fetch_assoc())) $n[$x['s']] = (int)$x['n'];
     out(['success' => true, 'configured' => secret_set(OH_G_ID) && secret_set(OH_G_SECRET), 'linked' => (bool)meta_get('drive_refresh'),
-        'counts' => $n, 'last_error' => json_decode((string)meta_get('drive_error'), true)]);
+        'counts' => $n, 'root' => meta_get('drive_root'), 'last_error' => json_decode((string)meta_get('drive_error'), true)]);
 }
 
 case 'drive_unlink': {

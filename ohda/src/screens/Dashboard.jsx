@@ -6,6 +6,7 @@ import { t } from '../lib/i18n';
 import { money, period, dayLabel, shortDate, monthLabel, METHODS } from '../lib/fmt';
 import { Money, Card, LinkCard, Section, Donut, Bars, Progress, CatIcon, Spinner, Empty, Btn } from '../ui';
 import { useData } from '../App';
+import { NoFundBanner } from './Funds';
 
 const PERIODS = [
     { k: 'month', t: 'هذا الشهر' }, { k: 'last', t: 'الشهر الماضي' },
@@ -57,6 +58,7 @@ export default function Dashboard({ q }) {
 
     return (
         <div className="space-y-5 pt-2 lg:pt-0">
+            <NoFundBanner />
             {/* الفترة والعهدة */}
             <div className="space-y-2">
                 <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4 lg:mx-0 lg:px-0">

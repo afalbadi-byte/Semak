@@ -38,6 +38,7 @@ export default function App() {
     const [flags, setFlags] = useState({});
     const [cats, setCats] = useState([]);
     const [funds, setFunds] = useState([]);
+    const [noFund, setNoFund] = useState(null);   // حركاتٌ بلا عهدة: تُعرض لتُسكَّن
     const [lang, setL] = useState(getLang());
     const [reason, setReason] = useState('');      // سبب الخروج: idle
     const [askBio, setAskBio] = useState(false);
@@ -49,7 +50,7 @@ export default function App() {
     }, []);
 
     const reloadCats = useCallback(async () => { const r = await call('cats'); if (r.success) setCats(r.data); }, []);
-    const reloadFunds = useCallback(async () => { const r = await call('funds'); if (r.success) setFunds(r.data); }, []);
+    const reloadFunds = useCallback(async () => { const r = await call('funds'); if (r.success) { setFunds(r.data); setNoFund(r.no_fund || null); } }, []);
     const reloadMe = useCallback(async () => {
         const r = await call('me');
         if (!r.success) return false;
@@ -107,7 +108,7 @@ export default function App() {
 
     return (
         <ToastHost>
-            <DataCtx.Provider value={{ me, profile, logo, flags, cats, funds, lang, changeLang, reloadCats, reloadFunds, reloadMe, logout, reboot: boot }}>
+            <DataCtx.Provider value={{ me, profile, logo, flags, cats, funds, noFund, lang, changeLang, reloadCats, reloadFunds, reloadMe, logout, reboot: boot }}>
                 <Shell key={lang} />
                 <BioOffer open={askBio} onClose={() => setAskBio(false)} />
             </DataCtx.Provider>
