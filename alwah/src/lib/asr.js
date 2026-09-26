@@ -15,7 +15,8 @@ import { call } from './api';
 const CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
 const SR = 16000;
 const SEG = 5000;            // طول المقطع على الجهاز بالمللي ثانية
-const SEG_CLOUD = 2600;      // السحاب أسرع، فالمقطع أقصر ويكون الكشف أقرب للحظة
+const SEG_CLOUD = 3800;      // السحاب أسرع، فالمقطع أقصر ويكون الكشف أقرب للحظة
+const SEG_CLOUD_MAX = 7000;  // حدّ التهدئة إن ضاق المزوّد بعدد الطلبات
 const OVERLAP = 1.4;         // ثوانٍ من آخر المقطع تُضمّ إلى تاليه فلا تُبتر كلمة
 const SLOW_MS = 7000;        // فوقه يُعدّ الجهاز بطيئاً فيُخفَّف النموذج — والحدّ مرتفع لأن الخفيف أقلّ دقّة
 
@@ -151,7 +152,8 @@ function clean(x) {
 // تُبتر كلمةٌ على الحدّ، ثم نقيس الشدّة: الصامت لا يُرسل أصلاً.
 export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint }) {
     let slow = 0;
-    let useCloud = !!cloud;                         // يسقط وحده إلى الجهاز إن تعثّر السحاب
+    let useCloud = !!cloud;                         // يسقط وحده إلى الجهاز إن تعثّر
+    let segCloud = SEG_CLOUD;                       // يطول إن ضاق المزوّد بعدد الطلبات السحاب
     listeners.text = [(text, ms) => {
         if (ms > SLOW_MS) slow++; else slow = 0;
         if (slow >= 2 && !lightened) {                  // الجهاز لا يلحق: نخفّف النموذج
@@ -209,8 +211,15 @@ export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint })
                 const t0 = Date.now();
                 const r = await call('asr', { form: e.data, params: { hint: hint ? hint() : '' } });
                 if (r && r.success && typeof r.text === 'string') { onChunk && onChunk(r.text.trim(), Date.now() - t0); return; }
+                const msg = (r && r.message) || 'انقطع الاتصال';
+                // ضيقٌ بعدد الطلبات لا عطبٌ في الخدمة: نهدّئ ونطيل المقطع ونبقى في السحاب
+                if (/429|rate limit/i.test(msg) && segCloud < SEG_CLOUD_MAX) {
+                    segCloud = Math.min(SEG_CLOUD_MAX, segCloud + 1200);
+                    onInfo && onInfo({ note: 'هدّأتُ الإرسال ليتّسع له حدّ الخطّة (' + (segCloud / 1000).toFixed(1) + 'ث للمقطع)' });
+                    return;
+                }
                 useCloud = false;                       // تعذّر السحاب: نكمل على الجهاز
-                onInfo && onInfo({ cloud: false, note: (r && r.message) || 'انقطع الاتصال، التعرّف على الجهاز' });
+                onInfo && onInfo({ cloud: false, note: msg });
                 try { await loadAsr(); } catch (err) { onError && onError('تعذّر تشغيل النموذج على الجهاز'); return; }
             }
             worker.postMessage({ type: 'audio', pcm });
@@ -221,7 +230,7 @@ export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint })
     const loop = () => {
         if (dead) return;
         try { rec.start(); } catch (e) { return; }
-        setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) { /* متوقّف */ } }, useCloud ? SEG_CLOUD : SEG);
+        setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) { /* متوقّف */ } }, useCloud ? segCloud : SEG);
     };
     rec.onstop = () => { if (!dead) setTimeout(loop, 60); };
     loop();
