@@ -22,6 +22,11 @@ input[type="date"] { min-height: 2.75rem; }
   background-size: 18px 18px;
 }
 .al-rise { animation: al-rise .5s cubic-bezier(.2,.8,.2,1) both; }
+/* ومضة الخطأ في التسميع الذاتي: تظهر وتخبو بلا أن تحجب المصحف */
+@keyframes al-flash-k { 0% { opacity: 0 } 15% { opacity: 1 } 100% { opacity: 0 } }
+.al-flash { animation: al-flash-k .42s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .al-flash { animation-duration: .2s } }
+
 @keyframes al-rise { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .al-rise { animation: none; } }
 

@@ -342,7 +342,7 @@ function Accounts({ members }) {
 
 function UserForm({ u, members, onDone }) {
     const toast = useToast();
-    const [f, setF] = useState({ name: u.name || '', username: u.username || '', password: '', role: u.role || 'member', member_id: u.member_id || '', active: u.active === undefined ? 1 : u.active });
+    const [f, setF] = useState({ name: u.name || '', username: u.username || '', password: '', role: u.role || 'member', member_id: u.member_id || '', active: u.active === undefined ? 1 : u.active, feat_recite: u.feat_recite ? 1 : 0 });
     const [busy, setBusy] = useState(false);
     const [saved, setSaved] = useState(null);
     const set = (k, v) => setF(x => ({ ...x, [k]: v }));
@@ -384,6 +384,10 @@ function UserForm({ u, members, onDone }) {
                 </select>
             </Field>
             {u.id ? <label className="flex items-center gap-2 text-[14px]"><input type="checkbox" checked={!!f.active} onChange={e => set('active', e.target.checked ? 1 : 0)} />الحساب فعّال</label> : null}
+            <label className="flex items-start gap-2 text-[14px]">
+                <input type="checkbox" className="mt-1" checked={!!f.feat_recite} onChange={e => set('feat_recite', e.target.checked ? 1 : 0)} />
+                <span>التسميع الذاتي بالاستماع <span className="text-[11.5px] text-ink-3 block leading-6">تجريبيّ: يستمع للتلاوة على الجهاز ويكشف الآية الصحيحة. يُحمّل نموذجاً مرّةً واحدة.</span></span>
+            </label>
             <Btn className="w-full !h-12" busy={busy} onClick={save}>احفظ</Btn>
         </div>
     );

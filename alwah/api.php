@@ -271,6 +271,13 @@ if ($__v < 9) {
     $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '9')");
 }
 
+if ($__v < 10) {
+    // صلاحية التسميع الذاتي: تُفتح لحساباتٍ يحدّدها صاحب الحساب
+    $has = one("SELECT 1 x FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='al_users' AND COLUMN_NAME='feat_recite'");
+    if (!$has) $conn->query('ALTER TABLE al_users ADD COLUMN feat_recite TINYINT(1) NOT NULL DEFAULT 0');
+    $conn->query("REPLACE INTO al_meta (k, v) VALUES ('schema', '10')");
+}
+
 // جلب نصٍّ من خدمةٍ خارجية (الإعراب من الباحث القرآني) — بلا تخزينٍ عندنا
 function fetch_text($url) {
     if (function_exists('curl_init')) {
@@ -696,7 +703,7 @@ function me() {
     if ($u !== false) return $u;
     $u = null;
     $id = read_token();
-    if ($id) { $x = one("SELECT id, family_id, username, name, role, member_id, is_admin, active FROM al_users WHERE id=$id LIMIT 1");
+    if ($id) { $x = one("SELECT id, family_id, username, name, role, member_id, is_admin, active, feat_recite FROM al_users WHERE id=$id LIMIT 1");
                if ($x && (int)$x['active'] === 1) $u = $x; }
     return $u;
 }
@@ -804,7 +811,7 @@ case 'login': {
 case 'me': {
     $u = need();
     $f = one("SELECT id, name FROM al_families WHERE id=" . (int)$u['family_id']);
-    foreach (['id', 'family_id', 'member_id', 'is_admin'] as $k) $u[$k] = $u[$k] === null ? null : (int)$u[$k];
+    foreach (['id', 'family_id', 'member_id', 'is_admin', 'feat_recite'] as $k) $u[$k] = $u[$k] === null ? null : (int)$u[$k];
     if ($f) $f['rules'] = family_rules((int)$u['family_id']);
     out(['success' => true, 'user' => $u, 'family' => $f, 'sup' => is_sup($u)]);
 }
@@ -1112,8 +1119,8 @@ case 'family_save': {
 
 case 'users': {
     $u = need_owner();
-    $list = rows("SELECT id, username, name, role, member_id, active, last_login FROM al_users WHERE family_id=" . (int)$u['family_id'] . " ORDER BY id");
-    foreach ($list as &$x) { $x['id'] = (int)$x['id']; $x['member_id'] = $x['member_id'] === null ? null : (int)$x['member_id']; $x['active'] = (int)$x['active']; }
+    $list = rows("SELECT id, username, name, role, member_id, active, last_login, feat_recite FROM al_users WHERE family_id=" . (int)$u['family_id'] . " ORDER BY id");
+    foreach ($list as &$x) { $x['id'] = (int)$x['id']; $x['member_id'] = $x['member_id'] === null ? null : (int)$x['member_id']; $x['active'] = (int)$x['active']; $x['feat_recite'] = (int)$x['feat_recite']; }
     unset($x);
     out(['success' => true, 'data' => $list]);
 }
@@ -1137,6 +1144,7 @@ case 'user_save': {
         if (!$t) fail('غير موجود', 404);
         if ($t['role'] === 'owner') $role = 'owner';
         $set = "name='" . E($nm) . "', username='" . E($un) . "', role='$role', member_id=" . ($mid ?: 'NULL') . ", active=" . (empty($b['active']) && isset($b['active']) ? 0 : 1);
+        if (array_key_exists('feat_recite', $b)) $set .= ', feat_recite=' . (empty($b['feat_recite']) ? 0 : 1);
         if ($pw !== '') { if (strlen($pw) < 6) fail('كلمة المرور ستة أحرف فأكثر'); $set .= ", pass_hash='" . E(password_hash($pw, PASSWORD_DEFAULT)) . "'"; }
         $conn->query("UPDATE al_users SET $set WHERE id=$id AND family_id=$fid");
     } else {

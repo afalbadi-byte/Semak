@@ -9,6 +9,7 @@ import WordActions from '../components/WordActions';
 import ListenPanel from '../components/ListenPanel';
 import { Picker } from '../components/AyahPicker';
 import AyahInfo from '../components/AyahInfo';
+import SelfRecite from '../components/SelfRecite';
 
 import PassBar from '../components/PassBar';
 import WirdEditor from '../components/WirdEditor';
@@ -46,6 +47,7 @@ export default function Hifz({ q }) {
     const [sel, setSel] = useState(null);
     const [busy, setBusy] = useState(false);
     const [hide, setHide] = useState(null);        // Set للأسطر المخفية، أو null
+    const [recite, setRecite] = useState(false);   // التسميع الذاتي بالاستماع
     const [data, setData] = useState(null);
     const [hl, setHl] = useState(null);
     const [editW, setEditW] = useState(false);
@@ -246,6 +248,12 @@ export default function Hifz({ q }) {
                     className={'h-10 px-3 rounded-xl text-[13px] font-bold inline-flex items-center gap-1.5 border ' + (hide ? 'bg-ink text-white border-ink' : 'bg-paper-card border-paper-2 text-ink-2')}>
                     {hide ? <Eye size={16} /> : <EyeOff size={16} />}{hide ? 'أظهر النص' : 'سمّع لنفسك'}
                 </button>
+                {me.feat_recite ? (
+                    <button onClick={() => setRecite(r => !r)}
+                        className={'h-10 px-3 rounded-xl text-[13px] font-bold inline-flex items-center gap-1.5 border ' + (recite ? 'bg-brand text-white border-brand' : 'bg-paper-card border-paper-2 text-ink-2')}>
+                        <Mic size={16} />تسميع ذاتي
+                    </button>
+                ) : null}
                 {hide && hide.size ? <button onClick={revealNext} className="h-10 px-3 rounded-xl bg-paper-card border border-paper-2 text-[13px] font-semibold text-ink-2 inline-flex items-center gap-1"><ChevronDown size={15} />اكشف سطراً</button> : null}
                 <div className="ms-auto flex items-center gap-1 bg-paper-card border border-paper-2 rounded-xl h-10 ps-1 pe-3">
                     <button onClick={() => bump(reps + 1)} className="h-8 px-2.5 rounded-lg bg-brand text-white text-[13px] font-bold inline-flex items-center gap-1" aria-label="كرّرت"><Plus size={14} />كرّرت</button>
@@ -253,7 +261,11 @@ export default function Hifz({ q }) {
                     {reps ? <button onClick={() => bump(0)} className="w-7 h-7 rounded-lg text-ink-3 flex items-center justify-center" aria-label="تصفير"><RotateCcw size={13} /></button> : null}
                 </div>
             </div>
-            {hide ? <p className="text-[12px] text-ink-3 text-center">اقرأ من حفظك، ثم المس السطر لتتأكّد منه</p> : null}
+            {hide && !recite ? <p className="text-[12px] text-ink-3 text-center">اقرأ من حفظك، ثم المس السطر لتتأكّد منه</p> : null}
+            {recite ? (
+                <SelfRecite page={page} data={data} lines={lines} focus={focus} member={m}
+                    onHideAll={hideAll} onReveal={reveal} onClose={() => { setRecite(false); setHide(null); }} />
+            ) : null}
 
             </div>
 
