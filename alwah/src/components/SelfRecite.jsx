@@ -149,7 +149,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
                         </div>
                         {hint ? <p className="text-center font-quran text-[20px] text-brand-800">{hint.raw}</p> : null}
                         {heard ? <p className="text-[11.5px] text-ink-3 text-center leading-6 truncate">سمعتُ: {heard}</p> : null}
-                        {info ? <p className="text-[10.5px] text-ink-3/70 text-center">الميكروفون {Math.round(info.rate / 1000)} ألف · {info.gpu ? 'مسرَّع' : 'برمجي'} · شدّة {(info.level * 1000).toFixed(1)}</p> : null}
+                        {info ? <p className="text-[10.5px] text-ink-3/70 text-center">الميكروفون {Math.round(info.rate / 1000)} ألف · {info.device === 'webgpu' ? 'مسرَّع' : 'برمجي'} · شدّة {(info.level * 1000).toFixed(1)}</p> : null}
                         <p className="text-[11px] text-ink-3 text-center">{stat.ok} كلمة صحيحة · {stat.bad} توقّف</p>
                     </>
                 ) : null}

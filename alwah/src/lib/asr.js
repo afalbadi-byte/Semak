@@ -26,7 +26,7 @@ self.onmessage = async e => {
   const m = e.data;
   if (m.type === 'load') {
     let last = null;
-    for (const dev of (m.gpu ? ['webgpu', 'wasm'] : ['wasm'])) {
+    for (const dev of ['wasm']) {                 // WebGPU يعطي هذياناً على بعض معالجات الجوال
       for (const cfg of m.models) {
         try {
           p = await pipeline('automatic-speech-recognition', cfg.id, {
@@ -51,7 +51,7 @@ self.onmessage = async e => {
   }
 };`;
 
-let worker = null, ready = false, loading = null;
+let worker = null, ready = false, loading = null, device = '';
 const listeners = { text: [], error: [] };
 
 export const asrSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.AudioContext && window.Worker);
@@ -75,7 +75,7 @@ export function loadAsr(onProgress) {
                 const b = Object.values(seen).reduce((s, v) => s + v.b, 0);
                 onProgress && onProgress(b ? Math.min(0.99, a / b) : 0);
             } else if (m.type === 'ready') {
-                ready = true; onProgress && onProgress(1); res(true);
+                ready = true; device = m.device || 'wasm'; onProgress && onProgress(1); res(true);
             } else if (m.type === 'text') {
                 listeners.text.forEach(f => f(m.text, m.ms));
             } else if (m.type === 'error') {
@@ -140,13 +140,20 @@ export async function listen({ onChunk, onLevel, onError, onInfo }) {
             const raw = decoded.getChannelData(0);
             let sum = 0; for (let i = 0; i < raw.length; i++) sum += Math.abs(raw[i]);
             const avg = sum / raw.length;
-            onInfo && onInfo({ rate: decoded.sampleRate, gpu: !!navigator.gpu, level: avg });
+            onInfo && onInfo({ rate: decoded.sampleRate, device, level: avg });
             if (avg < 0.0015) return;                       // صمت: لا نُشغّل النموذج عليه فيهذي
             worker.postMessage({ type: 'audio', pcm: resample(raw, decoded.sampleRate, SR) });
         } catch (err) { onError && onError(String((err && err.message) || err)); }
     };
 
-    rec.start(5000);                                        // مقطعٌ كل خمس ثوان
+    // تسجيلٌ مستقلّ لكل مقطع: المقاطع التالية في timeslice بلا ترويسةٍ فلا تُفكّ
+    const loop = () => {
+        if (dead) return;
+        try { rec.start(); } catch (e) { return; }
+        setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) { /* متوقّف */ } }, 5000);
+    };
+    rec.onstop = () => { if (!dead) setTimeout(loop, 60); };
+    loop();
     return {
         stop() {
             dead = true;
