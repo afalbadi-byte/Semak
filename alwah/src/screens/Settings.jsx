@@ -43,7 +43,7 @@ export default function Settings() {
 
             <a href="#/about" className="block"><Btn kind="line" className="w-full"><Info size={16} />حول ألواح</Btn></a>
             <Btn kind="line" className="w-full" onClick={logout}><LogOut size={16} />تسجيل الخروج</Btn>
-            <p className="text-center text-[11px] text-ink-3">{me.name} · {me.username}</p>
+            <p className="text-center text-[11px] text-ink-3">{me.name} · {me.username} · إصدار {typeof __BUILD__ === 'undefined' ? '—' : __BUILD__}</p>
 
             <Sheet open={!!edit} onClose={() => setEdit(null)} title={edit && edit.id ? 'تعديل ' + edit.name : 'فرد جديد'}>
                 {edit ? <MemberForm m={edit} onDone={async msg => { setEdit(null); await reloadMembers(); if (msg) toast(msg); }} /> : null}

@@ -248,7 +248,7 @@ export default function Hifz({ q }) {
                     className={'h-10 px-3 rounded-xl text-[13px] font-bold inline-flex items-center gap-1.5 border ' + (hide ? 'bg-ink text-white border-ink' : 'bg-paper-card border-paper-2 text-ink-2')}>
                     {hide ? <Eye size={16} /> : <EyeOff size={16} />}{hide ? 'أظهر النص' : 'سمّع لنفسك'}
                 </button>
-                {me.feat_recite ? (
+                {me.feat_recite || me.role === 'owner' ? (
                     <button onClick={() => setRecite(r => !r)}
                         className={'h-10 px-3 rounded-xl text-[13px] font-bold inline-flex items-center gap-1.5 border ' + (recite ? 'bg-brand text-white border-brand' : 'bg-paper-card border-paper-2 text-ink-2')}>
                         <Mic size={16} />تسميع ذاتي

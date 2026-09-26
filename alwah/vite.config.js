@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  define: { __BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
   root: here,
   base: './',
   plugins: [react()],
