@@ -61,6 +61,9 @@ function near(a, b) {
 // ما يُقال قبل الشروع في التلاوة فلا يُحاسَب عليه
 const PRELUDE = new Set(['اعوذ', 'بالله', 'من', 'الشيطان', 'الرجيم', 'بسم', 'الله', 'الرحمن', 'الرحيم']);
 
+// حرفٌ يتكرّر ثلاثاً متتابعة لا يقع في كلامٍ عربيّ: هو صرير ميكروفونٍ أو نفَس
+const NOISE = /(.)\1\1/;
+
 export function tracker(expected) {
     // expected: [{ k: 'سورة:آية', items: [{ t: 'الكلمة', wk: 'سورة:آية:موضع', line }] }]
     const flat = [];
@@ -93,6 +96,7 @@ export function tracker(expected) {
                 if (two && (h === two || (two.length >= 6 && dist(h, two, 1) <= 1))) { pos += 2; matched += 2; continue; }
                 if (isRepeat(h)) continue;                       // إعادةٌ من تراكب المقاطع
                 if (h.length <= 2) continue;                     // حرفٌ أو حرفان: ضجيج
+                if (NOISE.test(h)) continue;                     // «صططططط»: ضجيجٌ فسّره التعرّف حروفاً مكرّرة
                 if (!matched && PRELUDE.has(h)) continue;        // استعاذةٌ أو بسملةٌ قبل الشروع
                 stray++; lastWrong = h;
                 break;                                           // لا نتجاوز الكلمة المنتظرة
