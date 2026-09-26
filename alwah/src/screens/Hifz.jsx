@@ -47,6 +47,7 @@ export default function Hifz({ q }) {
     const [sel, setSel] = useState(null);
     const [busy, setBusy] = useState(false);
     const [hide, setHide] = useState(null);        // Set للأسطر المخفية، أو null
+    const [shown, setShown] = useState(null);      // كلماتٌ انكشفت وحدها داخل سطرٍ مخفيّ
     const [recite, setRecite] = useState(false);   // التسميع الذاتي بالاستماع
     const [data, setData] = useState(null);
     const [hl, setHl] = useState(null);
@@ -172,7 +173,9 @@ export default function Hifz({ q }) {
     if (!m) return <p className="text-center text-ink-3 py-16">غير موجود</p>;
 
     // الإخفاء: كل الأسطر (أو أسطر حفظ اليوم) تُخفى، ولمس السطر يكشفه
-    const hideAll = () => setHide(new Set(focus ? lines.filter(i => i >= focus[0] && i <= focus[1]) : lines));
+    const hideAll = () => { setShown(new Set()); setHide(new Set(focus ? lines.filter(i => i >= focus[0] && i <= focus[1]) : lines)); };
+    // التسميع الذاتي يكشف كلمةً كلمة وهو يسمعها
+    const revealWord = k => setShown(s2 => { const n = new Set(s2 || []); n.add(k); return n; });
     const reveal = i => setHide(h => { if (!h) return h; const n = new Set(h); n.delete(i); return n; });
     const revealNext = () => setHide(h => { if (!h || !h.size) return h; const n = new Set(h); n.delete(Math.min(...n)); return n; });
     const idx = set.indexOf(page);
@@ -264,14 +267,15 @@ export default function Hifz({ q }) {
             {hide && !recite ? <p className="text-[12px] text-ink-3 text-center">اقرأ من حفظك، ثم المس السطر لتتأكّد منه</p> : null}
             {recite ? (
                 <SelfRecite page={page} data={data} lines={lines} focus={focus} member={m}
-                    onHideAll={hideAll} onReveal={reveal} onClose={() => { setRecite(false); setHide(null); }} />
+                    onHideAll={hideAll} onReveal={reveal} onWordReveal={revealWord}
+                    onClose={() => { setRecite(false); setHide(null); setShown(null); }} />
             ) : null}
 
             </div>
 
             <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ touchAction: 'pan-y', overscrollBehaviorX: 'none' }}>
                 <Mushaf page={page} marks={marks} onWord={w => setSel(w)} selected={sel && sel.k}
-                    hide={hide} onLine={reveal} focus={hide ? null : focus} hl={hl} onAyah={k => setSel({ k: k + ':0', t: ayahName(k), marker: true })} />
+                    hide={hide} shown={shown} onLine={reveal} focus={hide ? null : focus} hl={hl} onAyah={k => setSel({ k: k + ':0', t: ayahName(k), marker: true })} />
             </div>
 
             <div className="space-y-3 al-hide-full">

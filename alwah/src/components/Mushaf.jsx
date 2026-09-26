@@ -19,8 +19,9 @@ export function markStyle(m) {
 }
 
 // hl: الآية المتلوّة الآن «سورة:آية» تُظلَّل، onAyah: لمس رقم الآية يختارها
-// hide: أسطرٌ مخفيّة للتسميع الذاتي (تُلمس فتنكشف عبر onLine)، focus: [من، إلى] أسطر حفظ اليوم وما عداها باهت
-export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, hide, onLine, focus, hl, onAyah }) {
+// hide: أسطرٌ مخفيّة للتسميع الذاتي (تُلمس فتنكشف عبر onLine)، shown: كلماتٌ بعينها
+// تنكشف داخل السطر المخفيّ وهو يسمّع، focus: [من، إلى] أسطر حفظ اليوم وما عداها باهت
+export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, hide, shown, onLine, focus, hl, onAyah }) {
     const [data, setData] = useState(null);
     const [mk, setMk] = useState(null);          // علامات الصفحة: الأرباع والسجدات
     const [err, setErr] = useState('');
@@ -120,8 +121,15 @@ export default function Mushaf({ page, marks = {}, onWord, selected, readOnly, h
                             {hid ? <span aria-hidden className="absolute inset-x-1 rounded-lg bg-[#efe3c4]" style={{ top: '22%', bottom: '22%' }} /> : null}
                             {rub ? <span title={'الجزء ' + rub.juz + ' · الحزب ' + rub.hizb} className="absolute text-[#b8893a] select-none" style={{ insetInlineStart: -14, fontSize: Math.min(15, size * 0.6), lineHeight: 1 }}>۞</span> : null}
                             {saj ? <span title={'موضع سجدة'} className="absolute text-[#8a6a2c] select-none" style={{ insetInlineEnd: -14, fontSize: Math.min(15, size * 0.6), lineHeight: 1 }}>۩</span> : null}
-                            {words.map(w => {
-                                if (hid) return <span key={w.k} style={{ visibility: 'hidden' }}>{w.c}</span>;
+                            {words.map((w, wi) => {
+                                if (hid) {
+                                    // الكلمة التي قرأها تظهر وحدها فوق الشريط، وبقيّة السطر مستورة
+                                    // رقم الآية يظهر مع آخر كلمةٍ منها
+                                    const prev = w.end && wi > 0 ? words[wi - 1] : null;
+                                    const seen = shown && shown.has(prev ? prev.k : w.k);
+                                    return <span key={w.k} className={seen ? 'al-word-in' : undefined}
+                                        style={seen ? { position: 'relative' } : { visibility: 'hidden' }}>{w.c}</span>;
+                                }
                                 const ak = w.k.slice(0, w.k.lastIndexOf(':'));
                                 const on = hl && ak === hl;
                                 if (w.end) return <span key={w.k} onClick={onAyah ? () => onAyah(ak) : undefined} className={'text-[#8a6a2c] rounded-full ' + (onAyah ? 'cursor-pointer ' : '') + (on ? 'bg-[#f4e7c6]' : '')}>{w.c}</span>;

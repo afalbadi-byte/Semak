@@ -9,7 +9,7 @@ import { call } from '../lib/api';
 // الصفحة مخفيّة، فإذا قرأ الحافظ آيةً صحيحةً انكشفت. وإن أخطأ ومض الإطار أحمر
 // واهتزّ الجوال ووقف عند الكلمة حتى يصيبها، وله أن يطلب التلقين.
 // كل ما يُسمع يُعالج على الجهاز، ولا يُرفع صوتٌ إلى أيّ خادم.
-export default function SelfRecite({ page, data, lines, focus, member, onReveal, onHideAll, onClose }) {
+export default function SelfRecite({ page, data, lines, focus, member, onReveal, onWordReveal, onHideAll, onClose }) {
     const [stage, setStage] = useState('idle');     // idle | loading | live | done
     const [cloud] = useState(true);                 // التعرّف في السحاب، ويسقط إلى الجهاز إن تعثّر
     const [pct, setPct] = useState(0);
@@ -64,11 +64,13 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
         if (r.advanced) {
             setHint(null);
             setStat(s => ({ ...s, ok: s.ok + r.advanced }));
-            // كل سطرٍ اكتملت كلماته ينكشف
+            // كل كلمةٍ قرأها تنكشف وحدها، وإذا تمّ السطر رُفع ستره كلّه
             for (let i = before; i < t.pos; i++) {
                 const w = t.at(i);
+                if (!w) continue;
+                onWordReveal && onWordReveal(w.wk);
                 const next = t.at(i + 1);
-                if (w && (!next || next.line !== w.line)) onReveal(w.line);
+                if (!next || next.line !== w.line) onReveal(w.line);
             }
         }
         // لا نومض لكل خلاف: ضجيجٌ أو كلمةٌ مبتورة تمرّ، والخطأ يُثبت بمقطعٍ

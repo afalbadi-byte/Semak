@@ -27,6 +27,11 @@ input[type="date"] { min-height: 2.75rem; }
 .al-flash { animation: al-flash-k .42s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .al-flash { animation-duration: .2s } }
 
+/* الكلمة تظهر وقت نطقها في التسميع الذاتي */
+@keyframes al-word-k { from { opacity: 0; transform: translateY(2px) } to { opacity: 1; transform: none } }
+.al-word-in { animation: al-word-k .18s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .al-word-in { animation: none } }
+
 @keyframes al-rise { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .al-rise { animation: none; } }
 

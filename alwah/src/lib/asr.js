@@ -208,7 +208,7 @@ export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint })
             if (useCloud) {                             // السحاب: يُرسل المقطع كما سُجّل، بلا تحويل
                 const t0 = Date.now();
                 const r = await call('asr', { form: e.data, params: { hint: hint ? hint() : '' } });
-                if (r && r.success) { onChunk && onChunk(String(r.text || '').trim(), Date.now() - t0); return; }
+                if (r && r.success && typeof r.text === 'string') { onChunk && onChunk(r.text.trim(), Date.now() - t0); return; }
                 useCloud = false;                       // تعذّر السحاب: نكمل على الجهاز
                 onInfo && onInfo({ cloud: false, note: (r && r.message) || 'انقطع الاتصال، التعرّف على الجهاز' });
                 try { await loadAsr(); } catch (err) { onError && onError('تعذّر تشغيل النموذج على الجهاز'); return; }
