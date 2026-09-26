@@ -24,19 +24,33 @@ export function norm(s) {
 
 export const words = s => norm(s).split(' ').filter(Boolean);
 
-// مسافة تحرير محدودة: نكتفي بمعرفة «قريبة أم لا»
+// مسافة تحرير كاملة: التعرّف على صوت الجوال يبدّل حرفاً أو حرفين في الكلمة
+// (الرحيم ← الرجيم)، فنسامح بقدر طول الكلمة: حرفٌ في الرباعية، وحرفان في
+// السداسية وما فوقها، ولا مسامحة في القصيرة فهي تُلبِس غيرها.
+function dist(a, b, cap) {
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > cap) return cap + 1;
+    let prev = new Uint8Array(lb + 1), cur = new Uint8Array(lb + 1);
+    for (let j = 0; j <= lb; j++) prev[j] = j;
+    for (let i = 1; i <= la; i++) {
+        cur[0] = i;
+        let best = cur[0];
+        for (let j = 1; j <= lb; j++) {
+            cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+            if (cur[j] < best) best = cur[j];
+        }
+        if (best > cap) return cap + 1;
+        const t = prev; prev = cur; cur = t;
+    }
+    return prev[lb];
+}
+
 function near(a, b) {
     if (a === b) return true;
-    const la = a.length, lb = b.length;
-    if (Math.abs(la - lb) > 1) return false;
-    if (la < 4 || lb < 4) return false;              // الكلمات القصيرة لا تُسامَح
-    let i = 0, j = 0, diff = 0;
-    while (i < la && j < lb) {
-        if (a[i] === b[j]) { i++; j++; continue; }
-        if (++diff > 1) return false;
-        if (la > lb) i++; else if (lb > la) j++; else { i++; j++; }
-    }
-    return diff + (la - i) + (lb - j) <= 1;
+    const len = Math.max(a.length, b.length);
+    const cap = len >= 6 ? 2 : len >= 4 ? 1 : 0;
+    if (!cap) return false;
+    return dist(a, b, cap) <= cap;
 }
 
 // ─── محرّك المتابعة ─────────────────────────────────────────────────────────
@@ -92,10 +106,18 @@ export function tracker(expected) {
                 miss = 0;
                 return { advanced: last + 1, matched: hit.length, skipped, error: null, heard: heard.length };
             }
-            // لا تتابع: إن كان الكلام كثيراً فهو قراءةٌ من موضعٍ آخر أو خطأ
+            // المقاطع متراكبة، فقد يكون كلّ ما في المقطع كلماتٍ قرأها قبل قليل:
+            // إعادةٌ لا خطأ، فلا تُحسب تعثّراً
+            const back = flat.slice(Math.max(0, pos - 10), pos).map(x => x.n);
+            if (heard.some(h => back.some(b => b === h || near(b, h))))
+                return { advanced: 0, matched: hit.length, error: null, repeat: true, heard: heard.length };
+
+            // لا تتابع ولا إعادة: نتربّص ثلاثة مقاطع قبل أن نحكم بالخطأ، فالتعرّف
+            // يشوّه كلمةً أو كلمتين أحياناً ولا يصحّ أن نوقف القارئ لذلك
             miss++;
-            const error = heard.length >= 3 || miss >= 2 ? { expected: flat[pos], heard: heard.join(' ') } : null;
-            return { advanced: 0, matched: hit.length, error, stuck: miss >= 2, heard: heard.length };
+            const error = miss >= 3 ? { expected: flat[pos], heard: heard.join(' ') } : null;
+            if (error) miss = 0;
+            return { advanced: 0, matched: hit.length, error, stuck: !!error, heard: heard.length };
         },
 
         ayahDone() {
