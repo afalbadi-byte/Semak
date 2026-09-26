@@ -89,13 +89,30 @@ export function loadAsr(onProgress) {
     return loading;
 }
 
+// تحويل التردّد بالاستيفاء الخطّي: يكفي للكلام ولا يحتاج مكتبة
+function resample(x, from, to) {
+    if (!from || from === to) return x;
+    const ratio = from / to;
+    const n = Math.max(1, Math.floor(x.length / ratio));
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+        const t = i * ratio, j = Math.floor(t), f = t - j;
+        out[i] = j + 1 < x.length ? x[j] * (1 - f) + x[j + 1] * f : x[x.length - 1];
+    }
+    return out;
+}
+
 // ─── الميكروفون: يلتقط، ويقطّع عند السكوت، ويرسل المقاطع للعامل ─────────────
-export async function listen({ onChunk, onLevel, onError }) {
+export async function listen({ onChunk, onLevel, onError, onInfo }) {
     listeners.text = [onChunk]; listeners.error = onError ? [onError] : [];
     const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-    const ac = new AudioContext({ sampleRate: SR });
+    // بعض الأجهزة تتجاهل التردّد المطلوب وتعطي 48 ألفاً؛ فلو أُرسل كما هو
+    // لسمع النموذج التلاوة بثلاثة أضعاف سرعتها فأخرج كلاماً لا معنى له.
+    // لذلك نقرأ التردّد الحقيقي ونحوّل إليه قبل الإرسال.
+    let ac;
+    try { ac = new AudioContext({ sampleRate: SR }); } catch (e) { ac = new AudioContext(); }
     const src = ac.createMediaStreamSource(stream);
     const proc = ac.createScriptProcessor(4096, 1, 1);
     const buf = [];
@@ -105,8 +122,9 @@ export async function listen({ onChunk, onLevel, onError }) {
         const n = buf.reduce((s, x) => s + x.length, 0);
         buf.length = 0; voiced = 0; silence = 0;
         if (n < SR * 0.7 || dead) return;
-        const pcm = new Float32Array(n);
-        let o = 0; for (const b of bufKeep) { pcm.set(b, o); o += b.length; }
+        const raw = new Float32Array(n);
+        let o = 0; for (const b of bufKeep) { raw.set(b, o); o += b.length; }
+        const pcm = resample(raw, ac.sampleRate, SR);
         worker.postMessage({ type: 'audio', pcm }, [pcm.buffer]);
     };
     let bufKeep = [];
@@ -130,6 +148,7 @@ export async function listen({ onChunk, onLevel, onError }) {
         if (voiced > SR * 9) { bufKeep = buf.slice(); flush(); }
     };
 
+    onInfo && onInfo({ rate: ac.sampleRate, gpu: !!navigator.gpu });
     src.connect(proc); proc.connect(ac.destination);
     return {
         stop() {

@@ -17,6 +17,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
     const [hint, setHint] = useState(null);
     const [level, setLevel] = useState(0);
     const [stat, setStat] = useState({ ok: 0, bad: 0 });
+    const [info, setInfo] = useState(null);        // تردّد الميكروفون ومسرّع الجهاز
     const [heard, setHeard] = useState('');        // آخر ما سمعه المتعرّف — يُري القارئ سبب التوقّف
     const trk = useRef(null);
     const mic = useRef(null);
@@ -82,7 +83,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
             if (!asrReady()) { setStage('loading'); await loadAsr(setPct); }
             onHideAll();
             setStage('live');
-            mic.current = await listen({ onChunk, onLevel: setLevel, onError: () => {} });
+            mic.current = await listen({ onChunk, onLevel: setLevel, onError: () => {}, onInfo: setInfo });
         } catch (e) {
             setStage('idle');
             setErr(e && e.message ? e.message : 'تعذّر تشغيل الاستماع');
@@ -148,6 +149,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
                         </div>
                         {hint ? <p className="text-center font-quran text-[20px] text-brand-800">{hint.raw}</p> : null}
                         {heard ? <p className="text-[11.5px] text-ink-3 text-center leading-6 truncate">سمعتُ: {heard}</p> : null}
+                        {info ? <p className="text-[10.5px] text-ink-3/70 text-center">الميكروفون {Math.round(info.rate / 1000)} ألف · {info.gpu ? 'مسرَّع' : 'برمجي'}</p> : null}
                         <p className="text-[11px] text-ink-3 text-center">{stat.ok} كلمة صحيحة · {stat.bad} توقّف</p>
                     </>
                 ) : null}
