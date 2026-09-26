@@ -1179,7 +1179,9 @@ case 'asr': {
     $part = function ($name, $val) use ($bd) {
         return "--$bd\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$val\r\n";
     };
-    $post = $part('model', 'whisper-large-v3-turbo') . $part('language', 'ar')
+    // الرأي الثاني يُطلب من النموذج الأكبر، ولا يُطلب إلا عند الشكّ فلا يُثقل الحساب
+    $model = ($_GET['m'] ?? '') === 'big' ? 'whisper-large-v3' : 'whisper-large-v3-turbo';
+    $post = $part('model', $model) . $part('language', 'ar')
         . $part('temperature', '0') . $part('response_format', 'json');
     if ($hint !== '') $post .= $part('prompt', $hint);
     $post .= "--$bd\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.$ext\"\r\n"

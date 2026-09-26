@@ -187,10 +187,12 @@ export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint })
     const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
     const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined);
     let dead = false, tail = null;
+    let lastBlob = null;                            // آخر مقطعٍ سُمع، يُراجَع برأيٍ ثانٍ عند الشكّ
 
     rec.ondataavailable = async e => {
         if (dead || !e.data || e.data.size < 2000) return;
         try {
+            lastBlob = e.data;
             const ab = await e.data.arrayBuffer();
             const decoded = await ac.decodeAudioData(ab.slice(0));
             const raw = resample(decoded.getChannelData(0), decoded.sampleRate, SR);
@@ -235,6 +237,12 @@ export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint })
     rec.onstop = () => { if (!dead) setTimeout(loop, 60); };
     loop();
     return {
+        // رأيٌ ثانٍ من النموذج الأكبر: لا يُطلب إلا حين يوشك التطبيق أن يحكم بالخطأ
+        async recheck(hintText) {
+            if (!useCloud || !lastBlob) return null;
+            const r = await call('asr', { form: lastBlob, params: { m: 'big', hint: hintText || '' } });
+            return r && r.success && typeof r.text === 'string' ? r.text.trim() : null;
+        },
         stop() {
             dead = true;
             clearInterval(meter);

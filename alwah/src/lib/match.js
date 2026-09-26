@@ -24,33 +24,10 @@ export function norm(s) {
 
 export const words = s => norm(s).split(' ').filter(Boolean);
 
-// مسافة تحرير كاملة: التعرّف على صوت الجوال يبدّل حرفاً أو حرفين في الكلمة
-// (الرحيم ← الرجيم)، فنسامح بقدر طول الكلمة: حرفٌ في الرباعية، وحرفان في
-// السداسية وما فوقها، ولا مسامحة في القصيرة فهي تُلبِس غيرها.
-function dist(a, b, cap) {
-    const la = a.length, lb = b.length;
-    if (Math.abs(la - lb) > cap) return cap + 1;
-    let prev = new Uint8Array(lb + 1), cur = new Uint8Array(lb + 1);
-    for (let j = 0; j <= lb; j++) prev[j] = j;
-    for (let i = 1; i <= la; i++) {
-        cur[0] = i;
-        let best = cur[0];
-        for (let j = 1; j <= lb; j++) {
-            cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-            if (cur[j] < best) best = cur[j];
-        }
-        if (best > cap) return cap + 1;
-        const t = prev; prev = cur; cur = t;
-    }
-    return prev[lb];
-}
-
+// لا تسامح: الكلمة تُطابَق حرفاً بحرف بعد إسقاط التشكيل والرسم فقط. وما
+// يخطئ فيه التعرّف لا يُمرَّر هنا، بل يُراجَع برأيٍ ثانٍ قبل الحكم بالخطأ.
 function near(a, b) {
-    if (a === b) return true;
-    const len = Math.max(a.length, b.length);
-    const cap = len >= 6 ? 2 : len >= 4 ? 1 : 0;
-    if (!cap) return false;
-    return dist(a, b, cap) <= cap;
+    return a === b;
 }
 
 // ─── محرّك المتابعة ─────────────────────────────────────────────────────────
@@ -93,7 +70,7 @@ export function tracker(expected) {
                 if (h === want || near(h, want)) { pos++; matched++; continue; }
                 // كلمتان في النصّ نطقهما التعرّف موصولتين: «الحمدلله»
                 const two = flat[pos + 1] ? want + flat[pos + 1].n : '';
-                if (two && (h === two || (two.length >= 6 && dist(h, two, 1) <= 1))) { pos += 2; matched += 2; continue; }
+                if (two && h === two) { pos += 2; matched += 2; continue; }
                 if (isRepeat(h)) continue;                       // إعادةٌ من تراكب المقاطع
                 if (h.length <= 2) continue;                     // حرفٌ أو حرفان: ضجيج
                 if (NOISE.test(h)) continue;                     // «صططططط»: ضجيجٌ فسّره التعرّف حروفاً مكرّرة

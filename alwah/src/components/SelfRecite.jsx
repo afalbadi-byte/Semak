@@ -55,7 +55,18 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
         setStat(s => ({ ...s, bad: s.bad + 1 }));
     };
 
-    const onChunk = (text, ms) => {
+    // كشف الكلمات التي استُهلكت من النصّ بين موضعين
+    const revealFrom = (t, before) => {
+        for (let i = before; i < t.pos; i++) {
+            const w = t.at(i);
+            if (!w) continue;
+            onWordReveal && onWordReveal(w.wk);
+            const next = t.at(i + 1);
+            if (!next || next.line !== w.line) onReveal(w.line);
+        }
+    };
+
+    const onChunk = async (text, ms) => {
         const t = trk.current;
         setHeard(text ? text + (ms ? '  · ' + (ms / 1000).toFixed(1) + 'ث' : '') : '');
         if (!t || !text) return;
@@ -64,19 +75,39 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
         if (r.advanced) {
             setHint(null);
             setStat(s => ({ ...s, ok: s.ok + r.advanced }));
-            // كل كلمةٍ قرأها تنكشف وحدها، وإذا تمّ السطر رُفع ستره كلّه
-            for (let i = before; i < t.pos; i++) {
-                const w = t.at(i);
-                if (!w) continue;
-                onWordReveal && onWordReveal(w.wk);
-                const next = t.at(i + 1);
-                if (!next || next.line !== w.line) onReveal(w.line);
-            }
+            revealFrom(t, before);                       // كل كلمةٍ قرأها تنكشف وحدها
         }
-        // لا نومض لكل خلاف: ضجيجٌ أو كلمةٌ مبتورة تمرّ، والخطأ يُثبت بمقطعٍ
-        // فيه كلامٌ كافٍ أو بتكرّر التعثّر مرّتين
-        if (r.error) wrong(r.error.expected, r.error.heard);
+        // لا نحكم بالخطأ برأيٍ واحد: نعيد المقطع على النموذج الأكبر، فإن قرأه
+        // صحيحاً مضينا بلا ومضة. فلا يُوقَف القارئ إلا إذا اتّفق اثنان على خطئه.
+        if (r.error) {
+            let saved = false;
+            if (mic.current && mic.current.recheck) {
+                try {
+                    const second = await mic.current.recheck(hintWords());
+                    if (second) {
+                        setHeard(second + '  · مراجعة');
+                        const b2 = t.pos;
+                        const r2 = t.feed(second);
+                        if (r2.advanced) {
+                            saved = true;
+                            setHint(null);
+                            setStat(s => ({ ...s, ok: s.ok + r2.advanced }));
+                            revealFrom(t, b2);
+                        }
+                    }
+                } catch (e) { /* تعذّرت المراجعة: نحكم بما سمعنا */ }
+            }
+            if (!saved) wrong(r.error.expected, r.error.heard);
+        }
         if (t.done) finish();
+    };
+
+    // الكلمات المنتظرة: تميل بالتعرّف إلى رسم المصحف
+    const hintWords = () => {
+        const t = trk.current; if (!t) return '';
+        const w = [];
+        for (let i = t.pos; i < Math.min(t.total, t.pos + 25); i++) w.push(t.at(i).raw);
+        return w.join(' ');
     };
 
     const start = async () => {
@@ -89,12 +120,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
             setStage('live');
             mic.current = await listen({
                 cloud,
-                hint: () => {                            // الكلمات المنتظرة: تميل بالتعرّف إلى رسم المصحف
-                    const t = trk.current; if (!t) return '';
-                    const w = [];
-                    for (let i = t.pos; i < Math.min(t.total, t.pos + 25); i++) w.push(t.at(i).raw);
-                    return w.join(' ');
-                },
+                hint: hintWords,
                 onChunk, onLevel: setLevel, onError: () => {}, onInfo: x => setInfo(i => ({ ...i, ...x })),
             });
         } catch (e) {
