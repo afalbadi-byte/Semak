@@ -17,6 +17,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
     const [hint, setHint] = useState(null);
     const [level, setLevel] = useState(0);
     const [stat, setStat] = useState({ ok: 0, bad: 0 });
+    const [heard, setHeard] = useState('');        // آخر ما سمعه المتعرّف — يُري القارئ سبب التوقّف
     const trk = useRef(null);
     const mic = useRef(null);
     const mistakes = useRef([]);                     // مواضع الخطأ لتُعلَّم على المصحف
@@ -52,8 +53,9 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
         setStat(s => ({ ...s, bad: s.bad + 1 }));
     };
 
-    const onChunk = text => {
+    const onChunk = (text, ms) => {
         const t = trk.current;
+        setHeard(text ? text + (ms ? '  · ' + (ms / 1000).toFixed(1) + 'ث' : '') : '');
         if (!t || !text) return;
         const before = t.pos;
         const r = t.feed(text);
@@ -69,8 +71,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
         }
         // لا نومض لكل خلاف: ضجيجٌ أو كلمةٌ مبتورة تمرّ، والخطأ يُثبت بمقطعٍ
         // فيه كلامٌ كافٍ أو بتكرّر التعثّر مرّتين
-        const heardN = String(text).trim().split(/s+/).filter(Boolean).length;
-        if (r.error && (r.stuck || heardN >= 3)) wrong(r.error.expected, r.error.heard);
+        if (r.error) wrong(r.error.expected, r.error.heard);
         if (t.done) finish();
     };
 
@@ -146,6 +147,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
                             <button onClick={finish} className="h-9 px-3 rounded-xl bg-ink text-white text-[12.5px] font-bold">أنهِ</button>
                         </div>
                         {hint ? <p className="text-center font-quran text-[20px] text-brand-800">{hint.raw}</p> : null}
+                        {heard ? <p className="text-[11.5px] text-ink-3 text-center leading-6 truncate">سمعتُ: {heard}</p> : null}
                         <p className="text-[11px] text-ink-3 text-center">{stat.ok} كلمة صحيحة · {stat.bad} توقّف</p>
                     </>
                 ) : null}

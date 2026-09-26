@@ -40,21 +40,64 @@ function near(a, b) {
 }
 
 // ─── محرّك المتابعة ─────────────────────────────────────────────────────────
-// يمسك موضع القارئ من النصّ المنتظر، ويستقبل ما سمعه المتعرِّف مقطعاً مقطعاً.
-// يرجع لكل مقطع: كم كلمةً تقدّم، وأين وقع الخطأ إن وقع.
+// المطابقة بمحاذاةٍ مرنة لا بموضعٍ مقفل: نأخذ ما سمعناه ونبحث عن أطول تتابعٍ
+// يوافق النصّ المنتظر في نافذةٍ أمامه. فما ليس من الآية — استعاذةٌ أو بسملةٌ
+// أو ضجيج — يسقط من تلقاء نفسه، ولا يُحسب خطأً ولا يوقف القارئ.
+const WINDOW = 40;
+
+// أطول تتابعٍ مشترك: يرجع مواضع المطابقة في النصّ المنتظر
+function align(heard, want) {
+    const n = heard.length, m = want.length;
+    const dp = Array.from({ length: n + 1 }, () => new Int16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--)
+        for (let j = m - 1; j >= 0; j--)
+            dp[i][j] = (heard[i] === want[j] || near(heard[i], want[j]))
+                ? dp[i + 1][j + 1] + 1
+                : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const hit = [];
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+        if (heard[i] === want[j] || near(heard[i], want[j])) { hit.push(j); i++; j++; }
+        else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+        else j++;
+    }
+    return hit;
+}
+
 export function tracker(expected) {
     // expected: [{ k: 'سورة:آية', items: [{ t: 'الكلمة', wk: 'سورة:آية:موضع', line }] }]
     const flat = [];
     expected.forEach((a, ai) => a.items.forEach((w, wi) => flat.push({ n: norm(w.t), raw: w.t, wk: w.wk, line: w.line, ai, wi, k: a.k })));
-    let pos = 0;                                     // أوّل كلمةٍ لم تُقرأ بعد
-    let miss = 0;                                    // محاولاتٌ متتالية بلا تقدّم
+    let pos = 0;
+    let miss = 0;
 
     return {
         get pos() { return pos; },
         get total() { return flat.length; },
         get done() { return pos >= flat.length; },
         at: i => flat[i],
-        // موضع القارئ بالآيات: الآية الجارية وما اكتمل منها
+        current() { return flat[pos] ? flat[pos].k : null; },
+        reset(i) { pos = Math.max(0, Math.min(flat.length, i)); miss = 0; },
+
+        feed(text) {
+            const heard = words(text);
+            if (!heard.length || pos >= flat.length) return { advanced: 0, error: null, matched: 0, heard: heard.length };
+            const win = flat.slice(pos, pos + WINDOW).map(x => x.n);
+            const hit = align(heard, win);
+            // تتابعٌ من كلمتين فأكثر يُعدّ قراءةً للنصّ، وما دونه لا يُبنى عليه
+            if (hit.length >= 2) {
+                const last = hit[hit.length - 1];
+                const skipped = (last + 1) - hit.length;         // كلماتٌ في النصّ لم تُسمع
+                pos += last + 1;
+                miss = 0;
+                return { advanced: last + 1, matched: hit.length, skipped, error: null, heard: heard.length };
+            }
+            // لا تتابع: إن كان الكلام كثيراً فهو قراءةٌ من موضعٍ آخر أو خطأ
+            miss++;
+            const error = heard.length >= 3 || miss >= 2 ? { expected: flat[pos], heard: heard.join(' ') } : null;
+            return { advanced: 0, matched: hit.length, error, stuck: miss >= 2, heard: heard.length };
+        },
+
         ayahDone() {
             const done = new Set();
             for (let i = 0; i < pos; i++) {
@@ -62,29 +105,6 @@ export function tracker(expected) {
                 if (i + 1 >= flat.length || flat[i + 1].ai !== w.ai) done.add(w.k);
             }
             return done;
-        },
-        current() { return flat[pos] ? flat[pos].k : null; },
-        reset(i) { pos = Math.max(0, Math.min(flat.length, i)); miss = 0; },
-
-        // يبتلع مقطعاً مسموعاً ويحاول مطابقته من الموضع الحالي
-        feed(text) {
-            const heard = words(text);
-            if (!heard.length) return { advanced: 0, error: null };
-            let i = 0, adv = 0, error = null;
-            while (i < heard.length && pos < flat.length) {
-                const h = heard[i], e = flat[pos].n;
-                if (h === e || near(h, e)) { pos++; adv++; i++; continue; }
-                // ربما ابتلع المتعرّف كلمةً قصيرة (واو أو «من»)، فننظر التالية
-                if (flat[pos + 1] && (flat[pos + 1].n === h || near(flat[pos + 1].n, h)) && e.length <= 3) {
-                    pos += 2; adv += 2; i++; continue;
-                }
-                // أو سمع كلمةً زائدة (تكرار القارئ أو ضجيج): نتخطّاها مرّة
-                if (flat[pos] && i + 1 < heard.length && (heard[i + 1] === e || near(heard[i + 1], e))) { i++; continue; }
-                error = { expected: flat[pos], heard: h };
-                break;
-            }
-            if (adv) miss = 0; else if (error) miss++;
-            return { advanced: adv, error, stuck: miss >= 2 };
         },
     };
 }
