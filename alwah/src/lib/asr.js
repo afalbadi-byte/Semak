@@ -9,7 +9,13 @@
 //  هذا أدقّ من تقطيعٍ بالثواني، لأنّ الوقف عند رأس الآية هو الأصل في القراءة.
 // ════════════════════════════════════════════════════════════════════════════
 const CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
-const MODEL = 'eventhorizon0/tarteel-ai-onnx-whisper-base-ar-quran';
+// المشفّر بصيغةٍ كاملة والمفكّك مضغوط: الصيغة المضغوطة للمشفّر تستعمل عقدة
+// ConvInteger لا يدعمها محرّك ONNX في المتصفّح، فتفشل الجلسة قبل أن تبدأ.
+const MODELS = [
+    { id: 'Sharjeelbaig/whisper-tiny-ar-quran-onnx', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q8' } },
+    { id: 'Sharjeelbaig/whisper-tiny-ar-quran-onnx', dtype: 'fp32' },
+    { id: 'eventhorizon0/tarteel-ai-onnx-whisper-base-ar-quran', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q8' } },
+];
 const SR = 16000;
 
 let tf = null;          // مكتبة transformers.js بعد تحميلها
@@ -25,20 +31,26 @@ export function loadAsr(onProgress) {
     loading = (async () => {
         tf = await import(/* @vite-ignore */ CDN);
         tf.env.allowLocalModels = false;
-        const seen = {};
-        asr = await tf.pipeline('automatic-speech-recognition', MODEL, {
-            dtype: 'q8',
-            progress_callback: p => {
-                if (!onProgress || !p || !p.file) return;
-                if (p.status === 'progress') seen[p.file] = { a: p.loaded || 0, b: p.total || 0 };
-                if (p.status === 'done') seen[p.file] = { a: 1, b: 1, done: 1 };
-                const a = Object.values(seen).reduce((s, x) => s + x.a, 0);
-                const b = Object.values(seen).reduce((s, x) => s + x.b, 0);
-                onProgress(b ? Math.min(0.99, a / b) : 0);
-            },
-        });
-        onProgress && onProgress(1);
-        return asr;
+        let last = null;
+        for (const m of MODELS) {
+            const seen = {};
+            try {
+                asr = await tf.pipeline('automatic-speech-recognition', m.id, {
+                    dtype: m.dtype,
+                    progress_callback: p => {
+                        if (!onProgress || !p || !p.file) return;
+                        if (p.status === 'progress') seen[p.file] = { a: p.loaded || 0, b: p.total || 0 };
+                        if (p.status === 'done') seen[p.file] = { a: 1, b: 1, done: 1 };
+                        const a = Object.values(seen).reduce((s, x) => s + x.a, 0);
+                        const b = Object.values(seen).reduce((s, x) => s + x.b, 0);
+                        onProgress(b ? Math.min(0.99, a / b) : 0);
+                    },
+                });
+                onProgress && onProgress(1);
+                return asr;
+            } catch (e) { last = e; asr = null; }      // صيغةٌ لا يدعمها الجهاز: نجرّب التي تليها
+        }
+        throw last || new Error('تعذّر تحميل نموذج التلاوة');
     })().catch(e => { loading = null; throw e; });
     return loading;
 }

@@ -67,7 +67,10 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
                 if (w && (!next || next.line !== w.line)) onReveal(w.line);
             }
         }
-        if (r.error) wrong(r.error.expected, r.error.heard);
+        // لا نومض لكل خلاف: ضجيجٌ أو كلمةٌ مبتورة تمرّ، والخطأ يُثبت بمقطعٍ
+        // فيه كلامٌ كافٍ أو بتكرّر التعثّر مرّتين
+        const heardN = String(text).trim().split(/s+/).filter(Boolean).length;
+        if (r.error && (r.stuck || heardN >= 3)) wrong(r.error.expected, r.error.heard);
         if (t.done) finish();
     };
 
