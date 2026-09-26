@@ -312,6 +312,7 @@ function MemberForm({ m, onDone }) {
 // ─── حسابات الدخول ──────────────────────────────────────────────────────────
 function Accounts({ members }) {
     const toast = useToast();
+    const { reboot } = useData();
     const [list, setList] = useState([]);
     const [edit, setEdit] = useState(null);
     const load = useCallback(async () => { const r = await call('users'); if (r.success) setList(r.data); }, []);
@@ -329,6 +330,7 @@ function Accounts({ members }) {
         }
         setBusy(false);
         await load();
+        await reboot();            // صلاحيتي أنا تُقرأ من جديد، فيظهر الزرّ بلا إعادة فتحٍ للتطبيق
         toast(on ? 'فُتح التسميع الذاتي للجميع' : 'أُغلق التسميع الذاتي');
     };
 
