@@ -31,6 +31,7 @@ $conn->query("SET time_zone = '+03:00'");
 // مفتاح التوقيع مخصوصٌ بهذا التطبيق: مفتاح سماك أو عُهدة لا يفتح ألواح
 define('AL_KEY', hash_hmac('sha256', 'alwah-app-v1', '__TOKEN_SECRET__'));
 const PUSH_KEY = '__PUSH_KEY__';                 // مفتاح مرسِل الإشعارات (لا جلسة)
+const GROQ_KEY = '__GROQ_KEY__';                 // تعرّفٌ سحابيّ على التلاوة (اختياري)
 
 function out($a) { ob_end_clean(); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
 function fail($m, $code = 200) { http_response_code($code); out(['success' => false, 'message' => $m]); }
@@ -1155,6 +1156,49 @@ case 'user_save': {
     }
     al_log($u['id'], 'user_save', ['id' => $id, 'username' => $un, 'role' => $role]);
     out(['success' => true, 'id' => $id]);
+}
+
+// ─── التعرّف السحابيّ على التلاوة ───────────────────────────────────────────
+// يمرّ الصوت من الجوال إلى المزوّد ويعود نصّاً، ولا يُكتب عندنا في قرصٍ ولا
+// قاعدة: لا ملفّ مؤقّت ولا سجلّ يحفظ الصوت. والكلمات المنتظرة تُرسل تلميحاً
+// فيميل التعرّف إلى رسم المصحف بدل ما يشبهه من الكلام.
+case 'asr': {
+    $u = need();
+    if (!(int)$u['feat_recite'] && $u['role'] !== 'owner') fail('التسميع الذاتي غير مفعّل لحسابك', 403);
+    if (GROQ_KEY === '' || strpos(GROQ_KEY, '__') === 0) fail('التعرّف السحابيّ غير مُعدّ على الخادم', 503);
+
+    $audio = file_get_contents('php://input');
+    $n = strlen((string)$audio);
+    if ($n < 800) fail('لا صوت');
+    if ($n > 3000000) fail('المقطع أكبر من اللازم');
+    $type = (string)($_SERVER['CONTENT_TYPE'] ?? 'audio/webm');
+    $ext = strpos($type, 'mp4') !== false ? 'mp4' : (strpos($type, 'ogg') !== false ? 'ogg' : 'webm');
+    $hint = mb_substr(trim((string)($_GET['hint'] ?? '')), 0, 600);
+
+    $bd = '----alwah' . bin2hex(random_bytes(8));
+    $part = function ($name, $val) use ($bd) {
+        return "--$bd\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$val\r\n";
+    };
+    $post = $part('model', 'whisper-large-v3-turbo') . $part('language', 'ar')
+        . $part('temperature', '0') . $part('response_format', 'json');
+    if ($hint !== '') $post .= $part('prompt', $hint);
+    $post .= "--$bd\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.$ext\"\r\n"
+        . "Content-Type: $type\r\n\r\n" . $audio . "\r\n--$bd--\r\n";
+
+    if (!function_exists('curl_init')) fail('الخادم لا يدعم الاتصال الخارجي', 500);
+    $c = curl_init('https://api.groq.com/openai/v1/audio/transcriptions');
+    curl_setopt_array($c, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $post, CURLOPT_TIMEOUT => 20,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . GROQ_KEY, 'Content-Type: multipart/form-data; boundary=' . $bd],
+    ]);
+    $res = curl_exec($c);
+    $code = (int)curl_getinfo($c, CURLINFO_HTTP_CODE);
+    curl_close($c);
+    unset($post, $audio);                                   // لا يبقى الصوت في الذاكرة بعد الإرسال
+
+    if ($res === false || $code !== 200) fail('تعذّر التعرّف السحابيّ (' . $code . ')', 502);
+    $j = json_decode((string)$res, true);
+    out(['success' => true, 'text' => trim((string)($j['text'] ?? ''))]);
 }
 
 // أسرٌ أخرى (لمدير التطبيق): لكل أسرة صاحب حساب، ولا ترى أسرةٌ أخرى

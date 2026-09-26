@@ -10,9 +10,12 @@
 //  الاثنتين بلا خطأ، بينما يشوّه tiny المشوّشة. وإن ثقل على الجهاز — قِسناه من
 //  زمن التعرّف نفسه — خفّفناه إلى tiny من تلقاء أنفسنا.
 // ════════════════════════════════════════════════════════════════════════════
+import { call } from './api';
+
 const CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
 const SR = 16000;
-const SEG = 5000;            // طول المقطع بالمللي ثانية
+const SEG = 5000;            // طول المقطع على الجهاز بالمللي ثانية
+const SEG_CLOUD = 2600;      // السحاب أسرع، فالمقطع أقصر ويكون الكشف أقرب للحظة
 const OVERLAP = 1.4;         // ثوانٍ من آخر المقطع تُضمّ إلى تاليه فلا تُبتر كلمة
 const SLOW_MS = 7000;        // فوقه يُعدّ الجهاز بطيئاً فيُخفَّف النموذج — والحدّ مرتفع لأن الخفيف أقلّ دقّة
 
@@ -146,8 +149,9 @@ function clean(x) {
 // أجهزة أندرويد فيهذي النموذج على الصمت. نسجّل مقاطع قصيرة مستقلّة، نفكّها
 // إلى عيّنات، ونحوّلها إلى 16 ألفاً، ونضمّ إلى أوّل كلٍّ منها ذيل سابقه فلا
 // تُبتر كلمةٌ على الحدّ، ثم نقيس الشدّة: الصامت لا يُرسل أصلاً.
-export async function listen({ onChunk, onLevel, onError, onInfo }) {
+export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint }) {
     let slow = 0;
+    let useCloud = !!cloud;                         // يسقط وحده إلى الجهاز إن تعثّر السحاب
     listeners.text = [(text, ms) => {
         if (ms > SLOW_MS) slow++; else slow = 0;
         if (slow >= 2 && !lightened) {                  // الجهاز لا يلحق: نخفّف النموذج
@@ -201,6 +205,14 @@ export async function listen({ onChunk, onLevel, onError, onInfo }) {
                 pcm.set(tail, 0); pcm.set(fixed, tail.length);
             }
             tail = next;
+            if (useCloud) {                             // السحاب: يُرسل المقطع كما سُجّل، بلا تحويل
+                const t0 = Date.now();
+                const r = await call('asr', { form: e.data, params: { hint: hint ? hint() : '' } });
+                if (r && r.success) { onChunk && onChunk(String(r.text || '').trim(), Date.now() - t0); return; }
+                useCloud = false;                       // تعذّر السحاب: نكمل على الجهاز
+                onInfo && onInfo({ cloud: false, note: (r && r.message) || 'انقطع الاتصال، التعرّف على الجهاز' });
+                try { await loadAsr(); } catch (err) { onError && onError('تعذّر تشغيل النموذج على الجهاز'); return; }
+            }
             worker.postMessage({ type: 'audio', pcm });
         } catch (err) { onError && onError(String((err && err.message) || err)); }
     };
@@ -209,7 +221,7 @@ export async function listen({ onChunk, onLevel, onError, onInfo }) {
     const loop = () => {
         if (dead) return;
         try { rec.start(); } catch (e) { return; }
-        setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) { /* متوقّف */ } }, SEG);
+        setTimeout(() => { try { rec.state === 'recording' && rec.stop(); } catch (e) { /* متوقّف */ } }, useCloud ? SEG_CLOUD : SEG);
     };
     rec.onstop = () => { if (!dead) setTimeout(loop, 60); };
     loop();

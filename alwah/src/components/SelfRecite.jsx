@@ -11,6 +11,7 @@ import { call } from '../lib/api';
 // كل ما يُسمع يُعالج على الجهاز، ولا يُرفع صوتٌ إلى أيّ خادم.
 export default function SelfRecite({ page, data, lines, focus, member, onReveal, onHideAll, onClose }) {
     const [stage, setStage] = useState('idle');     // idle | loading | live | done
+    const [cloud] = useState(true);                 // التعرّف في السحاب، ويسقط إلى الجهاز إن تعثّر
     const [pct, setPct] = useState(0);
     const [err, setErr] = useState('');
     const [flash, setFlash] = useState(0);
@@ -80,10 +81,20 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
         setErr('');
         if (!asrSupported()) { setErr('هذا الجهاز لا يدعم الاستماع من المتصفّح. جرّب كروم على أندرويد.'); return; }
         try {
-            if (!asrReady()) { setStage('loading'); await loadAsr(setPct); }
+            // السحاب لا يحتاج تحميل نموذج: يبدأ فوراً، والجهاز بديلٌ إن تعثّر
+            if (!cloud && !asrReady()) { setStage('loading'); await loadAsr(setPct); }
             onHideAll();
             setStage('live');
-            mic.current = await listen({ onChunk, onLevel: setLevel, onError: () => {}, onInfo: x => setInfo(i => ({ ...i, ...x })) });
+            mic.current = await listen({
+                cloud,
+                hint: () => {                            // الكلمات المنتظرة: تميل بالتعرّف إلى رسم المصحف
+                    const t = trk.current; if (!t) return '';
+                    const w = [];
+                    for (let i = t.pos; i < Math.min(t.total, t.pos + 25); i++) w.push(t.at(i).raw);
+                    return w.join(' ');
+                },
+                onChunk, onLevel: setLevel, onError: () => {}, onInfo: x => setInfo(i => ({ ...i, ...x })),
+            });
         } catch (e) {
             setStage('idle');
             setErr(e && e.message ? e.message : 'تعذّر تشغيل الاستماع');
@@ -124,7 +135,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
                         <div className="text-[11.5px] text-ink-3">
                             {stage === 'loading' ? 'يُحمّل نموذج التلاوة مرّةً واحدة… ' + Math.round(pct * 100) + '٪'
                                 : stage === 'live' ? (cur ? 'اقرأ من ' + ayahName(cur) : 'اقرأ…')
-                                    : stage === 'done' ? 'انتهت الجلسة' : 'يستمع لتلاوتك على جهازك، ولا يُرفع صوتك'}
+                                    : stage === 'done' ? 'انتهت الجلسة' : 'يستمع لتلاوتك ويكشف ما تقرأه'}
                         </div>
                     </div>
                     <button onClick={() => { finish(); onClose(); }} className="w-9 h-9 rounded-xl hover:bg-paper-2 flex items-center justify-center text-ink-3"><X size={17} /></button>
@@ -149,7 +160,7 @@ export default function SelfRecite({ page, data, lines, focus, member, onReveal,
                         </div>
                         {hint ? <p className="text-center font-quran text-[20px] text-brand-800">{hint.raw}</p> : null}
                         {heard ? <p className="text-[11.5px] text-ink-3 text-center leading-6 truncate">سمعتُ: {heard}</p> : null}
-                        {info && info.rate ? <p className="text-[10.5px] text-ink-3/70 text-center">الميكروفون {Math.round(info.rate / 1000)} ألف · {info.light ? 'نموذج خفيف' : 'نموذج كامل'} · شدّة {(info.level * 1000).toFixed(1)}</p> : null}
+                        {info && info.rate ? <p className="text-[10.5px] text-ink-3/70 text-center">الميكروفون {Math.round(info.rate / 1000)} ألف · {info.cloud === false ? 'على الجهاز' : cloud ? 'سحابيّ' : info.light ? 'نموذج خفيف' : 'نموذج كامل'} · شدّة {(info.level * 1000).toFixed(1)}</p> : null}
                         <p className="text-[11px] text-ink-3 text-center">{stat.ok} كلمة صحيحة · {stat.bad} توقّف</p>
                     </>
                 ) : null}
