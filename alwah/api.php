@@ -1196,7 +1196,13 @@ case 'asr': {
     curl_close($c);
     unset($post, $audio);                                   // لا يبقى الصوت في الذاكرة بعد الإرسال
 
-    if ($res === false || $code !== 200) fail('تعذّر التعرّف السحابيّ (' . $code . ')', 502);
+    if ($res === false || $code !== 200) {
+        // سبب المزوّد كما جاء: مفتاحٌ خطأ أو حدٌّ مستهلك أو غيرهما، فيُعرف الخلل بلا تخمين
+        $why = '';
+        $e = json_decode((string)$res, true);
+        if (isset($e['error']['message'])) $why = ' — ' . mb_substr((string)$e['error']['message'], 0, 120);
+        fail('تعذّر التعرّف السحابيّ (' . $code . ')' . $why, 502);
+    }
     $j = json_decode((string)$res, true);
     out(['success' => true, 'text' => trim((string)($j['text'] ?? ''))]);
 }
