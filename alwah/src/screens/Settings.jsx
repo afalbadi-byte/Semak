@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { UserPlus, Pencil, LogOut, KeyRound, Users, Home as HomeIcon, Share2, Trash2, Building, BellRing, Info } from 'lucide-react';
+import { UserPlus, Pencil, LogOut, KeyRound, Users, Home as HomeIcon, Share2, Trash2, Building, BellRing, Info, Mic } from 'lucide-react';
 import { call } from '../lib/api';
 import { subscribe, unsubscribe, pushState } from '../lib/push';
 import { useRoute } from '../lib/router';
@@ -318,6 +318,20 @@ function Accounts({ members }) {
     useEffect(() => { load(); }, [load]);
     const ROLE = { owner: 'صاحب الحساب', supervisor: 'مشرف (يسمّع للجميع)', member: 'فرد (يرى صفحته)' };
 
+    // فتح التسميع الذاتي للأسرة كلّها بضغطة، أو إغلاقه عنها
+    const [busy, setBusy] = useState(false);
+    const allOn = list.length > 0 && list.every(u => u.feat_recite);
+    const reciteAll = async on => {
+        setBusy(true);
+        for (const u of list) {
+            if (!!u.feat_recite === on) continue;
+            await call('user_save', { body: { id: u.id, name: u.name, username: u.username, role: u.role, member_id: u.member_id || '', active: u.active, feat_recite: on ? 1 : 0 } });
+        }
+        setBusy(false);
+        await load();
+        toast(on ? 'فُتح التسميع الذاتي للجميع' : 'أُغلق التسميع الذاتي');
+    };
+
     return (
         <Section title="حسابات الدخول" action={<button onClick={() => setEdit({ role: 'member' })} className="text-[12px] font-bold text-brand inline-flex items-center gap-1"><KeyRound size={14} />حساب جديد</button>}>
             <Card className="divide-y divide-paper-2">
@@ -332,6 +346,17 @@ function Accounts({ members }) {
                     </button>
                 ))}
             </Card>
+            <div className="mt-2 rounded-2xl border border-paper-2 bg-paper-card p-3 flex items-center gap-2">
+                <span className="w-9 h-9 rounded-xl bg-brand-50 text-brand flex items-center justify-center shrink-0"><Mic size={17} /></span>
+                <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[13.5px] text-ink">التسميع الذاتي بالاستماع</div>
+                    <div className="text-[11.5px] text-ink-3 leading-5">{list.filter(u => u.feat_recite).length} من {list.length} حساباً مفتوحٌ له. يعمل على الجهاز ولا يُرفع صوت.</div>
+                </div>
+                <button disabled={busy} onClick={() => reciteAll(!allOn)}
+                    className={'h-9 px-3 rounded-xl text-[12.5px] font-bold shrink-0 disabled:opacity-50 ' + (allOn ? 'bg-paper-card border border-paper-2 text-ink-2' : 'bg-brand text-white')}>
+                    {busy ? '…' : allOn ? 'أغلقه للجميع' : 'فعّله للجميع'}
+                </button>
+            </div>
             <p className="text-[11px] text-ink-3 mt-2 px-1 leading-5">المشرف (كالأم) يسمّع للأسرة كلّها، والفرد (كالابن) يرى صفحته ويسمّع لنفسه.</p>
             <Sheet open={!!edit} onClose={() => setEdit(null)} title={edit && edit.id ? 'تعديل الحساب' : 'حساب دخول جديد'}>
                 {edit ? <UserForm u={edit} members={members} onDone={() => { setEdit(null); load(); toast('حُفظ'); }} /> : null}
