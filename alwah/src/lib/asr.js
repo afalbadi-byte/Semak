@@ -186,7 +186,7 @@ export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint })
 
     const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
     const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined);
-    let dead = false, tail = null;
+    let dead = false, tail = null, faint = 0;
     let lastBlob = null;                            // آخر مقطعٍ سُمع، يُراجَع برأيٍ ثانٍ عند الشكّ
 
     rec.ondataavailable = async e => {
@@ -202,7 +202,13 @@ export async function listen({ onChunk, onLevel, onError, onInfo, cloud, hint })
             const fixed = clean(raw);
             const keep = Math.min(fixed.length, Math.round(SR * OVERLAP));
             const next = fixed.slice(fixed.length - keep);
-            if (avg < 0.0015) { tail = null; return; }   // صمت: لا نُشغّل النموذج عليه فيهذي
+            // الخافت جداً لا يُرسل: النموذج عليه يكرّر ويهذي. والقارئ يُنبَّه ليقرّب الجوال.
+            if (avg < 0.0025) {
+                tail = null;
+                if (++faint === 3) onInfo && onInfo({ note: 'صوتك بعيد — قرّب الجوال من فمك' });
+                return;
+            }
+            faint = 0;
             let pcm = fixed;
             if (tail && tail.length) {                  // ذيل المقطع السابق أوّلاً
                 pcm = new Float32Array(tail.length + fixed.length);

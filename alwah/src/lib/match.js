@@ -41,6 +41,13 @@ const PRELUDE = new Set(['اعوذ', 'بالله', 'من', 'الشيطان', 'ا
 // حرفٌ يتكرّر ثلاثاً متتابعة لا يقع في كلامٍ عربيّ: هو صرير ميكروفونٍ أو نفَس
 const NOISE = /(.)\1\1/;
 
+// التعرّف على الصوت الخافت يدخل في دورةٍ فيكرّر الكلمة مراراً: «الناس الناس
+// الناس…». هذا هذيانٌ لا تلاوة، فيُطرح المقطع كلّه ولا يُحسب خطأً.
+function babble(ws) {
+    if (ws.length < 4) return false;
+    return new Set(ws).size * 3 <= ws.length;
+}
+
 export function tracker(expected) {
     // expected: [{ k: 'سورة:آية', items: [{ t: 'الكلمة', wk: 'سورة:آية:موضع', line }] }]
     const flat = [];
@@ -59,6 +66,7 @@ export function tracker(expected) {
         feed(text) {
             const heard = words(text);
             if (!heard.length || pos >= flat.length) return { advanced: 0, error: null, matched: 0, heard: heard.length };
+            if (babble(heard)) return { advanced: 0, matched: 0, error: null, babble: true, heard: heard.length };
 
             const back = flat.slice(Math.max(0, pos - 8), pos).map(x => x.n);   // ما قُرئ قريباً
             const isRepeat = h => back.some(b => b === h || near(b, h));
