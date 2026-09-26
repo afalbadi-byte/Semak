@@ -54,29 +54,12 @@ function near(a, b) {
 }
 
 // ─── محرّك المتابعة ─────────────────────────────────────────────────────────
-// المطابقة بمحاذاةٍ مرنة لا بموضعٍ مقفل: نأخذ ما سمعناه ونبحث عن أطول تتابعٍ
-// يوافق النصّ المنتظر في نافذةٍ أمامه. فما ليس من الآية — استعاذةٌ أو بسملةٌ
-// أو ضجيج — يسقط من تلقاء نفسه، ولا يُحسب خطأً ولا يوقف القارئ.
-const WINDOW = 40;
+// مطابقةٌ كلمةً بكلمة على الترتيب: لا نتقدّم إلا إلى الكلمة التي تلي، فلا
+// يمكن تخطّي آيةٍ ولا القفز إلى آخر الصفحة. وما ليس من النصّ — استعاذةٌ أو
+// ضجيجٌ أو إعادةٌ لما قُرئ — يُطرح ولا يُحسب خطأً ولا تقدّماً.
 
-// أطول تتابعٍ مشترك: يرجع مواضع المطابقة في النصّ المنتظر
-function align(heard, want) {
-    const n = heard.length, m = want.length;
-    const dp = Array.from({ length: n + 1 }, () => new Int16Array(m + 1));
-    for (let i = n - 1; i >= 0; i--)
-        for (let j = m - 1; j >= 0; j--)
-            dp[i][j] = (heard[i] === want[j] || near(heard[i], want[j]))
-                ? dp[i + 1][j + 1] + 1
-                : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    const hit = [];
-    let i = 0, j = 0;
-    while (i < n && j < m) {
-        if (heard[i] === want[j] || near(heard[i], want[j])) { hit.push(j); i++; j++; }
-        else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
-        else j++;
-    }
-    return hit;
-}
+// ما يُقال قبل الشروع في التلاوة فلا يُحاسَب عليه
+const PRELUDE = new Set(['اعوذ', 'بالله', 'من', 'الشيطان', 'الرجيم', 'بسم', 'الله', 'الرحمن', 'الرحيم']);
 
 export function tracker(expected) {
     // expected: [{ k: 'سورة:آية', items: [{ t: 'الكلمة', wk: 'سورة:آية:موضع', line }] }]
@@ -96,28 +79,34 @@ export function tracker(expected) {
         feed(text) {
             const heard = words(text);
             if (!heard.length || pos >= flat.length) return { advanced: 0, error: null, matched: 0, heard: heard.length };
-            const win = flat.slice(pos, pos + WINDOW).map(x => x.n);
-            const hit = align(heard, win);
-            // تتابعٌ من كلمتين فأكثر يُعدّ قراءةً للنصّ، وما دونه لا يُبنى عليه
-            if (hit.length >= 2) {
-                const last = hit[hit.length - 1];
-                const skipped = (last + 1) - hit.length;         // كلماتٌ في النصّ لم تُسمع
-                pos += last + 1;
-                miss = 0;
-                return { advanced: last + 1, matched: hit.length, skipped, error: null, heard: heard.length };
-            }
-            // المقاطع متراكبة، فقد يكون كلّ ما في المقطع كلماتٍ قرأها قبل قليل:
-            // إعادةٌ لا خطأ، فلا تُحسب تعثّراً
-            const back = flat.slice(Math.max(0, pos - 10), pos).map(x => x.n);
-            if (heard.some(h => back.some(b => b === h || near(b, h))))
-                return { advanced: 0, matched: hit.length, error: null, repeat: true, heard: heard.length };
 
-            // لا تتابع ولا إعادة: نتربّص ثلاثة مقاطع قبل أن نحكم بالخطأ، فالتعرّف
-            // يشوّه كلمةً أو كلمتين أحياناً ولا يصحّ أن نوقف القارئ لذلك
+            const back = flat.slice(Math.max(0, pos - 8), pos).map(x => x.n);   // ما قُرئ قريباً
+            const isRepeat = h => back.some(b => b === h || near(b, h));
+            let matched = 0, stray = 0, lastWrong = '';
+
+            for (const h of heard) {
+                if (pos >= flat.length) break;
+                const want = flat[pos].n;
+                if (h === want || near(h, want)) { pos++; matched++; continue; }
+                // كلمتان في النصّ نطقهما التعرّف موصولتين: «الحمدلله»
+                const two = flat[pos + 1] ? want + flat[pos + 1].n : '';
+                if (two && (h === two || (two.length >= 6 && dist(h, two, 1) <= 1))) { pos += 2; matched += 2; continue; }
+                if (isRepeat(h)) continue;                       // إعادةٌ من تراكب المقاطع
+                if (h.length <= 2) continue;                     // حرفٌ أو حرفان: ضجيج
+                if (!matched && PRELUDE.has(h)) continue;        // استعاذةٌ أو بسملةٌ قبل الشروع
+                stray++; lastWrong = h;
+                break;                                           // لا نتجاوز الكلمة المنتظرة
+            }
+
+            if (matched) { miss = 0; return { advanced: matched, matched, error: null, heard: heard.length }; }
+            if (!stray) return { advanced: 0, matched: 0, error: null, repeat: true, heard: heard.length };
+
+            // كلامٌ لا يوافق الكلمة المنتظرة: نتربّص مقطعين — التعرّف يشوّه
+            // كلمةً أحياناً — ثم نحكم بالخطأ ونقف عندها حتى تُقرأ
             miss++;
-            const error = miss >= 3 ? { expected: flat[pos], heard: heard.join(' ') } : null;
+            const error = miss >= 2 ? { expected: flat[pos], heard: lastWrong || heard.join(' ') } : null;
             if (error) miss = 0;
-            return { advanced: 0, matched: hit.length, error, stuck: !!error, heard: heard.length };
+            return { advanced: 0, matched: 0, error, stuck: !!error, heard: heard.length };
         },
 
         ayahDone() {
