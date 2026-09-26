@@ -14,7 +14,7 @@ const CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
 const SR = 16000;
 const SEG = 5000;            // طول المقطع بالمللي ثانية
 const OVERLAP = 1.4;         // ثوانٍ من آخر المقطع تُضمّ إلى تاليه فلا تُبتر كلمة
-const SLOW_MS = 4500;        // فوقه يُعدّ الجهاز بطيئاً فيُخفَّف النموذج
+const SLOW_MS = 7000;        // فوقه يُعدّ الجهاز بطيئاً فيُخفَّف النموذج — والحدّ مرتفع لأن الخفيف أقلّ دقّة
 
 // المشفّر في tiny بصيغةٍ كاملة: صيغته المضغوطة تستعمل ConvInteger ولا ينفّذها المتصفّح
 const HEAVY = [
@@ -122,6 +122,25 @@ function resample(x, from, to) {
     return out;
 }
 
+// تنظيف المقطع قبل التعرّف: إزالة الهدير تحت الكلام (مروحةٌ أو مكيّف أو حركة
+// اليد) بمرشّحٍ عالي التمرير، ثم رفع الصوت إلى مستوىً ثابت. النموذج دُرّب على
+// تلاواتٍ مضبوطة المستوى، فالصوت البعيد الخافت يُشوّش عليه.
+function clean(x) {
+    const y = new Float32Array(x.length);
+    let prevIn = 0, prevOut = 0, peak = 0;
+    for (let i = 0; i < x.length; i++) {
+        const v = 0.97 * (prevOut + x[i] - prevIn);     // مرشّحٌ من الرتبة الأولى
+        prevIn = x[i]; prevOut = v;
+        y[i] = v;
+        const a = Math.abs(v); if (a > peak) peak = a;
+    }
+    if (peak > 0.001) {
+        const g = Math.min(8, 0.32 / peak);             // رفعٌ محدود فلا يتضخّم الضجيج
+        for (let i = 0; i < y.length; i++) y[i] *= g;
+    }
+    return y;
+}
+
 // ─── الميكروفون ─────────────────────────────────────────────────────────────
 // التسجيل بـ MediaRecorder لا بـ ScriptProcessor: الأخير يعطي صمتاً على بعض
 // أجهزة أندرويد فيهذي النموذج على الصمت. نسجّل مقاطع قصيرة مستقلّة، نفكّها
@@ -172,13 +191,14 @@ export async function listen({ onChunk, onLevel, onError, onInfo }) {
             let sum = 0; for (let i = 0; i < raw.length; i++) sum += Math.abs(raw[i]);
             const avg = sum / raw.length;
             onInfo && onInfo({ rate: decoded.sampleRate, level: avg, light: lightened });
-            const keep = Math.min(raw.length, Math.round(SR * OVERLAP));
-            const next = raw.slice(raw.length - keep);
+            const fixed = clean(raw);
+            const keep = Math.min(fixed.length, Math.round(SR * OVERLAP));
+            const next = fixed.slice(fixed.length - keep);
             if (avg < 0.0015) { tail = null; return; }   // صمت: لا نُشغّل النموذج عليه فيهذي
-            let pcm = raw;
+            let pcm = fixed;
             if (tail && tail.length) {                  // ذيل المقطع السابق أوّلاً
-                pcm = new Float32Array(tail.length + raw.length);
-                pcm.set(tail, 0); pcm.set(raw, tail.length);
+                pcm = new Float32Array(tail.length + fixed.length);
+                pcm.set(tail, 0); pcm.set(fixed, tail.length);
             }
             tail = next;
             worker.postMessage({ type: 'audio', pcm });
