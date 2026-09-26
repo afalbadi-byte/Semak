@@ -102,59 +102,58 @@ function resample(x, from, to) {
     return out;
 }
 
-// ─── الميكروفون: يلتقط، ويقطّع عند السكوت، ويرسل المقاطع للعامل ─────────────
+// ─── الميكروفون ─────────────────────────────────────────────────────────────
+// التسجيل بـ MediaRecorder لا بـ ScriptProcessor: الأخير يعطي صمتاً على بعض
+// أجهزة أندرويد (السياق الصوتي يبدأ موقوفاً)، فيهذي النموذج على الصمت ويخرج
+// كلاماً ثابتاً لا علاقة له بالتلاوة. هنا نسجّل مقاطع قصيرة، نفكّها إلى
+// عيّنات، ونحوّلها إلى 16 ألفاً، ثم نقيس شدّتها: الصامت لا يُرسل أصلاً.
 export async function listen({ onChunk, onLevel, onError, onInfo }) {
     listeners.text = [onChunk]; listeners.error = onError ? [onError] : [];
     const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-    // بعض الأجهزة تتجاهل التردّد المطلوب وتعطي 48 ألفاً؛ فلو أُرسل كما هو
-    // لسمع النموذج التلاوة بثلاثة أضعاف سرعتها فأخرج كلاماً لا معنى له.
-    // لذلك نقرأ التردّد الحقيقي ونحوّل إليه قبل الإرسال.
-    let ac;
-    try { ac = new AudioContext({ sampleRate: SR }); } catch (e) { ac = new AudioContext(); }
+    const ac = new AudioContext();
+    try { await ac.resume(); } catch (e) { /* مستأنَف أصلاً */ }
+
+    // مؤشّر المستوى: من محلّل مستقلّ، فيبقى يتحرّك ولو تعثّر التسجيل
     const src = ac.createMediaStreamSource(stream);
-    const proc = ac.createScriptProcessor(4096, 1, 1);
-    const buf = [];
-    let voiced = 0, silence = 0, dead = false, floor = 0.012;
-
-    const flush = () => {
-        const n = buf.reduce((s, x) => s + x.length, 0);
-        buf.length = 0; voiced = 0; silence = 0;
-        if (n < SR * 0.7 || dead) return;
-        const raw = new Float32Array(n);
-        let o = 0; for (const b of bufKeep) { raw.set(b, o); o += b.length; }
-        const pcm = resample(raw, ac.sampleRate, SR);
-        worker.postMessage({ type: 'audio', pcm }, [pcm.buffer]);
-    };
-    let bufKeep = [];
-
-    proc.onaudioprocess = e => {
-        if (dead) return;
-        const x = e.inputBuffer.getChannelData(0);
-        let sum = 0, peak = 0;
-        for (let i = 0; i < x.length; i++) { const v = Math.abs(x[i]); sum += v; if (v > peak) peak = v; }
-        const avg = sum / x.length;
-        floor = floor * 0.995 + avg * 0.005;                 // أرضية الضجيج تتكيّف مع المكان
+    const an = ac.createAnalyser(); an.fftSize = 512;
+    src.connect(an);
+    const buf = new Float32Array(an.fftSize);
+    let peak = 0;
+    const meter = setInterval(() => {
+        an.getFloatTimeDomainData(buf);
+        let p = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > p) p = v; }
+        peak = Math.max(peak * 0.85, p);
         onLevel && onLevel(peak);
-        const speaking = avg > Math.max(0.006, floor * 2.2);
-        if (speaking) { voiced += x.length; silence = 0; buf.push(new Float32Array(x)); }
-        else if (voiced) {
-            silence += x.length;
-            buf.push(new Float32Array(x));
-            if (silence > SR * 0.45) { bufKeep = buf.slice(); flush(); }
-        } else if (buf.length > 4) buf.shift();              // نحتفظ بلحظةٍ قبل الكلام
-        else buf.push(new Float32Array(x));
-        if (voiced > SR * 9) { bufKeep = buf.slice(); flush(); }
+    }, 120);
+
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined);
+    let dead = false;
+
+    rec.ondataavailable = async e => {
+        if (dead || !e.data || e.data.size < 2000) return;
+        try {
+            const ab = await e.data.arrayBuffer();
+            const decoded = await ac.decodeAudioData(ab.slice(0));
+            const raw = decoded.getChannelData(0);
+            let sum = 0; for (let i = 0; i < raw.length; i++) sum += Math.abs(raw[i]);
+            const avg = sum / raw.length;
+            onInfo && onInfo({ rate: decoded.sampleRate, gpu: !!navigator.gpu, level: avg });
+            if (avg < 0.0015) return;                       // صمت: لا نُشغّل النموذج عليه فيهذي
+            worker.postMessage({ type: 'audio', pcm: resample(raw, decoded.sampleRate, SR) });
+        } catch (err) { onError && onError(String((err && err.message) || err)); }
     };
 
-    onInfo && onInfo({ rate: ac.sampleRate, gpu: !!navigator.gpu });
-    src.connect(proc); proc.connect(ac.destination);
+    rec.start(5000);                                        // مقطعٌ كل خمس ثوان
     return {
         stop() {
             dead = true;
+            clearInterval(meter);
             listeners.text = []; listeners.error = [];
-            try { proc.disconnect(); src.disconnect(); } catch (e) { /* مغلق */ }
+            try { rec.state !== 'inactive' && rec.stop(); } catch (e) { /* متوقّف */ }
+            try { src.disconnect(); an.disconnect(); } catch (e) { /* مغلق */ }
             try { stream.getTracks().forEach(t => t.stop()); } catch (e) { /* تجاهل */ }
             try { ac.close(); } catch (e) { /* تجاهل */ }
         },
